@@ -833,12 +833,13 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           const { data: sessionData } = await supabase.auth.getSession();
           const token = sessionData.session?.access_token;
           if (token) {
-            const resp = await supabase.functions.invoke('populate-hubspot-column', {
+            const resp = await supabase.functions.invoke('populate-router', {
               headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
+                action: 'hubspot_column',
                 table_id: tableId,
                 column_id: column.id,
                 property_name: hubspotPropertyName,
@@ -1001,8 +1002,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         })
       );
       // Then call the edge function to regenerate
-      const { error } = await supabase.functions.invoke('generate-email-sequence', {
+      const { error } = await supabase.functions.invoke('generate-router', {
         body: {
+          action: 'email_sequence',
           table_id: tableId,
           sequence_config: {
             num_steps: config.num_steps,

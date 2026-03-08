@@ -1544,8 +1544,9 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
       // Optimistically update UI to show pending state
       onEdit?.(JSON.stringify({ status: 'pending' }));
       try {
-        const { data, error } = await supabase.functions.invoke('heygen-video-generate', {
+        const { data, error } = await supabase.functions.invoke('heygen-router', {
           body: {
+            action: 'video_generate',
             avatar_id: config.avatar_id,
             voice_id: config.voice_source !== 'audio_column' ? config.voice_id : undefined,
             audio_url: audioUrl,

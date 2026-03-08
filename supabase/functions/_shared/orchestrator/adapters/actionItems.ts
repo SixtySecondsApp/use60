@@ -30,14 +30,15 @@ export const actionItemsAdapter: SkillAdapter = {
         throw new Error('meeting_id not found in event payload');
       }
 
-      // Call existing extract-action-items edge function
-      const response = await fetch(`${supabaseUrl}/functions/v1/extract-action-items`, {
+      // Call extract-router with action_items action
+      const response = await fetch(`${supabaseUrl}/functions/v1/extract-router`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${serviceKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'action_items',
           meetingId,
           rerun: false,
         }),

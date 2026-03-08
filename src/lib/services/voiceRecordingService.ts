@@ -122,8 +122,9 @@ export const voiceRecordingService = {
       // Get duration (approximate from file size if not available)
       const durationSeconds = Math.round(audioBlob.size / 16000); // Rough estimate for webm
 
-      const { data, error } = await supabase.functions.invoke('voice-upload', {
+      const { data, error } = await supabase.functions.invoke('voice-router', {
         body: {
+          action: 'upload',
           audio_data: `data:${mimeType};base64,${base64}`,
           file_name: fileName,
           duration_seconds: durationSeconds,
@@ -154,8 +155,8 @@ export const voiceRecordingService = {
    */
   async transcribeRecording(recordingId: string): Promise<TranscribeResult> {
     try {
-      const { data, error } = await supabase.functions.invoke('voice-transcribe', {
-        body: { recording_id: recordingId },
+      const { data, error } = await supabase.functions.invoke('voice-router', {
+        body: { action: 'transcribe', recording_id: recordingId },
       });
 
       if (error) {
@@ -319,8 +320,8 @@ export const voiceRecordingService = {
     try {
       // If using share token, use the public share endpoint
       if (shareToken) {
-        const { data, error } = await supabase.functions.invoke('voice-share-playback', {
-          body: { share_token: shareToken },
+        const { data, error } = await supabase.functions.invoke('voice-router', {
+          body: { action: 'share_playback', share_token: shareToken },
         });
 
         if (error || !data?.url) {
@@ -335,8 +336,8 @@ export const voiceRecordingService = {
       }
 
       // Use edge function to get presigned S3 URL
-      const { data, error } = await supabase.functions.invoke('voice-presigned-url', {
-        body: { recording_id: recordingId },
+      const { data, error } = await supabase.functions.invoke('voice-router', {
+        body: { action: 'presigned_url', recording_id: recordingId },
       });
 
       if (error || !data?.url) {
@@ -359,8 +360,8 @@ export const voiceRecordingService = {
    */
   async enableSharing(recordingId: string): Promise<ShareResult> {
     try {
-      const { data, error } = await supabase.functions.invoke('voice-share', {
-        body: { recording_id: recordingId, enable: true },
+      const { data, error } = await supabase.functions.invoke('voice-router', {
+        body: { action: 'share', recording_id: recordingId, enable: true },
       });
 
       if (error) {
@@ -385,8 +386,8 @@ export const voiceRecordingService = {
    */
   async disableSharing(recordingId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { data, error } = await supabase.functions.invoke('voice-share', {
-        body: { recording_id: recordingId, enable: false },
+      const { data, error } = await supabase.functions.invoke('voice-router', {
+        body: { action: 'share', recording_id: recordingId, enable: false },
       });
 
       if (error) {

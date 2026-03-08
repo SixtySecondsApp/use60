@@ -1303,7 +1303,7 @@ async function ensureCompanyFactProfile(
   console.log(`[savvycal-webhook] Created fact profile ${profile.id} for ${domain}`);
 
   // Fire-and-forget: trigger research for the new profile
-  const researchUrl = `${SUPABASE_URL}/functions/v1/research-fact-profile`;
+  const researchUrl = `${SUPABASE_URL}/functions/v1/research-router-v2`;
   fetch(researchUrl, {
     method: "POST",
     headers: {
@@ -1312,7 +1312,8 @@ async function ensureCompanyFactProfile(
       "apikey": SUPABASE_SERVICE_ROLE_KEY,
     },
     body: JSON.stringify({
-      action: "research",
+      action: "fact_profile",
+      sub_action: "research",
       fact_profile_id: profile.id,
       domain,
     }),

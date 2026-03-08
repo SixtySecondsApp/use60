@@ -60,14 +60,15 @@ export const createTasksAdapter: SkillAdapter = {
         console.log(`[create-tasks] Context: contact=${contactName || 'none'}, deal=${dealName || 'none'}, meeting=${meetingTitle || 'none'}`);
       }
 
-      // Call create-task-unified in manual mode (orchestrator bypasses user auto-sync prefs)
-      const response = await fetch(`${supabaseUrl}/functions/v1/create-task-unified`, {
+      // Call create-task-unified via create-router in manual mode (orchestrator bypasses user auto-sync prefs)
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-router`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${serviceKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'task_unified',
           mode: 'manual',
           action_item_ids: actionItemIds,
           source: 'action_item',
@@ -85,7 +86,7 @@ export const createTasksAdapter: SkillAdapter = {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
-        throw new Error(`create-task-unified returned ${response.status}: ${errorText}`);
+        throw new Error(`create-router(task_unified) returned ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();

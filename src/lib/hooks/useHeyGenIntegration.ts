@@ -19,7 +19,7 @@ export function useHeyGenIntegration() {
 
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke('heygen-admin', {
+      const { data, error } = await supabase.functions.invoke('heygen-router', {
         body: { action: 'test_credentials' },
       });
 
@@ -41,7 +41,7 @@ export function useHeyGenIntegration() {
     if (!activeOrgId) throw new Error('No active organization');
     if (!isAuthenticated) throw new Error('Please sign in');
 
-    const { data, error } = await supabase.functions.invoke('heygen-admin', {
+    const { data, error } = await supabase.functions.invoke('heygen-router', {
       body: { action: 'save_credentials', api_key: apiKey },
     });
 

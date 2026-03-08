@@ -59,9 +59,9 @@ export function OpenRouterModelPicker({ value, onChange, className = '' }: OpenR
     queryFn: async () => {
       const token = await getSupabaseAuthToken();
       if (!token) throw new Error('Not authenticated');
-      const { data, error } = await supabase.functions.invoke('fetch-openrouter-models', {
+      const { data, error } = await supabase.functions.invoke('fetch-router', {
         headers: { Authorization: `Bearer ${token}` },
-        body: { accessToken: token },
+        body: { action: 'openrouter_models', accessToken: token },
       });
       if (error) throw error;
       return data as ModelsResponse;

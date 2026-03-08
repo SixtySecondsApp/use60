@@ -393,13 +393,13 @@ export async function getInvitationByToken(
 
     if (supabaseUrl && supabaseAnonKey) {
       try {
-        const edgeRes = await fetch(`${supabaseUrl}/functions/v1/get-invitation-by-token`, {
+        const edgeRes = await fetch(`${supabaseUrl}/functions/v1/get-router`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${supabaseAnonKey}`,
           },
-          body: JSON.stringify({ token }),
+          body: JSON.stringify({ action: 'invitation_by_token', token }),
         });
 
         if (edgeRes.ok) {

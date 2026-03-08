@@ -257,9 +257,10 @@ export function useMeetingAnalysisBatch(
       if (!meetingId) throw new Error('meetingId required');
 
       const { data, error } = await supabase.functions.invoke(
-        'meeting-analysis-batch',
+        'meeting-router',
         {
           body: {
+            action: 'analysis_batch',
             meetingId,
             analyses,
             params: options?.searchQuery

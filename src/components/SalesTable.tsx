@@ -454,7 +454,7 @@ export function SalesTable() {
         // Try to fetch transcript if missing
         if (!text && meetingId) {
           try {
-            const resp = await supabase.functions.invoke('fetch-transcript', { body: { meetingId } });
+            const resp = await supabase.functions.invoke('fetch-router', { body: { action: 'transcript', meetingId } });
             if (!(resp as any).error && (resp as any).data?.transcript) {
               text = (resp as any).data.transcript as string;
             }

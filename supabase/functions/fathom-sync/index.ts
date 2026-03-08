@@ -305,8 +305,9 @@ async function generateVideoThumbnail(
   meetingId?: string
 ): Promise<string | null> {
   try {
-    const functionUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-video-thumbnail-v2`
+    const functionUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-router`
     const requestBody: any = {
+      action: 'video_thumbnail_v2',
       recording_id: String(recordingId),
       share_url: shareUrl,
       fathom_embed_url: embedUrl,

@@ -622,8 +622,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
     setPreviewLoading(true);
     setPreviewResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke('enrich-dynamic-table', {
+      const { data, error } = await supabase.functions.invoke('enrich-router', {
         body: {
+          action: 'dynamic_table',
           table_id: tableId,
           column_id: 'preview',
           preview_mode: true,

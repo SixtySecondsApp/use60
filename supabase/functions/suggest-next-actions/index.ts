@@ -854,9 +854,10 @@ async function autoCreateTasksFromSuggestions(
       console.log(`[suggest-next-actions] Calling create-task-unified for suggestion ${suggestion.id}`)
 
       const { data: autoSyncResult, error: autoSyncError } = await supabase.functions.invoke(
-        'create-task-unified',
+        'create-router',
         {
           body: {
+            action: 'task_unified',
             mode: 'auto',
             action_item_ids: [suggestion.id],
             source: 'ai_suggestion'

@@ -559,7 +559,7 @@ async function executeEmailGeneration(
       return { step: 'email_generation', status: 'skipped', summary: 'No email sequence requested', duration_ms: 0, agent: 'outreach' as AgentName }
     }
 
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-email-sequence`, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-router`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -567,6 +567,7 @@ async function executeEmailGeneration(
         apikey: SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
+        action: 'email_sequence',
         table_id: tableId,
         sequence_config: {
           num_steps: plan.email_sequence.num_steps,

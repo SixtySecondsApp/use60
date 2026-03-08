@@ -37,8 +37,7 @@ export const EXTERNAL_ACCESSIBLE_FUNCTIONS = [
 
   // Meeting Data
   'api-v1',
-  'fetch-transcript',
-  'fetch-summary',
+  'fetch-router',
   'condense-meeting-summary',
   'extract-action-items',
   'analyze-action-item',
@@ -63,6 +62,7 @@ export const INTERNAL_ONLY_FUNCTIONS = [
   'deals',
   'deal-splits',
   'deal-activities',
+  'deal-router',
   'contacts',
   'companies',
   'clients',
@@ -70,6 +70,7 @@ export const INTERNAL_ONLY_FUNCTIONS = [
   // Activities & Tasks
   'add-activity',
   'add-sale',
+  'add-router',
   'bulk-import-activities',
   'process-single-activity',
   'create-task-unified',
@@ -80,6 +81,7 @@ export const INTERNAL_ONLY_FUNCTIONS = [
   'reprocess-lead-prep',
   'webhook-leads',
   'import-leads-generic',
+  'import-router',
 
   // Admin
   'impersonate-user',
@@ -92,6 +94,13 @@ export const INTERNAL_ONLY_FUNCTIONS = [
   // Analytics (internal)
   'analytics-web-vitals',
   'calculate-deal-health',
+
+  // Routers
+  'populate-router',
+  'enrich-router',
+  'analyze-router',
+  'create-router',
+  'get-router',
 ] as const;
 
 export type ExternalAccessibleFunction = typeof EXTERNAL_ACCESSIBLE_FUNCTIONS[number];
@@ -126,11 +135,11 @@ export const FUNCTION_DATABASE_TARGET: Record<string, DatabaseTarget> = {
   // Meeting functions query external DB (customer data)
   'meeting-intelligence-search': 'external',
   'meeting-intelligence-index': 'external',
+  'meeting-router': 'external',
   'meeting-intelligence-process-queue': 'external',
   'ask-meeting-ai': 'external',
   'api-v1': 'external',
-  'fetch-transcript': 'external',
-  'fetch-summary': 'external',
+  'fetch-router': 'external',
 
   // These still query internal (integration state, etc.)
   'fathom-sync': 'internal', // Syncs TO external, but reads config from internal

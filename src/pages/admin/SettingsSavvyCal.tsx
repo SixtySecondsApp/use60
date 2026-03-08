@@ -188,8 +188,8 @@ export default function SettingsSavvyCal() {
     setLastFetchedLinkId(linkId);
     
     try {
-      const { data, error } = await supabase.functions.invoke('fetch-savvycal-link', {
-        body: { link_id: linkId.trim() },
+      const { data, error } = await supabase.functions.invoke('fetch-router', {
+        body: { action: 'savvycal_link', link_id: linkId.trim() },
       });
 
       if (error) throw error;
@@ -488,8 +488,8 @@ export default function SettingsSavvyCal() {
 
     setIsFetchingLink(true);
     try {
-      const { data, error } = await supabase.functions.invoke('fetch-savvycal-link', {
-        body: { link_id: editingMapping.link_id.trim() },
+      const { data, error } = await supabase.functions.invoke('fetch-router', {
+        body: { action: 'savvycal_link', link_id: editingMapping.link_id.trim() },
       });
 
       if (error) throw error;
@@ -643,8 +643,8 @@ export default function SettingsSavvyCal() {
       // Fetch details for each link ID
       const fetchPromises = Array.from(linkIds).map(async (linkId) => {
         try {
-          const { data, error } = await supabase.functions.invoke('fetch-savvycal-link', {
-            body: { link_id: linkId },
+          const { data, error } = await supabase.functions.invoke('fetch-router', {
+            body: { action: 'savvycal_link', link_id: linkId },
           });
           
           if (!error && data.success && data.link) {

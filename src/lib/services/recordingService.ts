@@ -484,12 +484,14 @@ class RecordingService {
 
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
       let response = await fetch(
-        `${supabaseUrl}/functions/v1/get-recording-url?recording_id=${recordingId}`,
+        `${supabaseUrl}/functions/v1/get-router`,
         {
-          method: 'GET',
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ action: 'recording_url', recording_id: recordingId }),
         }
       );
 
@@ -515,12 +517,14 @@ class RecordingService {
         await new Promise(resolve => setTimeout(resolve, 500));
 
         response = await fetch(
-          `${supabaseUrl}/functions/v1/get-recording-url?recording_id=${recordingId}`,
+          `${supabaseUrl}/functions/v1/get-router`,
           {
-            method: 'GET',
+            method: 'POST',
             headers: {
               Authorization: `Bearer ${refreshData.session.access_token}`,
+              'Content-Type': 'application/json',
             },
+            body: JSON.stringify({ action: 'recording_url', recording_id: recordingId }),
           }
         );
 
@@ -574,14 +578,14 @@ class RecordingService {
 
       const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL);
       const response = await fetch(
-        `${supabaseUrl}/functions/v1/get-batch-signed-urls`,
+        `${supabaseUrl}/functions/v1/get-router`,
         {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ recording_ids: recordingIds }),
+          body: JSON.stringify({ action: 'batch_signed_urls', recording_ids: recordingIds }),
         }
       );
 

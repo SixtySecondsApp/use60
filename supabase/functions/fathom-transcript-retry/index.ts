@@ -274,7 +274,7 @@ async function processRetryJob(
         console.log(`🖼️  Generating thumbnail for meeting ${job.meeting_id}`)
 
         const thumbResponse = await fetch(
-          `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-video-thumbnail-v2`,
+          `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-router`,
           {
             method: 'POST',
             headers: {
@@ -283,6 +283,7 @@ async function processRetryJob(
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+              action: 'video_thumbnail_v2',
               recording_id: String(meetingForThumb.fathom_recording_id),
               share_url: meetingForThumb.share_url || '',
               fathom_embed_url: embedUrl,

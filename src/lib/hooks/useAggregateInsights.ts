@@ -46,9 +46,10 @@ export function useAggregateInsights() {
       setError(null);
 
       const { data, error: funcError } = await supabase.functions.invoke(
-        'meeting-aggregate-insights-query',
+        'meeting-router',
         {
           body: {
+            action: 'aggregate_insights_query',
             query_type: queryType,
             filter,
             limit: limit || 50,
@@ -88,9 +89,10 @@ export function useAggregateInsights() {
       setError(null);
 
       const { data, error: funcError } = await supabase.functions.invoke(
-        'meeting-aggregate-insights-query',
+        'meeting-router',
         {
           body: {
+            action: 'aggregate_insights_query',
             query_type: 'natural_language',
             natural_query: query,
             user_id: user.id,
@@ -220,9 +222,10 @@ export function useQuickStats(periodDays: number = 30) {
       dateFrom.setDate(dateFrom.getDate() - periodDays);
 
       const { data, error: funcError } = await supabase.functions.invoke(
-        'meeting-aggregate-insights-query',
+        'meeting-router',
         {
           body: {
+            action: 'aggregate_insights_query',
             query_type: 'count',
             filter: {
               date_from: dateFrom.toISOString().split('T')[0],

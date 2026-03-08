@@ -331,7 +331,8 @@ async function runPipeline(
   // ── Step: Structured summary ──
   sendEvent('step', { id: 'structured_summary', status: 'running', label: 'Analysing meeting transcript' })
   try {
-    const summaryRes = await callPipelineFunction('meeting-process-structured-summary', {
+    const summaryRes = await callPipelineFunction('meeting-router', {
+      action: 'process_structured_summary',
       meetingId,
       forceReprocess: false,
     })
@@ -351,7 +352,8 @@ async function runPipeline(
   // ── Step: Action items ──
   sendEvent('step', { id: 'action_items', status: 'running', label: 'Extracting action items' })
   try {
-    const actionRes = await callPipelineFunction('extract-action-items', {
+    const actionRes = await callPipelineFunction('extract-router', {
+      action: 'action_items',
       meetingId,
       rerun: false,
     })
@@ -380,7 +382,8 @@ async function runPipeline(
   try {
     // generate-follow-up streams SSE; we call it as a normal POST via service role
     // which returns JSON when called with service role key
-    const followUpRes = await callPipelineFunction('generate-follow-up', {
+    const followUpRes = await callPipelineFunction('generate-router', {
+      action: 'follow_up',
       meeting_id: meetingId,
       draft_only: true, // signal to not deliver
       user_id: null,    // service role provides no user context — function resolves from meeting owner

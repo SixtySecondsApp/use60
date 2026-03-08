@@ -68,13 +68,14 @@ export async function handleCalendarAction(ctx: CalendarActionContext): Promise<
       return;
     }
 
-    const response = await fetch(`${supabaseUrl}/functions/v1/create-calendar-event`, {
+    const response = await fetch(`${supabaseUrl}/functions/v1/create-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'calendar_event',
         user_id: ctx.userId,
         org_id: ctx.orgId,
         slot: selectedSlot,

@@ -20,8 +20,8 @@ export interface SemanticMatch {
  * Generate an embedding for a query string via the edge function.
  */
 async function generateQueryEmbedding(query: string): Promise<number[] | null> {
-  const { data, error } = await supabase.functions.invoke('generate-embedding', {
-    body: { text: query },
+  const { data, error } = await supabase.functions.invoke('generate-router', {
+    body: { action: 'embedding', text: query },
   });
 
   if (error || !data?.embedding) {

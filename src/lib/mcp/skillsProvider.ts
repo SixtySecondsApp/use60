@@ -113,16 +113,17 @@ export class SkillsProvider {
 
       // Call edge function
       const { data, error } = await supabase.functions.invoke<SkillsApiResponse>(
-        'get-agent-skills',
+        'get-router',
         {
           body: {
-            action: 'list',
+            action: 'agent_skills',
+            _skill_action: 'list',
             organization_id: this.organizationId,
             category,
             kind,
             enabled_only: enabledOnly,
           },
-        }
+        },
       );
 
       if (error) {
@@ -163,14 +164,15 @@ export class SkillsProvider {
 
       // Call edge function
       const { data, error } = await supabase.functions.invoke<SkillsApiResponse>(
-        'get-agent-skills',
+        'get-router',
         {
           body: {
-            action: 'get',
+            action: 'agent_skills',
+            _skill_action: 'get',
             organization_id: this.organizationId,
             skill_key: skillKey,
           },
-        }
+        },
       );
 
       if (error) {
@@ -221,17 +223,18 @@ export class SkillsProvider {
     try {
       // Call edge function
       const { data, error } = await supabase.functions.invoke<SkillsApiResponse>(
-        'get-agent-skills',
+        'get-router',
         {
           body: {
-            action: 'search',
+            action: 'agent_skills',
+            _skill_action: 'search',
             organization_id: this.organizationId,
             query,
             category,
             kind,
             enabled_only: enabledOnly,
           },
-        }
+        },
       );
 
       if (error) {

@@ -139,8 +139,8 @@ export default function ResearchComparison() {
     }, 2000);
 
     try {
-      const { data, error } = await supabase.functions.invoke('research-comparison', {
-        body: { domain }
+      const { data, error } = await supabase.functions.invoke('research-router-v2', {
+        body: { action: 'comparison', domain }
       });
 
       if (error) throw error;

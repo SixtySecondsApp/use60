@@ -50,8 +50,8 @@ export function useActionExecution(tableId: string | undefined) {
           return data;
         }
         case 're_enrich': {
-          const { data, error } = await supabase.functions.invoke('enrich-dynamic-table', {
-            body: { table_id: tableId, row_ids: [rowId], force_rerun: true },
+          const { data, error } = await supabase.functions.invoke('enrich-router', {
+            body: { action: 'dynamic_table', table_id: tableId, row_ids: [rowId], force_rerun: true },
           });
           if (error) throw error;
           return data;
@@ -158,8 +158,8 @@ async function executeSingleButtonAction(
     }
 
     case 're_enrich': {
-      const { error } = await supabase.functions.invoke('enrich-dynamic-table', {
-        body: { table_id: ctx.tableId, row_ids: [ctx.rowId], force_rerun: true },
+      const { error } = await supabase.functions.invoke('enrich-router', {
+        body: { action: 'dynamic_table', table_id: ctx.tableId, row_ids: [ctx.rowId], force_rerun: true },
       });
       if (error) throw error;
       return;

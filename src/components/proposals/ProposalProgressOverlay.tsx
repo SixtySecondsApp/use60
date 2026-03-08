@@ -403,8 +403,8 @@ export default function ProposalProgressOverlay({
 
       // 2. Invoke Gotenberg render (stages 3-4 only — skip assemble + compose)
       const { data: renderData, error: renderErr } = await supabase.functions.invoke(
-        'proposal-render-gotenberg',
-        { body: { proposal_id: proposalId } },
+        'proposal-router',
+        { body: { action: 'render_gotenberg', proposal_id: proposalId } },
       );
 
       if (renderErr) {

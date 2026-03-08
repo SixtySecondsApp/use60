@@ -335,8 +335,9 @@ export default function AgentResearchDemo() {
       toast.info(`Starting research for ${row?.company_name || 'row'}...`);
 
       // Call research-orchestrator edge function
-      const { data, error } = await supabase.functions.invoke('research-orchestrator', {
+      const { data, error } = await supabase.functions.invoke('research-router-v2', {
         body: {
+          action: 'orchestrator',
           agent_column_id: columnId,
           row_ids: [rowId],
           depth_override: researchDepth
@@ -389,8 +390,9 @@ export default function AgentResearchDemo() {
       toast.info(`Starting research for ${rowIds.length} companies...`);
 
       // Call research-orchestrator for all rows
-      const { data, error } = await supabase.functions.invoke('research-orchestrator', {
+      const { data, error } = await supabase.functions.invoke('research-router-v2', {
         body: {
+          action: 'orchestrator',
           agent_column_id: columnId,
           row_ids: rowIds,
           depth_override: researchDepth

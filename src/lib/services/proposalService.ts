@@ -1696,8 +1696,8 @@ function triggerBrowserDownload(bytes: Uint8Array, filename: string, mimeType: s
  * and triggers a browser download.
  */
 export async function downloadProposalDocx(proposalId: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('proposal-generate-docx', {
-    body: { proposal_id: proposalId },
+  const { data, error } = await supabase.functions.invoke('proposal-router', {
+    body: { action: 'generate_docx', proposal_id: proposalId },
   });
 
   if (error) {
@@ -1720,8 +1720,8 @@ export async function downloadProposalDocx(proposalId: string): Promise<void> {
  * and triggers a browser download.
  */
 export async function downloadProposalPdf(proposalId: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('proposal-generate-pdf', {
-    body: { proposal_id: proposalId },
+  const { data, error } = await supabase.functions.invoke('proposal-router', {
+    body: { action: 'generate_pdf', proposal_id: proposalId },
   });
 
   if (error) {
@@ -1800,8 +1800,8 @@ export async function resolveClientLogo(
     const emailDomain = contactEmail.split('@')[1];
     if (emailDomain && !emailDomain.match(/^(gmail|yahoo|hotmail|outlook|icloud|aol)\./i)) {
       try {
-        const { data: logoData, error: logoError } = await supabase.functions.invoke('fetch-logo', {
-          body: { domain: emailDomain },
+        const { data: logoData, error: logoError } = await supabase.functions.invoke('fetch-router', {
+          body: { action: 'logo', domain: emailDomain },
         });
 
         if (!logoError && logoData?.logo_url) {
@@ -2138,8 +2138,8 @@ export async function uploadAndParseDocument(
   }
 
   // Invoke parse edge function
-  const { data, error: invokeError } = await supabase.functions.invoke('proposal-parse-document', {
-    body: { asset_id: asset.id },
+  const { data, error: invokeError } = await supabase.functions.invoke('proposal-router', {
+    body: { action: 'parse_document', asset_id: asset.id },
   });
 
   if (invokeError) {

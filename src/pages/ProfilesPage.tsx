@@ -122,8 +122,8 @@ export default function ProfilesPage() {
 
   const handleResearch = useCallback(async (profile: FactProfile) => {
     setResearchingProfileId(profile.id);
-    const { error } = await supabase.functions.invoke('research-fact-profile', {
-      body: { action: 'research', profileId: profile.id },
+    const { error } = await supabase.functions.invoke('research-router-v2', {
+      body: { action: 'fact_profile', sub_action: 'research', profileId: profile.id },
     });
     if (error) {
       setResearchingProfileId(null);
