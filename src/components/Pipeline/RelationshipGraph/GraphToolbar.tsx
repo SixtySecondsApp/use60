@@ -1,7 +1,17 @@
-import { useMemo } from 'react';
-import { Search, Building2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Search, Building2, EyeOff, Eye, RotateCcw, ChevronDown, Users, MousePointerSquareDashed } from 'lucide-react';
 import { TIER_COLORS } from './constants';
-import type { GraphNode, WarmthTier } from './types';
+import type { GraphNode, WarmthTier, ContactCategory } from './types';
+
+const CATEGORIES: { value: ContactCategory; label: string; color: string }[] = [
+  { value: 'prospect', label: 'Prospects', color: '#6366f1' },
+  { value: 'client', label: 'Clients', color: '#22c55e' },
+  { value: 'partner', label: 'Partners', color: '#0ea5e9' },
+  { value: 'supplier', label: 'Suppliers', color: '#f59e0b' },
+  { value: 'employee', label: 'Employees', color: '#94a3b8' },
+  { value: 'investor', label: 'Investors', color: '#a78bfa' },
+  { value: 'other', label: 'Other', color: '#64748b' },
+];
 
 interface GraphToolbarProps {
   filter: WarmthTier | null;
@@ -12,14 +22,34 @@ interface GraphToolbarProps {
   allContactCount: number;
   clustered: boolean;
   onClusteredChange: (value: boolean) => void;
+  hideNoInteraction: boolean;
+  onHideNoInteractionChange: (value: boolean) => void;
+  excludedCount: number;
+  onClearExcluded: () => void;
+  excludedCategories: Set<ContactCategory>;
+  onToggleCategory: (cat: ContactCategory) => void;
+  multiSelectMode: boolean;
+  onToggleMultiSelect: () => void;
+  selectedCount: number;
 }
 
 const TIERS: WarmthTier[] = ['hot', 'warm', 'cool', 'cold'];
 
-export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, nodes, allContactCount, clustered, onClusteredChange }: GraphToolbarProps) {
+export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, nodes, allContactCount, clustered, onClusteredChange, hideNoInteraction, onHideNoInteractionChange, excludedCount, onClearExcluded, excludedCategories, onToggleCategory, multiSelectMode, onToggleMultiSelect, selectedCount }: GraphToolbarProps) {
+  const [showCategoryMenu, setShowCategoryMenu] = useState(false);
+
   const tierCounts = useMemo(() => {
     const counts: Record<WarmthTier, number> = { hot: 0, warm: 0, cool: 0, cold: 0 };
     nodes.forEach((n) => { counts[n.tier ?? 'cold']++; });
+    return counts;
+  }, [nodes]);
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    nodes.forEach((n) => {
+      const cat = n.category ?? 'prospect';
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
     return counts;
   }, [nodes]);
 
@@ -41,7 +71,7 @@ export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, n
   const trendingDown = useMemo(() => nodes.filter((n) => (n.warmth_delta ?? 0) < -0.03).length, [nodes]);
 
   return (
-    <div className="flex items-center gap-2.5 px-4 py-2 border-b border-white/[0.06] bg-[#111118]/70 shrink-0">
+    <div className="flex items-center gap-2.5 px-4 py-2 border-b border-white/[0.06] bg-[#111118]/70 shrink-0 flex-wrap">
       {/* Tier filter buttons */}
       {TIERS.map((t) => {
         const active = filter === t;
@@ -65,6 +95,57 @@ export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, n
           </button>
         );
       })}
+
+      <div className="w-px h-5 bg-white/[0.08] mx-1" />
+
+      {/* Category filter dropdown */}
+      <div className="relative">
+        <button
+          onClick={() => setShowCategoryMenu(!showCategoryMenu)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-all"
+          style={{
+            borderColor: excludedCategories.size > 0 ? '#f59e0b' : 'rgba(100,116,139,0.2)',
+            background: excludedCategories.size > 0 ? 'rgba(245,158,11,0.15)' : 'rgba(30,30,46,0.5)',
+            color: excludedCategories.size > 0 ? '#fbbf24' : '#94a3b8',
+          }}
+        >
+          <Users className="w-3 h-3" />
+          Type
+          {excludedCategories.size > 0 && (
+            <span className="text-[10px] text-amber-400">-{excludedCategories.size}</span>
+          )}
+          <ChevronDown className="w-3 h-3" />
+        </button>
+
+        {showCategoryMenu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowCategoryMenu(false)} />
+            <div className="absolute top-full left-0 mt-1 z-50 bg-[#1a1a2e] border border-white/[0.1] rounded-lg shadow-xl py-1 min-w-[160px]">
+              {CATEGORIES.map((cat) => {
+                const isExcluded = excludedCategories.has(cat.value);
+                const count = categoryCounts[cat.value] || 0;
+                return (
+                  <button
+                    key={cat.value}
+                    onClick={() => onToggleCategory(cat.value)}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] hover:bg-white/[0.06] transition-colors"
+                    style={{ color: isExcluded ? '#64748b' : '#e2e8f0' }}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ background: isExcluded ? '#334155' : cat.color }}
+                    />
+                    <span className={`flex-1 text-left ${isExcluded ? 'line-through' : ''}`}>
+                      {cat.label}
+                    </span>
+                    <span className="text-gray-500">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="w-px h-5 bg-white/[0.08] mx-1" />
 
@@ -100,6 +181,48 @@ export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, n
         <Building2 className="w-3 h-3" />
         Company
       </button>
+
+      {/* Hide no-interaction toggle */}
+      <button
+        onClick={() => onHideNoInteractionChange(!hideNoInteraction)}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-all"
+        style={{
+          borderColor: hideNoInteraction ? '#f59e0b' : 'rgba(100,116,139,0.2)',
+          background: hideNoInteraction ? 'rgba(245,158,11,0.15)' : 'rgba(30,30,46,0.5)',
+          color: hideNoInteraction ? '#fbbf24' : '#94a3b8',
+        }}
+      >
+        {hideNoInteraction ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+        {hideNoInteraction ? 'Engaged only' : 'All contacts'}
+      </button>
+
+      {/* Multi-select toggle */}
+      <button
+        onClick={onToggleMultiSelect}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-all"
+        style={{
+          borderColor: multiSelectMode ? '#6366f1' : 'rgba(100,116,139,0.2)',
+          background: multiSelectMode ? 'rgba(99,102,241,0.15)' : 'rgba(30,30,46,0.5)',
+          color: multiSelectMode ? '#a5b4fc' : '#94a3b8',
+        }}
+      >
+        <MousePointerSquareDashed className="w-3 h-3" />
+        Select
+        {selectedCount > 0 && (
+          <span className="text-[10px] bg-indigo-500/30 px-1.5 rounded-full text-indigo-300">{selectedCount}</span>
+        )}
+      </button>
+
+      {/* Excluded contacts reset */}
+      {excludedCount > 0 && (
+        <button
+          onClick={onClearExcluded}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-red-500/30 bg-red-500/10 text-[11px] font-semibold text-red-400 transition-all hover:bg-red-500/20"
+        >
+          <RotateCcw className="w-3 h-3" />
+          {excludedCount} hidden
+        </button>
+      )}
 
       {/* Search */}
       <div className="ml-auto relative">

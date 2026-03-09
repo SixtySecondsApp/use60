@@ -13,8 +13,8 @@ const corsHeaders = {
 
 interface ThumbnailRequest {
   recording_id: string
-  share_url: string
-  fathom_embed_url: string
+  share_url?: string | null
+  fathom_embed_url?: string | null
   timestamp_seconds?: number
   meeting_id?: string
 }
@@ -39,10 +39,24 @@ function normalizeFathomShareUrl(shareUrl: string): string {
       const token = parts[parts.length - 1]
       return `https://fathom.video/share/${token}`
     }
+    if (url.hostname === 'fathom.video' && url.pathname.startsWith('/embed/')) {
+      const token = url.pathname.split('/').filter(Boolean).pop()
+      if (token) return `https://fathom.video/share/${token}`
+    }
     return shareUrl
   } catch {
     return shareUrl
   }
+}
+
+function resolveFathomSourceUrl(
+  recordingId: string,
+  shareUrl?: string | null,
+  fathomEmbedUrl?: string | null
+): string {
+  if (shareUrl?.trim()) return normalizeFathomShareUrl(shareUrl.trim())
+  if (fathomEmbedUrl?.trim()) return normalizeFathomShareUrl(fathomEmbedUrl.trim())
+  return normalizeFathomShareUrl(`https://fathom.video/recording/${recordingId}`)
 }
 
 async function captureWithCustomAPI(
@@ -110,11 +124,11 @@ export async function handleVideoThumbnailV2(req: Request): Promise<Response> {
 
   try {
     const { recording_id, share_url, fathom_embed_url, timestamp_seconds, meeting_id }: ThumbnailRequest = await req.json()
-    if (!recording_id || !share_url) {
-      throw new Error('Missing required fields: recording_id and share_url')
+    if (!recording_id) {
+      throw new Error('Missing required field: recording_id')
     }
 
-    const normalizedShareUrl = normalizeFathomShareUrl(share_url)
+    const normalizedShareUrl = resolveFathomSourceUrl(recording_id, share_url, fathom_embed_url)
     let thumbnailUrl: string | null = null
 
     const thumbnailsFlag = Deno.env.get('ENABLE_VIDEO_THUMBNAILS')

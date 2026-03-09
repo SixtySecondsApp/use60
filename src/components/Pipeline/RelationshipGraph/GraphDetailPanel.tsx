@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Mail, Phone, Video, Linkedin } from 'lucide-react';
+import { X, Mail, Phone, Video, Linkedin, EyeOff } from 'lucide-react';
 import { TIER_COLORS, HEALTH_COLORS } from './constants';
 import type { GraphNode, WarmthTier } from './types';
 import { GraphTimeline } from './GraphTimeline';
@@ -10,6 +10,7 @@ interface GraphDetailPanelProps {
   allNodes: GraphNode[];
   onClose: () => void;
   onSelectContact?: (id: string) => void;
+  onExclude?: (id: string) => void;
 }
 
 type PanelTab = 'overview' | 'timeline' | 'agents';
@@ -22,7 +23,7 @@ const SIGNAL_BARS: { label: string; key: keyof GraphNode; color: string }[] = [
   { label: 'Sentiment', key: 'sentiment_score', color: '#22c55e' },
 ];
 
-export function GraphDetailPanel({ node, allNodes, onClose, onSelectContact }: GraphDetailPanelProps) {
+export function GraphDetailPanel({ node, allNodes, onClose, onSelectContact, onExclude }: GraphDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>('overview');
   const tier: WarmthTier = node.tier ?? 'cold';
   const tierColor = TIER_COLORS[tier];
@@ -56,12 +57,23 @@ export function GraphDetailPanel({ node, allNodes, onClose, onSelectContact }: G
               </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 rounded-md bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-gray-400 transition-colors"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {onExclude && (
+              <button
+                onClick={() => { onExclude(node.id); onClose(); }}
+                className="w-7 h-7 rounded-md bg-white/[0.06] hover:bg-red-500/20 flex items-center justify-center text-gray-400 hover:text-red-400 transition-colors"
+                title="Hide from graph"
+              >
+                <EyeOff className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-md bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-gray-400 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Warmth meter */}
