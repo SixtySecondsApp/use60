@@ -1524,19 +1524,39 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
       try { videoData = JSON.parse(cell.value); } catch { /* not JSON */ }
     }
 
+    const videoConfig = integrationConfig as { avatar_id?: string; voice_id?: string; voice_source?: string; audio_column_key?: string; script_template?: string } | null;
+
+    // Check which template variables are missing data for this row
+    const missingVars: string[] = [];
+    if (videoConfig?.script_template && rowCellValues) {
+      const varMatches = videoConfig.script_template.matchAll(/\{\{([\w\s]+?)\}\}/g);
+      for (const m of varMatches) {
+        const key = m[1].trim();
+        const snakeKey = key.replace(/\s+/g, '_');
+        if (!rowCellValues[key] && !rowCellValues[snakeKey]) {
+          missingVars.push(key);
+        }
+      }
+    }
+    const hasMissingVars = missingVars.length > 0;
+
     const handleGenerateVideo = async () => {
-      const config = integrationConfig as { avatar_id?: string; voice_id?: string; voice_source?: string; audio_column_key?: string; script_template?: string } | null;
-      if (!config?.avatar_id || !config?.script_template || !rowId || !tableId) {
+      if (!videoConfig?.avatar_id || !videoConfig?.script_template || !rowId || !tableId) {
         toast.error('Video avatar not configured — re-add the column');
+        return;
+      }
+
+      if (hasMissingVars) {
+        toast.error(`Missing data: ${missingVars.join(', ')}`);
         return;
       }
 
       // Resolve audio URL from referenced column if using audio_column mode
       let audioUrl: string | undefined;
-      if (config.voice_source === 'audio_column' && config.audio_column_key && rowCellValues) {
-        audioUrl = rowCellValues[config.audio_column_key] || undefined;
+      if (videoConfig.voice_source === 'audio_column' && videoConfig.audio_column_key && rowCellValues) {
+        audioUrl = rowCellValues[videoConfig.audio_column_key] || undefined;
         if (!audioUrl) {
-          toast.error(`No audio URL found in "${config.audio_column_key}" column for this row`);
+          toast.error(`No audio URL found in "${videoConfig.audio_column_key}" column for this row`);
           return;
         }
       }
@@ -1547,11 +1567,11 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         const { data, error } = await supabase.functions.invoke('heygen-router', {
           body: {
             action: 'video_generate',
-            avatar_id: config.avatar_id,
-            voice_id: config.voice_source !== 'audio_column' ? config.voice_id : undefined,
+            avatar_id: videoConfig.avatar_id,
+            voice_id: videoConfig.voice_source !== 'audio_column' ? videoConfig.voice_id : undefined,
             audio_url: audioUrl,
-            audio_column_key: config.voice_source === 'audio_column' ? config.audio_column_key : undefined,
-            script: config.script_template,
+            audio_column_key: videoConfig.voice_source === 'audio_column' ? videoConfig.audio_column_key : undefined,
+            script: videoConfig.script_template,
             table_id: tableId,
             row_ids: [rowId],
           },
@@ -1579,6 +1599,7 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         durationSeconds={videoData?.duration_seconds || null}
         errorMessage={videoData?.error_message || null}
         onGenerateVideo={integrationConfig ? handleGenerateVideo : undefined}
+        missingVariables={hasMissingVars ? missingVars : undefined}
         rowId={rowId}
         onCellUpdate={onEdit}
       />
@@ -1594,6 +1615,20 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
       }
     }
 
+    // Check which template variables are missing data for this row
+    const audioMissingVars: string[] = [];
+    if (integrationConfig?.script_template && rowCellValues) {
+      const varMatches = (integrationConfig.script_template as string).matchAll(/\{\{([\w\s]+?)\}\}/g);
+      for (const m of varMatches) {
+        const key = m[1].trim();
+        const snakeKey = key.replace(/\s+/g, '_');
+        if (!rowCellValues[key] && !rowCellValues[snakeKey]) {
+          audioMissingVars.push(key);
+        }
+      }
+    }
+    const hasAudioMissingVars = audioMissingVars.length > 0;
+
     const handleGenerateAudio = async () => {
       if (!integrationConfig || !rowId || !tableId) {
         console.error('[ElevenLabsAudio] Missing config:', { hasConfig: !!integrationConfig, rowId, tableId, columnKey });
@@ -1606,6 +1641,10 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
       }
       if (!integrationConfig.script_template) {
         toast.error('No script template — open column settings and add a script');
+        return;
+      }
+      if (hasAudioMissingVars) {
+        toast.error(`Missing data: ${audioMissingVars.join(', ')}`);
         return;
       }
 
@@ -1643,6 +1682,7 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         audioUrl={audioData?.audio_url || null}
         errorMessage={audioData?.error_message || null}
         onGenerateAudio={integrationConfig ? handleGenerateAudio : undefined}
+        missingVariables={hasAudioMissingVars ? audioMissingVars : undefined}
         rowId={rowId}
         onCellUpdate={onEdit}
       />

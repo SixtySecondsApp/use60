@@ -45,7 +45,7 @@ export const GenerateVideosAction: React.FC<GenerateVideosActionProps> = ({
           avatar_id: avatarId,
           voice_id: voiceId,
           script: scriptTemplate,
-          batch_row_ids: selectedRowIds,
+          row_ids: selectedRowIds,
           table_id: tableId,
         },
       });

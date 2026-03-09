@@ -14,6 +14,8 @@ interface HeyGenVideoCellProps {
   durationSeconds: number | null;
   errorMessage: string | null;
   onGenerateVideo?: () => void;
+  /** Variable names missing from this row's data */
+  missingVariables?: string[];
   /** Row ID — for polling video status from the DB */
   rowId?: string;
   /** Callback to update cell value when polling finds a completed video */
@@ -34,6 +36,7 @@ export const HeyGenVideoCell: React.FC<HeyGenVideoCellProps> = ({
   durationSeconds,
   errorMessage,
   onGenerateVideo,
+  missingVariables,
   rowId,
   onCellUpdate,
 }) => {
@@ -99,14 +102,24 @@ export const HeyGenVideoCell: React.FC<HeyGenVideoCellProps> = ({
     return (
       <div className="w-full h-full flex items-center justify-center">
         {onGenerateVideo ? (
-          <button
-            type="button"
-            onClick={onGenerateVideo}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20"
-          >
-            <Video className="w-3 h-3" />
-            Generate
-          </button>
+          missingVariables?.length ? (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium border border-gray-700 bg-gray-800/50 text-gray-500 cursor-not-allowed"
+              title={`Missing: ${missingVariables.join(', ')}`}
+            >
+              <AlertCircle className="w-3 h-3" />
+              Missing data
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onGenerateVideo}
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20"
+            >
+              <Video className="w-3 h-3" />
+              Generate
+            </button>
+          )
         ) : (
           <span className="text-gray-600 text-xs italic">--</span>
         )}

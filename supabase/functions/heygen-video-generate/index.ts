@@ -41,7 +41,11 @@ const MAX_BATCH = 50;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 
 function interpolateScript(script: string, vars: Record<string, string | undefined>): string {
-  return script.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
+  return script.replace(/\{\{([\w\s]+?)\}\}/g, (match, rawKey) => {
+    const key = rawKey.trim();
+    const snakeKey = key.replace(/\s+/g, '_');
+    return vars[key] ?? vars[snakeKey] ?? match;
+  });
 }
 
 Deno.serve(async (req: Request) => {

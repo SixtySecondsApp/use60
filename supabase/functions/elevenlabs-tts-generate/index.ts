@@ -33,7 +33,11 @@ interface TTSRequest {
 }
 
 function interpolateScript(script: string, vars: Record<string, string | undefined>): string {
-  return script.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
+  return script.replace(/\{\{([\w\s]+?)\}\}/g, (match, rawKey) => {
+    const key = rawKey.trim();
+    const snakeKey = key.replace(/\s+/g, '_');
+    return vars[key] ?? vars[snakeKey] ?? match;
+  });
 }
 
 /**
@@ -178,6 +182,19 @@ Deno.serve(async (req: Request) => {
           }
 
           const text = interpolateScript(body.script_template, vars);
+
+          // Skip rows where template variables are still unresolved
+          const unresolvedMatch = text.match(/\{\{[\w\s]+?\}\}/g);
+          if (unresolvedMatch) {
+            const missing = unresolvedMatch.map((m: string) => m.replace(/[{}]/g, '').trim());
+            console.warn(`[elevenlabs-tts-generate] Skipping row ${row.id} — missing: ${missing.join(', ')}`);
+            await svc.from('dynamic_table_cells').upsert({
+              row_id: row.id,
+              column_id: audioColumnId,
+              value: JSON.stringify({ status: 'failed', error_message: `Missing data: ${missing.join(', ')}` }),
+            }, { onConflict: 'row_id,column_id' });
+            return { row_id: row.id, error: `Missing data: ${missing.join(', ')}` };
+          }
 
           // Update cell to processing
           await svc.from('dynamic_table_cells').upsert({
