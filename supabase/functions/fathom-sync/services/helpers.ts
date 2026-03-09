@@ -9,18 +9,22 @@
  */
 export function buildEmbedUrl(shareUrl?: string, recordingId?: string | number): string | null {
   try {
-    if (recordingId) {
-      return `https://app.fathom.video/recording/${recordingId}`
+    if (shareUrl) {
+      const u = new URL(shareUrl)
+      const parts = u.pathname.split('/').filter(Boolean)
+      const token = parts.pop()
+      if (token) {
+        return `https://fathom.video/embed/${token}`
+      }
     }
-    if (!shareUrl) return null
-
-    const u = new URL(shareUrl)
-    const parts = u.pathname.split('/').filter(Boolean)
-    const token = parts.pop()
-    if (!token) return null
-
-    return `https://fathom.video/embed/${token}`
+    if (recordingId) {
+      return `https://fathom.video/embed/${recordingId}`
+    }
+    return null
   } catch {
+    if (recordingId) {
+      return `https://fathom.video/embed/${recordingId}`
+    }
     return null
   }
 }

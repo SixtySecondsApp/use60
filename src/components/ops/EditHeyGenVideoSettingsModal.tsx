@@ -3,9 +3,9 @@
  * for an existing heygen_video column.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Video, Mic, FileText, Save, Loader2, Play, Pause, Check, User, Image, Clapperboard, Link2, Volume2 } from 'lucide-react';
+import { X, Video, Mic, FileText, Save, Loader2, Play, Pause, Check, User, Image, Clapperboard, Link2, Volume2, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ScriptEditor } from './ScriptEditor';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
@@ -66,6 +66,11 @@ export function EditHeyGenVideoSettingsModal({
   const [showVoicePicker, setShowVoicePicker] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Preview state
+  const [previewRows, setPreviewRows] = useState<Record<string, string | undefined>[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       setScriptTemplate(currentConfig?.script_template || '');
@@ -78,8 +83,65 @@ export function EditHeyGenVideoSettingsModal({
       );
       setShowVoicePicker(false);
       setVoiceSearch('');
+      setPreviewIndex(0);
     }
   }, [isOpen, currentConfig]);
+
+  // Fetch sample rows for preview
+  useEffect(() => {
+    if (!isOpen || !currentConfig?.table_id || !existingColumns?.length) return;
+    let cancelled = false;
+    const fetchPreviewRows = async () => {
+      setLoadingPreview(true);
+      try {
+        const { data: columns } = await supabase
+          .from('dynamic_table_columns')
+          .select('id, key')
+          .eq('table_id', currentConfig.table_id!);
+        if (!columns || cancelled) return;
+
+        const colIdToKey: Record<string, string> = {};
+        for (const col of columns) colIdToKey[col.id] = col.key;
+
+        const { data: rows } = await supabase
+          .from('dynamic_table_rows')
+          .select('id, dynamic_table_cells(column_id, value)')
+          .eq('table_id', currentConfig.table_id!)
+          .limit(10);
+        if (!rows || cancelled) return;
+
+        const mapped = rows
+          .map((row: any) => {
+            const vars: Record<string, string | undefined> = {};
+            for (const cell of row.dynamic_table_cells || []) {
+              const key = colIdToKey[cell.column_id];
+              if (key && cell.value && !cell.value.startsWith('{')) vars[key] = cell.value;
+            }
+            return vars;
+          })
+          .filter(v => Object.keys(v).length > 0);
+
+        if (!cancelled) setPreviewRows(mapped);
+      } catch {
+        // silent — preview is non-critical
+      } finally {
+        if (!cancelled) setLoadingPreview(false);
+      }
+    };
+    fetchPreviewRows();
+    return () => { cancelled = true; };
+  }, [isOpen, currentConfig?.table_id, existingColumns]);
+
+  // Interpolate script with preview row data
+  const previewText = useMemo(() => {
+    if (previewRows.length === 0 || !scriptTemplate) return null;
+    const vars = previewRows[previewIndex] || {};
+    return scriptTemplate.replace(/\{\{([\w\s]+?)\}\}/g, (match, rawKey) => {
+      const key = rawKey.trim();
+      const snakeKey = key.replace(/\s+/g, '_');
+      return vars[key] ?? vars[snakeKey] ?? match;
+    });
+  }, [scriptTemplate, previewRows, previewIndex]);
 
   // Load voices when picker is opened or when modal opens (for current voice preview)
   const loadVoices = async () => {
@@ -449,10 +511,13 @@ export function EditHeyGenVideoSettingsModal({
           </div>
 
           {/* Script template */}
-          <div className="space-y-1.5">
+          <div className={`space-y-1.5 transition-opacity ${voiceSource === 'audio_column' && audioColumnKey ? 'opacity-40 pointer-events-none' : ''}`}>
             <label className="text-xs font-medium text-gray-400 uppercase tracking-wide flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5" />
               Script Template
+              {voiceSource === 'audio_column' && audioColumnKey && (
+                <span className="text-[10px] font-normal text-gray-500 normal-case tracking-normal ml-1">— not used with audio column</span>
+              )}
             </label>
             <ScriptEditor
               value={scriptTemplate}
@@ -463,6 +528,51 @@ export function EditHeyGenVideoSettingsModal({
               rows={5}
               className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-purple-500 resize-y font-mono leading-relaxed"
             />
+
+            {/* Live preview */}
+            {scriptTemplate && voiceSource !== 'audio_column' && (
+              <div className="rounded-lg border border-gray-700/60 bg-gray-800/40 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-700/40 bg-gray-800/60">
+                  <div className="flex items-center gap-1.5 text-[10px] text-gray-500 uppercase tracking-wide font-medium">
+                    <Eye className="w-3 h-3" />
+                    Preview
+                  </div>
+                  {previewRows.length > 1 && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewIndex(i => (i - 1 + previewRows.length) % previewRows.length)}
+                        className="p-0.5 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-300"
+                      >
+                        <ChevronLeft className="w-3 h-3" />
+                      </button>
+                      <span className="text-[10px] text-gray-500 tabular-nums">
+                        {previewIndex + 1} / {previewRows.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewIndex(i => (i + 1) % previewRows.length)}
+                        className="p-0.5 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-300"
+                      >
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="px-3 py-2.5">
+                  {loadingPreview ? (
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Loading row data...
+                    </div>
+                  ) : previewText ? (
+                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{previewText}</p>
+                  ) : (
+                    <p className="text-xs text-gray-600 italic">No rows with data found for preview</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

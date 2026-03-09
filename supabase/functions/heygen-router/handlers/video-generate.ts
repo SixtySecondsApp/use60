@@ -37,7 +37,12 @@ const MAX_BATCH = 50;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 
 function interpolateScript(script: string, vars: Record<string, string | undefined>): string {
-  return script.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
+  return script.replace(/\{\{([\w\s]+?)\}\}/g, (match, rawKey) => {
+    const key = rawKey.trim();
+    // Try exact match first, then try snake_case version (e.g. "contact name" -> "contact_name")
+    const snakeKey = key.replace(/\s+/g, '_');
+    return vars[key] ?? vars[snakeKey] ?? match;
+  });
 }
 
 export async function handleVideoGenerate(req: Request): Promise<Response> {
@@ -227,6 +232,28 @@ export async function handleVideoGenerate(req: Request): Promise<Response> {
     for (const entry of entries) {
       try {
         const personalizedScript = interpolateScript(body.script, entry.vars);
+
+        // Skip rows where template variables are still unresolved
+        const unresolvedMatch = personalizedScript.match(/\{\{[\w\s]+?\}\}/g);
+        if (unresolvedMatch) {
+          const missing = unresolvedMatch.map(m => m.replace(/[{}]/g, '').trim());
+          console.warn(`[heygen-router/video-generate] Skipping row ${entry.rowId} — missing: ${missing.join(', ')}`);
+          if (videoColumnId && entry.rowId) {
+            await svc
+              .from('dynamic_table_cells')
+              .upsert({
+                row_id: entry.rowId,
+                column_id: videoColumnId,
+                value: JSON.stringify({
+                  status: 'failed',
+                  error_message: `Missing data: ${missing.join(', ')}`,
+                }),
+              }, { onConflict: 'row_id,column_id' });
+          }
+          results.push({ row_id: entry.rowId, error: `Missing data: ${missing.join(', ')}` });
+          continue;
+        }
+
         const callbackId = crypto.randomUUID();
 
         // Insert DB record BEFORE calling HeyGen to avoid race condition

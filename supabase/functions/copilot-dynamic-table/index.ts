@@ -1158,7 +1158,7 @@ serve(async (req) => {
     // ---------------------------------------------------------------
     // 4b. Search Apollo with pagination — skip pages of all-duplicates
     // ---------------------------------------------------------------
-    const MAX_PAGES = 5
+    const MAX_PAGES = 10
     const desiredCount = search_params.per_page || 25
     let currentPage = search_params.page || 1
     let allNewContacts: NormalizedContact[] = []
@@ -1183,10 +1183,16 @@ serve(async (req) => {
       }
     }
 
+    // Credit-optimized fetching: Apollo search is free on their side, and we charge
+    // a flat 0.3 internal credits per API call regardless of per_page. So we always
+    // fetch the maximum (100) per call to minimise total calls needed after dedup.
+    // We only page further if dedup drops us below the user's desired count.
+    const APOLLO_MAX_PAGE_SIZE = 100
+
     console.log(`[copilot-dynamic-table] Calling apollo-search with sanitized params:`, JSON.stringify(cleanSearchParams))
 
     for (let attempt = 0; attempt < MAX_PAGES && hasMore; attempt++) {
-      const searchParamsWithPage = { ...cleanSearchParams, page: currentPage }
+      const searchParamsWithPage = { ...cleanSearchParams, per_page: APOLLO_MAX_PAGE_SIZE, page: currentPage }
       if (attempt > 0) {
         console.log(`[copilot-dynamic-table] Page ${currentPage}: fetching more results (have ${allNewContacts.length}/${desiredCount} net-new so far)`)
       }

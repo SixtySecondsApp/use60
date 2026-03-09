@@ -268,7 +268,7 @@ export function MeetingDetail() {
 
   const handleQuickAdd = async (type: 'meeting' | 'outbound' | 'proposal' | 'sale') => {
     if (!meeting) return;
-    const clientName = primaryExternal?.name || attendees[0]?.name || meeting.title || 'Prospect';
+    const clientName = companyName || primaryExternal?.name || attendees[0]?.name || meeting.title || 'Prospect';
     // Derive website from primary external attendee email domain when available
     let websiteFromEmail: string | undefined;
     const email = primaryExternal?.email || undefined;
@@ -411,8 +411,8 @@ export function MeetingDetail() {
 
         if (externalError) throw externalError;
 
-        // Combine both internal and external attendees
-        const combinedAttendees: MeetingAttendee[] = [
+        // Combine both internal and external attendees, deduplicating by email
+        const allAttendees: MeetingAttendee[] = [
           ...((internalAttendeesData || []) as any[]).map((a: any) => ({
             id: a.id,
             name: a.name,
@@ -433,6 +433,13 @@ export function MeetingDetail() {
               };
             })
         ];
+        const seen = new Set<string>();
+        const combinedAttendees = allAttendees.filter(a => {
+          const key = a.email?.toLowerCase();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
 
         setAttendees(combinedAttendees);
 
