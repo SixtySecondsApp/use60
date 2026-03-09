@@ -111,6 +111,41 @@ export default function CreatorView({ domain, queryParams }: CreatorViewProps) {
       .catch(() => {}); // Silent fail — prospect intel is optional
   }, [session, queryParams, domain, prospectIntel]);
 
+  // Auto-create campaign link when URL has query params (e.g., /t/domain.com?f=Drue&l=Steele&id=1234)
+  useEffect(() => {
+    if (!session || linkResult) return;
+    const hasContactInfo = queryParams.fn || queryParams.email;
+    if (!hasContactInfo) return;
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    fetch(`${supabaseUrl}/functions/v1/campaign-enrich`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        prospects: [{
+          first_name: queryParams.fn || '',
+          last_name: queryParams.ln || '',
+          email: queryParams.email || '',
+          title: queryParams.title || '',
+          company: domain.replace(/^www\./, ''),
+          domain,
+        }],
+        campaign_name: `URL Lead — ${domain}`,
+        campaign_source: 'url_shortlink',
+      }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.results?.[0]) {
+          setLinkResult({ code: data.results[0].code, url: data.results[0].url });
+        }
+      })
+      .catch(() => {}); // Silent fail — link creation is a bonus
+  }, [session, queryParams, domain, linkResult]);
+
   // Discover decision makers once research completes
   useEffect(() => {
     if (!session || !research || contacts.length > 0 || contactsLoading) return;

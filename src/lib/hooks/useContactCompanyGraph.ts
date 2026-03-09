@@ -12,7 +12,7 @@ import type { Contact, Company, Deal, Activity, Task } from '@/lib/database/mode
  */
 export interface TimelineItem {
   id: string;
-  recordType: 'activity' | 'meeting' | 'lead' | 'deal' | 'task';
+  recordType: 'activity' | 'meeting' | 'lead' | 'deal' | 'task' | 'communication';
   timestamp: string; // ISO date string for sorting
   title: string;
   description?: string;
@@ -39,6 +39,13 @@ export interface TimelineItem {
     taskPriority?: string;
     taskStatus?: string;
     dueDate?: string;
+    // Communication-specific
+    communicationDirection?: 'inbound' | 'outbound';
+    communicationEventType?: string;
+    communicationSubject?: string;
+    communicationSentiment?: string;
+    wasOpened?: boolean;
+    wasReplied?: boolean;
   };
   // Relationship IDs for navigation
   contactId?: string;
@@ -62,6 +69,7 @@ export interface ContactCompanyGraph {
   leads: any[]; // Lead records from leads table
   deals: Deal[];
   tasks: Task[];
+  communications: any[]; // Communication events (emails, calls)
   // Computed insights
   insights: {
     daysSinceLastTouch?: number;
@@ -235,6 +243,32 @@ function normalizeTaskToTimeline(task: Task): TimelineItem {
 }
 
 /**
+ * Normalize a communication event into a timeline item
+ */
+function normalizeCommunicationToTimeline(comm: any): TimelineItem {
+  const direction = comm.direction === 'inbound' ? 'Received' : 'Sent';
+  return {
+    id: comm.id,
+    recordType: 'communication',
+    timestamp: comm.event_timestamp || comm.communication_date || comm.created_at,
+    title: `${direction}: ${comm.subject || comm.email_subject || 'Email'}`,
+    description: comm.snippet || comm.email_body_preview || undefined,
+    metadata: {
+      communicationDirection: comm.direction,
+      communicationEventType: comm.event_type,
+      communicationSubject: comm.subject || comm.email_subject,
+      communicationSentiment: comm.sentiment_label,
+      wasOpened: comm.was_opened,
+      wasReplied: comm.was_replied,
+    },
+    contactId: comm.contact_id,
+    companyId: comm.company_id,
+    dealId: comm.deal_id,
+    originalRecord: comm,
+  };
+}
+
+/**
  * Fetch all related data for a contact
  */
 async function fetchContactGraph(contactId: string, userId: string, userData?: any): Promise<ContactCompanyGraph> {
@@ -333,6 +367,7 @@ async function fetchContactGraph(contactId: string, userId: string, userData?: a
     dealsByPrimaryResult,
     dealsByJunctionResult,
     tasksResult,
+    communicationsResult,
   ] = await Promise.allSettled([
     // Activities for this contact
     supabase
@@ -341,7 +376,7 @@ async function fetchContactGraph(contactId: string, userId: string, userData?: a
       .eq('contact_id', contactId)
       .eq('user_id', userId)
       .order('date', { ascending: false }),
-    
+
     // Meetings linked to this contact by primary_contact_id
     supabase
       .from('meetings')
@@ -349,7 +384,7 @@ async function fetchContactGraph(contactId: string, userId: string, userData?: a
       .eq('primary_contact_id', contactId)
       .eq('owner_user_id', userId)
       .order('meeting_start', { ascending: false }),
-    
+
     // Meetings linked via meeting_contacts junction
     supabase
       .from('meeting_contacts')
@@ -358,7 +393,7 @@ async function fetchContactGraph(contactId: string, userId: string, userData?: a
         meetings!inner(*)
       `)
       .eq('contact_id', contactId),
-    
+
     // Leads for this contact
     supabase
       .from('leads')
@@ -397,6 +432,15 @@ async function fetchContactGraph(contactId: string, userId: string, userData?: a
       .eq('contact_id', contactId)
       .eq('assigned_to', userId)
       .order('created_at', { ascending: false }),
+
+    // Communication events (emails, calls) for this contact
+    supabase
+      .from('communication_events')
+      .select('id, contact_id, company_id, deal_id, event_type, direction, subject, snippet, email_subject, email_body_preview, was_opened, was_replied, sentiment_score, sentiment_label, event_timestamp, communication_date, created_at')
+      .eq('contact_id', contactId)
+      .eq('user_id', userId)
+      .order('event_timestamp', { ascending: false })
+      .limit(50),
   ]);
   
   const activities = activitiesResult.status === 'fulfilled' 
@@ -442,13 +486,18 @@ async function fetchContactGraph(contactId: string, userId: string, userData?: a
   const tasks = tasksResult.status === 'fulfilled'
     ? (tasksResult.value.data || [])
     : [];
-  
+
+  const communications = communicationsResult.status === 'fulfilled'
+    ? (communicationsResult.value.data || [])
+    : [];
+
   // Compute insights
   const allTimestamps = [
     ...activities.map((a: any) => a.date || a.created_at),
     ...meetings.map((m: any) => m.meeting_start || m.created_at),
     ...leads.map((l: any) => l.meeting_start || l.created_at),
     ...tasks.map((t: any) => t.due_date || t.created_at),
+    ...communications.map((c: any) => c.event_timestamp || c.communication_date || c.created_at),
   ].filter(Boolean).map((d: any) => new Date(d).getTime());
   
   const lastActivityDate = allTimestamps.length > 0
@@ -490,6 +539,7 @@ async function fetchContactGraph(contactId: string, userId: string, userData?: a
     leads,
     deals: deals as Deal[],
     tasks: tasks as Task[],
+    communications,
     insights: {
       daysSinceLastTouch,
       pipelineCoverage,
@@ -558,6 +608,7 @@ async function fetchCompanyGraph(companyId: string, userId: string, userData?: a
       leads: [],
       deals: [],
       tasks: [],
+      communications: [],
       insights: {},
     };
   }
@@ -573,6 +624,7 @@ async function fetchCompanyGraph(companyId: string, userId: string, userData?: a
     dealsByPrimaryResult,
     dealsByJunctionResult,
     tasksResult,
+    communicationsResult,
   ] = await Promise.allSettled([
     // Activities for any contact in this company OR directly linked to company
     supabase
@@ -656,6 +708,15 @@ async function fetchCompanyGraph(companyId: string, userId: string, userData?: a
       .or(`company_id.eq.${companyId},contact_id.in.(${contactIds.join(',')})`)
       .eq('assigned_to', userId)
       .order('created_at', { ascending: false }),
+
+    // Communication events for company or any contact in company
+    supabase
+      .from('communication_events')
+      .select('id, contact_id, company_id, deal_id, event_type, direction, subject, snippet, email_subject, email_body_preview, was_opened, was_replied, sentiment_score, sentiment_label, event_timestamp, communication_date, created_at')
+      .or(`company_id.eq.${companyId},contact_id.in.(${contactIds.join(',')})`)
+      .eq('user_id', userId)
+      .order('event_timestamp', { ascending: false })
+      .limit(50),
   ]);
   
   const activities = activitiesResult.status === 'fulfilled' 
@@ -707,13 +768,18 @@ async function fetchCompanyGraph(companyId: string, userId: string, userData?: a
   const tasks = tasksResult.status === 'fulfilled'
     ? (tasksResult.value.data || [])
     : [];
-  
+
+  const communications = communicationsResult.status === 'fulfilled'
+    ? ((communicationsResult.value as any).data || [])
+    : [];
+
   // Compute insights (same as contact)
   const allTimestamps = [
     ...activities.map((a: any) => a.date || a.created_at),
     ...meetings.map((m: any) => m.meeting_start || m.created_at),
     ...leads.map((l: any) => l.meeting_start || l.created_at),
     ...tasks.map((t: any) => t.due_date || t.created_at),
+    ...communications.map((c: any) => c.event_timestamp || c.communication_date || c.created_at),
   ].filter(Boolean).map((d: any) => new Date(d).getTime());
   
   const lastActivityDate = allTimestamps.length > 0
@@ -753,6 +819,7 @@ async function fetchCompanyGraph(companyId: string, userId: string, userData?: a
     leads,
     deals: deals as Deal[],
     tasks: tasks as Task[],
+    communications,
     insights: {
       daysSinceLastTouch,
       pipelineCoverage,
@@ -823,7 +890,12 @@ export function useContactCompanyGraph(
     graph.tasks.forEach(task => {
       items.push(normalizeTaskToTimeline(task));
     });
-    
+
+    // Add communication events (emails, calls)
+    (graph.communications || []).forEach((comm: any) => {
+      items.push(normalizeCommunicationToTimeline(comm));
+    });
+
     // Sort by timestamp (newest first)
     return items.sort((a, b) => {
       const timeA = new Date(a.timestamp).getTime();
@@ -918,7 +990,12 @@ export function useTimelineInfinite(
       graph.tasks.forEach(task => {
         items.push(normalizeTaskToTimeline(task));
       });
-      
+
+      // Add communication events (emails, calls)
+      (graph.communications || []).forEach((comm: any) => {
+        items.push(normalizeCommunicationToTimeline(comm));
+      });
+
       // Sort by timestamp (newest first)
       items.sort((a, b) => {
         const timeA = new Date(a.timestamp).getTime();
