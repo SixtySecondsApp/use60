@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Send, Trash2, X, Upload, RotateCcw, Loader2 } from 'lucide-react';
+import { Sparkles, Send, Trash2, X, Upload, RotateCcw, Loader2, Download } from 'lucide-react';
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -10,6 +10,7 @@ interface BulkActionsBarProps {
   onDeselectAll: () => void;
   onPushToHubSpot?: () => void;
   onPushToAttio?: () => void;
+  onExportCSV?: () => void;
   onReEnrich?: () => void;
   onRetryFailed?: () => void;
   isEnriching?: boolean;
@@ -26,6 +27,7 @@ export function BulkActionsBar({
   onDeselectAll,
   onPushToHubSpot,
   onPushToAttio,
+  onExportCSV,
   onReEnrich,
   onRetryFailed,
   isEnriching = false,
@@ -108,6 +110,17 @@ export function BulkActionsBar({
             >
               <Upload className="h-4 w-4" />
               Attio
+            </button>
+          )}
+
+          {/* Export CSV Button */}
+          {onExportCSV && (
+            <button
+              onClick={onExportCSV}
+              className="flex items-center gap-2 rounded-lg bg-gray-700 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-600"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
             </button>
           )}
 

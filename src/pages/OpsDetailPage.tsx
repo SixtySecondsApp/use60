@@ -32,6 +32,7 @@ import {
   MoreHorizontal,
   Inbox,
   Play,
+  Columns,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -170,6 +171,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
   // ---- Local state ----
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [showAddColumn, setShowAddColumn] = useState(false);
   const [activeColumnMenu, setActiveColumnMenu] = useState<{
     columnId: string;
@@ -677,9 +679,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       searchParams.delete('action');
       setSearchParams(searchParams, { replace: true });
     } else if (action === 'export') {
-      // Trigger CSV export
-      const visibleCols = columns.filter((c) => c.is_visible);
-      OpsTableService.generateCSVExport(rows, visibleCols, table.name || 'export');
+      // Trigger CSV export — include ALL columns (visible + hidden), exclude action buttons
+      const exportCols = columns.filter((c) => c.column_type !== 'action');
+      OpsTableService.generateCSVExport(rows, exportCols, table.name || 'export');
       toast.success(`Exported ${rows.length} rows to CSV`);
       searchParams.delete('action');
       setSearchParams(searchParams, { replace: true });
@@ -1062,6 +1064,21 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     },
     onError: () => toast.error('Failed to hide column'),
   });
+
+  const toggleAllColumnsMutation = useMutation({
+    mutationFn: async (showAll: boolean) => {
+      const hiddenCols = columns.filter(c => c.is_visible !== showAll);
+      await Promise.all(
+        hiddenCols.map(c => tableService.updateColumn(c.id, { isVisible: showAll }))
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+    },
+    onError: () => toast.error('Failed to toggle columns'),
+  });
+
+  const hiddenColumnCount = columns.filter(c => !c.is_visible).length;
 
   const deleteColumnMutation = useMutation({
     mutationFn: (columnId: string) => tableService.removeColumn(columnId),
@@ -2148,7 +2165,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             }
             const exportCols = (result.columns as string[])
               ? columns.filter((c) => (result.columns as string[]).includes(c.key))
-              : columns.filter((c) => c.is_visible);
+              : columns.filter((c) => c.column_type !== 'action');
             OpsTableService.generateCSVExport(
               exportRows,
               exportCols,
@@ -2735,6 +2752,37 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                 Enriching
               </div>
             )}
+            {/* Toggle hidden columns */}
+            {hiddenColumnCount > 0 && (
+              <button
+                onClick={() => toggleAllColumnsMutation.mutate(true)}
+                disabled={toggleAllColumnsMutation.isPending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white disabled:opacity-50"
+              >
+                {toggleAllColumnsMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Columns className="h-3.5 w-3.5" />
+                )}
+                Show all ({hiddenColumnCount})
+              </button>
+            )}
+            {hiddenColumnCount === 0 && columns.filter(c => c.column_type === 'formula').length > 5 && (
+              <button
+                onClick={() => {
+                  const toHide = columns.filter(c => c.column_type === 'formula');
+                  if (toHide.length > 0) {
+                    Promise.all(toHide.map(c => tableService.updateColumn(c.id, { isVisible: false })))
+                      .then(() => queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] }))
+                      .catch(() => toast.error('Failed to hide columns'));
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+              >
+                <Columns className="h-3.5 w-3.5" />
+                Compact view
+              </button>
+            )}
             {/* Run All Pipeline */}
             {columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
               <button
@@ -3150,6 +3198,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               if (Object.keys(instantlySummary).length === 0) return summaryConfig ?? null;
               return { ...instantlySummary, ...(summaryConfig ?? {}) };
             })()}
+            onRowExpand={(rowId) => setExpandedRowId(rowId)}
           />
         </div>
       )}
@@ -3918,6 +3967,86 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         }}
         onPushToHubSpot={() => { setShowHubSpotPush(true); fetchHubSpotLists(); }}
         onPushToAttio={() => setShowAttioPush(true)}
+        onExportCSV={async () => {
+          const selectedRowData = rows.filter((r) => selectedRows.has(r.id));
+          const allExportCols = columns.filter((c) => c.column_type !== 'action');
+          const toastId = toast.loading('Building CSV with encoded tags...');
+
+          try {
+            // 1. Get current user's Slack ID
+            let slackUserId = '';
+            if (currentUserId && table?.organization_id) {
+              const { data: slackMapping } = await supabase
+                .from('slack_user_mappings')
+                .select('slack_user_id')
+                .eq('org_id', table.organization_id)
+                .eq('sixty_user_id', currentUserId)
+                .limit(1)
+                .maybeSingle();
+              slackUserId = slackMapping?.slack_user_id ?? '';
+            }
+
+            // 2. Collect all contact_ids from rows to batch-fetch emails
+            const contactIdSet = new Set<string>();
+            for (const row of selectedRowData) {
+              const contactId = row.cells['contact_id']?.value;
+              if (contactId) contactIdSet.add(contactId);
+            }
+            const contactEmailMap = new Map<string, string>();
+            if (contactIdSet.size > 0) {
+              const { data: contacts } = await supabase
+                .from('contacts')
+                .select('id, email')
+                .in('id', Array.from(contactIdSet));
+              for (const c of contacts ?? []) {
+                if (c.email) contactEmailMap.set(c.id, c.email);
+              }
+            }
+
+            // 3. Build raw tag strings per row
+            const CAMPAIGN_ID = '15000_C3.5_PS_V1_';
+            const encodedTagsMap = new Map<string, string>();
+            const rawTagsMap = new Map<string, string>();
+            const orderedRowIds: string[] = [];
+
+            for (const row of selectedRowData) {
+              const firstName = row.cells['first_name']?.value ?? '';
+              const lastName = row.cells['last_name']?.value ?? '';
+              const contactId = row.cells['contact_id']?.value ?? '';
+              const email = contactEmailMap.get(contactId) ?? row.cells['email']?.value ?? '';
+
+              const rawTags = `tag1=${firstName}&tag2=${lastName}&tag3=${email}&tag4=${slackUserId}&tag5=${CAMPAIGN_ID}&rca=${firstName}&rtr-intro-client-name=${firstName}&rtr-client-name=${firstName}`;
+              rawTagsMap.set(row.id, rawTags);
+              orderedRowIds.push(row.id);
+            }
+
+            // 4. Encode all tags via edge function (avoids CORS)
+            try {
+              const token = await getSupabaseAuthToken();
+              const { data: encodeResult, error: encodeErr } = await supabase.functions.invoke('encode-tags', {
+                body: { tags: orderedRowIds.map((id) => rawTagsMap.get(id)!) },
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+              });
+              if (!encodeErr && encodeResult?.encoded) {
+                for (let i = 0; i < orderedRowIds.length; i++) {
+                  encodedTagsMap.set(orderedRowIds[i], encodeResult.encoded[i] ?? '');
+                }
+              }
+            } catch (encErr) {
+              console.error('[encode-tags] Failed:', encErr);
+            }
+
+            // 5. Export CSV with extra columns
+            OpsTableService.generateCSVExport(selectedRowData, allExportCols, table?.name || 'export', [
+              { label: 'Campaign ID', value: CAMPAIGN_ID },
+              { label: 'Tags', value: (row) => rawTagsMap.get(row.id) ?? '' },
+              { label: 'Encoded Tags', value: (row) => encodedTagsMap.get(row.id) ?? '' },
+            ]);
+            toast.success(`Exported ${selectedRowData.length} rows`, { id: toastId });
+          } catch (err: any) {
+            toast.error(err?.message ?? 'Export failed', { id: toastId });
+          }
+        }}
         onReEnrich={() => {
           const enrichCols = columns.filter((c) => c.is_enrichment);
           if (enrichCols.length === 0) return toast.info('No enrichment columns');
@@ -4110,6 +4239,43 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             ) : (
               <WorkflowList tableId={tableId!} onEdit={() => setShowWorkflowBuilder(true)} />
             )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Row Detail Panel */}
+      <Sheet open={!!expandedRowId} onOpenChange={(open) => !open && setExpandedRowId(null)}>
+        <SheetContent className="w-[520px] sm:w-[560px] overflow-y-auto !top-16 !h-[calc(100vh-4rem)] !p-0 border-l border-white/[0.06] bg-gray-950">
+          <SheetHeader className="border-b border-white/[0.06] px-6 pt-6 pb-5">
+            <SheetTitle className="text-base font-semibold text-gray-100">Row Details</SheetTitle>
+          </SheetHeader>
+          <div className="px-6 py-4 space-y-3">
+            {(() => {
+              const row = rows.find(r => r.id === expandedRowId);
+              if (!row) return <p className="text-sm text-gray-500">Row not found</p>;
+              return columns.map(col => {
+                const cellValue = row.cells[col.key]?.value;
+                if (cellValue === null || cellValue === undefined || cellValue === '') return null;
+                const isJson = typeof cellValue === 'string' && (cellValue.startsWith('{') || cellValue.startsWith('['));
+                return (
+                  <div key={col.id} className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{col.label}</span>
+                      {!col.is_visible && (
+                        <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-500">hidden</span>
+                      )}
+                    </div>
+                    {isJson ? (
+                      <pre className="whitespace-pre-wrap text-xs text-gray-300 font-mono leading-relaxed max-h-80 overflow-auto">{
+                        (() => { try { return JSON.stringify(JSON.parse(cellValue), null, 2); } catch { return cellValue; } })()
+                      }</pre>
+                    ) : (
+                      <p className="text-sm text-gray-200 whitespace-pre-wrap">{cellValue}</p>
+                    )}
+                  </div>
+                );
+              }).filter(Boolean);
+            })()}
           </div>
         </SheetContent>
       </Sheet>
