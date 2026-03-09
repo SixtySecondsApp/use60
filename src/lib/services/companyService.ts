@@ -250,8 +250,9 @@ export class CompanyService {
         return existing;
       }
 
-      // Create new company
-      const companyName = suggestedName || this.suggestCompanyNameFromDomain(domain);
+      // Create new company — prefer domain-derived name over suggestedName which
+      // may be a person's name forwarded from the attendee/contact field.
+      const companyName = this.suggestCompanyNameFromDomain(domain) || suggestedName;
       
       logger.log('🏢 Creating new company:', { name: companyName, domain });
       
