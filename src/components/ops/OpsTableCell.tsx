@@ -1203,12 +1203,16 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
 
     // Push action — button to push row to Instantly
     if (subtype === 'push_action') {
-      const cellVal = cell.value?.toLowerCase();
-      const isRunning = cellVal === 'pending';
-      const isDone = cellVal === 'complete';
-      const isFailed = cellVal === 'failed';
+      // Cell value format: "complete::https://..." or just "complete"/"pending"/"failed"
+      const rawVal = cell.value || '';
+      const [statusPart, instantlyUrl] = rawVal.includes('::')
+        ? [rawVal.split('::')[0].toLowerCase(), rawVal.split('::').slice(1).join('::')]
+        : [rawVal.toLowerCase(), null];
+      const isRunning = statusPart === 'pending';
+      const isDone = statusPart === 'complete';
+      const isFailed = statusPart === 'failed';
       return (
-        <div className="w-full h-full flex items-center justify-center">
+        <div className="w-full h-full flex items-center justify-center gap-1.5">
           <button
             type="button"
             onClick={() => onEdit?.('execute')}
@@ -1235,6 +1239,19 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
             )}
             {isDone ? 'Repush' : isFailed ? 'Retry' : isRunning ? 'Pushing...' : 'Push'}
           </button>
+          {isDone && instantlyUrl && (
+            <a
+              href={instantlyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium border transition-colors hover:bg-purple-500/20"
+              style={{ borderColor: '#a855f760', backgroundColor: '#a855f715', color: '#a855f7' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="w-3 h-3" />
+              View
+            </a>
+          )}
         </div>
       );
     }
