@@ -82,8 +82,9 @@ export async function captureThumbnailFromIframe(
  */
 async function captureViaBackend(options: CaptureOptions): Promise<CaptureResult> {
   try {
-    const { data, error } = await supabase.functions.invoke('generate-video-thumbnail', {
+    const { data, error } = await supabase.functions.invoke('generate-router', {
       body: {
+        action: 'video_thumbnail',
         recording_id: options.recordingId,
         share_url: options.shareUrl,
         fathom_embed_url: options.shareUrl

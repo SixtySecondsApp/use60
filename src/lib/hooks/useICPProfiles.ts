@@ -55,8 +55,8 @@ export function useICPProfiles() {
         throw new Error('Auth session not ready');
       }
 
-      const { data, error } = await supabase.functions.invoke('generate-icp-profiles', {
-        body: {},
+      const { data, error } = await supabase.functions.invoke('generate-router', {
+        body: { action: 'icp_profiles' },
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -77,8 +77,8 @@ export function useICPProfiles() {
 
   const regenerate = async () => {
     const token = await getSupabaseAuthToken();
-    await supabase.functions.invoke('generate-icp-profiles', {
-      body: { force_regenerate: true },
+    await supabase.functions.invoke('generate-router', {
+      body: { action: 'icp_profiles', force_regenerate: true },
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     queryClient.invalidateQueries({ queryKey: icpProfilesKey(orgId) });

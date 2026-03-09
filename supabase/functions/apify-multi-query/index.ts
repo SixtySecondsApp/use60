@@ -514,13 +514,13 @@ async function executeApollo(
   supabaseUrl: string,
   authHeader: string
 ): Promise<ActorResult> {
-  const response = await fetch(`${supabaseUrl}/functions/v1/apollo-search`, {
+  const response = await fetch(`${supabaseUrl}/functions/v1/enrichment-apollo`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: authHeader,
     },
-    body: JSON.stringify(query),
+    body: JSON.stringify({ action: 'search', ...query }),
   });
 
   if (!response.ok) {

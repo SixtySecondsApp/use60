@@ -44,7 +44,6 @@ import {
   History,
   Workflow,
   Sparkles,
-  Search,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -65,8 +64,6 @@ import { getNavigationItems } from '@/lib/routes/routeConfig';
 import logger from '@/lib/utils/logger';
 import { useEventListener } from '@/lib/communication/EventBus';
 import { useTaskNotifications } from '@/lib/hooks/useTaskNotifications';
-import { SmartSearch } from '@/components/SmartSearch';
-import { CommandPalette } from '@/components/command-palette/CommandPalette';
 import { CreditWidget } from '@/components/credits/CreditWidget';
 import { LowBalanceBanner } from '@/components/credits/LowBalanceBanner';
 import { CreditTopUpProvider } from '@/components/credits/CreditTopUpPrompt';
@@ -89,8 +86,8 @@ import { useSubscriptionGate } from '@/lib/hooks/useSubscriptionGate';
 import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
 import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
+import { SetupWizardSidebarIndicator } from '@/components/setup-wizard/SetupWizardSidebarIndicator';
 import { SetupWizardDialog } from '@/components/setup-wizard/SetupWizardDialog';
-import { useSetupWizardAutoTrigger } from '@/lib/hooks/useSetupWizardAutoTrigger';
 import { useTicketsNeedingAttention } from '@/lib/hooks/useTicketsNeedingAttention';
 import { TrialCountdownBadge } from '@/components/TrialCountdownBadge';
 import { TrialUpgradeModal } from '@/components/TrialUpgradeModal';
@@ -98,6 +95,7 @@ import { WelcomeSplash } from '@/components/WelcomeSplash';
 import { ProductTour } from '@/components/ProductTour';
 import { useCommandCentreStatsQuery } from '@/lib/hooks/useCommandCentreItemsQuery';
 import { usePendingConfigQuestions } from '@/lib/services/configQuestionService';
+import { useOnboardingSeeding } from '@/lib/hooks/useOnboardingSeeding';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { userData, isImpersonating, stopImpersonating } = useUser();
@@ -112,20 +110,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Check if user has integration that needs reconnection (must be before isIntegrationBannerVisible)
   const { needsReconnect: integrationNeedsReconnect } = useIntegrationReconnectNeeded();
 
-  // Internal admin orgs bypass all subscription/trial UI
-  const isInternalAdminOrg = !subscriptionGate.isLoading && subscriptionGate.status === 'internal_admin';
-
   // TrialConversionModal is no longer triggered on 'expired' status —
   // ProtectedRoute now redirects expired users to /trial-expired instead.
   // The modal is kept for approaching-expiry warnings only (isTrialing).
-  // Internal admin orgs never see trial modals.
-  const isTrialApproachingExpiry = !isInternalAdminOrg && trialStatus.isTrialing && !trialStatus.isLoading;
-
-  // SETUP-002: Auto-trigger setup wizard for new users with no integrations
-  useSetupWizardAutoTrigger();
-
-  // Show the trial conversion modal when the trial has expired
-  const isTrialExpired = orgSubscription?.status === 'expired';
+  const isTrialApproachingExpiry = trialStatus.isTrialing && !trialStatus.isLoading;
 
   // Check if trial banner should be showing (same logic as TrialBanner component)
   const isTrialBannerVisible = useMemo(() => {
@@ -142,15 +130,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       // Ignore errors
     }
 
-    // Internal admin orgs never see trial banners
-    if (isInternalAdminOrg) return false;
-
     // Show for trialing (with 75%+ usage — TrialBanner handles the threshold internally)
     return trialStatus.isTrialing && !trialStatus.isLoading;
-  }, [trialStatus.isTrialing, trialStatus.isLoading, isInternalAdminOrg]);
+  }, [trialStatus.isTrialing, trialStatus.isLoading]);
 
-  // Grace period banner is shown when status is 'grace_period' (never for internal admins)
-  const isGracePeriodBannerVisible = !isInternalAdminOrg && !subscriptionGate.isLoading && subscriptionGate.status === 'grace_period';
+  // Grace period banner is shown when status is 'grace_period'
+  const isGracePeriodBannerVisible = !subscriptionGate.isLoading && subscriptionGate.status === 'grace_period';
 
   // Check if integration reconnect banner should be showing
   const isIntegrationBannerVisible = hasIntegrationAlerts || !!integrationNeedsReconnect;
@@ -185,7 +170,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [hasMounted, setHasMounted] = useState(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
-  const [isSmartSearchOpen, setIsSmartSearchOpen] = useState(false);
   const [isMobileUserMenuOpen, setIsMobileUserMenuOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(false);
   const [splashDismissed, setSplashDismissed] = useState(false);
@@ -244,6 +228,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   );
   const pendingQuestionsCount = pendingQuestions.length;
 
+  // SEED-002 / SEED-003: Demo onboarding seeding + welcome banner
+  const { wasSeeded, seedingData } = useOnboardingSeeding();
+  const [seedBannerDismissed, setSeedBannerDismissed] = useState(() => {
+    try {
+      return localStorage.getItem('sixty_demo_seed_banner_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const showSeedBanner = wasSeeded && !seedBannerDismissed;
+
+  const dismissSeedBanner = () => {
+    setSeedBannerDismissed(true);
+    localStorage.setItem('sixty_demo_seed_banner_dismissed', 'true');
+    // Clean up seeding metadata so it never triggers again
+    localStorage.removeItem('sixty_demo_seeding');
+  };
+
   // Check if user needs to set up their password (magic link users)
   const { needsSetup: needsPasswordSetup, completeSetup: completePasswordSetup } = usePasswordSetupRequired();
 
@@ -284,7 +286,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Auto-collapse sidebar on specific pages for more space
   useEffect(() => {
-    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow', '/platform/godseye'];
+    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow'];
     const shouldCollapse = collapsedPages.includes(location.pathname);
     
     if (shouldCollapse) {
@@ -307,20 +309,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Note: /ops/ pages removed — they use normal page scroll so users can scroll
   // when the mouse is outside the table.
   const isFullHeightPage = useMemo(() => {
-    return location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/') || location.pathname.startsWith('/landing-page-builder') || location.pathname === '/platform/godseye';
+    return location.pathname.startsWith('/copilot');
   }, [location.pathname]);
 
-  // Keyboard shortcut for CommandPalette (⌘K / Ctrl+K)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsSmartSearchOpen((v) => !v);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   // Dynamic navigation based on user type (internal vs external)
   // Uses centralized route config with access levels
@@ -690,6 +681,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
               {/* Fixed Footer with Settings and Logout */}
               <div className="flex-shrink-0 p-4 sm:p-6 border-t border-[#E2E8F0] dark:border-gray-800 space-y-2">
+                <SetupWizardSidebarIndicator />
                 <Link
                   to="/settings"
                   onClick={() => toggleMobileMenu()}
@@ -795,19 +787,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         'transition-all duration-300 ease-in-out',
         isImpersonating ? 'top-[44px]' : 'top-0'
       )}>
-        {/* Search Button (Cmd+K) */}
-        <button
-          onClick={() => setIsSmartSearchOpen(true)}
-          aria-label="Open search (⌘K)"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-800/70 transition-colors text-sm text-gray-500 dark:text-gray-400"
-        >
-          <Search className="w-4 h-4" />
-          <span className="hidden xl:inline">Search...</span>
-          <kbd className="hidden xl:inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded">
-            <span className="text-[10px]">⌘</span>K
-          </kbd>
-        </button>
-
         {/* User Profile with Dropdown */}
         <div className="flex items-center gap-3 ml-auto">
           {effectiveUserType !== 'external' && (
@@ -1009,23 +988,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         {supportAttentionCount > 9 ? '9+' : supportAttentionCount}
                       </span>
                     )}
-                    {!isCollapsed && item.href === '/command-centre' && ccUnreadCount > 0 && (
-                      <span className="inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-semibold leading-none ml-auto">
-                        {ccUnreadCount > 99 ? '99+' : ccUnreadCount}
-                      </span>
-                    )}
-                    {!isCollapsed && item.href === '/coaching' && pendingQuestionsCount > 0 && (
-                      <span className="inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-indigo-500 text-white text-[10px] font-semibold leading-none ml-auto">
-                        {pendingQuestionsCount > 9 ? '9+' : pendingQuestionsCount}
-                      </span>
-                    )}
                   </>
                 );
 
                 const tourAttr =
                   item.href === '/dashboard' ? 'dashboard' :
                   item.href === '/meetings' ? 'meetings' :
-                  item.href === '/meeting-analytics' ? 'insights' :
+                  item.href === '/meeting-analytics' ? 'intelligence' :
                   item.href === '/integrations' ? 'integrations' :
                   item.href === '/copilot' ? 'copilot' :
                   undefined;
@@ -1082,6 +1051,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             'mt-auto pt-6 border-t border-[#E2E8F0] dark:border-gray-800/50',
             isCollapsed ? 'space-y-1' : 'space-y-1'
           )}>
+            <SetupWizardSidebarIndicator isCollapsed={isCollapsed} />
             <Link
               to="/settings"
               data-tour="settings"
@@ -1268,6 +1238,42 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Low Credit Balance Banner — inside main so it renders below the fixed top bar */}
         <LowBalanceBanner />
 
+        {/* SEED-003: Welcome banner for users who just had demo data seeded */}
+        <AnimatePresence>
+          {showSeedBanner && seedingData && (
+            <motion.div
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.3 }}
+              className="mx-4 mt-4 mb-2 rounded-xl border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/80 dark:bg-emerald-950/30 p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/40">
+                    <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                      Welcome{userData?.first_name ? `, ${userData.first_name}` : ''}! We set up {seedingData.company} for you.
+                    </p>
+                    <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-300/70">
+                      1 deal created, 1 contact added, AI insights ready
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={dismissSeedBanner}
+                  className="flex-shrink-0 rounded-lg p-1 text-emerald-400 hover:bg-emerald-100 hover:text-emerald-600 dark:hover:bg-emerald-900/40 dark:hover:text-emerald-300 transition-colors"
+                  aria-label="Dismiss welcome banner"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {children}
         <QuickAdd isOpen={isQuickAddOpen} onClose={() => setIsQuickAddOpen(false)} />
         <CommandCenter isOpen={isCommandCenterOpen} onClose={() => setIsCommandCenterOpen(false)} />
@@ -1301,11 +1307,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <ProductTour userId={userData.id} />
         )}
 
-        {/* CommandPalette — Cmd+K global search */}
-        <CommandPalette
-          isOpen={isSmartSearchOpen}
-          onClose={() => setIsSmartSearchOpen(false)}
-        />
       </main>
     </div>
     </div>

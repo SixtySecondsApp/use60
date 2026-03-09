@@ -6283,6 +6283,37 @@ export async function detectAndStructureResponse(
   }
 
   // ---------------------------------------------------------------------------
+  // Task orchestration responses (one-shot plain-language tasks)
+  // ---------------------------------------------------------------------------
+  if (toolExecutions && toolExecutions.length > 0) {
+    const taskOrcExec = toolExecutions.find(
+      (e) => e.toolName === 'execute_action' && (e as any).args?.action === 'run_task_plan'
+    ) as any
+    if (taskOrcExec?.result?.plan) {
+      const plan = taskOrcExec.result.plan
+      return {
+        type: 'task_orchestration',
+        summary: taskOrcExec.result.summary || `${plan.label}: ${plan.status}`,
+        data: {
+          taskKey: plan.taskKey,
+          label: plan.label,
+          status: plan.status,
+          steps: plan.steps.map((s: any) => ({
+            id: s.id,
+            label: s.label,
+            status: s.status,
+            durationMs: s.durationMs,
+            error: s.error,
+          })),
+          completedCount: taskOrcExec.result.completedCount,
+          totalCount: taskOrcExec.result.totalCount,
+          hasFailures: taskOrcExec.result.hasFailures,
+        },
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Sequence-aware structured responses
   // ---------------------------------------------------------------------------
   if (toolExecutions && toolExecutions.length > 0) {

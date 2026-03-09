@@ -193,13 +193,14 @@ serve(async (req) => {
 
       if (supabaseUrl && serviceRoleKey) {
         try {
-          const analysisResponse = await fetch(`${supabaseUrl}/functions/v1/process-ai-analysis`, {
+          const analysisResponse = await fetch(`${supabaseUrl}/functions/v1/process-jobs-router`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${serviceRoleKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+              action: 'ai_analysis',
               recording_id: recordingId,
               bot_id: payload.metadata?.bot_id,
             }),

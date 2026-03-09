@@ -95,13 +95,14 @@ export async function handleEmailSendAction(ctx: EmailSendActionContext): Promis
       await sendSlackResponse(ctx.responseUrl, '✅ Email sent successfully!');
 
       // Resume orchestrator with send_complete
-      await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+      await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${serviceKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'orchestrator',
           resume_job_id: jobId,
           approval_data: {
             action: 'email_sent',

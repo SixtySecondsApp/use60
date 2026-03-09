@@ -247,13 +247,15 @@ export const DealDetailsView: React.FC<DealDetailsViewProps> = ({
 
       // Call backend to generate email from meeting context
       // The path should be /actions/generate-deal-email after the function name
-      const response = await fetch(`${supabaseUrl}/functions/v1/api-copilot/actions/generate-deal-email`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/api-services-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
+          action: 'copilot',
+          path: '/actions/generate-deal-email',
           dealId: deal.id,
           contactId: deal.contact?.id,
           companyId: deal.company?.id

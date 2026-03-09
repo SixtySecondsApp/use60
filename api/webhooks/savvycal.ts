@@ -5,7 +5,7 @@
  * Proxies webhook payloads to the Supabase Edge Function.
  *
  * Branded URL: https://use60.com/api/webhooks/savvycal
- * Proxies to: {SUPABASE_URL}/functions/v1/savvycal-leads-webhook
+ * Proxies to: {SUPABASE_URL}/functions/v1/webhook-leads/savvycal
  *
  * External-ready: Supports org-specific webhook tokens via ?token= query param.
  * Legacy mode: If no token, falls back to global webhook secret for existing installs.
@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Build edge function URL with optional token
-    let edgeFunctionUrl = `${supabaseUrl}/functions/v1/savvycal-leads-webhook`;
+    let edgeFunctionUrl = `${supabaseUrl}/functions/v1/webhook-leads/savvycal`;
     if (orgToken) {
       edgeFunctionUrl += `?token=${encodeURIComponent(orgToken)}`;
     }

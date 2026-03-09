@@ -340,11 +340,11 @@ export function createGoogleTests(userId: string): IntegrationTest[] {
 
           // Call the test-connection edge function
           const startTime = Date.now();
-          const response = await supabase.functions.invoke('google-test-connection', {
+          const response = await supabase.functions.invoke('google-services-router', {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
-            body: {},
+            body: { action: 'test_connection' },
           });
 
           const duration = Date.now() - startTime;
@@ -437,11 +437,11 @@ export function createGoogleTests(userId: string): IntegrationTest[] {
             };
           }
 
-          const response = await supabase.functions.invoke('google-gmail?action=labels', {
+          const response = await supabase.functions.invoke('google-services-router', {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
-            body: {},
+            body: { action: 'gmail', handlerAction: 'labels' },
           });
 
           if (response.error) {
@@ -508,11 +508,11 @@ export function createGoogleTests(userId: string): IntegrationTest[] {
             };
           }
 
-          const response = await supabase.functions.invoke('google-gmail?action=list', {
+          const response = await supabase.functions.invoke('google-services-router', {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
-            body: { maxResults: 5 },
+            body: { action: 'gmail', handlerAction: 'list', maxResults: 5 },
           });
 
           if (response.error) {
@@ -797,11 +797,11 @@ export function createGoogleTests(userId: string): IntegrationTest[] {
             };
           }
 
-          const response = await supabase.functions.invoke('google-tasks', {
+          const response = await supabase.functions.invoke('google-services-router', {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
-            body: { action: 'list-tasklists' },
+            body: { action: 'tasks', handlerAction: 'list-tasklists' },
           });
 
           if (response.error) {
@@ -937,11 +937,11 @@ export function createGoogleTests(userId: string): IntegrationTest[] {
             };
           }
 
-          const response = await supabase.functions.invoke('google-drive', {
+          const response = await supabase.functions.invoke('google-services-router', {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
-            body: { action: 'list', maxResults: 5 },
+            body: { action: 'drive', maxResults: 5 },
           });
 
           if (response.error) {

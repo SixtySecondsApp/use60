@@ -1,17 +1,17 @@
 /**
- * BulkActionBar (PIPE-ADV-002)
+ * BulkActionBar Component (PIPE-ADV-002)
  *
- * Floating action bar shown when deals are multi-selected in the table view.
- * Supports bulk move (stage), bulk tag, and bulk assign (owner).
+ * Floating action bar for bulk deal operations.
+ * Appears at bottom when deals are selected in table view.
  */
 
 import React, { useState } from 'react';
-import { X, ArrowRight, Tag, UserCheck, ChevronDown } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { supabase } from '@/lib/supabase/clientV2';
+import { X, ArrowRight, XCircle, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useQueryClient } from '@tanstack/react-query';
+import { useOrgMembers } from '@/lib/hooks/useOrgMembers';
 import type { StageMetric } from './hooks/usePipelineData';
-import logger from '@/lib/utils/logger';
 
 interface BulkActionBarProps {
   selectedIds: Set<string>;
@@ -20,159 +20,148 @@ interface BulkActionBarProps {
   onRefresh: () => void;
 }
 
-const DEAL_TAGS = [
-  'Hot', 'Cold', 'Stalled', 'Needs Attention', 'Champion Confirmed',
-  'Budget Confirmed', 'Timeline Slipping', 'Competitive', 'Renewal',
-];
-
 export function BulkActionBar({ selectedIds, stageMetrics, onClear, onRefresh }: BulkActionBarProps) {
-  const count = selectedIds.size;
-  const [moveOpen, setMoveOpen] = useState(false);
-  const [tagOpen, setTagOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showStageMenu, setShowStageMenu] = useState(false);
+  const [showOwnerMenu, setShowOwnerMenu] = useState(false);
+  const [showConfirmLost, setShowConfirmLost] = useState(false);
+  const queryClient = useQueryClient();
+  const { data: orgMembers = [] } = useOrgMembers();
 
-  if (count === 0) return null;
+  const ids = Array.from(selectedIds);
+  const count = ids.length;
 
-  const handleBulkMove = async (stageId: string, stageName: string) => {
-    setIsProcessing(true);
-    setMoveOpen(false);
+  const bulkUpdate = async (updates: Record<string, any>, label: string) => {
+    setLoading(true);
     try {
-      const ids = Array.from(selectedIds);
-      const { error } = await supabase
-        .from('deals')
-        .update({ stage_id: stageId, stage_changed_at: new Date().toISOString() })
-        .in('id', ids);
-
+      const { error } = await supabase.from('deals').update(updates).in('id', ids);
       if (error) throw error;
-
-      toast.success(`${count} deal${count > 1 ? 's' : ''} moved to ${stageName}`);
+      toast.success(`${count} deal${count !== 1 ? 's' : ''} ${label}`);
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
       onClear();
       onRefresh();
     } catch (err: any) {
-      logger.error('Bulk move failed:', err);
-      toast.error(`Failed to move deals: ${err.message}`);
+      toast.error(`Bulk update failed: ${err.message}`);
     } finally {
-      setIsProcessing(false);
+      setLoading(false);
+      setShowStageMenu(false);
+      setShowOwnerMenu(false);
+      setShowConfirmLost(false);
     }
   };
 
-  const handleBulkTag = async (tag: string) => {
-    setIsProcessing(true);
-    setTagOpen(false);
-    try {
-      const ids = Array.from(selectedIds);
-
-      // Fetch existing tags for all selected deals
-      const { data: existing, error: fetchErr } = await supabase
-        .from('deals')
-        .select('id, tags')
-        .in('id', ids);
-
-      if (fetchErr) throw fetchErr;
-
-      // Merge tag into each deal's tags array
-      const updates = (existing || []).map((d: any) => {
-        const currentTags: string[] = Array.isArray(d.tags) ? d.tags : [];
-        const newTags = currentTags.includes(tag) ? currentTags : [...currentTags, tag];
-        return { id: d.id, tags: newTags };
-      });
-
-      for (const update of updates) {
-        const { error } = await supabase
-          .from('deals')
-          .update({ tags: update.tags })
-          .eq('id', update.id);
-        if (error) throw error;
-      }
-
-      toast.success(`Tagged ${count} deal${count > 1 ? 's' : ''} as "${tag}"`);
-      onClear();
-      onRefresh();
-    } catch (err: any) {
-      logger.error('Bulk tag failed:', err);
-      toast.error(`Failed to tag deals: ${err.message}`);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  // Find Lost stage
+  const lostStage = stageMetrics.find((s) => s.stage_name === 'Lost');
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-3 rounded-2xl bg-gray-900 dark:bg-white/[0.08] border border-white/10 backdrop-blur-xl shadow-2xl shadow-black/40 animate-in slide-in-from-bottom-4 duration-200">
-      {/* Count badge */}
-      <div className="flex items-center gap-2 pr-3 border-r border-white/10">
-        <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold">
-          {count}
-        </span>
-        <span className="text-sm text-gray-300">
-          deal{count > 1 ? 's' : ''} selected
-        </span>
-      </div>
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl bg-gray-900/95 dark:bg-gray-800/95 backdrop-blur-xl border border-white/10 shadow-2xl">
+      {/* Count */}
+      <span className="text-sm font-semibold text-white">
+        {count} selected
+      </span>
 
-      {/* Bulk Move */}
-      <Popover open={moveOpen} onOpenChange={setMoveOpen}>
-        <PopoverTrigger asChild>
-          <button
-            disabled={isProcessing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.10] text-gray-200 text-[12.5px] font-medium transition-colors disabled:opacity-50"
-          >
-            <ArrowRight className="w-3.5 h-3.5" />
-            Move to Stage
-            <ChevronDown className="w-3 h-3 opacity-60" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[200px] p-1.5" align="start" side="top">
-          <div className="space-y-0.5">
+      <div className="w-px h-6 bg-white/20" />
+
+      {/* Move to Stage */}
+      <div className="relative">
+        <button
+          onClick={() => { setShowStageMenu(!showStageMenu); setShowOwnerMenu(false); }}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-50"
+        >
+          <ArrowRight className="w-3.5 h-3.5" />
+          Move to Stage
+        </button>
+        {showStageMenu && (
+          <div className="absolute bottom-full mb-2 left-0 w-44 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-white/10 p-1 max-h-64 overflow-y-auto">
             {stageMetrics.map((stage) => (
               <button
                 key={stage.stage_id}
-                onClick={() => handleBulkMove(stage.stage_id, stage.stage_name)}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors text-left"
+                onClick={() => bulkUpdate({ stage_id: stage.stage_id }, `moved to ${stage.stage_name}`)}
+                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors flex items-center gap-2"
               >
                 <span
-                  className="w-2 h-2 rounded-sm flex-shrink-0"
-                  style={{ backgroundColor: stage.stage_color || '#3B82F6' }}
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: stage.stage_color || '#9ca3af' }}
                 />
                 {stage.stage_name}
               </button>
             ))}
           </div>
-        </PopoverContent>
-      </Popover>
+        )}
+      </div>
 
-      {/* Bulk Tag */}
-      <Popover open={tagOpen} onOpenChange={setTagOpen}>
-        <PopoverTrigger asChild>
+      {/* Close as Lost */}
+      <div className="relative">
+        {showConfirmLost ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-300">Close {count} as lost?</span>
+            <button
+              onClick={() => bulkUpdate(
+                { status: 'lost', ...(lostStage ? { stage_id: lostStage.stage_id } : {}) },
+                'closed as lost'
+              )}
+              disabled={loading}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-red-400 bg-red-500/20 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+            >
+              Confirm
+            </button>
+            <button
+              onClick={() => setShowConfirmLost(false)}
+              className="px-2 py-1 rounded-lg text-xs text-gray-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
           <button
-            disabled={isProcessing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.10] text-gray-200 text-[12.5px] font-medium transition-colors disabled:opacity-50"
+            onClick={() => { setShowConfirmLost(true); setShowStageMenu(false); setShowOwnerMenu(false); }}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors disabled:opacity-50"
           >
-            <Tag className="w-3.5 h-3.5" />
-            Tag
-            <ChevronDown className="w-3 h-3 opacity-60" />
+            <XCircle className="w-3.5 h-3.5" />
+            Close as Lost
           </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[200px] p-1.5" align="start" side="top">
-          <div className="space-y-0.5 max-h-[240px] overflow-y-auto">
-            {DEAL_TAGS.map((tag) => (
+        )}
+      </div>
+
+      {/* Assign Owner */}
+      <div className="relative">
+        <button
+          onClick={() => { setShowOwnerMenu(!showOwnerMenu); setShowStageMenu(false); }}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-50"
+        >
+          <UserPlus className="w-3.5 h-3.5" />
+          Assign to
+        </button>
+        {showOwnerMenu && (
+          <div className="absolute bottom-full mb-2 right-0 w-48 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-white/10 p-1 max-h-64 overflow-y-auto">
+            {orgMembers.map((member) => (
               <button
-                key={tag}
-                onClick={() => handleBulkTag(tag)}
-                className="w-full px-3 py-2 rounded-lg text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.06] transition-colors text-left"
+                key={member.user_id}
+                onClick={() => bulkUpdate({ owner_id: member.user_id }, `assigned to ${member.name || member.email}`)}
+                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors truncate"
               >
-                {tag}
+                {member.name || member.email}
               </button>
             ))}
           </div>
-        </PopoverContent>
-      </Popover>
+        )}
+      </div>
+
+      <div className="w-px h-6 bg-white/20" />
 
       {/* Clear selection */}
       <button
         onClick={onClear}
-        className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/[0.06] text-gray-400 hover:text-gray-200 transition-colors"
+        className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+        title="Clear selection"
       >
         <X className="w-4 h-4" />
       </button>
     </div>
   );
 }
+
+export default BulkActionBar;

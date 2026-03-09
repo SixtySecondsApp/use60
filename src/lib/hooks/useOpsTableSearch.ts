@@ -131,8 +131,8 @@ export interface ApolloCreditsData {
 }
 
 async function fetchApolloCredits(): Promise<ApolloCreditsData> {
-  const { data, error } = await supabase.functions.invoke('apollo-credits', {
-    body: {},
+  const { data, error } = await supabase.functions.invoke('enrichment-apollo', {
+    body: { action: 'credits' },
   })
   if (error) throw error
   if (data?.error) throw new Error(data.error)

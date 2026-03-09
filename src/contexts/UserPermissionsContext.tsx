@@ -144,12 +144,15 @@ export function UserPermissionsProvider({ children }: UserPermissionsProviderPro
 
   // Only internal users can toggle view mode
   // Reset external view if user becomes external
+  // IMPORTANT: Wait for internal users whitelist to load before resetting,
+  // otherwise the user is temporarily classified as 'external' during load
+  // which wipes the sessionStorage-persisted view mode on page refresh.
   useEffect(() => {
-    if (actualUserType === 'external') {
+    if (usersLoaded && actualUserType === 'external') {
       setIsExternalViewActive(false);
       sessionStorage.removeItem(EXTERNAL_VIEW_STORAGE_KEY);
     }
-  }, [actualUserType]);
+  }, [actualUserType, usersLoaded]);
 
   // Persist view mode to session storage
   useEffect(() => {

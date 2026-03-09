@@ -46,13 +46,13 @@ export const extractCompetitiveMentionsAdapter: SkillAdapter = {
         return { success: true, output: { skipped: true, reason: 'no_meeting_id' }, duration_ms: Date.now() - start };
       }
 
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-competitive-intel`, {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         },
-        body: JSON.stringify({ mode: 'extract', meeting_id: meetingId, org_id: orgId }),
+        body: JSON.stringify({ action: 'competitive_intel', mode: 'extract', meeting_id: meetingId, org_id: orgId }),
       });
 
       if (!resp.ok) {
@@ -92,13 +92,13 @@ export const aggregateCompetitorProfileAdapter: SkillAdapter = {
 
       const results = [];
       for (const name of profilesToAggregate) {
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-competitive-intel`, {
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
           },
-          body: JSON.stringify({ mode: 'aggregate', org_id: orgId, competitor_name: name }),
+          body: JSON.stringify({ action: 'competitive_intel', mode: 'aggregate', org_id: orgId, competitor_name: name }),
         });
 
         if (resp.ok) {

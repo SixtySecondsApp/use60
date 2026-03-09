@@ -53,7 +53,7 @@ function useAllOrgTickets(statusFilter: TicketStatusFilter, categoryFilter?: Tic
     queryFn: async () => {
       let query = supabase
         .from('support_tickets')
-        .select('id, org_id, user_id, subject, description, category, priority, status, assigned_to, created_at, updated_at, resolved_at')
+        .select('id, org_id, user_id, subject, description, category, priority, status, assigned_to, first_response_at, sla_response_hours, sla_breached, created_at, updated_at, resolved_at')
         .order('created_at', { ascending: false });
 
       if (statusFilter === 'open') {

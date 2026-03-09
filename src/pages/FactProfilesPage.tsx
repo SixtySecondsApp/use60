@@ -45,8 +45,8 @@ export default function FactProfilesPage() {
     async (profile: FactProfile) => {
       // Show progress overlay immediately for responsive UX.
       setResearchingProfileId(profile.id);
-      const { error } = await supabase.functions.invoke('research-fact-profile', {
-        body: { action: 'research', profileId: profile.id },
+      const { error } = await supabase.functions.invoke('research-router-v2', {
+        body: { action: 'fact_profile', sub_action: 'research', profileId: profile.id },
       });
       if (error) {
         setResearchingProfileId(null);
@@ -96,7 +96,7 @@ export default function FactProfilesPage() {
         profile.research_status === 'complete'
       ) {
         supabase.functions
-          .invoke('sync-fact-profile-context', { body: { profileId: profile.id } })
+          .invoke('sync-jobs-router', { body: { action: 'fact_profile_context', profileId: profile.id } })
           .then(({ data, error }) => {
             if (error) {
               console.error('[auto-sync] Failed to sync org profile on research complete:', error);

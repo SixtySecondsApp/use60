@@ -26,7 +26,9 @@ export {
 export {
   processActionItems,
   fetchRecordingActionItems,
+  fetchRecordingDetails,
   type FathomActionItem,
+  type FathomRecordingDetails,
   type ActionItemInsertResult,
 } from './actionItemsService.ts'
 

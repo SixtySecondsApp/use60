@@ -60,6 +60,13 @@ export interface IntegrationCreditCosts {
   ai_ark_company: number;
   ai_ark_people: number;
   exa_enrichment: number;
+  heygen_photo_generate: number;
+  heygen_avatar_train: number;
+  heygen_look_generate: number;
+  heygen_add_motion: number;
+  heygen_video_per_second: number;
+  elevenlabs_voice_clone: number;
+  elevenlabs_tts_per_1k_chars: number;
 }
 
 // ============================================================================
@@ -197,6 +204,15 @@ export const INTEGRATION_CREDIT_COSTS: IntegrationCreditCosts = {
   ai_ark_company: 0.25,
   ai_ark_people: 1.25,
   exa_enrichment: 0.2,
+  // HeyGen Video Avatar — ~50% margin over HeyGen pay-as-you-go costs
+  heygen_photo_generate: 15,   // HeyGen: $1 → we charge $1.50
+  heygen_avatar_train: 60,     // HeyGen: $4 → we charge $6.00
+  heygen_look_generate: 15,    // HeyGen: $1 → we charge $1.50
+  heygen_add_motion: 15,       // HeyGen: $1 → we charge $1.50
+  heygen_video_per_second: 0.25, // HeyGen: $0.0167/s → we charge $0.025/s (~50% margin)
+  // ElevenLabs Voice Clone — platform key usage
+  elevenlabs_voice_clone: 20,     // One-time cost for instant voice clone
+  elevenlabs_tts_per_1k_chars: 1, // ~$0.10 per 1k characters
 };
 
 // ============================================================================

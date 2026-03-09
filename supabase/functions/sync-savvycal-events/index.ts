@@ -132,6 +132,7 @@ interface OrgIntegration {
   org_id: string;
   webhook_token: string;
   api_token: string;
+  webhook_secret?: string | null;
 }
 
 interface SyncResult {
@@ -146,6 +147,31 @@ interface SyncResult {
     failed: number;
   };
   error?: string;
+}
+
+function bufferToHex(buffer: ArrayBuffer): string {
+  return [...new Uint8Array(buffer)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function generateSignatureWithSecret(payload: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+
+  const signatureBuffer = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(payload),
+  );
+
+  return bufferToHex(signatureBuffer);
 }
 
 async function fetchSavvyCalEvents(apiToken: string, sinceDate: Date): Promise<SavvyCalEvent[]> {
@@ -225,7 +251,10 @@ async function getExistingEventIds(
 
 function eventToWebhookPayload(event: SavvyCalEvent) {
   return {
-    event: "event.confirmed",
+    id: `sync_${event.id}_${Date.now()}`,
+    occurred_at: event.updated_at ?? event.created_at,
+    type: "event.confirmed",
+    version: "1.0",
     payload: {
       id: event.id,
       state: event.state,
@@ -298,20 +327,32 @@ async function syncOrgEvents(
     }
 
     // Sync new events by calling the webhook handler with the org token
-    const webhookUrl = `${SUPABASE_URL}/functions/v1/savvycal-leads-webhook?token=${encodeURIComponent(integration.webhook_token)}`;
+    const webhookUrl = `${SUPABASE_URL}/functions/v1/webhook-leads/savvycal?token=${encodeURIComponent(integration.webhook_token)}`;
     const results: Array<{ id: string; success: boolean; error?: string }> = [];
+    const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
 
     for (const event of newEvents) {
       const payload = eventToWebhookPayload(event);
+      const body = JSON.stringify(payload);
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      };
+
+      if (cronSecret) {
+        headers["x-cron-secret"] = cronSecret;
+      }
+
+      if (integration.webhook_secret) {
+        const signature = await generateSignatureWithSecret(body, integration.webhook_secret);
+        headers["SavvyCal-Signature"] = `sha256=${signature}`;
+      }
 
       try {
         const response = await fetch(webhookUrl, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          body: JSON.stringify(payload),
+          headers,
+          body,
         });
 
         const text = await response.text();
@@ -461,7 +502,7 @@ serve(async (req) => {
     const integrationIds = integrations.map((i) => i.id);
     const { data: secrets, error: secretsError } = await supabase
       .from("savvycal_integration_secrets")
-      .select("integration_id, api_token")
+      .select("integration_id, api_token, webhook_secret")
       .in("integration_id", integrationIds)
       .not("api_token", "is", null);
 
@@ -470,10 +511,13 @@ serve(async (req) => {
     }
 
     // Build map of integration_id -> api_token
-    const tokenMap = new Map<string, string>();
+    const tokenMap = new Map<string, { apiToken: string; webhookSecret: string | null }>();
     for (const secret of secrets || []) {
       if (secret.api_token) {
-        tokenMap.set(secret.integration_id, secret.api_token);
+        tokenMap.set(secret.integration_id, {
+          apiToken: secret.api_token,
+          webhookSecret: secret.webhook_secret ?? null,
+        });
       }
     }
 
@@ -484,7 +528,8 @@ serve(async (req) => {
         id: i.id,
         org_id: i.org_id,
         webhook_token: i.webhook_token,
-        api_token: tokenMap.get(i.id)!,
+        api_token: tokenMap.get(i.id)!.apiToken,
+        webhook_secret: tokenMap.get(i.id)!.webhookSecret,
       }));
 
     if (orgsToSync.length === 0) {

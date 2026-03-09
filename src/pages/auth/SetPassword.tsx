@@ -354,9 +354,10 @@ export default function SetPassword() {
         try {
           console.log('[SetPassword] Attempting profile sync via edge function...');
           const { data: edgeResponse, error: edgeFunctionError } = await supabase.functions.invoke(
-            'sync-profile-names',
+            'sync-jobs-router',
             {
               body: {
+                action: 'profile_names',
                 userId,
                 firstName: firstName.trim(),
                 lastName: lastName.trim(),

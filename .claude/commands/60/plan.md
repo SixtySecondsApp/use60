@@ -1,6 +1,40 @@
+---
+name: 60-plan
+invoke: /60/plan
+description: Execution planning — story breakdown, dependency graphs, parallel groups, TDD test stubs
+---
+
 # 60/plan — Generate Execution Plan
 
+**Phase 3 of `/60/ship` pipeline. Also works standalone.**
+
 **Purpose**: Create or extend the execution plan from requirements. Handles both new projects and features within existing projects.
+
+---
+
+## PIPELINE INTEGRATION
+
+When called from `/60/ship`:
+1. Read `.sixty/pipeline.json` for DEFINE phase output (PRD, stories outline)
+2. Refine stories: add dependencies, acceptance criteria, test stubs (TDD), parallel groups
+3. Run Dependency Forecaster agent to optimize execution order
+4. Run Test Oracle agent to generate test stubs for each story
+5. Score complexity and compose team (if not already done in DISCOVER)
+6. Write finalized stories to `pipeline.json.stories[]`
+7. Set `pipeline.json.phaseGates.plan.status = "complete"`
+
+When called standalone:
+1. Falls back to `.sixty/plan.json` or legacy `prd.json` behavior
+2. If `.sixty/pipeline.json` exists, also update it
+
+### TDD Integration (Test-Driven Development)
+
+During PLAN phase, generate test stubs for each story:
+- Read acceptance criteria
+- Create failing test files that define "done"
+- Store test file paths in `story.testFiles[]`
+- Tests are created BEFORE implementation code
+- BUILD phase workers must make these tests pass
 
 ---
 
@@ -11,7 +45,7 @@
 | New Project | `60/plan --project "name" --template <url>` | Starting from scratch |
 | Add Feature | `60/plan --feature "name"` | Adding to existing project |
 | Quick Feature | `60/plan --feature "name" --describe "..."` | Small feature, no PRD file |
-| From Consult | `60/consult "..." --output plan` | After discovery session |
+| From Discover | `/60/ship --resume` (auto-flows from DISCOVER) | After discovery session |
 | Edit Existing | `60/plan --edit` | Modify current plan |
 | Interactive | `60/plan` | Prompts for missing info |
 
@@ -616,62 +650,15 @@ function shouldSplit(story) {
 
 ## Dev Hub Integration
 
-Dev Hub integration uses **AI Dev Hub MCP tools** for task tracking. All Dev Hub operations are **non-blocking** — failures log warnings but never stop plan generation or execution.
+Dev Hub sync is handled by `/60/sync`. See `.claude/commands/60/sync.md` for the full protocol.
 
-### Project Selection
+**Key rules:**
+- ONE parent ticket per PRD/plan, stories become subtasks
+- Always deduplicate against existing tasks before creating
+- Write human-readable titles (no `[slug] US-XXX:` prefixes)
+- All Dev Hub operations are **non-blocking** — log warnings, never stop execution
 
-When creating a plan or adding a feature, select a Dev Hub project:
-
-1. Check if `plan.json.aiDevHubProjectId` already has a value — if so, reuse it
-2. If null, check if AI Dev Hub MCP tools are available (call `search_projects` with keyword from feature/project name or "use60")
-3. If MCP unavailable, log `⚠️ AI Dev Hub MCP unavailable — skipping Dev Hub sync.` and continue
-4. Present discovered projects to user as numbered list using `AskUserQuestion`:
-   - `1. <Project Name> (id: <id>)`
-   - `2. <Project Name> (id: <id>)`
-   - `[Skip] No Dev Hub sync`
-5. Store selected project ID in `plan.json.aiDevHubProjectId` (or leave `null` if skipped)
-
-### Task Creation
-
-**Skip entirely if `aiDevHubProjectId` is `null`.**
-
-For each new story generated:
-
-1. Call `create_task` with:
-   - `projectId`: from `plan.json.aiDevHubProjectId`
-   - `title`: `[<storyId>] <Story Title>`
-   - `description`: Story description + acceptance criteria formatted as checklist
-   - `type`: `"feature"`
-   - `status`: `"todo"`
-   - `priority`: mapped from story priority (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
-2. Store returned task ID in `story.aiDevHubTaskId`
-3. If individual task creation fails, set `aiDevHubTaskId: null`, log warning, and continue
-
-### Status Transition Map
-
-| Event | Target Status | Fallback |
-|-------|--------------|----------|
-| Story picked by `60/run` | `"in_progress"` | Works reliably |
-| Story passes gates | `"in review"` | Keep status + comment `[STATUS] Ready for review` |
-| Story done | `"done"` | Keep status + comment `[STATUS] Completed` |
-| Story blocked | `"blocked"` | Works reliably |
-
-**Known API bugs**: `"in review"` and `"done"` status transitions may fail. When they do, keep the current status and add a `[STATUS]` comment via `create_comment` as a fallback. Log: `Dev Hub: status update failed (known API bug) — added comment instead`
-
-### Priority Mapping
-
-| Story Priority | Dev Hub Priority |
-|---------------|-----------------|
-| 1-3 | `"high"` |
-| 4-7 | `"medium"` |
-| 8+ | `"low"` |
-
-### Re-Sync on Plan Edit
-
-When running `60/plan --edit` and stories are added or split:
-1. New stories: create tasks (same flow as above)
-2. Removed stories: add comment `[STATUS] Story removed from plan` (do not delete tasks)
-3. Modified stories: update task title/description via `update_task`
+After plan generation, run `/60/sync` (or let `/60/ship` auto-advance to SYNC phase).
 
 ---
 
@@ -745,7 +732,7 @@ After `60/plan` completes:
    .sixty/progress.md (initialized)
    .sixty/config.json (updated)
 
-🎫 Dev Hub: <7 tasks created in "<project name>" | skipped (no project selected) | unavailable>
+🎫 Dev Hub: Run `/dev-hub-sync` to create parent ticket + subtasks
 
 📊 Execution Plan:
    Feature: dark-mode
@@ -769,8 +756,7 @@ After `60/plan` completes:
 | Story too large | Auto-split or prompt user |
 | Dependency cycle | Report and ask for resolution |
 | Dev Hub MCP unavailable | Continue without sync, log warning |
-| Dev Hub task creation fails | Set `aiDevHubTaskId: null`, log warning, continue |
-| Dev Hub status update fails | Keep current status, add `[STATUS]` comment as fallback |
+| Dev Hub sync fails | Log warning, continue — run `/dev-hub-sync` manually later |
 
 ---
 

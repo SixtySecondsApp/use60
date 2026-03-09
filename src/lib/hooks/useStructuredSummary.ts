@@ -59,9 +59,9 @@ export function useStructuredSummary(meetingId: string | null) {
       setError(null);
 
       const { data, error: funcError } = await supabase.functions.invoke(
-        'meeting-process-structured-summary',
+        'meeting-router',
         {
-          body: { meetingId, forceReprocess },
+          body: { action: 'process_structured_summary', meetingId, forceReprocess },
         }
       );
 

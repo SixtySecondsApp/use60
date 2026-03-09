@@ -162,8 +162,8 @@ describe('CRMFieldMappingSettings', () => {
     fireEvent.click(autoDetectBtn);
 
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('hubspot-admin', {
-        body: expect.objectContaining({ action: 'detect_fields', org_id: 'org-123' }),
+      expect(mockInvoke).toHaveBeenCalledWith('crm-admin-router', {
+        body: expect.objectContaining({ action: 'hubspot_admin', sub_action: 'detect_fields', org_id: 'org-123' }),
       });
     });
   });

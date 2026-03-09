@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edge Function Consolidation — Post-Migration Guide</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface-2: #1c1c1c;
+      --border: #2a2a2a;
+      --border-active: #3a3a3a;
+      --text: #e5e5e5;
+      --text-muted: #888;
+      --text-dim: #555;
+      --accent: #3b82f6;
+      --accent-dim: #1e3a5f;
+      --green: #22c55e;
+      --green-dim: #0a3d1e;
+      --yellow: #eab308;
+      --yellow-dim: #3d2e08;
+      --red: #ef4444;
+      --red-dim: #3d1111;
+      --orange: #f97316;
+      --orange-dim: #3d1f08;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+
+    .progress-bar-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 2rem;
+      position: sticky;
+      top: 1rem;
+      z-index: 10;
+      backdrop-filter: blur(12px);
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .progress-count {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent);
+      font-family: var(--mono);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+      border-radius: 3px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+
+    .phase {
+      margin-bottom: 2.5rem;
+    }
+
+    .phase-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .phase-number {
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .phase-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .phase-desc {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+      padding-left: 0.25rem;
+    }
+
+    .risk-badge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .risk-low { background: var(--green-dim); color: var(--green); }
+    .risk-medium { background: var(--yellow-dim); color: var(--yellow); }
+    .risk-high { background: var(--orange-dim); color: var(--orange); }
+    .risk-critical { background: var(--red-dim); color: var(--red); }
+
+    .task-group {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .task-group-header {
+      background: var(--surface);
+      padding: 0.6rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .task {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+
+    .task:last-child { border-bottom: none; }
+    .task:hover { background: var(--surface); }
+    .task.completed { opacity: 0.5; }
+    .task.completed .task-label { text-decoration: line-through; }
+
+    .task input[type="checkbox"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border-active);
+      border-radius: 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+      margin-top: 2px;
+      position: relative;
+      transition: all 0.15s;
+    }
+
+    .task input[type="checkbox"]:checked {
+      background: var(--green);
+      border-color: var(--green);
+    }
+
+    .task input[type="checkbox"]:checked::after {
+      content: '';
+      position: absolute;
+      left: 4px;
+      top: 1px;
+      width: 6px;
+      height: 10px;
+      border: solid var(--bg);
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+
+    .task-content { flex: 1; min-width: 0; }
+
+    .task-label {
+      font-size: 0.9rem;
+      font-weight: 500;
+      display: block;
+      cursor: pointer;
+    }
+
+    .task-detail {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+
+    .task-url {
+      display: block;
+      margin-top: 0.35rem;
+    }
+
+    code, .url-box {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      background: var(--surface-2);
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      color: var(--accent);
+      word-break: break-all;
+    }
+
+    .url-box {
+      display: block;
+      padding: 0.5rem 0.75rem;
+      margin-top: 0.35rem;
+      line-height: 1.5;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      position: relative;
+    }
+
+    .url-box:hover { border-color: var(--accent); }
+
+    .url-box::after {
+      content: 'click to copy';
+      position: absolute;
+      right: 0.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .url-box:hover::after { opacity: 1; }
+    .url-box.copied::after { content: 'copied!'; color: var(--green); opacity: 1; }
+
+    .arrow { color: var(--text-dim); margin: 0 0.25rem; }
+
+    .env-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .env-tab {
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .env-tab.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .env-url { display: none; }
+    .env-url.active { display: block; }
+
+    .note {
+      background: var(--surface);
+      border-left: 3px solid var(--yellow);
+      padding: 0.75rem 1rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      border-radius: 0 6px 6px 0;
+      margin: 1rem 0;
+    }
+
+    .note strong { color: var(--yellow); }
+
+    .info-note {
+      border-left-color: var(--accent);
+    }
+    .info-note strong { color: var(--accent); }
+
+    .reset-btn {
+      background: var(--red-dim);
+      color: var(--red);
+      border: 1px solid var(--red);
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: opacity 0.15s;
+    }
+
+    .reset-btn:hover { opacity: 0.8; }
+
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .summary-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-family: var(--mono);
+    }
+
+    .summary-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+
+    .completed-banner {
+      display: none;
+      background: var(--green-dim);
+      border: 1px solid var(--green);
+      border-radius: 8px;
+      padding: 1.25rem;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .completed-banner.visible { display: block; }
+
+    .completed-banner h2 {
+      color: var(--green);
+      font-size: 1.1rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .completed-banner p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 1rem; }
+      .summary-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Edge Function Consolidation</h1>
+  <p class="subtitle">Post-migration guide — deploy consolidated functions, update webhook URLs, verify, delete old functions</p>
+
+  <div class="completed-banner" id="completedBanner">
+    <h2>All Steps Complete</h2>
+    <p>Every webhook has been migrated and verified. Old functions can now be safely removed from all environments.</p>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="summary-value" style="color: var(--accent)">499 <span class="arrow">&rarr;</span> 450</div>
+      <div class="summary-label">Local Functions</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-value" style="color: var(--green)">49</div>
+      <div class="summary-label">Functions Removed</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-value" style="color: var(--yellow)">9</div>
+      <div class="summary-label">New Consolidated Routers</div>
+    </div>
+  </div>
+
+  <div class="progress-bar-container">
+    <div class="progress-header">
+      <span class="progress-label">Overall Progress</span>
+      <span class="progress-count" id="progressCount">0 / 0</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+  </div>
+
+  <!-- PHASE 1 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-number">Phase 1</span>
+      <span class="phase-title">Deploy Consolidated Functions</span>
+      <span class="risk-badge risk-low">Low Risk</span>
+    </div>
+    <p class="phase-desc">Deploy the 9 new router functions to staging first, then production. Old functions remain active — no downtime.</p>
+
+    <div class="note info-note">
+      <strong>Note:</strong> Deploying new functions does NOT break existing webhook URLs. The old functions still work until explicitly deleted.
+    </div>
+
+    <div class="task-group">
+      <div class="task-group-header">Deploy to Staging <code>caerqjzvuerejfrdtygb</code></div>
+
+      <div class="task" data-key="deploy-staging-api-v1">
+        <input type="checkbox" id="deploy-staging-api-v1">
+        <div class="task-content">
+          <label class="task-label" for="deploy-staging-api-v1">Deploy <code>api-v1</code></label>
+          <span class="task-detail">Consolidates 6 entity CRUD functions into one router</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="deploy-staging-oauth-initiate">
+        <input type="checkbox" id="deploy-staging-oauth-initiate">
+        <div class="task-content">
+          <label class="task-label" for="deploy-staging-oauth-initiate">Deploy <code>oauth-initiate</code></label>
+          <span class="task-detail">Routes to Google, HubSpot, Fathom, Attio, Bullhorn OAuth flows</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="deploy-staging-oauth-refresh">
+        <input type="checkbox" id="deploy-staging-oauth-refresh">
+        <div class="task-content">
+          <label class="task-label" for="deploy-staging-oauth-refresh">Deploy <code>oauth-token-refresh</code></label>
+          <span class="task-detail">Routes to provider-specific token refresh logic</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="deploy-staging-poll">
+        <input type="checkbox" id="deploy-staging-poll">
+        <div class="task-content">
+          <label class="task-label" for="deploy-staging-poll">Deploy <code>poll-scheduler</code></label>
+          <span class="task-detail">Consolidates 6 polling functions</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="deploy-staging-cleanup">
+        <input type="checkbox" id="deploy-staging-cleanup">
+        <div class="task-content">
+          <label class="task-label" for="deploy-staging-cleanup">Deploy <code>cleanup-scheduler</code></label>
+          <span class="task-detail">Consolidates 4 cleanup cron functions</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="deploy-staging-backfill">
+        <input type="checkbox" id="deploy-staging-backfill">
+        <div class="task-content">
+          <label class="task-label" for="deploy-staging-backfill">Deploy <code>backfill-runner</code></label>
+          <span class="task-detail">Consolidates 9 backfill functions</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="deploy-staging-webhook-crm">
+        <input type="checkbox" id="deploy-staging-webhook-crm">
+        <div class="task-content">
+          <label class="task-label" for="deploy-staging-webhook-crm">Deploy <code>webhook-crm</code></label>
+          <span class="task-detail">Routes HubSpot, Attio, Bullhorn webhooks</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="deploy-staging-webhook-int">
+        <input type="checkbox" id="deploy-staging-webhook-int">
+        <div class="task-content">
+          <label class="task-label" for="deploy-staging-webhook-int">Deploy <code>webhook-integrations</code></label>
+          <span class="task-detail">Routes Apify, Fathom, Stripe, Sentry, JustCall webhooks</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="deploy-staging-webhook-leads">
+        <input type="checkbox" id="deploy-staging-webhook-leads">
+        <div class="task-content">
+          <label class="task-label" for="deploy-staging-webhook-leads">Deploy <code>webhook-leads</code></label>
+          <span class="task-detail">Routes Facebook, SavvyCal, ops-table-inbound webhooks</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="task-group">
+      <div class="task-group-header">Deploy to Production <code>ygdpgliavpxeugaajgrb</code></div>
+
+      <div class="task" data-key="deploy-prod-all">
+        <input type="checkbox" id="deploy-prod-all">
+        <div class="task-content">
+          <label class="task-label" for="deploy-prod-all">Deploy all 9 consolidated functions to production</label>
+          <span class="task-detail">Only after staging is verified. Same deploy commands with production project ref.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+
+  <!-- PHASE 2 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-number">Phase 2</span>
+      <span class="phase-title">Update Cron Schedules</span>
+      <span class="risk-badge risk-medium">Medium Risk</span>
+    </div>
+    <p class="phase-desc">Update pg_cron jobs and Supabase cron config to call the new consolidated function endpoints.</p>
+
+    <div class="note">
+      <strong>Important:</strong> Update cron schedules AFTER deploying the new functions. The old cron targets will 404 once old functions are deleted.
+    </div>
+
+    <div class="task-group">
+      <div class="task-group-header">Token Refresh Crons</div>
+
+      <div class="task" data-key="cron-google-refresh">
+        <input type="checkbox" id="cron-google-refresh">
+        <div class="task-content">
+          <label class="task-label" for="cron-google-refresh">Google token refresh</label>
+          <span class="task-detail"><code>google-token-refresh</code> <span class="arrow">&rarr;</span> <code>oauth-token-refresh/google</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-hubspot-refresh">
+        <input type="checkbox" id="cron-hubspot-refresh">
+        <div class="task-content">
+          <label class="task-label" for="cron-hubspot-refresh">HubSpot token refresh</label>
+          <span class="task-detail"><code>hubspot-token-refresh</code> <span class="arrow">&rarr;</span> <code>oauth-token-refresh/hubspot</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-fathom-refresh">
+        <input type="checkbox" id="cron-fathom-refresh">
+        <div class="task-content">
+          <label class="task-label" for="cron-fathom-refresh">Fathom token refresh</label>
+          <span class="task-detail"><code>fathom-token-refresh</code> <span class="arrow">&rarr;</span> <code>oauth-token-refresh/fathom</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-attio-refresh">
+        <input type="checkbox" id="cron-attio-refresh">
+        <div class="task-content">
+          <label class="task-label" for="cron-attio-refresh">Attio token refresh</label>
+          <span class="task-detail"><code>attio-token-refresh</code> <span class="arrow">&rarr;</span> <code>oauth-token-refresh/attio</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-bullhorn-refresh">
+        <input type="checkbox" id="cron-bullhorn-refresh">
+        <div class="task-content">
+          <label class="task-label" for="cron-bullhorn-refresh">Bullhorn token refresh</label>
+          <span class="task-detail"><code>bullhorn-token-refresh</code> <span class="arrow">&rarr;</span> <code>oauth-token-refresh/bullhorn</code></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="task-group">
+      <div class="task-group-header">Polling Crons</div>
+
+      <div class="task" data-key="cron-stuck-bots">
+        <input type="checkbox" id="cron-stuck-bots">
+        <div class="task-content">
+          <label class="task-label" for="cron-stuck-bots">Poll stuck bots</label>
+          <span class="task-detail"><code>poll-stuck-bots</code> <span class="arrow">&rarr;</span> <code>poll-scheduler/stuck-bots</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-transcription">
+        <input type="checkbox" id="cron-transcription">
+        <div class="task-content">
+          <label class="task-label" for="cron-transcription">Poll transcription queue</label>
+          <span class="task-detail"><code>poll-transcription-queue</code> <span class="arrow">&rarr;</span> <code>poll-scheduler/transcription-queue</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-gladia">
+        <input type="checkbox" id="cron-gladia">
+        <div class="task-content">
+          <label class="task-label" for="cron-gladia">Poll Gladia jobs</label>
+          <span class="task-detail"><code>poll-gladia-jobs</code> <span class="arrow">&rarr;</span> <code>poll-scheduler/gladia-jobs</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-s3">
+        <input type="checkbox" id="cron-s3">
+        <div class="task-content">
+          <label class="task-label" for="cron-s3">Poll S3 upload queue</label>
+          <span class="task-detail"><code>poll-s3-upload-queue</code> <span class="arrow">&rarr;</span> <code>poll-scheduler/s3-upload-queue</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-snooze">
+        <input type="checkbox" id="cron-snooze">
+        <div class="task-content">
+          <label class="task-label" for="cron-snooze">Slack snooze check</label>
+          <span class="task-detail"><code>slack-snooze-check</code> <span class="arrow">&rarr;</span> <code>poll-scheduler/slack-snooze</code></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="task-group">
+      <div class="task-group-header">Cleanup Crons</div>
+
+      <div class="task" data-key="cron-logs">
+        <input type="checkbox" id="cron-logs">
+        <div class="task-content">
+          <label class="task-label" for="cron-logs">Logs cleanup</label>
+          <span class="task-detail"><code>logs-cleanup</code> <span class="arrow">&rarr;</span> <code>cleanup-scheduler/logs</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-cc-daily">
+        <input type="checkbox" id="cron-cc-daily">
+        <div class="task-content">
+          <label class="task-label" for="cron-cc-daily">Command Centre daily cleanup</label>
+          <span class="task-detail"><code>cc-daily-cleanup</code> <span class="arrow">&rarr;</span> <code>cleanup-scheduler/cc-daily</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-invitations">
+        <input type="checkbox" id="cron-invitations">
+        <div class="task-content">
+          <label class="task-label" for="cron-invitations">Expired invitations cleanup</label>
+          <span class="task-detail"><code>cleanup-expired-invitations</code> <span class="arrow">&rarr;</span> <code>cleanup-scheduler/expired-invitations</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="cron-onboarding">
+        <input type="checkbox" id="cron-onboarding">
+        <div class="task-content">
+          <label class="task-label" for="cron-onboarding">Incomplete onboarding cleanup</label>
+          <span class="task-detail"><code>cleanup-incomplete-onboarding</code> <span class="arrow">&rarr;</span> <code>cleanup-scheduler/incomplete-onboarding</code></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+
+  <!-- PHASE 3 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-number">Phase 3</span>
+      <span class="phase-title">Update External Webhook URLs</span>
+      <span class="risk-badge risk-high">High Risk</span>
+    </div>
+    <p class="phase-desc">Update webhook URLs on each provider's dashboard. Do one at a time — update, verify, move to next.</p>
+
+    <div class="note">
+      <strong>Rollback plan:</strong> If a webhook stops working, revert the URL to the old path. The old function is still deployed until Phase 5.
+    </div>
+
+    <div class="env-tabs">
+      <button class="env-tab active" onclick="switchEnv('staging')">Staging</button>
+      <button class="env-tab" onclick="switchEnv('production')">Production</button>
+    </div>
+
+    <!-- CRM Webhooks -->
+    <div class="task-group">
+      <div class="task-group-header">CRM Webhooks <span class="arrow">&rarr;</span> <code>webhook-crm</code></div>
+
+      <div class="task" data-key="webhook-hubspot">
+        <input type="checkbox" id="webhook-hubspot">
+        <div class="task-content">
+          <label class="task-label" for="webhook-hubspot">HubSpot webhook URL</label>
+          <span class="task-detail">Settings &rarr; Integrations &rarr; Private Apps &rarr; Webhooks tab</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-crm/hubspot</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-crm/hubspot</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task" data-key="webhook-attio">
+        <input type="checkbox" id="webhook-attio">
+        <div class="task-content">
+          <label class="task-label" for="webhook-attio">Attio webhook URL</label>
+          <span class="task-detail">Settings &rarr; Developers &rarr; Webhooks</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-crm/attio</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-crm/attio</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task" data-key="webhook-bullhorn">
+        <input type="checkbox" id="webhook-bullhorn">
+        <div class="task-content">
+          <label class="task-label" for="webhook-bullhorn">Bullhorn webhook URL</label>
+          <span class="task-detail">Admin &rarr; Webhook Subscriptions</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-crm/bullhorn</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-crm/bullhorn</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Integration Webhooks -->
+    <div class="task-group">
+      <div class="task-group-header">Integration Webhooks <span class="arrow">&rarr;</span> <code>webhook-integrations</code></div>
+
+      <div class="task" data-key="webhook-stripe">
+        <input type="checkbox" id="webhook-stripe">
+        <div class="task-content">
+          <label class="task-label" for="webhook-stripe">Stripe webhook URL</label>
+          <span class="task-detail">Developers &rarr; Webhooks &rarr; Endpoint URL</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-integrations/stripe</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-integrations/stripe</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task" data-key="webhook-apify">
+        <input type="checkbox" id="webhook-apify">
+        <div class="task-content">
+          <label class="task-label" for="webhook-apify">Apify webhook URL</label>
+          <span class="task-detail">Actor run config &rarr; Webhook URL field</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-integrations/apify</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-integrations/apify</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task" data-key="webhook-fathom">
+        <input type="checkbox" id="webhook-fathom">
+        <div class="task-content">
+          <label class="task-label" for="webhook-fathom">Fathom webhook URL</label>
+          <span class="task-detail">App settings &rarr; Webhooks (or Use60 proxy config)</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-integrations/fathom</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-integrations/fathom</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task" data-key="webhook-sentry">
+        <input type="checkbox" id="webhook-sentry">
+        <div class="task-content">
+          <label class="task-label" for="webhook-sentry">Sentry webhook URL</label>
+          <span class="task-detail">Settings &rarr; Integrations &rarr; Internal Integration &rarr; Webhooks</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-integrations/sentry</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-integrations/sentry</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task" data-key="webhook-justcall">
+        <input type="checkbox" id="webhook-justcall">
+        <div class="task-content">
+          <label class="task-label" for="webhook-justcall">JustCall webhook URL</label>
+          <span class="task-detail">Settings &rarr; API & Webhooks &rarr; Webhook URL</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-integrations/justcall</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-integrations/justcall</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lead Webhooks -->
+    <div class="task-group">
+      <div class="task-group-header">Lead Webhooks <span class="arrow">&rarr;</span> <code>webhook-leads</code></div>
+
+      <div class="task" data-key="webhook-facebook">
+        <input type="checkbox" id="webhook-facebook">
+        <div class="task-content">
+          <label class="task-label" for="webhook-facebook">Facebook Leads webhook URL</label>
+          <span class="task-detail">Make.com / n8n scenario &rarr; HTTP module URL</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-leads/facebook</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-leads/facebook</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task" data-key="webhook-savvycal">
+        <input type="checkbox" id="webhook-savvycal">
+        <div class="task-content">
+          <label class="task-label" for="webhook-savvycal">SavvyCal webhook URL</label>
+          <span class="task-detail">Settings &rarr; Integrations &rarr; Webhook URL</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-leads/savvycal</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-leads/savvycal</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task" data-key="webhook-ops-inbound">
+        <input type="checkbox" id="webhook-ops-inbound">
+        <div class="task-content">
+          <label class="task-label" for="webhook-ops-inbound">Ops Table inbound webhook URL</label>
+          <span class="task-detail">Internal config &mdash; update any stored inbound webhook URLs</span>
+          <div class="task-url">
+            <div class="env-url staging active">
+              <div class="url-box" onclick="copyUrl(this)">https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/webhook-leads/ops-table-inbound</div>
+            </div>
+            <div class="env-url production">
+              <div class="url-box" onclick="copyUrl(this)">https://ygdpgliavpxeugaajgrb.supabase.co/functions/v1/webhook-leads/ops-table-inbound</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+
+  <!-- PHASE 4 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-number">Phase 4</span>
+      <span class="phase-title">Verify Everything Works</span>
+      <span class="risk-badge risk-medium">Medium Risk</span>
+    </div>
+    <p class="phase-desc">Trigger test events on each provider and verify they arrive through the new consolidated endpoints. Monitor Supabase logs for 48 hours.</p>
+
+    <div class="task-group">
+      <div class="task-group-header">Verification Checks</div>
+
+      <div class="task" data-key="verify-oauth-flows">
+        <input type="checkbox" id="verify-oauth-flows">
+        <div class="task-content">
+          <label class="task-label" for="verify-oauth-flows">Test all OAuth connect flows</label>
+          <span class="task-detail">Connect/reconnect Google, HubSpot, Fathom, Attio, Bullhorn on staging</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="verify-token-refresh">
+        <input type="checkbox" id="verify-token-refresh">
+        <div class="task-content">
+          <label class="task-label" for="verify-token-refresh">Verify token refresh crons fire correctly</label>
+          <span class="task-detail">Check Supabase logs for successful token refreshes after one cron cycle</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="verify-webhooks-crm">
+        <input type="checkbox" id="verify-webhooks-crm">
+        <div class="task-content">
+          <label class="task-label" for="verify-webhooks-crm">Test CRM webhook delivery (HubSpot, Attio, Bullhorn)</label>
+          <span class="task-detail">Create/update a test record in each CRM and verify sync queue receives it</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="verify-webhooks-stripe">
+        <input type="checkbox" id="verify-webhooks-stripe">
+        <div class="task-content">
+          <label class="task-label" for="verify-webhooks-stripe">Test Stripe webhook (use Stripe CLI or test event)</label>
+          <span class="task-detail"><code>stripe trigger payment_intent.succeeded</code></span>
+        </div>
+      </div>
+
+      <div class="task" data-key="verify-webhooks-leads">
+        <input type="checkbox" id="verify-webhooks-leads">
+        <div class="task-content">
+          <label class="task-label" for="verify-webhooks-leads">Test lead webhooks (SavvyCal booking, Facebook form)</label>
+          <span class="task-detail">Book a test meeting or submit a test lead form</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="verify-polling">
+        <input type="checkbox" id="verify-polling">
+        <div class="task-content">
+          <label class="task-label" for="verify-polling">Verify polling functions via cron</label>
+          <span class="task-detail">Check logs for poll-scheduler runs after cron schedule fires</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="verify-cleanup">
+        <input type="checkbox" id="verify-cleanup">
+        <div class="task-content">
+          <label class="task-label" for="verify-cleanup">Verify cleanup crons run successfully</label>
+          <span class="task-detail">Check logs for cleanup-scheduler runs</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="verify-48h">
+        <input type="checkbox" id="verify-48h">
+        <div class="task-content">
+          <label class="task-label" for="verify-48h">48-hour monitoring window passed with no errors</label>
+          <span class="task-detail">Check Sentry + Supabase function logs for any new errors on consolidated endpoints</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+
+  <!-- PHASE 5 -->
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-number">Phase 5</span>
+      <span class="phase-title">Delete Old Deployed Functions</span>
+      <span class="risk-badge risk-critical">Critical</span>
+    </div>
+    <p class="phase-desc">Only after Phase 4 verification passes. Delete old function deployments from staging and production to reclaim the function count.</p>
+
+    <div class="note">
+      <strong>Point of no return:</strong> Once deleted, the old webhook URLs will 404. Make absolutely sure all external services are updated first.
+    </div>
+
+    <div class="task-group">
+      <div class="task-group-header">Delete from Staging</div>
+
+      <div class="task" data-key="delete-staging-oauth">
+        <input type="checkbox" id="delete-staging-oauth">
+        <div class="task-content">
+          <label class="task-label" for="delete-staging-oauth">Delete old OAuth functions (10 functions)</label>
+          <span class="task-detail">google/hubspot/fathom/attio/bullhorn -token-refresh and -oauth-initiate</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="delete-staging-api">
+        <input type="checkbox" id="delete-staging-api">
+        <div class="task-content">
+          <label class="task-label" for="delete-staging-api">Delete old api-v1-* functions (6 functions)</label>
+          <span class="task-detail">api-v1-activities, companies, contacts, deals, meetings, tasks</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="delete-staging-poll">
+        <input type="checkbox" id="delete-staging-poll">
+        <div class="task-content">
+          <label class="task-label" for="delete-staging-poll">Delete old polling functions (6 functions)</label>
+          <span class="task-detail">poll-stuck-bots, poll-transcription-queue, poll-gladia-jobs, poll-s3-upload-queue, voice-transcribe-poll, slack-snooze-check</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="delete-staging-cleanup">
+        <input type="checkbox" id="delete-staging-cleanup">
+        <div class="task-content">
+          <label class="task-label" for="delete-staging-cleanup">Delete old cleanup functions (4 functions)</label>
+          <span class="task-detail">logs-cleanup, cc-daily-cleanup, cleanup-expired-invitations, cleanup-incomplete-onboarding</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="delete-staging-backfill">
+        <input type="checkbox" id="delete-staging-backfill">
+        <div class="task-content">
+          <label class="task-label" for="delete-staging-backfill">Delete old backfill functions (9 functions)</label>
+          <span class="task-detail">backfill-transcripts, thumbnails, standard-ops-tables, notetaker-transcripts, lead-sources, memory-backfill, autopilot-backfill, fathom-backfill-companies, warmth-backfill</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="delete-staging-webhooks">
+        <input type="checkbox" id="delete-staging-webhooks">
+        <div class="task-content">
+          <label class="task-label" for="delete-staging-webhooks">Delete old webhook functions (11 functions)</label>
+          <span class="task-detail">hubspot/attio/bullhorn/apify-run/fathom/stripe/sentry/justcall/facebook-leads/savvycal-leads/ops-table-inbound -webhook</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="delete-staging-verify">
+        <input type="checkbox" id="delete-staging-verify">
+        <div class="task-content">
+          <label class="task-label" for="delete-staging-verify">Verify staging function count decreased</label>
+          <span class="task-detail"><code>supabase functions list --project-ref caerqjzvuerejfrdtygb | wc -l</code></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="task-group">
+      <div class="task-group-header">Delete from Production</div>
+
+      <div class="task" data-key="delete-prod-all">
+        <input type="checkbox" id="delete-prod-all">
+        <div class="task-content">
+          <label class="task-label" for="delete-prod-all">Delete all old functions from production (same 46 as staging)</label>
+          <span class="task-detail">Only after staging deletion is verified and stable for 24h</span>
+        </div>
+      </div>
+
+      <div class="task" data-key="delete-prod-verify">
+        <input type="checkbox" id="delete-prod-verify">
+        <div class="task-content">
+          <label class="task-label" for="delete-prod-verify">Verify production function count decreased</label>
+          <span class="task-detail"><code>supabase functions list --project-ref ygdpgliavpxeugaajgrb | wc -l</code></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="section-divider">
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+    <span class="task-detail">Progress is saved to your browser's local storage</span>
+    <button class="reset-btn" onclick="resetAll()">Reset All Checkboxes</button>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'edge-fn-migration-v1';
+
+    function loadState() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      } catch { return {}; }
+    }
+
+    function saveState(state) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function updateProgress() {
+      const checkboxes = document.querySelectorAll('.task input[type="checkbox"]');
+      const total = checkboxes.length;
+      const checked = Array.from(checkboxes).filter(cb => cb.checked).length;
+      const pct = total > 0 ? (checked / total) * 100 : 0;
+
+      document.getElementById('progressCount').textContent = `${checked} / ${total}`;
+      document.getElementById('progressFill').style.width = `${pct}%`;
+
+      const banner = document.getElementById('completedBanner');
+      if (checked === total && total > 0) {
+        banner.classList.add('visible');
+      } else {
+        banner.classList.remove('visible');
+      }
+    }
+
+    function init() {
+      const state = loadState();
+      const checkboxes = document.querySelectorAll('.task input[type="checkbox"]');
+
+      checkboxes.forEach(cb => {
+        const key = cb.closest('.task').dataset.key;
+        if (state[key]) {
+          cb.checked = true;
+          cb.closest('.task').classList.add('completed');
+        }
+
+        cb.addEventListener('change', () => {
+          const s = loadState();
+          s[key] = cb.checked;
+          saveState(s);
+          cb.closest('.task').classList.toggle('completed', cb.checked);
+          updateProgress();
+        });
+      });
+
+      updateProgress();
+    }
+
+    function resetAll() {
+      if (!confirm('Reset all checkboxes? This cannot be undone.')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      document.querySelectorAll('.task input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+        cb.closest('.task').classList.remove('completed');
+      });
+      updateProgress();
+    }
+
+    function copyUrl(el) {
+      navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+        el.classList.add('copied');
+        setTimeout(() => el.classList.remove('copied'), 1500);
+      });
+    }
+
+    function switchEnv(env) {
+      document.querySelectorAll('.env-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.textContent.toLowerCase().trim() === env);
+      });
+      document.querySelectorAll('.env-url').forEach(el => {
+        el.classList.toggle('active', el.classList.contains(env));
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

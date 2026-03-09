@@ -134,8 +134,9 @@ export const geminiSvgService = {
         }
       } else {
         // --- Supabase edge function fallback ---
-        ({ data, error } = await supabase.functions.invoke('generate-svg', {
+        ({ data, error } = await supabase.functions.invoke('generate-router', {
           body: {
+            action: 'svg',
             description: params.description,
             brand_colors: params.brand_colors,
             complexity: params.complexity ?? 'medium',

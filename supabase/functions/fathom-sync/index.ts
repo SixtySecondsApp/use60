@@ -13,6 +13,7 @@ import {
   extractAndTruncateSummary,
   // Action Items
   processActionItems,
+  fetchRecordingDetails,
   // Helpers
   buildEmbedUrl,
   normalizeInviteesType,
@@ -304,8 +305,9 @@ async function generateVideoThumbnail(
   meetingId?: string
 ): Promise<string | null> {
   try {
-    const functionUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-video-thumbnail-v2`
+    const functionUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-router`
     const requestBody: any = {
+      action: 'video_thumbnail_v2',
       recording_id: String(recordingId),
       share_url: shareUrl,
       fathom_embed_url: embedUrl,
@@ -440,7 +442,7 @@ async function fetchRecordingActionItems(apiKey: string, recordingId: string | n
 
 async function createGoogleDocForTranscript(supabase: any, userId: string, meetingId: string, title: string, plaintext: string): Promise<string | null> {
   try {
-    const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/google-docs-create`
+    const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/google-services-router`
     // Create a service role client to mint a short-lived user JWT by calling auth API
     const serviceSupabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -456,6 +458,7 @@ async function createGoogleDocForTranscript(supabase: any, userId: string, meeti
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'docs_create',
         title: title || 'Meeting Transcript',
         content: plaintext,
         metadata: { meetingId },
@@ -474,7 +477,8 @@ async function createGoogleDocForTranscript(supabase: any, userId: string, meeti
   }
 }
 
-serve(async (req) => {
+/** Exported handler for use by fathom-ops-router */
+export async function handleSync(req: Request): Promise<Response> {
   // For error handling: capture which sync state row to update
   let syncStateOrgId: string | null = null
   let syncStateUserId: string | null = null
@@ -1247,13 +1251,13 @@ serve(async (req) => {
     // processes one batch. We trigger it multiple times with staggered delays so the
     // queue drains progressively instead of sitting idle after a single fire-and-forget.
     if (bulkSyncFastMode && meetingsSynced > 0) {
-      const retryUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-transcript-retry`
+      const retryUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-ops-router`
       const retryHeaders = {
         'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
         'apikey': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
         'Content-Type': 'application/json',
       }
-      const retryBody = JSON.stringify({ batch_size: 50, concurrency: 5 })
+      const retryBody = JSON.stringify({ action: 'transcript_retry', batch_size: 50, concurrency: 5 })
 
       // Calculate how many rounds we need (each round processes up to 50 jobs)
       const rounds = Math.min(Math.ceil(meetingsSynced / 50), 6) // Cap at 6 rounds
@@ -1353,7 +1357,10 @@ serve(async (req) => {
       }
     )
   }
-})
+}
+
+// Standalone serve wrapper — delegates to exported handleSync
+serve((req) => handleSync(req))
 
 // retryWithBackoff is now imported from ./services/helpers.ts
 
@@ -1910,6 +1917,27 @@ async function syncSingleCall(
     // - Internal users: Create meeting_attendees entry only (no contact creation)
     // - External users: Create/update contacts + meeting_contacts junction (no meeting_attendees)
     const externalContactIds: string[] = []
+
+    // If the list API didn't include participants, fetch from individual recording endpoint
+    const hasParticipants = (call.calendar_invitees?.length > 0) || (call.participants?.length > 0)
+    if (!hasParticipants) {
+      const recordingId = call.recording_id || call.id || call.recordingId
+      if (recordingId) {
+        try {
+          console.log(`[fathom-sync] No participants in list response — fetching from /recordings/${recordingId}`)
+          const details = await fetchRecordingDetails(integration.access_token, recordingId)
+          if (details?.calendar_invitees?.length) {
+            call.calendar_invitees = details.calendar_invitees
+            console.log(`[fathom-sync] Got ${details.calendar_invitees.length} calendar_invitees from recording details`)
+          } else if (details?.participants?.length) {
+            call.participants = details.participants
+            console.log(`[fathom-sync] Got ${details.participants.length} participants from recording details`)
+          }
+        } catch (err) {
+          console.warn(`[fathom-sync] Failed to fetch recording details for participants:`, err instanceof Error ? err.message : String(err))
+        }
+      }
+    }
 
     // Determine which participant list to use
     const inviteeList = (call.calendar_invitees && call.calendar_invitees.length > 0)

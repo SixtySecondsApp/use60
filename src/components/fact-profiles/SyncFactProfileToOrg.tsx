@@ -32,8 +32,8 @@ export function SyncFactProfileToOrg({ profile, variant = 'outline', size = 'sm'
     setSynced(false);
 
     try {
-      const { data, error } = await supabase.functions.invoke('sync-fact-profile-context', {
-        body: { profileId: profile.id },
+      const { data, error } = await supabase.functions.invoke('sync-jobs-router', {
+        body: { action: 'fact_profile_context', profileId: profile.id },
       });
 
       if (error) throw error;

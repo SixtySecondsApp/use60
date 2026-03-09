@@ -239,8 +239,9 @@ export const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ onKeySelected }) =
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('create-api-key', {
+      const { data, error } = await supabase.functions.invoke('create-router', {
         body: {
+          action: 'api_key',
           name: createForm.name,
           permissions: createForm.permissions,
           rate_limit: createForm.rate_limit,

@@ -675,48 +675,29 @@ export function useRecordingsRequiringAttention() {
 // =============================================================================
 
 export function useBatchVideoUrls(recordings: Recording[]) {
-  // Split recordings: those with S3 keys (need signed URLs) vs those with direct URLs
-  const s3Ids = useMemo(
+  // All ready recordings need fresh signed URLs (both S3-backed and MeetingBaaS-backed)
+  // The edge function handles both: S3 keys get presigned, MeetingBaaS get refreshed via API
+  const readyIds = useMemo(
     () =>
       recordings
-        .filter((r) => r.status === 'ready' && r.recording_s3_key)
+        .filter((r) => r.status === 'ready' && (r.recording_s3_key || r.bot_id || r.recording_s3_url))
         .map((r) => r.id),
-    [recordings]
-  );
-
-  // Recordings with a direct URL but no S3 key (e.g., MeetingBaaS URLs)
-  const directUrls = useMemo(
-    () => {
-      const result: Record<string, { video_url: string; thumbnail_url?: string }> = {};
-      for (const r of recordings) {
-        if (r.status === 'ready' && !r.recording_s3_key && r.recording_s3_url) {
-          result[r.id] = { video_url: r.recording_s3_url };
-        }
-      }
-      return result;
-    },
     [recordings]
   );
 
   // Stable query key based on sorted IDs
   const queryKey = useMemo(
-    () => [...recordingKeys.all, 'batch-urls', ...s3Ids.slice().sort()],
-    [s3Ids]
+    () => [...recordingKeys.all, 'batch-urls', ...readyIds.slice().sort()],
+    [readyIds]
   );
 
   const query = useQuery<Record<string, { video_url: string; thumbnail_url?: string }>>({
     queryKey,
-    queryFn: () => recordingService.getBatchSignedUrls(s3Ids),
-    enabled: s3Ids.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    queryFn: () => recordingService.getBatchSignedUrls(readyIds),
+    enabled: readyIds.length > 0,
+    staleTime: 3 * 60 * 1000, // 3 minutes (URLs expire in 4h, refresh well before)
     gcTime: 10 * 60 * 1000, // 10 minutes
   });
 
-  // Merge S3 signed URLs with direct URLs
-  const mergedData = useMemo(
-    () => ({ ...directUrls, ...(query.data || {}) }),
-    [directUrls, query.data]
-  );
-
-  return { ...query, data: mergedData };
+  return query;
 }

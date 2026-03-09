@@ -107,8 +107,9 @@ export function useEnrichment(tableId: string) {
     resumeJobId?: string;
     skipCompleted?: boolean;
   }): Promise<EnrichmentResult> => {
-    const { data, error } = await supabase.functions.invoke('enrich-dynamic-table', {
+    const { data, error } = await supabase.functions.invoke('enrich-router', {
       body: {
+        action: 'dynamic_table',
         table_id: tableId,
         column_id: params.columnId,
         row_ids: params.rowIds,
@@ -288,8 +289,9 @@ export function useEnrichment(tableId: string) {
       const failedRowIds = failedResults.map((r) => r.row_id);
 
       // Start enrichment with just the failed rows
-      const { data, error } = await supabase.functions.invoke('enrich-dynamic-table', {
+      const { data, error } = await supabase.functions.invoke('enrich-router', {
         body: {
+          action: 'dynamic_table',
           table_id: tableId,
           column_id: job.column_id,
           row_ids: failedRowIds,

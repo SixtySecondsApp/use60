@@ -1,459 +1,350 @@
-// supabase/functions/demo-research/index.ts
-//
-// Public edge function: researches a company domain and generates a complete
-// ResearchData payload for the demo experience.
-//
-// Architecture (2-phase pipeline, ~3-6s total):
-//   Phase 1: Exa semantic search → raw web page content (~1s)
-//            Returns actual text from 5 top results (company site, LinkedIn, etc.)
-//   Phase 2: Single Gemini 2.5 Flash call → full structured JSON (~2-4s)
-//            Extracts company info + generates demo content in one shot.
-//            Thinking disabled for speed (thinkingBudget=0).
-//
-// Fallback chain: Exa fails → Gemini 3 Flash grounded search → single-shot.
+/**
+ * demo-research
+ *
+ * Deep research for the interactive demo. Scrapes the visitor's company
+ * website, uses Gemini Flash to extract WHAT THEY SELL, then generates
+ * fully personalized demo content referencing their real product/service.
+ *
+ * This is the wow factor — the demo should feel like it already knows
+ * the viewer's business.
+ *
+ * Input:  { url } OR { domain, company_name, visitor_name?, visitor_title? }
+ * Output: Full ResearchData shape (company, demo_actions, stats)
+ */
 
-import {
-  getCorsHeaders,
-  handleCorsPreflightRequest,
-  jsonResponse,
-  errorResponse,
-} from '../_shared/corsHelper.ts';
+import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
 
-// ============================================================================
-// Rate limiter (in-memory, per-isolate)
-// ============================================================================
+const GEMINI_MODEL = 'gemini-2.0-flash';
 
-const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX = 10;
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const timestamps = rateLimitMap.get(ip) ?? [];
-  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT_MAX) return true;
-  recent.push(now);
-  rateLimitMap.set(ip, recent);
-  return false;
+interface DemoResearchRequest {
+  url?: string;
+  domain?: string;
+  company_name?: string;
+  visitor_name?: string;
+  visitor_title?: string;
 }
 
-// ============================================================================
-// Domain extraction
-// ============================================================================
-
-function extractDomain(raw: string): string | null {
-  const cleaned = raw
-    .trim()
-    .replace(/^(https?:\/\/)?(www\.)?/, '')
-    .replace(/\/.*$/, '')
-    .toLowerCase();
-  if (!cleaned || !cleaned.includes('.') || cleaned.length < 4) return null;
-  return cleaned;
+interface ResearchData {
+  company: {
+    name: string;
+    domain: string;
+    vertical: string;
+    product_summary: string;
+    value_props: string[];
+    employee_range?: string;
+    competitors?: string[];
+    icp: {
+      title: string;
+      company_size: string;
+      industry: string;
+    };
+  };
+  demo_actions: {
+    cold_outreach: {
+      target_name: string;
+      target_title: string;
+      target_company: string;
+      personalised_hook: string;
+      email_preview: string;
+    };
+    proposal_draft: {
+      prospect_name: string;
+      prospect_company: string;
+      proposal_title: string;
+      key_sections: string[];
+    };
+    meeting_prep: {
+      attendee_name: string;
+      attendee_company: string;
+      context: string;
+      talking_points: string[];
+    };
+    pipeline_action: {
+      deal_name: string;
+      deal_value: string;
+      days_stale: number;
+      health_score: number;
+      risk_signal: string;
+      suggested_action: string;
+      signals: { label: string; type: 'positive' | 'warning' | 'neutral' }[];
+    };
+  };
+  stats: {
+    signals_found: number;
+    actions_queued: number;
+    contacts_identified: number;
+    opportunities_mapped: number;
+  };
 }
 
-// ============================================================================
-// Exa search — fast semantic web search (~1s)
-// ============================================================================
-
-async function exaSearch(
-  domain: string,
-  apiKey: string
-): Promise<{ text: string; durationMs: number }> {
-  const start = performance.now();
-
-  const response = await fetch('https://api.exa.ai/search', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      query: `${domain} company overview products services customers`,
-      type: 'auto',
-      numResults: 5,
-      contents: {
-        text: { maxCharacters: 1500 },
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Exa API error: ${response.status} ${response.statusText}`);
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return handleCorsPreflightRequest(req);
   }
 
-  const data = await response.json();
-  const results = data.results || [];
+  try {
+    const body: DemoResearchRequest = await req.json();
 
-  // Combine text from all results into a single context string
-  const text = results
-    .map((r: { title?: string; url?: string; text?: string }) => {
-      const title = r.title || '';
-      const url = r.url || '';
-      const content = r.text || '';
-      return `[${title}] (${url})\n${content}`;
-    })
-    .join('\n\n---\n\n');
+    // Support both { url } and { domain } input shapes
+    let domain = body.domain;
+    if (!domain && body.url) {
+      domain = body.url
+        .replace(/^(https?:\/\/)?(www\.)?/, '')
+        .replace(/\/.*$/, '')
+        .toLowerCase();
+    }
 
-  const durationMs = Math.round(performance.now() - start);
-  console.log(`[exa] Got ${results.length} results (${text.length} chars) in ${durationMs}ms`);
+    if (!domain) {
+      return errorResponse('domain or url is required', 400, req);
+    }
 
-  if (!text || text.length < 50) {
-    throw new Error('Exa returned insufficient content');
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiKey) {
+      return errorResponse('GEMINI_API_KEY not configured', 500, req);
+    }
+
+    // Step 1: Scrape the company website
+    const websiteContent = await scrapeWebsite(domain);
+
+    // Step 2: Generate full research data using Gemini
+    const companyName = body.company_name || domainToName(domain);
+    const result = await generateResearchData(
+      geminiKey,
+      domain,
+      companyName,
+      websiteContent,
+      body.visitor_name,
+      body.visitor_title
+    );
+
+    return jsonResponse({ success: true, data: result }, req);
+  } catch (err) {
+    console.error('[demo-research] Error:', err);
+    return errorResponse(
+      err instanceof Error ? err.message : 'Internal error',
+      500,
+      req
+    );
   }
+});
 
-  return { text, durationMs };
+// ---------------------------------------------------------------------------
+// Website scraping
+// ---------------------------------------------------------------------------
+
+async function scrapeWebsite(domain: string): Promise<string> {
+  try {
+    const url = `https://${domain}`;
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; 60Bot/1.0)' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return '';
+    const html = await response.text();
+    return html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 12000);
+  } catch {
+    return '';
+  }
 }
 
-// ============================================================================
-// Gemini helper
-// ============================================================================
+// ---------------------------------------------------------------------------
+// Generate full ResearchData from website content (or name-only fallback)
+// ---------------------------------------------------------------------------
 
-const GEMINI_MODEL_FAST = 'gemini-2.5-flash';
-const GEMINI_MODEL_GROUNDED = 'gemini-3-flash-preview';
-
-async function callGemini(
+async function generateResearchData(
   apiKey: string,
-  prompt: string,
-  opts: {
-    temperature?: number;
-    maxOutputTokens?: number;
-    grounding?: boolean;
-    model?: string;
-    disableThinking?: boolean;
-  } = {}
-): Promise<{ text: string; inputTokens: number; outputTokens: number; durationMs: number }> {
-  const start = performance.now();
-  const model = opts.model ?? GEMINI_MODEL_FAST;
+  domain: string,
+  companyName: string,
+  websiteContent: string,
+  visitorName?: string,
+  visitorTitle?: string
+): Promise<ResearchData> {
+  const hasWebsite = websiteContent.length >= 50;
+  const senderName = visitorName || 'the rep';
+  const senderFirstName = (visitorName || 'Alex').split(' ')[0];
 
-  const generationConfig: Record<string, unknown> = {
-    temperature: opts.temperature ?? 0.3,
-    maxOutputTokens: opts.maxOutputTokens ?? 2048,
-  };
+  const websiteContext = hasWebsite
+    ? `Here is the homepage content from ${companyName}'s website (${domain}):
 
-  if (opts.disableThinking) {
-    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+---
+${websiteContent}
+---
+
+Based on this website content, extract:`
+    : `The company is ${companyName} (${domain}). Based on the company name and domain, infer:`;
+
+  const prompt = `You are researching a company for a personalized sales CRM demo. The person viewing this demo is ${senderName}${visitorTitle ? ` (${visitorTitle})` : ''} from ${companyName}. They are a SALES REP using a CRM tool called "60" to manage their pipeline.
+
+${websiteContext}
+1. WHAT ${companyName} sells — their core product or service offering
+2. WHO they sell to — their ideal customer profile (ICP)
+3. Their key value propositions and differentiators
+4. Their industry vertical
+5. Likely competitors
+
+Then generate a complete set of personalized demo content where ${senderFirstName} from ${companyName} is selling THEIR product/service to prospects. Every piece of content should reference ${companyName}'s ACTUAL product, features, and value props${hasWebsite ? ' from the website' : ''}.
+
+Return JSON matching this EXACT structure:
+{
+  "company": {
+    "name": "${companyName}",
+    "domain": "${domain}",
+    "vertical": "The industry vertical (e.g. 'B2B SaaS', 'FinTech', 'Healthcare', 'Professional Services')",
+    "product_summary": "One clear sentence describing what ${companyName} sells — their core product/service. Be specific about WHAT it does, not generic. This is critical.",
+    "value_props": ["3-4 specific value propositions from ${companyName}'s actual offering — features, benefits, outcomes they deliver to customers"],
+    "employee_range": "Estimated employee range (e.g. '11-50', '51-200', '201-1000')",
+    "competitors": ["2-3 real competitors in ${companyName}'s space"],
+    "icp": {
+      "title": "The job title of ${companyName}'s ideal buyer (e.g. 'VP of Sales', 'Head of Engineering')",
+      "company_size": "Target company size (e.g. '50-500 employees')",
+      "industry": "Target industry"
+    }
+  },
+  "demo_actions": {
+    "cold_outreach": {
+      "target_name": "Sarah Chen",
+      "target_title": "A title that matches ${companyName}'s ICP buyer",
+      "target_company": "A realistic prospect company name",
+      "personalised_hook": "A warm, specific opening that references a previous conversation or demo. Not an introduction. Not 'I'm reaching out because'. Reference something specific from 'yesterday's call'.",
+      "email_preview": "SEE EMAIL RULES BELOW — this is a FOLLOW-UP after a demo/meeting, NOT cold outreach"
+    },
+    "proposal_draft": {
+      "prospect_name": "James Wright",
+      "prospect_company": "A different realistic prospect company",
+      "proposal_title": "How ${companyName}'s [specific product] helps [prospect company] achieve [specific outcome]",
+      "key_sections": ["4 proposal sections referencing ${companyName}'s real capabilities"]
+    },
+    "meeting_prep": {
+      "attendee_name": "David Park",
+      "attendee_company": "A third realistic prospect company",
+      "context": "Meeting context that references ${companyName}'s product and a specific feature the prospect asked about",
+      "talking_points": ["4 talking points referencing ${companyName}'s REAL product features and competitive advantages"]
+    },
+    "pipeline_action": {
+      "deal_name": "[Prospect Company] — [Deal type]",
+      "deal_value": "A realistic deal value as string (e.g. '$42,000')",
+      "days_stale": 16,
+      "health_score": 38,
+      "risk_signal": "A specific risk signal referencing the deal context",
+      "suggested_action": "A specific next step referencing ${companyName}'s product",
+      "signals": [
+        {"label": "Champion engaged", "type": "positive"},
+        {"label": "Competitor evaluated", "type": "warning"},
+        {"label": "Budget approved", "type": "positive"},
+        {"label": "Technical review pending", "type": "warning"},
+        {"label": "Usage metrics strong", "type": "positive"}
+      ]
+    }
+  },
+  "stats": {
+    "signals_found": 47,
+    "actions_queued": 12,
+    "contacts_identified": 8,
+    "opportunities_mapped": 4
   }
+}
 
-  const requestBody: Record<string, unknown> = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig,
-  };
+CRITICAL INSTRUCTIONS:
+- The "product_summary" must describe what ${companyName} ACTUALLY sells. Not "provides solutions" — be specific about their product/service.
+- The "value_props" must be ${companyName}'s REAL value propositions${hasWebsite ? ' extracted from the website' : ''}.
+- ALL email content, talking points, and proposals must reference ${companyName}'s specific product/service, not generic sales language.
+- The viewer should think "wow, it knows exactly what we sell and how to position it."
+- Use realistic prospect company names, not generic ones.
+- Do NOT use placeholder brackets like [Name] — use actual names.
 
-  if (opts.grounding) {
-    requestBody.tools = [{ googleSearch: {} }];
-  }
+EMAIL RULES (for "email_preview" — follow these exactly):
+This is a POST-MEETING FOLLOW-UP email, not cold outreach. ${senderFirstName} already had a demo/call with the prospect yesterday. The email references the conversation and proposes next steps.
+
+The email must read like the best human SDR wrote it, not AI. Follow these rules:
+1. 75-125 WORDS. Follow-ups can be slightly longer than cold emails but still concise.
+2. 3rd-to-5th grade reading level. Short words. Short sentences. No jargon.
+3. ONE email, ONE idea, ONE ask. Single CTA.
+4. Open by referencing yesterday's conversation. "Great speaking with you yesterday" or reference a specific topic they discussed. Never "I'm reaching out" or "My name is".
+5. Reference 2-3 SPECIFIC features/benefits of ${companyName}'s product that were relevant to the prospect's needs. Use bullet points.
+6. End with a clear, easy next step. "Want me to send over the proposal?" or "Happy to jump on a quick call Thursday to walk through it."
+7. Write like you talk. Read it out loud. No "leverage," "synergies," "streamline," "empower," "best-in-class."
+8. Vary sentence length. Long sentence, then a fragment. A question. Two words.
+9. Use contractions. "You're" not "you are." "Don't" not "do not."
+10. NO em dashes (— or –). Use a hyphen, full stop, or rewrite as two sentences.
+11. NO oxford commas. "Sales, marketing and ops" not "sales, marketing, and ops."
+12. Reference ${companyName}'s SPECIFIC product features from the website. Not generic benefits.
+13. Sign off as just "${senderFirstName}" — nothing else after the name.
+
+DEAD LANGUAGE — never use these phrases in the email:
+"I'm reaching out because", "I hope this email finds you well", "Allow me to introduce myself",
+"I'd love to explore", "leverage", "synergies", "transforming", "cutting-edge", "revolutionize",
+"just following up", "just checking in", "bumping this", "best-in-class", "streamline your workflow",
+"empower your team", "industry-leading", "unique perspective", "drive meaningful engagement"
+
+Return ONLY valid JSON, no markdown fences.`;
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 3000,
+          responseMimeType: 'application/json',
+        },
+      }),
     }
   );
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({})) as Record<string, Record<string, string>>;
-    throw new Error(`Gemini API error (${model}): ${err.error?.message || response.statusText}`);
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Gemini API error: ${response.status} ${errText}`);
   }
 
   const data = await response.json();
-  // Gemini 2.5 Flash returns thinking + text parts — extract only non-thought text
-  const parts = data.candidates?.[0]?.content?.parts || [];
-  const text = parts
-    .filter((p: { thought?: boolean }) => !p.thought)
-    .map((p: { text?: string }) => p.text || '')
-    .join('') || '';
-  if (!text) throw new Error(`Empty response from ${model}`);
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-  return {
-    text,
-    inputTokens: data.usageMetadata?.promptTokenCount || 0,
-    outputTokens: data.usageMetadata?.candidatesTokenCount || 0,
-    durationMs: Math.round(performance.now() - start),
-  };
-}
-
-function parseJsonFromText(text: string): Record<string, unknown> {
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/);
-  const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : text;
-  return JSON.parse(jsonStr);
-}
-
-// ============================================================================
-// Generation prompt — single Gemini call produces all demo content
-// ============================================================================
-
-function buildExtractionPrompt(domain: string, searchResults: string): string {
-  return `Web search results about ${domain}:
-
-${searchResults}
-
----
-
-Extract real company information and generate fictional demo content. Use REAL company data from the search results. Use FICTIONAL names for people and prospect companies.
-
-For the email_preview: Write a cold email following these rules EXACTLY:
-- Under 75 words total. 3rd-5th grade reading level. Use contractions.
-- Open with a specific observation about the prospect's business, NOT "I'm reaching out" or "I saw".
-- One clear ask. Interest-based CTA like "Worth a look?" not "Can we schedule a call?"
-- Sign off with the REAL first name of the CEO/founder of ${domain}. If unknown, use "Alex".
-- CRITICAL FORMATTING: Use actual newline characters (not \\n) to separate every paragraph. The greeting, each body sentence, and sign-off MUST be on separate lines with a blank line between them. Example structure:
-
-Hi [Name],
-
-[Observation about their business in one sentence.]
-
-[One sentence connecting to a real product/feature.] [CTA question.]
-
-Best,
-[First Name]
-
-Do NOT write the email as a single continuous paragraph. Each thought gets its own line.
-
-Return ONLY a JSON object:
-{"company":{"name":"","vertical":"2 word industry","product_summary":"what they do in 2 sentences","value_props":["","",""],"icp_title":"who buys this","icp_company_size":"typical buyer size","icp_industry":"buyer industry","employee_range":"","competitors":["",""]},"outreach":{"target_name":"fictional","target_title":"","target_company":"fictional","personalised_hook":"1 sentence referencing real product","email_preview":"under 75 words cold email with proper casing and founder sign-off"},"meeting":{"attendee_name":"fictional","attendee_company":"fictional","context":"","talking_points":["","",""]},"pipeline":{"deal_name":"fictional — deal type","deal_value":"$XX,000","days_stale":0,"health_score":0,"risk_signal":"","suggested_action":"","signals":[{"label":"","type":"warning"},{"label":"","type":"warning"},{"label":"","type":"positive"},{"label":"","type":"positive"}]}}`;
-}
-
-// ============================================================================
-// Primary pipeline: Exa search (~1s) → Gemini extraction (~3s)
-// ============================================================================
-
-async function researchPipeline(
-  domain: string,
-  geminiKey: string,
-  exaKey: string
-): Promise<{ data: Record<string, unknown>; meta: Record<string, unknown> }> {
-  const pipelineStart = performance.now();
-
-  // Phase 1: Exa semantic search
-  const exa = await exaSearch(domain, exaKey);
-
-  // Phase 2: Single Gemini 2.5 Flash call — all sections in one shot
-  const prompt = buildExtractionPrompt(domain, exa.text);
-  const gemini = await callGemini(geminiKey, prompt, {
-    temperature: 0.3,
-    maxOutputTokens: 2048,
-    model: GEMINI_MODEL_FAST,
-    disableThinking: true,
-  });
-
-  const parsed = parseJsonFromText(gemini.text);
-
-  // Restructure into frontend-expected shape
-  const rawCompany = (parsed.company as Record<string, unknown>) || {};
-  const outreach = (parsed.outreach as Record<string, unknown>) || {};
-  const meeting = (parsed.meeting as Record<string, unknown>) || {};
-  const pipeline = (parsed.pipeline as Record<string, unknown>) || {};
-
-  // Restructure flat ICP fields into nested object for frontend compatibility
-  const company: Record<string, unknown> = { ...rawCompany };
-  if (rawCompany.icp_title || rawCompany.icp_company_size || rawCompany.icp_industry) {
-    company.icp = {
-      title: rawCompany.icp_title || '',
-      company_size: rawCompany.icp_company_size || '',
-      industry: rawCompany.icp_industry || '',
-    };
-    delete company.icp_title;
-    delete company.icp_company_size;
-    delete company.icp_industry;
+  if (!text) {
+    throw new Error('No content in Gemini response');
   }
 
-  const data: Record<string, unknown> = {
-    company: { ...company, domain },
-    demo_actions: {
-      cold_outreach: outreach.target_name ? outreach : {},
-      proposal_draft: {},
-      meeting_prep: meeting.attendee_name ? meeting : {},
-      pipeline_action: pipeline.deal_name ? pipeline : {},
-    },
-    stats: {
-      signals_found: Math.floor(Math.random() * 30) + 30,
-      actions_queued: Math.floor(Math.random() * 7) + 8,
-      contacts_identified: Math.floor(Math.random() * 7) + 5,
-      opportunities_mapped: Math.floor(Math.random() * 3) + 3,
-    },
-  };
+  const parsed = JSON.parse(text) as ResearchData;
 
-  const totalDurationMs = Math.round(performance.now() - pipelineStart);
-  console.log(`[pipeline] Exa+Gemini: ${totalDurationMs}ms (exa=${exa.durationMs}ms, gemini=${gemini.durationMs}ms)`);
+  // Validate critical fields
+  if (!parsed.company?.name || !parsed.company?.product_summary) {
+    throw new Error('Missing company name or product_summary in response');
+  }
+  if (!parsed.demo_actions?.cold_outreach?.email_preview) {
+    throw new Error('Missing cold_outreach email_preview');
+  }
+  if (!parsed.demo_actions?.meeting_prep?.talking_points?.length) {
+    throw new Error('Missing meeting_prep talking_points');
+  }
 
-  return {
-    data,
-    meta: {
-      mode: 'exa-pipeline',
-      models: { search: 'exa', extraction: GEMINI_MODEL_FAST },
-      calls: 2,
-      totalDurationMs,
-      exaMs: exa.durationMs,
-      geminiMs: gemini.durationMs,
-      inputTokens: gemini.inputTokens,
-      outputTokens: gemini.outputTokens,
-    },
-  };
+  // Ensure domain is correct
+  parsed.company.domain = domain;
+
+  return parsed;
 }
 
-// ============================================================================
-// Fallback: Gemini grounded search → structured extraction
-// Used when Exa is unavailable or fails.
-// ============================================================================
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-async function researchGeminiFallback(
-  domain: string,
-  apiKey: string
-): Promise<{ data: Record<string, unknown>; meta: Record<string, unknown> }> {
-  console.log(`[fallback-gemini] Grounded research for ${domain}`);
-  const pipelineStart = performance.now();
-
-  // Phase 1: Grounded plain text brief via Gemini 3 Flash
-  const briefPrompt = `Research "${domain}" thoroughly using web search. Write a concise company intelligence brief covering:
-
-1. COMPANY: Official name, what they do (1-2 sentences), industry/vertical, approximate employee count, founding year
-2. PRODUCTS: Their main products or services with specific names and what each does
-3. CUSTOMERS: Who buys from them — typical job titles, company sizes, industries
-4. COMPETITORS: 2-3 direct competitors with names
-5. RECENT NEWS: Any notable recent developments, funding, partnerships, or growth signals
-
-Be specific and factual. Use real product names, real competitor names, real details from their website.`;
-
-  const brief = await callGemini(apiKey, briefPrompt, {
-    temperature: 0.1,
-    maxOutputTokens: 768,
-    grounding: true,
-    model: GEMINI_MODEL_GROUNDED,
-  });
-
-  // Phase 2: Single Gemini 2.5 Flash extraction
-  const extractionPrompt = buildExtractionPrompt(domain, brief.text);
-  const gemini = await callGemini(apiKey, extractionPrompt, {
-    temperature: 0.3,
-    maxOutputTokens: 2048,
-    model: GEMINI_MODEL_FAST,
-    disableThinking: true,
-  });
-
-  const parsed = parseJsonFromText(gemini.text);
-
-  const rawCompany = (parsed.company as Record<string, unknown>) || {};
-  const outreach = (parsed.outreach as Record<string, unknown>) || {};
-  const meeting = (parsed.meeting as Record<string, unknown>) || {};
-  const pipeline = (parsed.pipeline as Record<string, unknown>) || {};
-
-  const company: Record<string, unknown> = { ...rawCompany };
-  if (rawCompany.icp_title || rawCompany.icp_company_size || rawCompany.icp_industry) {
-    company.icp = {
-      title: rawCompany.icp_title || '',
-      company_size: rawCompany.icp_company_size || '',
-      industry: rawCompany.icp_industry || '',
-    };
-    delete company.icp_title;
-    delete company.icp_company_size;
-    delete company.icp_industry;
-  }
-
-  const data: Record<string, unknown> = {
-    company: { ...company, domain },
-    demo_actions: {
-      cold_outreach: outreach.target_name ? outreach : {},
-      proposal_draft: {},
-      meeting_prep: meeting.attendee_name ? meeting : {},
-      pipeline_action: pipeline.deal_name ? pipeline : {},
-    },
-    stats: {
-      signals_found: Math.floor(Math.random() * 30) + 30,
-      actions_queued: Math.floor(Math.random() * 7) + 8,
-      contacts_identified: Math.floor(Math.random() * 7) + 5,
-      opportunities_mapped: Math.floor(Math.random() * 3) + 3,
-    },
-  };
-
-  const totalDurationMs = Math.round(performance.now() - pipelineStart);
-  console.log(`[fallback-gemini] Total: ${totalDurationMs}ms (brief=${brief.durationMs}ms, extraction=${gemini.durationMs}ms)`);
-
-  return {
-    data,
-    meta: {
-      mode: 'gemini-fallback',
-      models: { research: GEMINI_MODEL_GROUNDED, extraction: GEMINI_MODEL_FAST },
-      calls: 2,
-      totalDurationMs,
-      briefMs: brief.durationMs,
-      extractionMs: gemini.durationMs,
-      inputTokens: brief.inputTokens + gemini.inputTokens,
-      outputTokens: brief.outputTokens + gemini.outputTokens,
-    },
-  };
+function domainToName(domain: string): string {
+  const cleaned = domain
+    .replace(/\.(com|io|co|ai|dev|org|net|app)$/i, '')
+    .replace(/[^a-zA-Z0-9]/g, ' ')
+    .trim();
+  return cleaned
+    .split(' ')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
 }
-
-// ============================================================================
-// Handler
-// ============================================================================
-
-Deno.serve(async (req: Request) => {
-  const preflight = handleCorsPreflightRequest(req);
-  if (preflight) return preflight;
-
-  if (req.method !== 'POST') {
-    return errorResponse('Method not allowed', req, 405);
-  }
-
-  const ip =
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    req.headers.get('cf-connecting-ip') ||
-    'unknown';
-  if (isRateLimited(ip)) {
-    return errorResponse('Rate limit exceeded. Try again in a minute.', req, 429);
-  }
-
-  try {
-    const body = await req.json();
-    const rawUrl = body?.url;
-    if (!rawUrl || typeof rawUrl !== 'string') {
-      return errorResponse('Missing or invalid "url" field', req, 400);
-    }
-
-    const domain = extractDomain(rawUrl);
-    if (!domain) {
-      return errorResponse('Invalid domain', req, 400);
-    }
-
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || '';
-    if (!GEMINI_API_KEY) {
-      return errorResponse('GEMINI_API_KEY not configured', req, 500);
-    }
-
-    const EXA_API_KEY = Deno.env.get('EXA_API_KEY') || '';
-
-    console.log(`[demo-research] domain=${domain} exa=${!!EXA_API_KEY}`);
-
-    // Try Exa pipeline first (fastest), fall back to Gemini grounded search
-    if (EXA_API_KEY) {
-      try {
-        const result = await researchPipeline(domain, GEMINI_API_KEY, EXA_API_KEY);
-        console.log(`[demo-research] Exa pipeline: ${result.meta.totalDurationMs}ms`);
-        return jsonResponse({ success: true, data: result.data, meta: result.meta }, req);
-      } catch (exaError) {
-        console.warn(`[demo-research] Exa pipeline failed:`, exaError);
-        // Fall through to Gemini fallback
-      }
-    }
-
-    try {
-      const result = await researchGeminiFallback(domain, GEMINI_API_KEY);
-      console.log(`[demo-research] Gemini fallback: ${result.meta.totalDurationMs}ms`);
-      return jsonResponse({
-        success: true,
-        data: result.data,
-        meta: { ...result.meta, fallback: !EXA_API_KEY ? 'no-exa-key' : 'exa-failed' },
-      }, req);
-    } catch (fallbackError) {
-      console.error(`[demo-research] All pipelines failed:`, fallbackError);
-      const message = fallbackError instanceof Error ? fallbackError.message : 'Research failed';
-      return errorResponse(message, req, 500);
-    }
-  } catch (error) {
-    console.error('[demo-research] Error:', error);
-    const message = error instanceof Error ? error.message : 'Research failed';
-    return errorResponse(message, req, 500);
-  }
-});

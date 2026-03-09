@@ -178,6 +178,10 @@ const INTEGRATION_DOMAINS: Record<string, string> = {
   looker: 'looker.com',
   metabase: 'metabase.com',
 
+  // AI Video & Audio
+  heygen: 'heygen.com',
+  elevenlabs: 'elevenlabs.io',
+
   // AI & Productivity
   openai: 'openai.com',
   chatgpt: 'openai.com',
@@ -307,9 +311,9 @@ export function useIntegrationLogo(
     const promise =
       existingPromise ||
       supabase.functions
-        .invoke<LogoResponse>('fetch-company-logo', {
+        .invoke<LogoResponse>('fetch-router', {
           method: 'POST',
-          body: { domain: normalizedDomain },
+          body: { action: 'company_logo', domain: normalizedDomain },
         })
         .then(({ data, error: fetchError }) => {
           if (fetchError) throw new Error(fetchError.message);

@@ -11,27 +11,23 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
-import { ArrowRight, Sparkles, Clock, TrendingUp, Shield, Zap, Eye, Bot, Menu, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowRight, Clock, TrendingUp, Shield, Zap, Eye, Bot, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useForceDarkMode } from '../lib/hooks/useForceDarkMode';
 import { getLoginUrl } from '../lib/utils/siteUrl';
 import { useDemoResearch } from '../demo/useDemoResearch';
 import { AgentResearch } from '../demo-v2/AgentResearch';
-import { ProductShowcase } from '../demo-v2/ProductShowcase';
-import { WeekRecap } from '../demo-v2/WeekRecap';
-import { DemoSignup } from '../demo-v2/DemoSignup';
+import { SandboxExperience } from '../sandbox/SandboxExperience';
+import { DemoHero } from '../demo/DemoHero';
 
 // ─────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────
 
-type DemoPhase = 'idle' | 'research' | 'showcase' | 'recap' | 'signup';
-
-const EXAMPLE_DOMAINS = ['stripe.com', 'notion.com', 'linear.app', 'figma.com'];
+type DemoPhase = 'idle' | 'research' | 'sandbox';
 
 const EASE_OUT_QUINT: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const EASE_OUT_EXPO: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 // ─────────────────────────────────────────────────────────────
 // Navbar
@@ -56,30 +52,27 @@ function Navbar({ onTryFree }: { onTryFree: () => void }) {
     >
       <nav className="max-w-6xl mx-auto px-5 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
         {/* Logo */}
-        <a href="/" className="flex items-center gap-2 text-white font-bold text-lg tracking-tight">
-          60
+        <a href="/" className="flex items-center">
+          <img
+            src="https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Dark%20Mode%20Logo.png"
+            alt="Sixty"
+            className="h-6 sm:h-7 w-auto"
+          />
         </a>
 
         {/* Desktop nav */}
         <div className="hidden sm:flex items-center gap-6">
-          <a href="/pricing" className="text-sm text-zinc-400 hover:text-white transition-colors">
-            Pricing
-          </a>
-          <a href={getLoginUrl()} className="text-sm text-zinc-400 hover:text-white transition-colors">
+          <a href={`${getLoginUrl()}`} className="text-sm text-zinc-400 hover:text-white transition-colors">
             Log in
           </a>
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-            onClick={onTryFree}
+          <a
+            href="/waitlist"
             className="px-5 py-2 rounded-lg bg-white text-zinc-950 text-sm font-semibold
               hover:bg-zinc-100 transition-colors
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950
-              motion-reduce:transform-none"
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
           >
-            Try free
-          </motion.button>
+            Sign Up Free
+          </a>
         </div>
 
         {/* Mobile menu button */}
@@ -103,18 +96,16 @@ function Navbar({ onTryFree }: { onTryFree: () => void }) {
             className="sm:hidden overflow-hidden bg-zinc-950/95 backdrop-blur-lg border-b border-white/[0.06]"
           >
             <div className="px-5 py-4 flex flex-col gap-3">
-              <a href="/pricing" onClick={() => setMobileOpen(false)} className="text-sm text-zinc-400 py-2">
-                Pricing
-              </a>
-              <a href={getLoginUrl()} onClick={() => setMobileOpen(false)} className="text-sm text-zinc-400 py-2">
+              <a href={`${getLoginUrl()}`} onClick={() => setMobileOpen(false)} className="text-sm text-zinc-400 py-2">
                 Log in
               </a>
-              <button
-                onClick={() => { setMobileOpen(false); onTryFree(); }}
-                className="w-full py-3 rounded-lg bg-white text-zinc-950 text-sm font-semibold"
+              <a
+                href="/waitlist"
+                onClick={() => setMobileOpen(false)}
+                className="w-full py-3 rounded-lg bg-white text-zinc-950 text-sm font-semibold text-center"
               >
-                Try free
-              </button>
+                Sign Up Free
+              </a>
             </div>
           </motion.div>
         )}
@@ -123,177 +114,7 @@ function Navbar({ onTryFree }: { onTryFree: () => void }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Hero Section
-// ─────────────────────────────────────────────────────────────
-
-interface HeroProps {
-  onSubmit: (url: string) => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-}
-
-function HeroSection({ onSubmit, inputRef }: HeroProps) {
-  const [url, setUrl] = useState('');
-  const [error, setError] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = url.trim();
-    if (!trimmed) {
-      setError('Enter a website to get started');
-      return;
-    }
-    setError('');
-    onSubmit(trimmed);
-  };
-
-  const handleExample = (domain: string) => {
-    setUrl(domain);
-    onSubmit(domain);
-  };
-
-  return (
-    <section className="relative min-h-[100dvh] flex flex-col items-center justify-center px-5 sm:px-6 pt-16">
-      {/* Background atmosphere */}
-      <div
-        className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/4
-          w-[700px] sm:w-[1000px] h-[500px] sm:h-[700px] rounded-full pointer-events-none
-          bg-[radial-gradient(ellipse,rgba(139,92,246,0.10),transparent_70%)]
-          blur-3xl"
-      />
-      <div
-        className="absolute inset-0 pointer-events-none
-          bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)]
-          bg-[size:64px_64px]
-          [mask-image:radial-gradient(ellipse_60%_50%_at_50%_40%,black_20%,transparent_100%)]"
-      />
-
-      <div className="relative z-10 w-full max-w-2xl mx-auto text-center">
-        {/* Badge */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.5, ease: EASE_OUT_EXPO }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full
-            border border-violet-500/20 bg-violet-500/[0.06] text-xs sm:text-sm text-violet-300 mb-6 sm:mb-8
-            motion-reduce:transition-none"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          Early access
-        </motion.div>
-
-        {/* Headline */}
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.7, ease: EASE_OUT_EXPO }}
-          className="text-[2.5rem] sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.08]
-            bg-clip-text text-transparent
-            bg-gradient-to-b from-white via-white to-zinc-500
-            text-balance
-            motion-reduce:transition-none"
-        >
-          You sell.
-          <br />
-          60 does the rest.
-        </motion.h1>
-
-        {/* Subheadline */}
-        <motion.p
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35, duration: 0.6, ease: EASE_OUT_QUINT }}
-          className="mt-5 sm:mt-6 text-base sm:text-lg text-zinc-400 max-w-lg mx-auto text-pretty
-            motion-reduce:transition-none"
-        >
-          AI that handles follow-ups, meeting prep, pipeline tracking and outreach. You focus on the conversation.
-        </motion.p>
-
-        {/* URL Input */}
-        <motion.form
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, duration: 0.6, ease: EASE_OUT_QUINT }}
-          onSubmit={handleSubmit}
-          className="mt-8 sm:mt-10 motion-reduce:transition-none"
-        >
-          <div className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
-            <div className="flex-1 relative">
-              <input
-                ref={inputRef}
-                type="text"
-                value={url}
-                onChange={(e) => { setUrl(e.target.value); setError(''); }}
-                placeholder="yourcompany.com"
-                className={cn(
-                  'w-full px-5 py-3.5 sm:py-4 rounded-xl text-base',
-                  'bg-white/[0.05] border placeholder-zinc-500 text-white',
-                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/70 focus-visible:border-transparent',
-                  'transition-all duration-200',
-                  error
-                    ? 'border-red-500/50'
-                    : 'border-white/10 hover:border-white/20 focus:shadow-[0_0_20px_rgba(139,92,246,0.15)]'
-                )}
-              />
-              {error && (
-                <p className="absolute -bottom-6 left-1 text-xs text-red-400">{error}</p>
-              )}
-            </div>
-
-            <motion.button
-              type="submit"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-              className="px-7 py-3.5 sm:py-4 rounded-xl font-semibold text-base
-                bg-white text-zinc-950 hover:bg-zinc-100 transition-colors
-                flex items-center justify-center gap-2 shrink-0
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950
-                motion-reduce:transform-none"
-            >
-              Show me
-              <ArrowRight className="w-4 h-4" />
-            </motion.button>
-          </div>
-
-          {/* Example domains */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.65, duration: 0.5 }}
-            className="mt-4 flex flex-wrap items-center justify-center gap-2 text-sm text-zinc-500
-              motion-reduce:transition-none"
-          >
-            <span className="text-zinc-600">Try:</span>
-            {EXAMPLE_DOMAINS.map((domain) => (
-              <button
-                key={domain}
-                type="button"
-                onClick={() => handleExample(domain)}
-                className="px-2.5 py-1 rounded-lg border border-white/[0.06] bg-white/[0.02]
-                  text-zinc-400 hover:text-white hover:border-white/15 hover:bg-white/[0.04]
-                  transition-all duration-150
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-              >
-                {domain}
-              </button>
-            ))}
-          </motion.div>
-        </motion.form>
-
-        {/* Micro-copy */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8, duration: 0.4 }}
-          className="mt-6 text-xs text-zinc-600 motion-reduce:transition-none"
-        >
-          30 seconds. No signup required.
-        </motion.p>
-      </div>
-    </section>
-  );
-}
+// HeroSection removed — now using DemoHero from demo/DemoHero.tsx
 
 // ─────────────────────────────────────────────────────────────
 // Proof Bar
@@ -556,10 +377,15 @@ function Footer() {
   return (
     <footer className="border-t border-white/[0.04] py-8 px-5 sm:px-6">
       <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-        <span className="text-sm font-bold text-zinc-600 tracking-tight">60</span>
+        <a href="/">
+          <img
+            src="https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Dark%20Mode%20Logo.png"
+            alt="Sixty"
+            className="h-5 w-auto opacity-40"
+          />
+        </a>
         <div className="flex items-center gap-6 text-xs text-zinc-600">
           <a href="/privacy-policy" className="hover:text-zinc-400 transition-colors">Privacy</a>
-          <a href="/pricing" className="hover:text-zinc-400 transition-colors">Pricing</a>
           <span>&copy; {new Date().getFullYear()} Sixty AI</span>
         </div>
       </div>
@@ -576,13 +402,11 @@ export function LandingPage() {
 
   const [demoPhase, setDemoPhase] = useState<DemoPhase>('idle');
   const research = useDemoResearch();
-  const heroInputRef = useRef<HTMLInputElement | null>(null);
   const demoRef = useRef<HTMLDivElement>(null);
 
   // Focus hero input when "Try Free" clicked
   const handleTryFree = useCallback(() => {
     if (demoPhase !== 'idle') return;
-    heroInputRef.current?.focus();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [demoPhase]);
 
@@ -602,10 +426,8 @@ export function LandingPage() {
     handleUrlSubmit('stripe.com');
   }, [handleUrlSubmit]);
 
-  // Demo phase transitions
-  const handleResearchComplete = useCallback(() => setDemoPhase('showcase'), []);
-  const handleShowcaseComplete = useCallback(() => setDemoPhase('recap'), []);
-  const handleRecapContinue = useCallback(() => setDemoPhase('signup'), []);
+  // Demo phase transitions — research completes → sandbox launches
+  const handleResearchComplete = useCallback(() => setDemoPhase('sandbox'), []);
 
   // Scroll to top on demo phase change
   useEffect(() => {
@@ -616,12 +438,13 @@ export function LandingPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 overflow-x-hidden">
-      <Navbar onTryFree={handleTryFree} />
+      {/* Hide navbar when sandbox is active — it has its own topbar */}
+      {demoPhase !== 'sandbox' && <Navbar onTryFree={handleTryFree} />}
 
       {/* Pre-demo sections — hidden once demo starts */}
       {demoPhase === 'idle' && (
         <>
-          <HeroSection onSubmit={handleUrlSubmit} inputRef={heroInputRef} />
+          <DemoHero onSubmit={handleUrlSubmit} />
           <ProofBar />
           <DifferentiatorSection onSeeItWork={handleSeeItWork} />
         </>
@@ -642,27 +465,11 @@ export function LandingPage() {
             />
           )}
 
-          {demoPhase === 'showcase' && research.research && (
-            <ProductShowcase
-              key="showcase"
-              data={research.research}
-              onComplete={handleShowcaseComplete}
-            />
-          )}
-
-          {demoPhase === 'recap' && research.research && (
-            <WeekRecap
-              key="recap"
-              data={research.research}
-              onContinue={handleRecapContinue}
-            />
-          )}
-
-          {demoPhase === 'signup' && (
-            <DemoSignup
-              key="signup"
-              companyName={research.research?.company.name ?? ''}
-              stats={research.research?.stats ?? null}
+          {demoPhase === 'sandbox' && research.research && (
+            <SandboxExperience
+              key="sandbox"
+              research={research.research}
+              onSignup={handleTryFree}
             />
           )}
         </AnimatePresence>

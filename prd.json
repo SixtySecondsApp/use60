@@ -1,165 +1,215 @@
 {
-  "project": "Go-Live Polish — Insights, Integrations & Reports Fixes",
-  "runSlug": "golive-polish",
-  "branchName": "feature/support-docs-fixes",
-  "description": "Batch of 5 in-progress tickets (10 stories) covering Insights rename, sync error, Slack branding, help panel, and 6 Reports subtask bugs blocking go-live sign-off.",
+  "project": "Deal Pipeline Hygiene",
+  "runSlug": "deal-pipeline-hygiene",
+  "branchName": "feature/deal-pipeline-hygiene",
+  "description": "Visual freshness timer on pipeline deal cards + weekly Slack hygiene digest to keep deals active or close them out",
   "aiDevHubProjectId": null,
-  "createdAt": "2026-03-04T14:00:00.000Z",
+  "createdAt": "2026-03-08T12:00:00.000Z",
   "userStories": [
     {
-      "id": "US-001",
-      "title": "Rename Intelligence to Insights in Navigation and Page Heading",
-      "description": "As a user, I want the nav item and page heading to say 'Insights' instead of 'Intelligence' / 'Meeting Analytics' so the branding is consistent.",
+      "id": "US-B1",
+      "title": "Expose days_since_last_activity in Pipeline RPC",
+      "description": "As a developer, I want get_pipeline_with_health to return days_since_last_activity so the frontend can render freshness indicators",
       "acceptanceCriteria": [
-        "Navigation sidebar label changed from 'Intelligence' to 'Insights' in routeConfig.ts",
-        "Page heading changed from 'Meeting Analytics' to 'Insights' in MeetingAnalyticsPage.tsx",
-        "data-tour attribute updated if it references 'intelligence'",
+        "get_pipeline_with_health RPC returns days_since_last_activity from deal_health_scores table",
+        "Value is null when no health score exists (not 0)",
+        "Verify days_since_last_activity counts ALL activity types (meeting, email, call, proposal)",
+        "Add composite index on activities(deal_id, created_at DESC) if missing",
+        "npx supabase db push --linked --dry-run passes",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Group 1 — no dependencies",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-B2",
+      "title": "Update PipelineDeal Type and Fallback",
+      "description": "As a developer, I want the PipelineDeal TypeScript type to include days_since_last_activity so components can use it",
+      "acceptanceCriteria": [
+        "PipelineDeal interface includes days_since_last_activity: number | null",
+        "Fallback query computes days_since_last_activity when RPC unavailable",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Group 2 — depends on US-B1",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-B3",
+      "title": "Freshness Badge on DealCard",
+      "description": "As a sales rep, I want to see a color-coded freshness indicator on each deal card so I can instantly spot which deals need attention",
+      "acceptanceCriteria": [
+        "DealCard shows badge with days since last activity and Lucide icon",
+        "Color coding: emerald (0-7d), amber (8-14d), red (15-21d), grey (21+d)",
+        "Tooltip shows 'Last activity X days ago'",
+        "Deals with no activity data show no badge",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "TSK-0503 | Nav/heading already Insights, updated data-tour attribute",
+      "passes": false,
+      "notes": "Group 1 — no dependencies (can stub data initially)",
       "aiDevHubTaskId": null
     },
     {
-      "id": "US-002",
-      "title": "Fix Sync Button Error Message",
-      "description": "As a user clicking the Sync button, I want a helpful error message instead of the confusing 'Sync your meetings/calls first to enable AI search'.",
+      "id": "US-B4",
+      "title": "Dormant Visual Treatment",
+      "description": "As a sales rep, I want deals with 30+ days of no activity to appear visually dimmed so I can focus on active deals",
       "acceptanceCriteria": [
-        "Error message changed to 'No conversations to index. Please ensure integrations are configured correctly'",
-        "Message only shows when there are genuinely no meetings/calls to index",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 2,
-      "passes": true,
-      "notes": "TSK-0504 | Already fixed in useMeetingIntelligence.ts line 657-658",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-003",
-      "title": "Fix Slack App Display Name",
-      "description": "As a user connecting Slack, I want to see 'Use60' as the app name, not 'use60 (staging)'.",
-      "acceptanceCriteria": [
-        "Slack OAuth app name displays as 'Use60' during connection flow",
-        "Review Slack app permissions are correctly scoped",
-        "If Slack API dashboard config change, document what was changed",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 2,
-      "passes": true,
-      "notes": "TSK-0507 | NOT a code fix — app name is set in Slack API dashboard (api.slack.com/apps). Rename from 'use60 (staging)' to 'Use60' there.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-004",
-      "title": "Fix Help Panel on Integrations Page",
-      "description": "As a user clicking the '?' help icon next to Integrations, I want the help panel to show actual documentation instead of 'Documentation not available yet.'",
-      "acceptanceCriteria": [
-        "Help panel loads and displays documentation content for the Integrations page",
-        "If no docs_articles record exists, create seed content or show useful fallback",
-        "Evaluate whether HelpPanel should appear on other pages",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 2,
-      "passes": true,
-      "notes": "TSK-0506 | Fallback already updated to 'coming soon' with docs.use60.com link. Slug is integrations-overview — needs docs_articles seed.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-005",
-      "title": "Fix Reports History Showing Pre-User Dates",
-      "description": "As a user viewing Reports, I should only see reports generated after my account was created, not phantom historical reports.",
-      "acceptanceCriteria": [
-        "Report history query filters by user's created_at or org membership date",
-        "No reports appear dated before the user's account creation",
+        "Deals with days_since_last_activity >= 30 have reduced opacity",
+        "Small 'Dormant' label on the card",
+        "Distinct from Lost stage deals",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "TSK-0505 subtask 1 | Files: ReportsTab.tsx, useMaReportHistory",
+      "passes": false,
+      "notes": "Group 2 — depends on US-B3",
       "aiDevHubTaskId": null
     },
     {
-      "id": "US-006",
-      "title": "Fix Send to All Channels Email Notifications",
-      "description": "As a user clicking 'Send to All Channels' after adding an email in Notification Settings, I want the email to actually be delivered.",
+      "id": "US-B5",
+      "title": "Sort Dormant Deals to Bottom",
+      "description": "As a sales rep, I want dormant deals pushed to the bottom of each pipeline column so active deals are front and center",
       "acceptanceCriteria": [
-        "Email notification is sent to configured email address",
-        "Success toast only shows after API call succeeds",
-        "If email sending fails, show error toast instead of success",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "TSK-0505 subtask 2 | Files: ReportsTab.tsx, useMaSendReport",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-007",
-      "title": "Fix Generate Preview Button UX",
-      "description": "As a user on the Reports tab, the 'Generate Preview' button should clearly communicate what it does.",
-      "acceptanceCriteria": [
-        "Button label or tooltip clarifies the action",
-        "Button behavior matches user expectation — generates preview before sending",
+        "Deals with days_since_last_activity >= 30 sort after non-dormant deals",
+        "Within dormant group, existing sort order preserved",
+        "Drag-and-drop still works for dormant deals",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "TSK-0505 subtask 3 | Files: ReportsTab.tsx",
+      "passes": false,
+      "notes": "Group 2 — depends on US-B2",
       "aiDevHubTaskId": null
     },
     {
-      "id": "US-008",
-      "title": "Fix Total Meetings Count Showing 0",
-      "description": "As a user with meetings, the Reports section should show the correct meeting count instead of 0.",
+      "id": "US-B6",
+      "title": "Exclude Dormant from Forecast + Add Dormant Filter",
+      "description": "As a sales manager, I want dormant deals excluded from weighted forecast values and a Dormant quick filter to show/hide them",
       "acceptanceCriteria": [
-        "Total meetings metric reflects actual meeting count for the user",
-        "Query uses correct column meetings.owner_user_id (NOT user_id)",
-        "Count matches what the user sees in other parts of the app",
+        "RPC stage metrics weighted_value excludes deals with days_since_last_activity >= 30",
+        "Summary weighted_value also excludes dormant",
+        "Stage metric deal_count still includes dormant deals",
+        "Add dormant_count to summary statistics",
+        "Pipeline header quick filters include Dormant option",
+        "npx supabase db push --linked --dry-run passes",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 3,
-      "passes": true,
-      "notes": "TSK-0505 subtask 4 | Files: ReportsTab.tsx, useMaReportHistory",
+      "priority": 5,
+      "passes": false,
+      "notes": "Group 3 — depends on US-B2",
       "aiDevHubTaskId": null
     },
     {
-      "id": "US-009",
-      "title": "Fix Generic AI Tips When No Transcripts Exist",
-      "description": "As a user with no meeting transcripts, the Reports section should not show AI-generated coaching tips that have no data basis.",
+      "id": "US-A1",
+      "title": "RPC for Stale Deals by Owner",
+      "description": "As a developer, I want an RPC that returns stale deals grouped by owner so the digest edge function can query per-rep deal lists",
       "acceptanceCriteria": [
-        "If user has zero transcripts, AI tips section is hidden or shows fallback message",
-        "Tips only appear when there is actual transcript data to derive them from",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "New RPC get_stale_deals_for_digest(p_org_id TEXT) returns JSONB grouped by owner_id",
+        "Each deal includes: id, name, company, value, stage_name, days_since_last_activity, expected_close_date, ghost_probability, stale_reason",
+        "Stale criteria: days_since_last_activity >= 14 OR expected_close_date < NOW() OR ghost_probability_percent >= 70",
+        "Only includes status = active deals",
+        "SECURITY DEFINER with search_path = public",
+        "npx supabase db push --linked --dry-run passes",
+        "Typecheck passes"
       ],
-      "priority": 3,
-      "passes": true,
-      "notes": "TSK-0505 subtask 5 | Files: ReportsTab.tsx",
+      "priority": 1,
+      "passes": false,
+      "notes": "Group 1 — no dependencies",
       "aiDevHubTaskId": null
     },
     {
-      "id": "US-010",
-      "title": "Fix Notification Settings Slack Webhook URL Overflow",
-      "description": "As a user adding a Slack webhook URL in Notification Settings, the popup should not break layout with a wide scrollbar.",
+      "id": "US-A2",
+      "title": "Slack Block Kit Builder for Hygiene Digest",
+      "description": "As a developer, I want a Block Kit builder that formats the hygiene digest into a rich Slack message with action buttons",
       "acceptanceCriteria": [
-        "Webhook URL input truncates or wraps long URLs within popup width",
-        "No horizontal scrollbar appears in notification settings popup",
-        "URL still fully accessible via tooltip or expandable field",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "New function buildPipelineHygieneDigest(data) in slackBlocks.ts",
+        "Header with deal count and date",
+        "Deals grouped by stale reason with section headers",
+        "Per-deal action buttons: Snooze 7d, Draft Follow-up, Close as Lost",
+        "Snooze All bulk action button when 3+ deals",
+        "Truncates to top 15 deals with 'and X more...' note",
+        "Respects Slack Block Kit limits",
+        "Typecheck passes"
       ],
-      "priority": 4,
-      "passes": true,
-      "notes": "TSK-0505 subtask 6 | Files: ReportsTab.tsx (notification settings modal)",
+      "priority": 1,
+      "passes": false,
+      "notes": "Group 1 — no dependencies",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-A3",
+      "title": "Pipeline Hygiene Digest Edge Function",
+      "description": "As a sales rep, I want to receive a weekly Slack DM listing my stale deals so I'm reminded to act on them",
+      "acceptanceCriteria": [
+        "New edge function pipeline-hygiene-digest",
+        "Auth: service role only",
+        "Iterates active orgs, calls get_stale_deals_for_digest RPC",
+        "Resolves Slack user IDs via slack_user_mappings",
+        "Sends Slack DM using sendSlackDM() with 500ms delay between sends",
+        "Skips users with no stale deals",
+        "Supports ?dryRun=true and ?singleUserId=X params",
+        "Writes summary to Command Centre",
+        "Uses runAgent wrapper for telemetry",
+        "Logs errors per-user without failing entire batch",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Group 2 — depends on US-A1, US-A2",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-A4",
+      "title": "Slack Interactive Handler for Hygiene Actions",
+      "description": "As a sales rep, I want to click action buttons in the digest and have the system create follow-up items",
+      "acceptanceCriteria": [
+        "New handlers: hygiene_snooze_7d, hygiene_draft_followup, hygiene_close_lost, hygiene_snooze_all",
+        "Snooze: creates CC item, sets snoozed_until metadata",
+        "Draft Follow-up: creates CC item with item_type follow_up",
+        "Close as Lost: creates CC item with confirmation step",
+        "Snooze All: applies snooze to all deals in digest",
+        "Updates original Slack message to reflect action taken",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Group 3 — depends on US-A3",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-A5",
+      "title": "Cron Migration for Weekly Schedule",
+      "description": "As a system, I want the digest to run automatically every Monday at 9am UTC",
+      "acceptanceCriteria": [
+        "New migration creates pg_cron job at 0 9 * * 1",
+        "Scheduled after health score recalc",
+        "Uses net.http_post() with x-cron-secret header",
+        "Idempotent: cron.unschedule before cron.schedule",
+        "npx supabase db push --linked --dry-run passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Group 3 — depends on US-A3",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-A6",
+      "title": "Register pipeline_hygiene as CC Source",
+      "description": "As a developer, I want pipeline_hygiene registered as a valid Command Centre source agent",
+      "acceptanceCriteria": [
+        "pipeline_hygiene added to SourceAgent type",
+        "Dedup logic handles pipeline_hygiene source correctly",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Group 3 — can run anytime",
       "aiDevHubTaskId": null
     }
   ]

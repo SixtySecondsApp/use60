@@ -61,9 +61,9 @@ export function useMeetingScorecard(meetingId: string | null) {
       setError(null);
 
       const { data, error: funcError } = await supabase.functions.invoke(
-        'meeting-generate-scorecard',
+        'meeting-router',
         {
-          body: { meetingId, templateId },
+          body: { action: 'generate_scorecard', meetingId, templateId },
         }
       );
 

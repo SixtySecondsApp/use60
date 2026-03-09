@@ -533,13 +533,14 @@ serve(async (req) => {
                 _trigger_event: triggerEvent,
               };
 
-              fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+              fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
                 method: 'POST',
                 headers: {
                   Authorization: `Bearer ${supabaseServiceKey}`,
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
+                  action: 'orchestrator',
                   type: triggerRow.handoff_target_event,
                   source: 'orchestrator:trigger-handoff',
                   org_id: organization_id,

@@ -3,7 +3,7 @@
  * Backfill SavvyCal events from a date range
  *
  * This script fetches events directly from the SavvyCal API and pushes them
- * through the savvycal-leads-webhook edge function for processing.
+ * through the webhook-leads/savvycal edge function for processing.
  *
  * Usage:
  *   npx ts-node scripts/backfill-savvycal-events.ts --since 2025-12-08 --until 2025-12-13
@@ -185,7 +185,7 @@ async function fetchSavvyCalEvents(since: string, until: string): Promise<SavvyC
 }
 
 async function processEventThroughWebhook(event: SavvyCalEvent): Promise<{ success: boolean; error?: string }> {
-  const webhookUrl = `${SUPABASE_URL}/functions/v1/savvycal-leads-webhook`;
+  const webhookUrl = `${SUPABASE_URL}/functions/v1/webhook-leads/savvycal`;
 
   // Transform event to webhook format
   const webhookPayload = {
@@ -244,7 +244,7 @@ async function main() {
   console.log(`📅 Date range: ${since} to ${until}`);
   console.log(`🔧 Mode: ${execute ? '🚀 EXECUTE' : '👀 PREVIEW'}`);
   console.log(`📦 Batch size: ${batch}`);
-  console.log(`🌐 Webhook URL: ${SUPABASE_URL}/functions/v1/savvycal-leads-webhook`);
+  console.log(`🌐 Webhook URL: ${SUPABASE_URL}/functions/v1/webhook-leads/savvycal`);
   console.log('');
 
   // Fetch events from SavvyCal

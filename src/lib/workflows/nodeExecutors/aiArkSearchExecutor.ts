@@ -1,7 +1,7 @@
 /**
  * AI Ark Search Node Executor
  *
- * Executes ai-ark-search edge function calls within the workflow engine.
+ * Executes enrichment-ai-ark edge function calls within the workflow engine.
  * Supports company_search, people_search, and similarity_search actions.
  * Respects the 5 req/sec rate limit with a 250ms inter-request delay.
  */
@@ -143,8 +143,8 @@ export async function executeAiArkSearch(
   }
 
   const { data, error } = await supabase.functions.invoke<AiArkSearchResult>(
-    'ai-ark-search',
-    { body: payload }
+    'enrichment-ai-ark',
+    { body: { ...payload } }
   );
 
   if (error) {

@@ -227,13 +227,14 @@ export class CleanupService {
 
     console.log(`[CleanupService] Deleting HubSpot ${resource.resourceType}:`, resource.externalId);
 
-    const { data: response, error } = await supabase.functions.invoke('hubspot-admin', {
+    const { data: response, error } = await supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        action,
+        action: 'hubspot_admin',
+        sub_action: action,
         org_id: this.orgId,
         record_id: resource.externalId,
       }),

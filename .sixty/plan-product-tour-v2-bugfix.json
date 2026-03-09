@@ -1,0 +1,217 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind",
+      "testing": "vitest"
+    }
+  },
+  "features": [
+    {
+      "id": "tour-v2-fix",
+      "name": "Product Tour V2 — Complete Bugfix & Wow-Factor Enhancement",
+      "status": "pending",
+      "description": "Fix the completely broken product tour (black screen, invisible buttons, stacking overlay) and enhance it into a wow-factor onboarding experience. Show off V1 features (Dashboard, Meetings, Intelligence, Integrations, Credits) with a temporary fake demo meeting that showcases meeting analysis capabilities (transcript, AI summary, sentiment, talk time). Fake meeting data is injected client-side only and cleaned up when the tour ends.",
+      "createdAt": "2026-03-02T00:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "TOURFIX-001",
+      "feature": "tour-v2-fix",
+      "title": "Fix black screen — remove SVG background-color override",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["TOURFIX-002", "TOURFIX-003", "TOURFIX-004", "TOURFIX-005", "TOURFIX-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Remove `.driver-overlay { background-color: rgb(0, 0, 0) !important; }` from tour.css — this sets background on an SVG element, creating a solid black layer that hides the evenodd spotlight cutout",
+        "Overlay color and opacity are controlled ONLY via driver.js config props (`overlayColor`, `overlayOpacity`) in ProductTour.tsx — NOT via CSS",
+        "Spotlight cutout (transparent hole around highlighted element) is visible and working",
+        "Overlay is semi-transparent (overlayOpacity ~0.5) — page content visible through it",
+        "Tour launches, highlights [data-tour='dashboard'] sidebar item with visible spotlight on first step"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/styles/tour.css",
+        "src/components/ProductTour.tsx"
+      ]
+    },
+    {
+      "id": "TOURFIX-002",
+      "feature": "tour-v2-fix",
+      "title": "Fix button visibility and popover styling",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": { "stories": ["TOURFIX-001"], "files": [], "schema": [] },
+      "blocks": ["TOURFIX-006"],
+      "parallelWith": ["TOURFIX-003", "TOURFIX-004"],
+      "acceptance": [
+        "Next button: solid violet-600 bg (#7c3aed), white text, 8px 18px padding, rounded-lg, 600 font-weight, hover darkens to violet-700",
+        "Previous button: subtle rgba(255,255,255,0.08) bg, gray-200 text, 1px rgba(255,255,255,0.12) border, hover brightens",
+        "Close (×) button: visible gray-400, hover brightens to white with subtle bg",
+        "Progress text ('3 of 10') visible in gray-500",
+        "Verify CSS selectors match driver.js v1.4.0 class names (check actual DOM elements in browser DevTools)",
+        "Popover glassmorphic shell renders correctly: dark bg, violet glow border, backdrop blur"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/styles/tour.css"
+      ]
+    },
+    {
+      "id": "TOURFIX-003",
+      "feature": "tour-v2-fix",
+      "title": "Create tour demo meeting data and TourMeetingDetail page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": { "stories": ["TOURFIX-001"], "files": [], "schema": [] },
+      "blocks": ["TOURFIX-005"],
+      "parallelWith": ["TOURFIX-002", "TOURFIX-004"],
+      "acceptance": [
+        "New file `src/components/tour/tourDemoData.ts` — contains a fake UnifiedMeeting for the list view and full meeting detail data (reuse/adapt demoMeetings[0] from src/components/demo/data/meetings.ts)",
+        "Fake meeting: 'DataFlow Systems — Platform Demo', 52 min, sentiment 0.72, coach rating 8, talk time 38%, type 'demo', 3 open tasks",
+        "Full transcript text in [HH:MM:SS] Speaker: text format (12+ realistic exchanges showing sales conversation)",
+        "AI summary with key topics, action items, buyer signals, and next steps",
+        "Sentiment reasoning text explaining the 0.72 score",
+        "New file `src/pages/TourMeetingDetail.tsx` — static meeting detail page that renders same layout as MeetingDetail but with hardcoded data (no Supabase queries)",
+        "TourMeetingDetail shows: video placeholder area (dark bg with play icon + 'Recording available after your first meeting'), sentiment card, talk time chart, transcript tab with color-coded speakers, summary tab",
+        "Route `/meetings/tour-demo` registered in router BEFORE the `:id` wildcard route",
+        "data-tour='meeting-detail' attribute on the TourMeetingDetail outer container",
+        "data-tour='meeting-transcript' attribute on the transcript section",
+        "data-tour='meeting-analysis' attribute on the sentiment/talk-time section"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/tour/tourDemoData.ts",
+        "src/pages/TourMeetingDetail.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "TOURFIX-004",
+      "feature": "tour-v2-fix",
+      "title": "Inject fake demo meeting into UnifiedMeetingsList during tour",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "dependencies": { "stories": ["TOURFIX-001"], "files": [], "schema": [] },
+      "blocks": ["TOURFIX-005"],
+      "parallelWith": ["TOURFIX-002", "TOURFIX-003"],
+      "acceptance": [
+        "Create a minimal Zustand store `src/lib/stores/tourStore.ts` with `isTourActive: boolean` flag and `setTourActive(active: boolean)` action",
+        "ProductTour.tsx sets `tourStore.setTourActive(true)` when tour starts, `setTourActive(false)` in handleTourEnd",
+        "UnifiedMeetingsList reads `tourStore.isTourActive` — when true, prepends the fake TOUR_DEMO_MEETING to the displayed list",
+        "Fake meeting row appears at the top of the meetings list with a subtle shimmer/glow border or '60 Demo' badge to make it stand out",
+        "When tour ends, fake meeting disappears from the list immediately",
+        "No database writes — everything is client-side state only"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/stores/tourStore.ts",
+        "src/components/ProductTour.tsx",
+        "src/components/meetings/UnifiedMeetingsList.tsx"
+      ]
+    },
+    {
+      "id": "TOURFIX-005",
+      "feature": "tour-v2-fix",
+      "title": "Redesign tour steps — wow-factor flow with meeting deep-dive",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "dependencies": { "stories": ["TOURFIX-003", "TOURFIX-004"], "files": [], "schema": [] },
+      "blocks": ["TOURFIX-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "Tour flow (13 steps): 1) Dashboard sidebar → 2) Dashboard overview metrics → 3) Meetings sidebar → 4) Meetings list (with fake meeting visible) → 5) Click into fake meeting detail → 6) Meeting analysis section (sentiment + talk time) → 7) Meeting transcript section → 8) Intelligence sidebar → 9) Intelligence dashboard → 10) Integrations sidebar → 11) Integrations grid → 12) Credits widget → 13) Final 'Let's Go' step",
+        "Step 5 navigates to /meetings/tour-demo and highlights [data-tour='meeting-detail']",
+        "Step 6 highlights [data-tour='meeting-analysis'] with tooltip: 'AI-Powered Analysis — Every meeting gets sentiment scoring, talk-time ratios, and coaching insights automatically'",
+        "Step 7 highlights [data-tour='meeting-transcript'] with tooltip: 'Smart Transcripts — Color-coded speakers, key moment detection, and searchable history across all your calls'",
+        "Each step has compelling, concise copy that sells the feature (not just describes it)",
+        "First step shows only Next + Close (no Previous), last step shows 'Let's Go' button text",
+        "Navigation between pages uses waitForElement with 3s timeout, graceful skip on failure"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/ProductTour.tsx"
+      ]
+    },
+    {
+      "id": "TOURFIX-006",
+      "feature": "tour-v2-fix",
+      "title": "Polish tour UX — smooth transitions, edge cases, final design pass",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 6,
+      "dependencies": { "stories": ["TOURFIX-002", "TOURFIX-005"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Spotlight moves smoothly between elements (driver.js animate: true, no flash)",
+        "ESC key dismisses tour correctly, cleans up tour store state",
+        "Component unmount cleans up tour store state (setTourActive(false))",
+        "Tour handles missing elements gracefully (skips step, logs warning)",
+        "No console errors during complete tour flow",
+        "Tour works with both expanded and collapsed sidebar",
+        "After tour ends: navigates back to /dashboard, fake meeting removed from list, setup wizard opens (if completed all steps)",
+        "Verify overlayOpacity is comfortable — not too dark (can't see content) and not too light (doesn't draw attention to spotlight)",
+        "Popover arrow matches glassmorphic background color"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/ProductTour.tsx",
+        "src/styles/tour.css",
+        "src/lib/stores/tourStore.ts"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 6,
+    "completedStories": 6,
+    "currentFeature": "tour-v2-fix",
+    "lastUpdated": "2026-03-02T00:00:00Z",
+    "estimatedTotal": "2-2.5 hours",
+    "parallelGroups": [
+      {
+        "stories": ["TOURFIX-002", "TOURFIX-003", "TOURFIX-004"],
+        "reason": "Button CSS, demo meeting data/page, and list injection are independent — can run in parallel after TOURFIX-001"
+      }
+    ]
+  },
+  "designNotes": {
+    "rootCause": "driver.js uses an SVG element with fill-rule='evenodd' to create the spotlight cutout. The CSS rule `.driver-overlay { background-color: rgb(0,0,0) !important }` sets a background on the SVG element itself, creating a solid black layer UNDERNEATH the SVG path. This black background does not participate in the evenodd fill-rule logic, so it completely hides the transparent spotlight hole. Fix: remove this CSS rule entirely and control overlay via driver.js config props only.",
+    "driverJsOverlayMechanism": "SVG with evenodd fill-rule — outer rectangle (viewport) + inner rounded rectangle (spotlight hole). The path intersection is transparent. Opacity and color are set via inline JS styles on the <path> element, NOT via CSS background-color on the <svg>.",
+    "fakeMeetingStrategy": "Client-side only. Zustand tourStore.isTourActive flag. UnifiedMeetingsList prepends a fake meeting when flag is true. TourMeetingDetail is a static page at /meetings/tour-demo that renders hardcoded meeting data (transcript, sentiment, talk time) with the same layout as MeetingDetail but no Supabase queries. On tour end, flag resets and fake data disappears.",
+    "tourFlow": [
+      "1. Sidebar: Dashboard → 2. Page: Dashboard overview metrics",
+      "3. Sidebar: Meetings → 4. Page: Meetings list (with demo meeting)",
+      "5. Page: Meeting detail (fake) → 6. Meeting analysis (sentiment/talk time)",
+      "7. Meeting transcript (color-coded speakers)",
+      "8. Sidebar: Intelligence → 9. Page: Analytics dashboard",
+      "10. Sidebar: Integrations → 11. Page: Integration cards",
+      "12. Credits widget → 13. Let's Go (final)"
+    ],
+    "tourCopy": {
+      "dashboard": "Your Command Centre — Track targets, team performance, and AI agent activity at a glance.",
+      "dashboardOverview": "Real-Time Metrics — Revenue, outbound activity, meetings, and proposals. Set targets and watch them update live.",
+      "meetings": "Meeting Intelligence — Every meeting gets an AI summary, action items, and follow-up draft automatically.",
+      "meetingsList": "All Your Meetings — Recordings from every source appear here. Search, filter, and dive into any call.",
+      "meetingDetail": "Deep Dive — Click into any meeting for the full story: recording, transcript, AI analysis, and next steps.",
+      "meetingAnalysis": "AI-Powered Analysis — Sentiment scoring, talk-time ratios, and coaching insights from every call.",
+      "meetingTranscript": "Smart Transcripts — Color-coded speakers, key moments flagged, and fully searchable across all calls.",
+      "intelligence": "Analytics & Insights — Trends across all meetings: talk ratios, sentiment, and coaching recommendations.",
+      "intelligenceDashboard": "Meeting Analytics — Track patterns over time and get AI coaching to improve your conversations.",
+      "integrations": "Connect Your Tools — Link CRM, calendar, and email so 60 works across your entire workflow.",
+      "integrationsGrid": "Your Integrations — Google Workspace, HubSpot, Slack, and more. Each unlock new AI capabilities.",
+      "credits": "AI Credits — Each AI action uses credits. You start with free credits — earn more by completing setup."
+    }
+  }
+}

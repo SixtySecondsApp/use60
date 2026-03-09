@@ -87,7 +87,6 @@ interface ProposalRow {
   trigger_type: string | null;
   created_at: string | null;
   updated_at: string | null;
-  rendered_html: string | null;
 }
 
 interface EditableSection {
@@ -319,7 +318,7 @@ export default function ProposalProgressOverlay({
   const fetchProposal = useCallback(async () => {
     const { data, error: fetchErr } = await supabase
       .from('proposals')
-      .select('id, title, generation_status, pdf_url, credits_used, metadata, brand_config, style_config, trigger_type, created_at, updated_at, rendered_html')
+      .select('id, title, generation_status, pdf_url, credits_used, metadata, brand_config, style_config, trigger_type, created_at, updated_at')
       .eq('id', proposalId)
       .maybeSingle();
 
@@ -404,8 +403,8 @@ export default function ProposalProgressOverlay({
 
       // 2. Invoke Gotenberg render (stages 3-4 only — skip assemble + compose)
       const { data: renderData, error: renderErr } = await supabase.functions.invoke(
-        'proposal-render-gotenberg',
-        { body: { proposal_id: proposalId } },
+        'proposal-router',
+        { body: { action: 'render_gotenberg', proposal_id: proposalId } },
       );
 
       if (renderErr) {

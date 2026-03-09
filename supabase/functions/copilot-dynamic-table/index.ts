@@ -444,7 +444,7 @@ serve(async (req) => {
       const aiArkColumns = isCompanySearch ? AI_ARK_COMPANY_COLUMNS : AI_ARK_PEOPLE_COLUMNS
 
       // Call ai-ark-search edge function
-      const aiArkResponse = await fetch(`${supabaseUrl}/functions/v1/ai-ark-search`, {
+      const aiArkResponse = await fetch(`${supabaseUrl}/functions/v1/enrichment-ai-ark`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -612,7 +612,7 @@ serve(async (req) => {
           if (!shouldEnrich || !colKeyToId[key]) continue
 
           try {
-            const enrichResp = await fetch(`${supabaseUrl}/functions/v1/ai-ark-enrich`, {
+            const enrichResp = await fetch(`${supabaseUrl}/functions/v1/enrichment-ai-ark`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: authHeader, apikey: supabaseAnonKey },
               body: JSON.stringify({ action: 'bulk_enrich', table_id: tableId, column_id: colKeyToId[key] }),
@@ -1191,14 +1191,14 @@ serve(async (req) => {
         console.log(`[copilot-dynamic-table] Page ${currentPage}: fetching more results (have ${allNewContacts.length}/${desiredCount} net-new so far)`)
       }
 
-      const apolloResponse = await fetch(`${supabaseUrl}/functions/v1/apollo-search`, {
+      const apolloResponse = await fetch(`${supabaseUrl}/functions/v1/enrichment-apollo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: authHeader,
           apikey: supabaseAnonKey,
         },
-        body: JSON.stringify(searchParamsWithPage),
+        body: JSON.stringify({ action: 'search', ...searchParamsWithPage }),
       })
 
       if (!apolloResponse.ok) {
@@ -1537,7 +1537,7 @@ serve(async (req) => {
       try {
         console.log(`[copilot-dynamic-table] Auto-enriching ${key} column: ${columnId}`)
 
-        const enrichResponse = await fetch(`${supabaseUrl}/functions/v1/apollo-enrich`, {
+        const enrichResponse = await fetch(`${supabaseUrl}/functions/v1/enrichment-apollo`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1545,6 +1545,7 @@ serve(async (req) => {
             apikey: supabaseAnonKey,
           },
           body: JSON.stringify({
+            action: 'enrich',
             table_id: tableId,
             column_id: columnId,
             reveal_personal_emails: key === 'email' ? (auto_enrich?.reveal_personal_emails ?? false) : false,
@@ -1580,7 +1581,7 @@ serve(async (req) => {
         await Promise.allSettled(
           secondaryEnrich.map(async ({ columnId, key }) => {
             try {
-              const resp = await fetch(`${supabaseUrl}/functions/v1/apollo-enrich`, {
+              const resp = await fetch(`${supabaseUrl}/functions/v1/enrichment-apollo`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -1588,6 +1589,7 @@ serve(async (req) => {
                   apikey: supabaseAnonKey,
                 },
                 body: JSON.stringify({
+                  action: 'enrich',
                   table_id: tableId,
                   column_id: columnId,
                 }),

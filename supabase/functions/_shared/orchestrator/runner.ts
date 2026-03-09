@@ -12,7 +12,24 @@
  * Entry points:
  * - runSequence() - Start a new sequence from an event
  * - resumeSequence() - Resume after HITL approval
+ * - Task orchestrator (plain-language tasks): see ./taskOrchestrator.ts
  */
+
+// Re-export task orchestrator for plain-language one-shot tasks
+export {
+  resolveTaskKey,
+  buildTaskPlan,
+  executeTaskPlan,
+  listTaskTemplates,
+} from './taskOrchestrator.ts';
+export type {
+  TaskPlan,
+  TaskStep,
+  TaskStepStatus,
+  TaskContext,
+  TaskOrchestratorResult,
+  StepExecutor,
+} from './taskOrchestrator.ts';
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type {
@@ -926,13 +943,13 @@ async function selfInvoke(jobId: string): Promise<void> {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
   // Fire-and-forget self-invocation
-  fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+  fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${serviceKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ resume_job_id: jobId }),
+    body: JSON.stringify({ action: 'orchestrator', resume_job_id: jobId }),
   }).catch(err => {
     console.error(`[orchestrator] Self-invoke failed for job ${jobId}:`, err);
   });
@@ -965,13 +982,13 @@ async function processFollowups(
       }
 
       // Fire-and-forget
-      fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+      fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${serviceKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(event),
+        body: JSON.stringify({ action: 'orchestrator', ...event }),
       }).catch(err => {
         console.error(`[orchestrator] Follow-up ${followup.type} failed:`, err);
       });

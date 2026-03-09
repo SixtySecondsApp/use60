@@ -25,7 +25,8 @@ interface GmailMessage {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function parseSenderName(from: string): { name: string; initials: string } {
+function parseSenderName(from: string | undefined): { name: string; initials: string } {
+  if (!from) return { name: 'Unknown', initials: '??' };
   // "John Doe <john@example.com>" or just "john@example.com"
   const match = from.match(/^(.+?)\s*<.+>$/);
   const name = match ? match[1].replace(/"/g, '').trim() : from.split('@')[0];

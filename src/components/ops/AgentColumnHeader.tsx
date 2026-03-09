@@ -123,8 +123,9 @@ export function AgentColumnHeader({
   // Run research mutation
   const runResearch = useMutation({
     mutationFn: async (params: { rowIds: string[]; depthOverride?: DepthLevel }) => {
-      const { data, error } = await supabase.functions.invoke('research-orchestrator', {
+      const { data, error } = await supabase.functions.invoke('research-router-v2', {
         body: {
+          action: 'orchestrator',
           agent_column_id: agentColumnId,
           row_ids: params.rowIds,
           depth_override: params.depthOverride,

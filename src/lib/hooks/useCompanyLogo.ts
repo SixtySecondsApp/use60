@@ -39,9 +39,9 @@ export function useCompanyLogo(domain: string | null | undefined) {
 
     // Fetch logo via edge function
     supabase.functions
-      .invoke<LogoResponse>('fetch-company-logo', {
+      .invoke<LogoResponse>('fetch-router', {
         method: 'POST',
-        body: { domain: normalizedDomain },
+        body: { action: 'company_logo', domain: normalizedDomain },
       })
       .then(({ data, error }) => {
         if (error) {

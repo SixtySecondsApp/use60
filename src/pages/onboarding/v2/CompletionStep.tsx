@@ -88,8 +88,8 @@ export function CompletionStep() {
       });
 
       // Fire background research (don't await)
-      supabase.functions.invoke('research-fact-profile', {
-        body: { action: 'research', profileId: profile.id },
+      supabase.functions.invoke('research-router-v2', {
+        body: { action: 'fact_profile', sub_action: 'research', profileId: profile.id },
       }).catch((err) => {
         console.error('[CompletionStep] Background research failed:', err);
       });

@@ -132,7 +132,7 @@ export function useWorkflowOrchestrator() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/ops-workflow-orchestrator`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/ops-table-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,6 +140,7 @@ export function useWorkflowOrchestrator() {
           apikey: supabaseAnonKey,
         },
         body: JSON.stringify({
+          action: 'workflow_orchestrator',
           prompt,
           config,
           clarification_answers: clarificationAnswers,

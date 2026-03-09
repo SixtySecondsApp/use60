@@ -36,8 +36,8 @@ export function useInstantlyPush(tableId: string | undefined) {
 
   const pushMutation = useMutation({
     mutationFn: async (params: PushParams) => {
-      const { data, error } = await supabase.functions.invoke('push-to-instantly', {
-        body: { ...params, _auth_token: await getSupabaseAuthToken() },
+      const { data, error } = await supabase.functions.invoke('crm-push', {
+        body: { action: 'to_instantly', ...params, _auth_token: await getSupabaseAuthToken() },
       })
 
       if (error) throw new Error(error.message || 'Failed to push to Instantly')
