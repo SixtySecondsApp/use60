@@ -134,7 +134,7 @@ export function useCommandCentreDeepLinks(
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
-          if (filter && filter !== 'all') {
+          if (filter && filter !== 'needs-you') {
             next.set('filter', filter);
           } else {
             next.delete('filter');

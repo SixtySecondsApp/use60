@@ -94,7 +94,7 @@ interface GeminiAgentConfigInference {
 const GEMINI_MODEL =
   Deno.env.get("GEMINI_FLASH_MODEL") ??
   Deno.env.get("GEMINI_MODEL") ??
-  "gemini-2.5-flash";
+  "gemini-3.1-flash-lite-preview";
 
 const GEMINI_API_KEY =
   Deno.env.get("GEMINI_API_KEY") ??

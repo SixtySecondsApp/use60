@@ -212,7 +212,7 @@ function SubFilterBar({
 // ============================================================================
 
 export default function CommandCentre() {
-  const [activeFilter, setActiveFilter] = useState<CCFilter>('all');
+  const [activeFilter, setActiveFilter] = useState<CCFilter>('needs-you');
   const [urgencyFilter, setUrgencyFilter] = useState<string | null>(null);
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());

@@ -341,6 +341,90 @@ class CommandCentreItemsService {
       throw err;
     }
   }
+
+  async saveEmailAsDraft(
+    id: string,
+    emailPayload: { to: string; subject: string; body_html: string },
+  ): Promise<void> {
+    try {
+      const { error: draftError } = await supabase.functions.invoke('email-send-as-rep', {
+        body: {
+          to: emailPayload.to,
+          subject: emailPayload.subject,
+          body: emailPayload.body_html,
+          draft_only: true,
+        },
+      });
+
+      if (draftError) {
+        logger.error('[commandCentreItemsService.saveEmailAsDraft] Draft error:', draftError);
+        throw draftError;
+      }
+
+      const { error: updateError } = await supabase
+        .from('command_centre_items')
+        .update({
+          status: 'completed',
+          resolution_channel: 'saved_as_draft',
+          resolved_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (updateError) {
+        logger.error('[commandCentreItemsService.saveEmailAsDraft] Update error:', updateError);
+        throw updateError;
+      }
+    } catch (err) {
+      logger.error('[commandCentreItemsService.saveEmailAsDraft] Exception:', err);
+      throw err;
+    }
+  }
+
+  async regenerateWithFeedback(
+    id: string,
+    feedback: string,
+  ): Promise<Record<string, unknown>> {
+    try {
+      const { data, error } = await supabase.functions.invoke('cc-regenerate', {
+        body: { item_id: id, feedback },
+      });
+
+      if (error) {
+        logger.error('[commandCentreItemsService.regenerateWithFeedback] Error:', error);
+        throw error;
+      }
+
+      return (data as Record<string, unknown>)?.drafted_action as Record<string, unknown> ?? {};
+    } catch (err) {
+      logger.error('[commandCentreItemsService.regenerateWithFeedback] Exception:', err);
+      throw err;
+    }
+  }
+
+  async markGoodSuggestion(id: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('command_centre_items')
+        .update({
+          status: 'approved',
+          resolution_channel: 'autonomy_positive',
+        })
+        .eq('id', id);
+
+      if (error) {
+        logger.error('[commandCentreItemsService.markGoodSuggestion] Error:', error);
+        toast.error('Failed to record feedback');
+        throw error;
+      }
+
+      supabase.functions.invoke('cc-action-sync', {
+        body: { item_id: id, action: 'autonomy_positive' },
+      }).catch(err => logger.warn('[commandCentreItemsService] Slack sync failed (non-blocking):', err));
+    } catch (err) {
+      logger.error('[commandCentreItemsService.markGoodSuggestion] Exception:', err);
+      throw err;
+    }
+  }
 }
 
 export const commandCentreItemsService = new CommandCentreItemsService();

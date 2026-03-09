@@ -343,6 +343,7 @@ export default function AISettings() {
         { value: 'openai/gpt-4-turbo-preview', label: 'GPT-4 Turbo (via OpenRouter)' },
       ],
       gemini: [
+        { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Recommended)' },
         { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
         { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
         { value: 'gemini-1.5-pro-latest', label: 'Gemini 1.5 Pro' },

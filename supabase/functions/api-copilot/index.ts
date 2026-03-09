@@ -47,7 +47,7 @@ import {
 
 // Gemini API configuration (replacing Claude for copilot chat)
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? Deno.env.get('GOOGLE_GEMINI_API_KEY') ?? ''
-const GEMINI_MODEL = Deno.env.get('GEMINI_FLASH_MODEL') ?? Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash'
+const GEMINI_MODEL = Deno.env.get('GEMINI_FLASH_MODEL') ?? Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.1-flash-lite-preview'
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
 // Legacy Anthropic config (kept for reference/fallback)
@@ -1570,7 +1570,7 @@ async function logExecutionHistory(client: any, data: {
         user_id: data.user_id,
         user_message: data.user_message,
         execution_mode: 'agent',
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.1-flash-lite-preview',
         response_text: data.response_text?.slice(0, 5000),
         success: data.success,
         tools_used: data.tools_used,
@@ -1831,7 +1831,7 @@ Return ONLY a JSON object:
     }
     
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
