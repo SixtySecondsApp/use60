@@ -340,6 +340,18 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     order: 3.95,
     displayGroup: 4,
   },
+  // LinkedIn Ad Library Intelligence
+  {
+    path: '/intelligence/ads',
+    access: 'internal',
+    label: 'Ad Intelligence',
+    icon: Eye,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3.96,
+    displayGroup: 4,
+    badge: 'New',
+  },
   // Coaching & Team Intelligence (COACH-UI-001)
   {
     path: '/coaching',

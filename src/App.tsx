@@ -103,7 +103,7 @@ import {
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, AutonomyDashboardPage, SearchResultsPage, CompetitiveIntelPage, CoachingDashboardPage, CoachingRepDetailPage, TeachSixtySection, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
+  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, AutonomyDashboardPage, SearchResultsPage, CompetitiveIntelPage, AdLibraryPage, CoachingDashboardPage, CoachingRepDetailPage, TeachSixtySection, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
   CreditPurchaseSuccess, CreditsSettingsPage, ModelPreferencesPage, BillingSettingsPage, SalesGoalsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage, MeetingSettingsPage,
   OrgBilling,
@@ -630,6 +630,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/autonomy" element={<InternalRouteGuard><AppLayout><AutonomyDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/search" element={<AppLayout><SearchResultsPage /></AppLayout>} />
                 <Route path="/intelligence/competitive" element={<AppLayout><CompetitiveIntelPage /></AppLayout>} />
+                <Route path="/intelligence/ads" element={<InternalRouteGuard><AppLayout><AdLibraryPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/coaching" element={<InternalRouteGuard><AppLayout><CoachingDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/coaching/rep/:userId" element={<InternalRouteGuard><AppLayout><CoachingRepDetailPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/methodology" element={<OrgAdminRouteGuard><AppLayout><SalesMethodologySettings /></AppLayout></OrgAdminRouteGuard>} />

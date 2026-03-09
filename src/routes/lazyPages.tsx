@@ -208,6 +208,7 @@ export const AutonomySettingsPage = lazyWithRetry(() => import('@/pages/settings
 export const AutonomyDashboardPage = lazyWithRetry(() => import('@/pages/AutonomyDashboardPage'));
 export const SearchResultsPage = lazyWithRetry(() => import('@/pages/SearchResultsPage'));
 export const CompetitiveIntelPage = lazyWithRetry(() => import('@/pages/CompetitiveIntelPage'));
+export const AdLibraryPage = lazyWithRetry(() => import('@/pages/AdLibrary'));
 export const FollowUpDraftsPage = lazyWithRetry(() => import('@/pages/FollowUpDraftsPage'));
 export const CoachingDashboardPage = lazyWithRetry(() => import('@/pages/CoachingDashboardPage'));
 export const CoachingRepDetailPage = lazyWithRetry(() => import('@/pages/CoachingRepDetailPage'));
