@@ -260,6 +260,13 @@ You have one tool: create_workflow_plan. Always use it to return the structured 
   if (config?.max_results) (plan.search_params as Record<string, unknown>).per_page = Math.min(config.max_results, 100)
   if (config?.skip_email_generation) plan.email_sequence = null
   if (config?.skip_campaign_creation) plan.campaign = null
+  // If user explicitly requested email steps but the plan didn't include an email_sequence, create one
+  if (config?.num_email_steps && !plan.email_sequence && !config?.skip_email_generation) {
+    plan.email_sequence = {
+      num_steps: config.num_email_steps,
+      angle: config.campaign_angle || 'professional outreach',
+    }
+  }
   if (config?.num_email_steps && plan.email_sequence) plan.email_sequence.num_steps = config.num_email_steps
   if (config?.campaign_angle && plan.email_sequence) plan.email_sequence.angle = config.campaign_angle
 
@@ -446,6 +453,13 @@ Rules:
     if (config?.max_results) (plan.search_params as Record<string, unknown>).per_page = Math.min(config.max_results, 100)
     if (config?.skip_email_generation) plan.email_sequence = null
     if (config?.skip_campaign_creation) plan.campaign = null
+    // If user explicitly requested email steps but the plan didn't include an email_sequence, create one
+    if (config?.num_email_steps && !plan.email_sequence && !config?.skip_email_generation) {
+      plan.email_sequence = {
+        num_steps: config.num_email_steps,
+        angle: config.campaign_angle || 'professional outreach',
+      }
+    }
     if (config?.num_email_steps && plan.email_sequence) plan.email_sequence.num_steps = config.num_email_steps
     if (config?.campaign_angle && plan.email_sequence) plan.email_sequence.angle = config.campaign_angle
 

@@ -154,13 +154,17 @@ export async function handleVideoThumbnailV2(req: Request): Promise<Response> {
     let dbUpdated = false
     if (meeting_id && thumbnailUrl) {
       try {
+        const isPlaceholder = thumbnailUrl.includes('dummyimage.com')
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
         const supabase = createClient(supabaseUrl, supabaseKey)
 
         const { error: updateError } = await supabase
           .from('meetings')
-          .update({ thumbnail_url: thumbnailUrl })
+          .update({
+            thumbnail_url: thumbnailUrl,
+            thumbnail_status: isPlaceholder ? 'pending' : 'complete',
+          })
           .eq('id', meeting_id)
 
         if (!updateError) {
