@@ -193,14 +193,15 @@ export async function handleInitiate(req: Request): Promise<Response> {
     authUrl.searchParams.set('code_challenge', codeChallenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         authUrl: authUrl.toString(),
-        state: state 
+        state: state
       }),
       {
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
         },
       }
     );

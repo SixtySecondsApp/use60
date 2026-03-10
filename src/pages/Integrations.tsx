@@ -908,12 +908,13 @@ export default function Integrations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]); // Only depend on searchParams, not checkGoogleConnection
 
-  // Check integration status on mount
+  // Check Google integration status on mount
   useEffect(() => {
     checkGoogleConnection();
-    checkMicrosoftConnection();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount to avoid infinite loop
+
+  // Lazy-load Microsoft check: only when user interacts with Microsoft card or returns from Microsoft OAuth
 
   // Get integration status
   const getIntegrationStatus = (integrationId: string): IntegrationStatus => {
@@ -973,8 +974,13 @@ export default function Integrations() {
   };
 
   // Handle card action
-  const handleCardAction = (integrationId: string, isBuilt: boolean = false) => {
+  const handleCardAction = async (integrationId: string, isBuilt: boolean = false) => {
     if (!isBuilt) return; // Don't handle clicks on coming soon integrations
+
+    // Lazy-load Microsoft status when user clicks the Microsoft card
+    if (integrationId === 'microsoft-365') {
+      await checkMicrosoftConnection();
+    }
 
     const status = getIntegrationStatus(integrationId);
 
@@ -1204,7 +1210,6 @@ export default function Integrations() {
                 const isGoogleLimited = integration.id === 'google-workspace' && googleConnected && !nylasCalendarConnected;
                 return (
                   <IntegrationCardWithLogo
-                    key={integration.id}
                     config={integration}
                     isBuilt={true}
                     status={getIntegrationStatus(integration.id)}
