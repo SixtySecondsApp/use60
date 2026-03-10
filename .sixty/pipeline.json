@@ -1,0 +1,322 @@
+{
+  "version": 2,
+  "runSlug": "linkedin-ad-manager",
+  "project": "LinkedIn Ad Manager",
+  "description": "Full campaign management inside use60 — create, launch, edit, pause, and monitor LinkedIn ad campaigns",
+  "phase": "deliver",
+  "startedAt": "2026-03-10T12:00:00.000Z",
+  "lastUpdatedAt": "2026-03-10T13:00:00.000Z",
+
+  "input": {
+    "type": "prd",
+    "source": "tasks/prd-linkedin-ad-manager.md",
+    "extractedRequirements": [
+      "Connect LinkedIn ad accounts with rw_ads permission",
+      "Campaign group CRUD with budgets and schedules",
+      "Campaign creation wizard (objective, format, targeting, budget, schedule)",
+      "Basic creative creation (single image sponsored content)",
+      "Campaign status management (draft, active, paused, archived)",
+      "Approval model for budget-impacting actions",
+      "Bidirectional campaign sync with LinkedIn",
+      "Inline performance metrics on campaign views"
+    ],
+    "extractedConstraints": [
+      "versionTag required for optimistic concurrency",
+      "Campaign format immutable once set",
+      "Max 15 active creatives per campaign",
+      "EU political ad compliance for EU-targeted campaigns",
+      "LinkedIn is source of truth for drift resolution"
+    ],
+    "openQuestions": [],
+    "answeredQuestions": []
+  },
+
+  "phaseGates": {
+    "launch":      { "status": "skipped", "completedAt": null },
+    "discover":    { "status": "complete", "completedAt": "2026-03-10T12:10:00.000Z" },
+    "define":      { "status": "complete", "completedAt": "2026-03-10T12:10:00.000Z" },
+    "plan":        { "status": "complete", "completedAt": "2026-03-10T12:30:00.000Z" },
+    "sync":        { "status": "skipped", "completedAt": null },
+    "build":       { "status": "complete", "completedAt": "2026-03-10T13:00:00.000Z" },
+    "deliver":     { "status": "in_progress", "completedAt": null },
+    "housekeeping": { "status": "pending", "completedAt": null }
+  },
+
+  "team": {
+    "tier": 3,
+    "tierReason": "6 complexity score: 9 stories, 4 schema tables, LinkedIn API, cross-feature deps, budget security",
+    "workers": { "model": "sonnet", "count": 3 },
+    "reviewer": { "model": "opus" },
+    "architect": { "model": "opus", "phaseOnly": "plan" },
+    "manager": { "model": "opus" }
+  },
+
+  "prdFile": "tasks/prd-linkedin-ad-manager.md",
+  "branch": "feat/linkedin-ad-manager",
+
+  "stories": [
+    {
+      "id": "LAM-001",
+      "title": "Database migration: campaign management tables",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "schema": [] },
+      "parallelGroup": 1,
+      "acceptance": [
+        "linkedin_managed_campaigns table with all PRD columns + RLS",
+        "linkedin_managed_creatives table with all PRD columns + RLS",
+        "linkedin_managed_lead_forms table with all PRD columns + RLS",
+        "linkedin_campaign_approvals table with all PRD columns + RLS",
+        "All policies use org_id scoping via organization_memberships",
+        "Service role bypass policies on all tables",
+        "Indexes on org_id, campaign_id, status columns"
+      ],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "LAM-002",
+      "title": "Edge function: linkedin-campaign-manager (CRUD router)",
+      "type": "service",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["LAM-001"], "schema": ["linkedin_managed_campaigns", "linkedin_managed_creatives"] },
+      "parallelGroup": 2,
+      "acceptance": [
+        "Actions: list_campaigns, get_campaign, create_campaign, update_campaign, update_status",
+        "Actions: list_groups, create_group, update_group",
+        "Actions: list_creatives, create_creative, update_creative",
+        "All mutations use versionTag for optimistic concurrency",
+        "Creates entities on LinkedIn via Advertising API then stores locally",
+        "Validates against LinkedIn limits before API submission",
+        "Uses getCorsHeaders(req) from _shared/corsHelper.ts",
+        "Auth via edgeAuth.ts pattern with org role validation"
+      ],
+      "estimatedMinutes": 60
+    },
+    {
+      "id": "LAM-003",
+      "title": "Edge function: linkedin-campaign-sync (bidirectional sync worker)",
+      "type": "service",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["LAM-001"], "schema": ["linkedin_managed_campaigns"] },
+      "parallelGroup": 2,
+      "acceptance": [
+        "Actions: sync (manual for specific org), sync_all (cron for all connected orgs)",
+        "Fetches campaigns, campaign groups, and creatives from LinkedIn API",
+        "Upserts local state to match LinkedIn (LinkedIn is source of truth)",
+        "Detects drift: flags campaigns modified externally since last sync",
+        "Tracks sync runs in linkedin_analytics_sync_runs (reuse existing table)",
+        "Follows linkedin-analytics-sync patterns: date chunking, retry, batch upsert"
+      ],
+      "estimatedMinutes": 45
+    },
+    {
+      "id": "LAM-004",
+      "title": "Edge function: linkedin-campaign-approval (approval handler)",
+      "type": "service",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["LAM-001", "LAM-002"], "schema": ["linkedin_campaign_approvals"] },
+      "parallelGroup": 2,
+      "acceptance": [
+        "Actions: request_approval, approve, reject, list_pending",
+        "Budget-impacting actions (activate, increase budget) require approval by default",
+        "Auto-approve actions: create draft, pause, create creative",
+        "Stores approval records with action_type, requested_by, details",
+        "On approve: executes the pending action via linkedin-campaign-manager",
+        "Integrates with Slack for approval notifications"
+      ],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "LAM-005",
+      "title": "Service layer: linkedinAdManagerService.ts",
+      "type": "service",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["LAM-002", "LAM-003", "LAM-004"], "schema": [] },
+      "parallelGroup": 3,
+      "acceptance": [
+        "Wraps all linkedin-campaign-manager edge function actions",
+        "Wraps linkedin-campaign-sync actions",
+        "Wraps linkedin-campaign-approval actions",
+        "Uses supabase.functions.invoke() pattern from adLibraryService.ts",
+        "Exports TypeScript interfaces for all response types",
+        "Error handling with clear user-facing messages"
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "LAM-006",
+      "title": "Hook: useLinkedInAdManager.ts",
+      "type": "service",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["LAM-005"], "schema": [] },
+      "parallelGroup": 3,
+      "acceptance": [
+        "Manages campaign list, groups, creatives, and approval state",
+        "ready check: isAuthenticated && user && activeOrgId && !authLoading",
+        "useRef(initialLoadDone) to prevent duplicate loads",
+        "Loading states per data type (campaigns, groups, creatives)",
+        "toast.error() for all failures",
+        "Returns action methods: createCampaign, updateStatus, syncCampaigns, etc."
+      ],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "LAM-007",
+      "title": "UI: Campaign list page with status management",
+      "type": "component",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["LAM-006"], "schema": [] },
+      "parallelGroup": 4,
+      "acceptance": [
+        "Replace CampaignsPage stub with full campaign management page",
+        "Tabs: Campaigns, Campaign Groups, Approvals",
+        "Campaign table: name, status badge, format, budget, spend, impressions, clicks, CTR",
+        "Sorting on all metric columns",
+        "Status filter (draft, active, paused, archived)",
+        "Search by campaign name",
+        "Row click opens detail Sheet panel",
+        "Quick actions: pause, resume, archive per campaign",
+        "Sync button to trigger manual sync",
+        "Uses Lucide icons only, no emoji"
+      ],
+      "estimatedMinutes": 45
+    },
+    {
+      "id": "LAM-008",
+      "title": "UI: Campaign detail Sheet panel",
+      "type": "component",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["LAM-007"], "schema": [] },
+      "parallelGroup": 4,
+      "acceptance": [
+        "SheetContent with !top-16 !h-[calc(100vh-4rem)] positioning",
+        "Campaign header: name, status badge, format, objective",
+        "Budget section: daily/total budget, spend to date, pacing",
+        "Targeting summary: job titles, industries, geos, seniority",
+        "Schedule: start/end dates or continuous indicator",
+        "Creatives list: thumbnails with headline, status, metrics",
+        "Performance inline: impressions, clicks, spend, leads, CTR, CPC from analytics",
+        "Action buttons: edit, pause/resume, archive, view on LinkedIn"
+      ],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "LAM-009",
+      "title": "UI: Campaign creation wizard (5-step)",
+      "type": "component",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["LAM-006", "LAM-007"], "schema": [] },
+      "parallelGroup": 5,
+      "acceptance": [
+        "Dialog-based wizard following HubSpotImportWizard pattern",
+        "Step 1: Objective — select from 6 objectives with descriptions",
+        "Step 2: Format — select from supported formats (filtered by objective), format immutability warning",
+        "Step 3: Targeting — job title, function, seniority, company, industry, geography builders",
+        "Step 4: Budget & Bid — daily/lifetime budget, bid strategy (manual CPC/CPM, target cost, cost cap), schedule dates",
+        "Step 5: Review — full summary of all selections with edit links per section",
+        "Creates campaign in DRAFT status on submit",
+        "Validation at each step before advancing",
+        "Back/Next/Create navigation",
+        "EU political ad compliance notice when EU regions selected in targeting"
+      ],
+      "estimatedMinutes": 60
+    },
+    {
+      "id": "LAM-010",
+      "title": "UI: Creative creation form",
+      "type": "component",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["LAM-008"], "schema": [] },
+      "parallelGroup": 5,
+      "acceptance": [
+        "Dialog form for creating single image sponsored content creative",
+        "Fields: headline, body text, CTA, destination URL, image upload",
+        "Character count validation per LinkedIn limits",
+        "Preview card showing how creative will appear",
+        "Attaches to selected campaign",
+        "Limit warning when approaching 15 active creatives per campaign",
+        "Creates as direct sponsored content (not on company page)"
+      ],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "LAM-011",
+      "title": "UI: Campaign group management",
+      "type": "component",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["LAM-007"], "schema": [] },
+      "parallelGroup": 5,
+      "acceptance": [
+        "Campaign Groups tab on campaigns page",
+        "Table listing groups: name, status, budget, campaign count, total spend",
+        "Create group dialog: name, budget (daily/lifetime), schedule, status",
+        "Edit group inline or via dialog",
+        "Archive group action",
+        "Validation: max 2000 campaigns per non-default group"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "LAM-012",
+      "title": "UI: Approval queue and confirmation flow",
+      "type": "component",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["LAM-007", "LAM-004"], "schema": [] },
+      "parallelGroup": 5,
+      "acceptance": [
+        "Approvals tab on campaigns page showing pending approvals",
+        "Each approval card: action type, campaign name, requested by, details, timestamp",
+        "Approve/Reject buttons with confirmation dialog",
+        "Confirmation modal for budget-impacting actions (activate campaign, increase budget)",
+        "Badge count on Approvals tab for pending items",
+        "Toast feedback on approve/reject"
+      ],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "LAM-013",
+      "title": "Route registration and navigation",
+      "type": "integration",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["LAM-007"], "schema": [] },
+      "parallelGroup": 6,
+      "acceptance": [
+        "Update /campaigns route to use new CampaignsPage (already mapped)",
+        "Add navigation entry in sidebar under appropriate section",
+        "Page has Helmet meta title",
+        "Lazy loading via lazyPages.tsx (already configured)"
+      ],
+      "estimatedMinutes": 10
+    }
+  ],
+
+  "devHub": {
+    "projectId": null,
+    "taskId": null,
+    "taskCode": null
+  },
+
+  "slack": {
+    "warRoomChannel": null,
+    "warRoomThreadTs": null
+  },
+
+  "execution": {
+    "totalStories": 13,
+    "completedStories": 0,
+    "lastUpdated": "2026-03-10T12:30:00.000Z"
+  }
+}
