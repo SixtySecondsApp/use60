@@ -2201,13 +2201,31 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           member_status: 'active',
         });
 
-      set({ organizationId: org.id });
-
       // Proceed to enrichment — use resolved domain if user picked one
       const freshState = get();
       const enrichDomain = freshState.resolvedResearchDomain || freshState.domain;
+
+      // Always transition to enrichment_loading (the step handles domain mismatch picker)
+      set({
+        organizationId: org.id,
+        ...(enrichDomain ? { currentStep: 'enrichment_loading', enrichmentSource: 'website' } : { currentStep: 'skills' }),
+      });
+
+      // If there's an unresolved domain mismatch, don't start enrichment yet —
+      // EnrichmentLoadingStep will show the domain picker first, then start enrichment
+      if (freshState.hasDomainMismatch && !freshState.resolvedResearchDomain) {
+        console.log('[onboardingV2Store] Domain mismatch unresolved — deferring enrichment to picker');
+        return;
+      }
+
       if (enrichDomain) {
-        await get().startEnrichment(org.id, enrichDomain, false);
+        const enrichmentResult = await get().startEnrichment(org.id, enrichDomain, false);
+
+        if (!enrichmentResult.success) {
+          console.error('[onboardingV2Store] Enrichment failed after org creation, skipping to skills');
+          toast.error('Enrichment could not start. You can continue setup.');
+          set({ currentStep: 'skills' });
+        }
       }
     } catch (error) {
       console.error('[onboardingV2Store] Error creating organization:', error);
