@@ -32,6 +32,7 @@ export interface AdLibraryAd {
   is_likely_winner: boolean
   winner_signals: any[]
   created_at: string
+  advertiser_logo_url?: string | null
   classification?: AdClassification
 }
 
@@ -184,7 +185,11 @@ class AdLibraryService {
     })
     if (error) throw new Error(error.message || 'Failed to capture competitor ads')
     if (data?.error) throw new Error(data.error)
-    return data as { status: string; ads_captured: number }
+    // Edge function returns { run_id, total_scraped, inserted, updated, watchlist_id }
+    return {
+      status: 'success',
+      ads_captured: data?.inserted ?? data?.total_scraped ?? 0,
+    }
   }
 
   async captureByKeyword(
@@ -196,7 +201,10 @@ class AdLibraryService {
     })
     if (error) throw new Error(error.message || 'Failed to capture ads by keyword')
     if (data?.error) throw new Error(data.error)
-    return data as { status: string; ads_captured: number }
+    return {
+      status: 'success',
+      ads_captured: data?.inserted ?? data?.total_scraped ?? 0,
+    }
   }
 
   async getClusters(dimension?: string): Promise<AdCluster[]> {

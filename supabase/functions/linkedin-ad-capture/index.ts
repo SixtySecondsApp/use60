@@ -14,7 +14,7 @@ import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelpe
  *   { action, competitor_name?, competitor_linkedin_url?, keyword?, geography?, org_id? }
  */
 
-const APIFY_ACTOR_ID = 'memo23~linkedin-ads-scraper'
+const APIFY_ACTOR_ID = 'unlimitedleadtestinbox~linkedin-ads-scraper'
 const APIFY_API_BASE = 'https://api.apify.com/v2'
 const POLL_INTERVAL_MS = 5_000
 const POLL_MAX_DURATION_MS = 120_000
@@ -69,11 +69,18 @@ function buildSearchUrl(competitorName?: string, competitorLinkedInUrl?: string)
     if (competitorLinkedInUrl.includes('/ad-library')) {
       return competitorLinkedInUrl
     }
+    // Extract company slug from LinkedIn company URL (e.g. linkedin.com/company/hubspot)
+    const companyMatch = competitorLinkedInUrl.match(/linkedin\.com\/company\/([^\/\?]+)/)
+    if (companyMatch) {
+      return `https://www.linkedin.com/ad-library/search?accountOwner=${companyMatch[1]}`
+    }
     return competitorLinkedInUrl
   }
   if (competitorName) {
-    const encoded = encodeURIComponent(competitorName)
-    return `https://www.linkedin.com/ad-library/?q=${encoded}`
+    // Use accountOwner param — LinkedIn uses the company page slug (e.g. "hubspot", "salesforce")
+    // Just lowercase and strip spaces — don't kebab-case as that breaks multi-word slugs
+    const slug = competitorName.toLowerCase().replace(/\s+/g, '')
+    return `https://www.linkedin.com/ad-library/search?accountOwner=${encodeURIComponent(slug)}`
   }
   throw new Error('Either competitor_name or competitor_linkedin_url is required')
 }
@@ -150,7 +157,7 @@ async function fetchDatasetItems(
 function detectMediaType(item: Record<string, unknown>): 'image' | 'video' | 'carousel' | 'text' {
   const mediaType = String(item.mediaType ?? item.media_type ?? '').toLowerCase()
   if (mediaType.includes('video')) return 'video'
-  if (mediaType.includes('carousel')) return 'carousel'
+  if (mediaType.includes('carousel') || mediaType.includes('document')) return 'carousel'
 
   // Check for media presence
   const images = item.images ?? item.imageUrls ?? item.media_urls
@@ -212,12 +219,12 @@ function normalizeAd(
     advertiser_name: String(item.advertiserName ?? item.advertiser_name ?? item.companyName ?? item.company_name ?? 'Unknown'),
     advertiser_linkedin_url: (item.advertiserUrl ?? item.advertiser_url ?? item.companyUrl ?? item.company_url ?? null) as string | null,
     headline: (item.headline ?? item.title ?? null) as string | null,
-    body_text: (item.bodyText ?? item.body_text ?? item.text ?? item.description ?? null) as string | null,
+    body_text: (item.bodyText ?? item.body_text ?? item.ad_copy ?? item.text ?? item.description ?? null) as string | null,
     cta_text: (item.ctaText ?? item.cta_text ?? item.callToAction ?? item.cta ?? null) as string | null,
-    destination_url: (item.destinationUrl ?? item.destination_url ?? item.landingPageUrl ?? item.url ?? null) as string | null,
+    destination_url: (item.destinationUrl ?? item.destination_url ?? item.landingPageUrl ?? item.ad_detail_url ?? item.url ?? null) as string | null,
     media_type: detectMediaType(item),
     media_urls: extractMediaUrls(item),
-    ad_format: (item.adFormat ?? item.ad_format ?? item.format ?? null) as string | null,
+    ad_format: (item.adFormat ?? item.ad_format ?? item.ad_type ?? item.format ?? null) as string | null,
     geography: geography ?? (item.geography ?? item.geo ?? item.country ?? null) as string | null,
     first_seen_at: (item.firstSeenAt ?? item.first_seen_at ?? item.startDate ?? now) as string,
     last_seen_at: (item.lastSeenAt ?? item.last_seen_at ?? item.endDate ?? now) as string,
@@ -468,7 +475,7 @@ async function handleCaptureKeyword(
     throw new Error('keyword is required for capture_keyword action')
   }
 
-  const searchUrl = `https://www.linkedin.com/ad-library/?q=${encodeURIComponent(keyword)}`
+  const searchUrl = `https://www.linkedin.com/ad-library/search?q=${encodeURIComponent(keyword)}`
 
   const actorInput: Record<string, unknown> = {
     startUrls: [{ url: searchUrl }],

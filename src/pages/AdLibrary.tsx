@@ -73,18 +73,61 @@ function truncate(text: string | null, maxLen: number): string {
 
 function AdCard({ ad, onClick }: { ad: AdLibraryAd; onClick: () => void }) {
   const MediaIcon = MEDIA_TYPE_ICONS[ad.media_type] ?? FileText
+  const [imgError, setImgError] = useState(false)
+  const previewUrl = ad.media_urls?.[0]
+  const logoUrl = ad.advertiser_logo_url
 
   return (
     <Card
-      className="group cursor-pointer border-zinc-800/60 bg-zinc-900/60 hover:border-zinc-700 transition-colors"
+      className="group cursor-pointer border-zinc-800/60 bg-zinc-900/60 hover:border-zinc-700 transition-colors overflow-hidden"
       onClick={onClick}
     >
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-semibold text-zinc-100 truncate">
+      {/* Creative preview */}
+      {previewUrl && !imgError ? (
+        <div className="relative w-full aspect-[1.91/1] bg-zinc-950 overflow-hidden">
+          <img
+            src={previewUrl}
+            alt={ad.headline || ad.advertiser_name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
+          <div className="absolute top-2 right-2">
+            <Badge className="text-[10px] bg-black/60 text-zinc-300 border-none backdrop-blur-sm">
+              <MediaIcon className="h-3 w-3 mr-0.5" />
+              {ad.media_type}
+            </Badge>
+          </div>
+          {ad.media_urls.length > 1 && (
+            <div className="absolute bottom-2 right-2">
+              <Badge className="text-[10px] bg-black/60 text-zinc-300 border-none backdrop-blur-sm">
+                +{ad.media_urls.length - 1} more
+              </Badge>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="w-full aspect-[1.91/1] bg-zinc-950 flex items-center justify-center">
+          <MediaIcon className="h-10 w-10 text-zinc-700" />
+        </div>
+      )}
+
+      <CardHeader className="pb-2 pt-3">
+        <div className="flex items-center gap-2">
+          {logoUrl && (
+            <img
+              src={logoUrl}
+              alt=""
+              className="h-5 w-5 rounded-full shrink-0 bg-zinc-800"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          )}
+          <CardTitle className="text-sm font-semibold text-zinc-100 truncate flex-1">
             {ad.advertiser_name}
           </CardTitle>
-          <MediaIcon className="h-4 w-4 shrink-0 text-zinc-500" />
+          {ad.is_likely_winner && (
+            <Trophy className="h-4 w-4 shrink-0 text-amber-400" />
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -101,7 +144,7 @@ function AdCard({ ad, onClick }: { ad: AdLibraryAd; onClick: () => void }) {
 
         {/* Badges row */}
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          {ad.cta_text && (
+          {ad.cta_text && ad.cta_text !== 'View details' && (
             <Badge variant="secondary" className="text-[10px] font-medium bg-blue-500/10 text-blue-400 border-blue-500/20">
               {ad.cta_text}
             </Badge>
@@ -116,10 +159,9 @@ function AdCard({ ad, onClick }: { ad: AdLibraryAd; onClick: () => void }) {
               {ad.classification.target_persona}
             </Badge>
           )}
-          {ad.is_likely_winner && (
-            <Badge className="text-[10px] font-medium bg-amber-500/10 text-amber-400 border-amber-500/20">
-              <Trophy className="h-3 w-3 mr-0.5" />
-              Likely Winner
+          {ad.ad_format && (
+            <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">
+              {ad.ad_format}
             </Badge>
           )}
         </div>
@@ -128,9 +170,9 @@ function AdCard({ ad, onClick }: { ad: AdLibraryAd; onClick: () => void }) {
         <div className="flex items-center gap-3 pt-1 text-[10px] text-zinc-500">
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
-            First: {formatDate(ad.first_seen_at)}
+            {formatDate(ad.first_seen_at)}
           </span>
-          <span>Last: {formatDate(ad.last_seen_at)}</span>
+          {ad.geography && <span>{ad.geography}</span>}
         </div>
       </CardContent>
     </Card>
@@ -166,6 +208,23 @@ function AdDetailSheet({
         </SheetHeader>
 
         <div className="mt-6 space-y-5">
+          {/* Creative media */}
+          {ad.media_urls?.length > 0 && (
+            <div className="space-y-2">
+              {ad.media_urls.map((url, i) => (
+                <div key={i} className="rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800">
+                  <img
+                    src={url}
+                    alt={`Creative ${i + 1}`}
+                    className="w-full object-contain max-h-[400px]"
+                    loading="lazy"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Headline */}
           {ad.headline && (
             <div>
@@ -177,7 +236,7 @@ function AdDetailSheet({
           {/* Body */}
           {ad.body_text && (
             <div>
-              <p className="text-xs font-medium text-zinc-500 mb-1">Body</p>
+              <p className="text-xs font-medium text-zinc-500 mb-1">Body Copy</p>
               <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">{ad.body_text}</p>
             </div>
           )}

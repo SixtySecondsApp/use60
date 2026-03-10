@@ -675,6 +675,9 @@ function LeadListItem({
             {lead.external_source === 'savvycal' && (
               <LabelBadge icon={Tag} label="Meeting Booked" variant="emerald" />
             )}
+            {lead.external_source === 'linkedin' && (
+              <LabelBadge icon={Tag} label="LinkedIn Lead" variant="blue" />
+            )}
             
             {/* Source Label */}
             <LabelBadge icon={Tag} label={sourceLabel} variant="blue" />

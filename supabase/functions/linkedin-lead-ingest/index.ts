@@ -519,7 +519,7 @@ async function draftAndRouteEmail(
     .insert({
       org_id: params.orgId,
       user_id: params.ownerId,
-      resource_type: 'linkedin_lead_email',
+      resource_type: 'email_draft',
       resource_id: params.leadId,
       resource_name: `Email to ${contactName}${params.companyName ? ` (${params.companyName})` : ''}`,
       status: 'pending',

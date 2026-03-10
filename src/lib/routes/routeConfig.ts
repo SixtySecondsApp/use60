@@ -352,6 +352,30 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     displayGroup: 4,
     badge: 'New',
   },
+  // LinkedIn Revenue Feedback Loop
+  {
+    path: '/intelligence/linkedin-revenue',
+    access: 'any',
+    label: 'LinkedIn Revenue',
+    icon: TrendingUp,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3.97,
+    displayGroup: 4,
+    badge: 'New',
+  },
+  // LinkedIn Advertising Analytics
+  {
+    path: '/intelligence/linkedin-analytics',
+    access: 'any',
+    label: 'Ad Analytics',
+    icon: BarChart3,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3.975,
+    displayGroup: 4,
+    badge: 'New',
+  },
   // Coaching & Team Intelligence (COACH-UI-001)
   {
     path: '/coaching',

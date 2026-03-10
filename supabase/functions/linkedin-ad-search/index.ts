@@ -187,6 +187,7 @@ async function handleSearch(
       a.media_type, a.media_urls, a.ad_format, a.geography,
       a.first_seen_at, a.last_seen_at, a.capture_source,
       a.is_likely_winner, a.winner_signals,
+      a.raw_data->>'advertiser_logo_url' as advertiser_logo_url,
       c.angle, c.target_persona, c.offer_type, c.cta_type,
       c.creative_format, c.industry_vertical, c.messaging_theme,
       c.confidence as classification_confidence
