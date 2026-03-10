@@ -26,11 +26,18 @@ const HANDLERS: Record<string, (req: Request) => Promise<Response>> = {
 Deno.serve(async (req: Request) => {
   const cors = getCorsHeaders(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed. Use POST with JSON body: { action, origin?, scope_tier? }' }), { status: 405, headers: { ...cors, 'Content-Type': 'application/json' } })
+  }
   try {
     const bodyText = await req.text()
+    const bodyTextTrimmed = bodyText?.trim() || ''
+    if (!bodyTextTrimmed) {
+      return new Response(JSON.stringify({ error: 'Request body is required. Send JSON: { action: "oauth_initiate", origin: "https://...", scope_tier?: "free"|"paid" }' }), { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } })
+    }
     let body: Record<string, unknown>
-    try { body = JSON.parse(bodyText) } catch {
-      return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } })
+    try { body = JSON.parse(bodyTextTrimmed) } catch (e) {
+      return new Response(JSON.stringify({ error: 'Invalid JSON body', detail: (e as Error).message }), { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } })
     }
     const action = body.action as string
     if (!action || !HANDLERS[action]) {

@@ -381,11 +381,11 @@ const builtIntegrations: IntegrationConfig[] = [
     iconBgColor: 'bg-gray-50 dark:bg-gray-800',
     iconBorderColor: 'border-gray-200 dark:border-gray-700',
     fallbackIcon: (
-      <svg className="w-6 h-6" viewBox="0 0 24 24">
+      <svg className="w-6 h-6" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
         <path fill="#F25022" d="M1 1h10v10H1z" />
-        <path fill="#7FBA00" d="M13 1h10v10H13z" />
-        <path fill="#00A4EF" d="M1 13h10v10H1z" />
-        <path fill="#FFB900" d="M13 13h10v10H13z" />
+        <path fill="#7FBA00" d="M12 1h10v10H12z" />
+        <path fill="#00A4EF" d="M1 12h10v10H1z" />
+        <path fill="#FFB900" d="M12 12h10v10H12z" />
       </svg>
     ),
     isBuilt: true,

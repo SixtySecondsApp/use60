@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { googleApi, GoogleIntegration, GoogleServiceStatus } from '@/lib/api/googleIntegration';
-import { supabase } from '@/lib/supabase/clientV2';
+import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
 
 interface GoogleState {
   isConnected: boolean;
@@ -409,6 +409,13 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
   checkMicrosoftConnection: async () => {
     const { microsoft } = get();
     if (microsoft.isLoading) return;
+
+    // Skip if no auth token — REST API requires apikey + JWT; avoids "No API key" when auth not ready
+    const token = await getSupabaseAuthToken();
+    if (!token) {
+      set(state => ({ microsoft: { ...state.microsoft, isConnected: false, isLoading: false, error: null } }));
+      return;
+    }
 
     set(state => ({ microsoft: { ...state.microsoft, isLoading: true, error: null } }));
 

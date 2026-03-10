@@ -39,3 +39,10 @@ curl -X POST "https://caerqjzvuerejfrdtygb.supabase.co/functions/v1/nylas-oauth-
 ```
 
 Response body will show the actual error.
+
+## 6. REST API "No API key found in request"
+
+If you see this when calling `microsoft_integrations` or other REST endpoints:
+
+- **From the app**: Ensure you're logged in. The integration store now skips the Microsoft check when no auth token is available.
+- **Direct URL testing**: The REST API requires an `apikey` header with your project's anon key. Add: `-H "apikey: YOUR_ANON_KEY"` and `-H "Authorization: Bearer YOUR_JWT"` to your curl/Postman request.
