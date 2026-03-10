@@ -2201,13 +2201,23 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           member_status: 'active',
         });
 
-      set({ organizationId: org.id });
-
       // Proceed to enrichment — use resolved domain if user picked one
       const freshState = get();
       const enrichDomain = freshState.resolvedResearchDomain || freshState.domain;
+
+      set({
+        organizationId: org.id,
+        ...(enrichDomain ? { currentStep: 'enrichment_loading', enrichmentSource: 'website' } : { currentStep: 'skills' }),
+      });
+
       if (enrichDomain) {
-        await get().startEnrichment(org.id, enrichDomain, false);
+        const enrichmentResult = await get().startEnrichment(org.id, enrichDomain, false);
+
+        if (!enrichmentResult.success) {
+          console.error('[onboardingV2Store] Enrichment failed after org creation, skipping to skills');
+          toast.error('Enrichment could not start. You can continue setup.');
+          set({ currentStep: 'skills' });
+        }
       }
     } catch (error) {
       console.error('[onboardingV2Store] Error creating organization:', error);
