@@ -23,7 +23,7 @@ import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useLandingBuilderWorkspace } from '@/lib/hooks/useLandingBuilderWorkspace';
 import { CopyPicker, parseCopySections } from './CopyPicker';
-import { PHASE_AGENT_MAP, AGENT_BADGES, type LandingResearchData, type LandingSection, type BrandConfig } from './types';
+import { PHASE_AGENT_MAP, AGENT_BADGES, type LandingResearchData, type LandingSection, type BrandConfig, type SeoConfig, generateDefaultSeo } from './types';
 import { useLandingResearch } from '@/lib/hooks/useLandingResearch';
 import { STRATEGIST_SYSTEM_PROMPT } from './agents/strategistAgent';
 import { COPYWRITER_SYSTEM_PROMPT } from './agents/copywriterAgent';
@@ -34,10 +34,11 @@ import { AssemblyPreview } from './AssemblyPreview';
 import { LandingEditorPanel } from './LandingEditorPanel';
 import { FloatingChatBar, type ChatOverlayState } from './FloatingChatBar';
 import { PublishModal } from './PublishModal';
+import { SeoSettingsPanel } from './SeoSettingsPanel';
 import type { ModelTier } from './IntelligenceToggle';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Globe } from 'lucide-react';
+import { Globe, Settings } from 'lucide-react';
 import type { WorkspacePhaseKey } from '@/lib/services/landingBuilderWorkspaceService';
 import type { FactProfile } from '@/lib/types/factProfile';
 import type { ProductProfile } from '@/lib/types/productProfile';
@@ -356,6 +357,9 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
   const [showDividers, setShowDividers] = useState(true);
   // Publish modal state
   const [publishModalOpen, setPublishModalOpen] = useState(false);
+  // SEO settings panel state (US-022)
+  const [seoSettingsOpen, setSeoSettingsOpen] = useState(false);
+  const [seoConfig, setSeoConfig] = useState<SeoConfig | null>(null);
 
   // Sync phase from workspace on load
   React.useEffect(() => {

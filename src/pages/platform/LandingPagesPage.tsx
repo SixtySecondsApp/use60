@@ -19,7 +19,6 @@ import {
   Pencil,
   FileText,
   Download,
-  X,
   Globe,
   Inbox,
 } from 'lucide-react';
