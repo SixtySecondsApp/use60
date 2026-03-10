@@ -19,6 +19,14 @@ import {
   ExternalLink,
   ChevronDown,
   X,
+  MapPin,
+  Flame,
+  Heart,
+  MessageCircle,
+  ThumbsUp,
+  Sparkles,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -67,14 +75,55 @@ function truncate(text: string | null, maxLen: number): string {
   return text.length > maxLen ? text.slice(0, maxLen) + '...' : text
 }
 
+function daysRunning(firstSeen: string | null, lastSeen: string | null): number | null {
+  if (!firstSeen || !lastSeen) return null
+  const diff = new Date(lastSeen).getTime() - new Date(firstSeen).getTime()
+  const days = Math.round(diff / (1000 * 60 * 60 * 24))
+  // Only show longevity when there's a real multi-day spread (re-captured over time)
+  return days >= 2 ? days : null
+}
+
+function daysAgo(dateStr: string | null): string {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const days = Math.round(diff / (1000 * 60 * 60 * 24))
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.round(days / 7)}w ago`
+  return `${Math.round(days / 30)}mo ago`
+}
+
+/** Safely get media_urls as an array (handles {} from DB) */
+function getMediaUrls(ad: AdLibraryAd): string[] {
+  if (!ad.media_urls) return []
+  if (Array.isArray(ad.media_urls)) return ad.media_urls
+  return []
+}
+
+function longevityLabel(days: number | null): string {
+  if (!days) return ''
+  if (days < 7) return `${days}d`
+  if (days < 30) return `${Math.round(days / 7)}w`
+  return `${Math.round(days / 30)}mo`
+}
+
+function longevityColor(days: number | null): string {
+  if (!days || days < 14) return 'text-zinc-500'
+  if (days < 30) return 'text-blue-400'
+  if (days < 60) return 'text-emerald-400'
+  return 'text-amber-400'
+}
+
 // ---------------------------------------------------------------------------
 // Ad Card
 // ---------------------------------------------------------------------------
 
-function AdCard({ ad, onClick }: { ad: AdLibraryAd; onClick: () => void }) {
+function AdCard({ ad, onClick, onSave, onUnsave }: { ad: AdLibraryAd; onClick: () => void; onSave?: (id: string) => void; onUnsave?: (id: string) => void }) {
   const MediaIcon = MEDIA_TYPE_ICONS[ad.media_type] ?? FileText
   const [imgError, setImgError] = useState(false)
-  const previewUrl = ad.media_urls?.[0]
+  const urls = getMediaUrls(ad)
+  const previewUrl = urls[0]
   const logoUrl = ad.advertiser_logo_url
 
   return (
@@ -98,10 +147,17 @@ function AdCard({ ad, onClick }: { ad: AdLibraryAd; onClick: () => void }) {
               {ad.media_type}
             </Badge>
           </div>
-          {ad.media_urls.length > 1 && (
+          {ad.media_type === 'video' && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                <Video className="h-5 w-5 text-white ml-0.5" />
+              </div>
+            </div>
+          )}
+          {urls.length > 1 && (
             <div className="absolute bottom-2 right-2">
               <Badge className="text-[10px] bg-black/60 text-zinc-300 border-none backdrop-blur-sm">
-                +{ad.media_urls.length - 1} more
+                +{urls.length - 1} more
               </Badge>
             </div>
           )}
@@ -125,8 +181,22 @@ function AdCard({ ad, onClick }: { ad: AdLibraryAd; onClick: () => void }) {
           <CardTitle className="text-sm font-semibold text-zinc-100 truncate flex-1">
             {ad.advertiser_name}
           </CardTitle>
+          {ad.capture_source === 'organic' && (
+            <Badge className="text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0">
+              Organic
+            </Badge>
+          )}
           {ad.is_likely_winner && (
             <Trophy className="h-4 w-4 shrink-0 text-amber-400" />
+          )}
+          {(onSave || onUnsave) && (
+            <button
+              onClick={(e) => { e.stopPropagation(); ad.is_saved ? onUnsave?.(ad.id) : onSave?.(ad.id) }}
+              className={`shrink-0 p-0.5 rounded hover:bg-zinc-800 transition-colors ${ad.is_saved ? 'text-blue-400' : 'text-zinc-600 hover:text-zinc-400'}`}
+              title={ad.is_saved ? 'Unsave' : 'Save'}
+            >
+              {ad.is_saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+            </button>
           )}
         </div>
       </CardHeader>
@@ -166,12 +236,38 @@ function AdCard({ ad, onClick }: { ad: AdLibraryAd; onClick: () => void }) {
           )}
         </div>
 
-        {/* Dates */}
+        {/* Engagement metrics */}
+        {ad.num_reactions > 0 && (
+          <div className="flex items-center gap-3 pt-1 text-[10px]">
+            <span className="flex items-center gap-1 text-rose-400">
+              <Heart className="h-3 w-3" />
+              {ad.num_reactions.toLocaleString()}
+            </span>
+            {ad.num_comments > 0 && (
+              <span className="flex items-center gap-1 text-blue-400">
+                <MessageCircle className="h-3 w-3" />
+                {ad.num_comments.toLocaleString()}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Longevity + Dates */}
         <div className="flex items-center gap-3 pt-1 text-[10px] text-zinc-500">
-          <span className="flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            {formatDate(ad.first_seen_at)}
-          </span>
+          {(() => {
+            const days = daysRunning(ad.first_seen_at, ad.last_seen_at)
+            return days ? (
+              <span className={`flex items-center gap-1 font-semibold ${longevityColor(days)}`}>
+                <Clock className="h-3 w-3" />
+                Running {longevityLabel(days)}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {ad.capture_source === 'organic' ? 'Posted' : 'Seen'} {daysAgo(ad.first_seen_at)}
+              </span>
+            )
+          })()}
           {ad.geography && <span>{ad.geography}</span>}
         </div>
       </CardContent>
@@ -187,10 +283,14 @@ function AdDetailSheet({
   ad,
   open,
   onClose,
+  onSave,
+  onUnsave,
 }: {
   ad: AdLibraryAd | null
   open: boolean
   onClose: () => void
+  onSave?: (id: string) => void
+  onUnsave?: (id: string) => void
 }) {
   if (!ad) return null
 
@@ -201,7 +301,20 @@ function AdDetailSheet({
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent className="!top-16 !h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle className="text-zinc-100">{ad.advertiser_name}</SheetTitle>
+          <div className="flex items-center gap-2">
+            <SheetTitle className="text-zinc-100 flex-1">{ad.advertiser_name}</SheetTitle>
+            {(onSave || onUnsave) && (
+              <Button
+                variant={ad.is_saved ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => ad.is_saved ? onUnsave?.(ad.id) : onSave?.(ad.id)}
+                className={ad.is_saved ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
+              >
+                {ad.is_saved ? <BookmarkCheck className="h-4 w-4 mr-1.5" /> : <Bookmark className="h-4 w-4 mr-1.5" />}
+                {ad.is_saved ? 'Saved' : 'Save'}
+              </Button>
+            )}
+          </div>
           <SheetDescription className="text-zinc-500">
             Ad detail — {ad.media_type} — {ad.capture_source}
           </SheetDescription>
@@ -209,10 +322,10 @@ function AdDetailSheet({
 
         <div className="mt-6 space-y-5">
           {/* Creative media */}
-          {ad.media_urls?.length > 0 && (
+          {getMediaUrls(ad).length > 0 && (
             <div className="space-y-2">
-              {ad.media_urls.map((url, i) => (
-                <div key={i} className="rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800">
+              {getMediaUrls(ad).map((url, i) => (
+                <div key={i} className="relative rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800">
                   <img
                     src={url}
                     alt={`Creative ${i + 1}`}
@@ -220,6 +333,13 @@ function AdDetailSheet({
                     loading="lazy"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
+                  {ad.media_type === 'video' && i === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-12 h-12 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center">
+                        <Video className="h-6 w-6 text-white ml-0.5" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -307,12 +427,63 @@ function AdDetailSheet({
             </div>
           )}
 
-          {/* Meta */}
-          <div className="flex items-center gap-4 pt-2 text-xs text-zinc-500 border-t border-zinc-800">
+          {/* Engagement metrics */}
+          {ad.num_reactions > 0 && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+              <p className="text-xs font-medium text-zinc-500 mb-2">Engagement</p>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <ThumbsUp className="h-4 w-4 text-blue-400" />
+                  <span className="text-sm font-semibold text-zinc-200">{ad.num_reactions.toLocaleString()}</span>
+                  <span className="text-xs text-zinc-500">reactions</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <MessageCircle className="h-4 w-4 text-blue-400" />
+                  <span className="text-sm font-semibold text-zinc-200">{ad.num_comments.toLocaleString()}</span>
+                  <span className="text-xs text-zinc-500">comments</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Heart className="h-4 w-4 text-rose-400" />
+                  <span className="text-sm font-semibold text-zinc-200">{ad.num_likes.toLocaleString()}</span>
+                  <span className="text-xs text-zinc-500">likes</span>
+                </div>
+              </div>
+              {ad.engagement_post_url && (
+                <a
+                  href={ad.engagement_post_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:underline flex items-center gap-1 mt-2"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  View original post
+                </a>
+              )}
+            </div>
+          )}
+
+          {/* Longevity + Meta */}
+          {(() => {
+            const days = daysRunning(ad.first_seen_at, ad.last_seen_at)
+            return days ? (
+              <div className={`flex items-center gap-2 text-sm font-semibold ${longevityColor(days)}`}>
+                <Clock className="h-4 w-4" />
+                Running for {days} day{days !== 1 ? 's' : ''}
+                {days >= 30 && <Badge className="text-[10px] bg-amber-500/10 text-amber-400 border-amber-500/20 ml-1">Likely performing</Badge>}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-zinc-400">
+                <Clock className="h-4 w-4" />
+                {ad.capture_source === 'organic' ? 'Posted' : 'First seen'} {daysAgo(ad.first_seen_at)}
+              </div>
+            )
+          })()}
+          <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-zinc-500 border-t border-zinc-800">
             <span>Media: {ad.media_type}</span>
+            {ad.ad_format && <span>Format: {ad.ad_format}</span>}
             {ad.geography && <span>Geo: {ad.geography}</span>}
-            <span>First seen: {formatDate(ad.first_seen_at)}</span>
-            <span>Last seen: {formatDate(ad.last_seen_at)}</span>
+            <span>{ad.capture_source === 'organic' ? 'Posted' : 'First seen'}: {formatDate(ad.first_seen_at)}</span>
+            {ad.first_seen_at !== ad.last_seen_at && <span>Last seen: {formatDate(ad.last_seen_at)}</span>}
           </div>
         </div>
       </SheetContent>
@@ -467,34 +638,62 @@ function GalleryTab({
   totalAds,
   loading,
   onSearch,
+  onSearchLinkedIn,
   onLoadMore,
   onSelectAd,
   onOpenManual,
+  onEnrichEngagement,
+  onSaveAd,
+  onUnsaveAd,
 }: {
   ads: AdLibraryAd[]
   totalAds: number
   loading: boolean
   onSearch: (params: any) => void
+  onSearchLinkedIn: (query: string, geography?: string) => Promise<any>
   onLoadMore: () => void
   onSelectAd: (ad: AdLibraryAd) => void
   onOpenManual: () => void
+  onEnrichEngagement: () => Promise<any>
+  onSaveAd: (id: string) => void
+  onUnsaveAd: (id: string) => void
 }) {
   const [query, setQuery] = useState('')
   const [advertiser, setAdvertiser] = useState('')
   const [mediaType, setMediaType] = useState('all')
-  const [angle, setAngle] = useState('')
-  const [persona, setPersona] = useState('')
+  const [geography, setGeography] = useState('all')
+  const [sortBy, setSortBy] = useState<string>('longevity')
+  const [topPerforming, setTopPerforming] = useState(false)
+  const [searchingLinkedIn, setSearchingLinkedIn] = useState(false)
+  const [savedOnly, setSavedOnly] = useState(false)
+
+  const buildSearchParams = (overrides?: Record<string, unknown>) => ({
+    query: query.trim() || undefined,
+    advertiser_name: advertiser.trim() || undefined,
+    media_type: mediaType !== 'all' ? mediaType : undefined,
+    geography: geography !== 'all' ? geography : undefined,
+    sort_by: sortBy,
+    sort_order: 'desc',
+    saved_only: savedOnly || undefined,
+    page: 0,
+    page_size: 20,
+    ...overrides,
+  })
 
   const handleSearch = () => {
-    onSearch({
-      query: query.trim() || undefined,
-      advertiser_name: advertiser.trim() || undefined,
-      media_type: mediaType !== 'all' ? mediaType : undefined,
-      angle: angle.trim() || undefined,
-      persona: persona.trim() || undefined,
-      page: 0,
-      page_size: 20,
-    })
+    onSearch(buildSearchParams())
+  }
+
+  const handleSearchLinkedIn = async () => {
+    if (!query.trim()) return
+    setSearchingLinkedIn(true)
+    try {
+      await onSearchLinkedIn(query.trim(), geography !== 'all' ? geography : undefined)
+    } catch {
+      // handled by hook
+    } finally {
+      setSearchingLinkedIn(false)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -505,12 +704,13 @@ function GalleryTab({
     setQuery('')
     setAdvertiser('')
     setMediaType('all')
-    setAngle('')
-    setPersona('')
+    setGeography('all')
+    setTopPerforming(false)
+    setSavedOnly(false)
     onSearch({ page: 0, page_size: 20 })
   }
 
-  const hasFilters = query || advertiser || mediaType !== 'all' || angle || persona
+  const hasFilters = query || advertiser || mediaType !== 'all' || geography !== 'all' || topPerforming || savedOnly
 
   return (
     <div className="space-y-4">
@@ -522,19 +722,42 @@ function GalleryTab({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search ads by keyword..."
+            placeholder="Search company or keyword e.g. &quot;hubspot&quot;, &quot;CRM software&quot;..."
             className="pl-9 bg-zinc-900 border-zinc-800"
           />
         </div>
-        <Button onClick={handleSearch} size="sm">
+        <Button onClick={handleSearch} variant="outline" size="sm">
           <Search className="h-4 w-4 mr-1.5" />
-          Search
+          My Ads
+        </Button>
+        <Button
+          onClick={handleSearchLinkedIn}
+          size="sm"
+          disabled={!query.trim() || searchingLinkedIn}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          {searchingLinkedIn ? (
+            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+          ) : (
+            <ExternalLink className="h-4 w-4 mr-1.5" />
+          )}
+          {searchingLinkedIn ? 'Searching LinkedIn...' : 'Search LinkedIn'}
         </Button>
         <Button variant="outline" size="sm" onClick={onOpenManual}>
           <Plus className="h-4 w-4 mr-1.5" />
           Submit Ad
         </Button>
       </div>
+
+      {searchingLinkedIn && (
+        <div className="flex items-center gap-3 rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+          <div>
+            <p className="text-sm font-medium text-blue-300">Searching LinkedIn Ad Library...</p>
+            <p className="text-xs text-blue-400/70">Scraping live ads for &quot;{query}&quot; — this takes 30-60 seconds</p>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
@@ -545,7 +768,7 @@ function GalleryTab({
           placeholder="Advertiser"
           className="w-40 bg-zinc-900 border-zinc-800 text-xs h-8"
         />
-        <Select value={mediaType} onValueChange={setMediaType}>
+        <Select value={mediaType} onValueChange={(v) => { setMediaType(v); onSearch(buildSearchParams({ media_type: v !== 'all' ? v : undefined })) }}>
           <SelectTrigger className="w-32 bg-zinc-900 border-zinc-800 text-xs h-8">
             <SelectValue placeholder="Media type" />
           </SelectTrigger>
@@ -557,20 +780,79 @@ function GalleryTab({
             <SelectItem value="text">Text</SelectItem>
           </SelectContent>
         </Select>
-        <Input
-          value={angle}
-          onChange={(e) => setAngle(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Angle"
-          className="w-32 bg-zinc-900 border-zinc-800 text-xs h-8"
-        />
-        <Input
-          value={persona}
-          onChange={(e) => setPersona(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Persona"
-          className="w-32 bg-zinc-900 border-zinc-800 text-xs h-8"
-        />
+        <Select value={geography} onValueChange={(v) => { setGeography(v); onSearch(buildSearchParams({ geography: v !== 'all' ? v : undefined })) }}>
+          <SelectTrigger className="w-36 bg-zinc-900 border-zinc-800 text-xs h-8">
+            <MapPin className="h-3 w-3 mr-1 text-zinc-500" />
+            <SelectValue placeholder="Location" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All locations</SelectItem>
+            <SelectItem value="US">United States</SelectItem>
+            <SelectItem value="GB">United Kingdom</SelectItem>
+            <SelectItem value="CA">Canada</SelectItem>
+            <SelectItem value="AU">Australia</SelectItem>
+            <SelectItem value="DE">Germany</SelectItem>
+            <SelectItem value="FR">France</SelectItem>
+            <SelectItem value="BR">Brazil</SelectItem>
+            <SelectItem value="IN">India</SelectItem>
+            <SelectItem value="SG">Singapore</SelectItem>
+            <SelectItem value="NL">Netherlands</SelectItem>
+            <SelectItem value="IE">Ireland</SelectItem>
+            <SelectItem value="SE">Sweden</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={(v) => { setSortBy(v); onSearch(buildSearchParams({ sort_by: v })) }}>
+          <SelectTrigger className="w-40 bg-zinc-900 border-zinc-800 text-xs h-8">
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="longevity">Longest running</SelectItem>
+            <SelectItem value="first_seen_at">Newest first</SelectItem>
+            <SelectItem value="last_seen_at">Recently active</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant={topPerforming ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            const next = !topPerforming
+            setTopPerforming(next)
+            if (next) {
+              setSortBy('longevity')
+              onSearch(buildSearchParams({ sort_by: 'longevity', min_longevity_days: 30 }))
+            } else {
+              onSearch(buildSearchParams())
+            }
+          }}
+          className={`h-8 text-xs ${topPerforming ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600' : ''}`}
+        >
+          <Flame className="h-3 w-3 mr-1" />
+          Top Performing
+        </Button>
+        <Button
+          variant={savedOnly ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            const next = !savedOnly
+            setSavedOnly(next)
+            onSearch(buildSearchParams({ saved_only: next || undefined }))
+          }}
+          className={`h-8 text-xs ${savedOnly ? 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600' : ''}`}
+        >
+          <BookmarkCheck className="h-3 w-3 mr-1" />
+          Saved
+        </Button>
+        {savedOnly && ads.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onEnrichEngagement}
+            className="h-8 text-xs text-purple-400 border-purple-500/30 hover:bg-purple-500/10"
+          >
+            <Sparkles className="h-3 w-3 mr-1" />
+            Get Engagement
+          </Button>
+        )}
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs text-zinc-500 hover:text-zinc-300">
             <X className="h-3 w-3 mr-1" />
@@ -614,7 +896,7 @@ function GalleryTab({
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {ads.map((ad) => (
-              <AdCard key={ad.id} ad={ad} onClick={() => onSelectAd(ad)} />
+              <AdCard key={ad.id} ad={ad} onClick={() => onSelectAd(ad)} onSave={onSaveAd} onUnsave={onUnsaveAd} />
             ))}
           </div>
 
@@ -647,12 +929,14 @@ function WatchlistTab({
   onAdd,
   onRemove,
   onCapture,
+  onCaptureAll,
 }: {
   watchlist: WatchlistEntry[]
   loading: boolean
   onAdd: (entry: { competitor_name: string; competitor_linkedin_url?: string; competitor_website?: string; capture_frequency?: string }) => Promise<any>
   onRemove: (id: string) => Promise<void>
   onCapture: (name: string, url?: string) => Promise<any>
+  onCaptureAll: () => Promise<any>
 }) {
   const [name, setName] = useState('')
   const [linkedinUrl, setLinkedinUrl] = useState('')
@@ -1165,6 +1449,11 @@ export default function AdLibrary() {
     addCompetitor,
     removeCompetitor,
     captureCompetitor,
+    captureAll,
+    searchLinkedIn,
+    enrichEngagement,
+    saveAd,
+    unsaveAd,
     submitManualAd,
     clusters,
     clustersLoading,
@@ -1265,9 +1554,13 @@ export default function AdLibrary() {
               totalAds={totalAds}
               loading={loading}
               onSearch={searchAds}
+              onSearchLinkedIn={searchLinkedIn}
               onLoadMore={loadMore}
               onSelectAd={handleSelectAd}
               onOpenManual={() => setManualOpen(true)}
+              onEnrichEngagement={() => enrichEngagement()}
+              onSaveAd={saveAd}
+              onUnsaveAd={unsaveAd}
             />
           </TabsContent>
 
@@ -1278,6 +1571,7 @@ export default function AdLibrary() {
               onAdd={addCompetitor}
               onRemove={removeCompetitor}
               onCapture={captureCompetitor}
+              onCaptureAll={captureAll}
             />
           </TabsContent>
 
@@ -1309,7 +1603,7 @@ export default function AdLibrary() {
       </div>
 
       {/* Detail sheet */}
-      <AdDetailSheet ad={selectedAd} open={detailOpen} onClose={() => setDetailOpen(false)} />
+      <AdDetailSheet ad={selectedAd} open={detailOpen} onClose={() => setDetailOpen(false)} onSave={saveAd} onUnsave={unsaveAd} />
 
       {/* Manual submission sheet */}
       <ManualAdSheet open={manualOpen} onClose={() => setManualOpen(false)} onSubmit={handleManualSubmit} />

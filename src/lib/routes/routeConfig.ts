@@ -293,10 +293,11 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     access: 'internal',
     label: 'Campaigns',
     icon: Send,
-    showInNav: false,
+    showInNav: true,
     navSection: 'tools',
     order: 3.5,
     displayGroup: 4,
+    badge: 'New',
   },
   {
     path: '/outreach/analytics',

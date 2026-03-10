@@ -351,7 +351,7 @@ async function handleListPending(
       details,
       created_at,
       linkedin_managed_campaigns (
-        campaign_name
+        name
       )
     `)
     .eq('org_id', org_id)
@@ -373,7 +373,7 @@ async function handleListPending(
     status: row.status,
     details: row.details,
     created_at: row.created_at,
-    campaign_name: row.linkedin_managed_campaigns?.campaign_name ?? null,
+    campaign_name: row.linkedin_managed_campaigns?.name ?? null,
   }))
 
   return jsonResponse({ approvals }, req)

@@ -12,6 +12,10 @@ import {
   CreateGroupParams,
   CreateCreativeParams,
   SyncResult,
+  MatchedAudience,
+  AudienceEstimate,
+  CreateAudienceParams,
+  UploadAudienceMembersParams,
 } from '@/lib/services/linkedinAdManagerService'
 
 export function useLinkedInAdManager() {
@@ -38,6 +42,12 @@ export function useLinkedInAdManager() {
 
   // Sync
   const [syncing, setSyncing] = useState(false)
+
+  // Audiences
+  const [audiences, setAudiences] = useState<MatchedAudience[]>([])
+  const [audiencesLoading, setAudiencesLoading] = useState(false)
+  const [audienceEstimate, setAudienceEstimate] = useState<AudienceEstimate | null>(null)
+  const [estimateLoading, setEstimateLoading] = useState(false)
 
   const initialLoadDone = useRef(false)
   const ready = isAuthenticated && !!user && !!activeOrgId && !authLoading && !orgLoading
@@ -249,6 +259,75 @@ export function useLinkedInAdManager() {
   }, [ready, activeOrgId, loadCampaigns])
 
   // ---------------------------------------------------------------------------
+  // Audiences
+  // ---------------------------------------------------------------------------
+
+  const loadAudiences = useCallback(async () => {
+    if (!ready || !activeOrgId) return
+    try {
+      setAudiencesLoading(true)
+      const result = await linkedinAdManagerService.listAudiences(activeOrgId)
+      setAudiences(result)
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to load audiences')
+    } finally {
+      setAudiencesLoading(false)
+    }
+  }, [ready, activeOrgId])
+
+  const createAudience = useCallback(async (params: Omit<CreateAudienceParams, 'org_id'> & { ad_account_id: string }) => {
+    if (!ready || !activeOrgId) return null
+    try {
+      const audience = await linkedinAdManagerService.createAudience({
+        ...params,
+        org_id: activeOrgId,
+      })
+      toast.success('Audience created')
+      setAudiences((prev) => [audience, ...prev])
+      return audience
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to create audience')
+      return null
+    }
+  }, [ready, activeOrgId])
+
+  const deleteAudience = useCallback(async (audienceId: string) => {
+    if (!ready) return
+    try {
+      await linkedinAdManagerService.deleteAudience(audienceId)
+      toast.success('Audience deleted')
+      setAudiences((prev) => prev.filter((a) => a.id !== audienceId))
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to delete audience')
+    }
+  }, [ready])
+
+  const uploadAudienceMembers = useCallback(async (params: UploadAudienceMembersParams) => {
+    if (!ready) return null
+    try {
+      const result = await linkedinAdManagerService.uploadAudienceMembers(params)
+      toast.success(`Uploaded ${result.uploaded_count} members`)
+      return result
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to upload audience members')
+      return null
+    }
+  }, [ready])
+
+  const estimateAudienceSize = useCallback(async (targetingCriteria: Record<string, any>) => {
+    if (!ready || !activeOrgId) return
+    try {
+      setEstimateLoading(true)
+      const result = await linkedinAdManagerService.estimateAudience(activeOrgId, '', targetingCriteria)
+      setAudienceEstimate(result)
+    } catch (e: any) {
+      setAudienceEstimate({ estimated_count: null, error: e.message || 'Failed to estimate' })
+    } finally {
+      setEstimateLoading(false)
+    }
+  }, [ready, activeOrgId])
+
+  // ---------------------------------------------------------------------------
   // Initial load
   // ---------------------------------------------------------------------------
 
@@ -258,7 +337,8 @@ export function useLinkedInAdManager() {
     loadCampaigns()
     loadGroups()
     loadApprovals()
-  }, [ready, loadCampaigns, loadGroups, loadApprovals])
+    loadAudiences()
+  }, [ready, loadCampaigns, loadGroups, loadApprovals, loadAudiences])
 
   return {
     // Campaigns
@@ -290,6 +370,16 @@ export function useLinkedInAdManager() {
     // Sync
     syncing,
     syncCampaigns,
+    // Audiences
+    audiences,
+    audiencesLoading,
+    audienceEstimate,
+    estimateLoading,
+    loadAudiences,
+    createAudience: createAudience as (params: Omit<CreateAudienceParams, 'org_id'> & { ad_account_id: string }) => Promise<MatchedAudience | null>,
+    deleteAudience,
+    uploadAudienceMembers,
+    estimateAudienceSize,
     // Auth state
     ready,
   }

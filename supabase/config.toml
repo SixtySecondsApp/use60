@@ -57,6 +57,13 @@ verify_jwt = false
 [functions.hubspot-oauth-callback]
 verify_jwt = false
 
+# LinkedIn integration (OAuth callback + lead webhooks must accept non-JWT requests)
+[functions.linkedin-oauth-callback]
+verify_jwt = false
+
+[functions.webhook-linkedin]
+verify_jwt = false
+
 # Health check endpoint - public access for monitoring services
 [functions.health]
 verify_jwt = false

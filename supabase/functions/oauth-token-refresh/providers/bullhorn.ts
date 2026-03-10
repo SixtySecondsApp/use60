@@ -25,7 +25,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 const BULLHORN_CLIENT_ID = Deno.env.get('BULLHORN_CLIENT_ID') || ''
 const BULLHORN_CLIENT_SECRET = Deno.env.get('BULLHORN_CLIENT_SECRET') || ''
 
-Deno.serve(async (req: Request) => {
+export async function handleRefresh(req: Request): Promise<Response> {
   // Handle CORS preflight
   const corsPreflightResponse = handleCorsPreflightRequest(req);
   if (corsPreflightResponse) return corsPreflightResponse;

@@ -15,6 +15,7 @@ import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelpe
  */
 
 const APIFY_ACTOR_ID = 'unlimitedleadtestinbox~linkedin-ads-scraper'
+const APIFY_COMPANY_POST_ACTOR = 'dROPwXpqeCOK9ZRGG'
 const APIFY_API_BASE = 'https://api.apify.com/v2'
 const POLL_INTERVAL_MS = 5_000
 const POLL_MAX_DURATION_MS = 120_000
@@ -24,7 +25,7 @@ const POLL_MAX_DURATION_MS = 120_000
 // ---------------------------------------------------------------------------
 
 interface CaptureRequest {
-  action: 'capture_competitor' | 'capture_keyword' | 'get_status'
+  action: 'capture_competitor' | 'capture_keyword' | 'capture_organic' | 'get_status'
   competitor_name?: string
   competitor_linkedin_url?: string
   keyword?: string
@@ -89,8 +90,9 @@ function buildSearchUrl(competitorName?: string, competitorLinkedInUrl?: string)
 async function startActorRun(
   apifyToken: string,
   input: Record<string, unknown>,
+  actorId: string = APIFY_ACTOR_ID,
 ): Promise<ApifyRunResult> {
-  const url = `${APIFY_API_BASE}/acts/${APIFY_ACTOR_ID}/runs?token=${apifyToken}`
+  const url = `${APIFY_API_BASE}/acts/${actorId}/runs?token=${apifyToken}`
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -414,10 +416,11 @@ async function handleCaptureCompetitor(
     competitor_linkedin_url,
   )
 
-  // Start Apify actor — actor expects startUrls as array of {url} objects
+  // Start Apify actor — actor expects searchUrl (not startUrls) and maxAds (not maxResults)
   const actorInput: Record<string, unknown> = {
-    startUrls: [{ url: searchUrl }],
-    maxResults: 100,
+    searchUrl: searchUrl,
+    maxAds: 100,
+    includeDetailPages: false,
   }
   if (geography) {
     actorInput.geography = geography
@@ -478,8 +481,9 @@ async function handleCaptureKeyword(
   const searchUrl = `https://www.linkedin.com/ad-library/search?q=${encodeURIComponent(keyword)}`
 
   const actorInput: Record<string, unknown> = {
-    startUrls: [{ url: searchUrl }],
-    maxResults: 100,
+    searchUrl: searchUrl,
+    maxAds: 100,
+    includeDetailPages: false,
   }
   if (geography) {
     actorInput.geography = geography
@@ -513,6 +517,136 @@ async function handleCaptureKeyword(
     run_id: runId,
     keyword,
     total_scraped: items.length,
+    inserted,
+    updated,
+  }
+}
+
+async function handleCaptureOrganic(
+  serviceClient: SupabaseClient,
+  apifyToken: string,
+  orgId: string,
+  body: CaptureRequest,
+): Promise<Record<string, unknown>> {
+  const { competitor_name, competitor_linkedin_url } = body
+
+  if (!competitor_name && !competitor_linkedin_url) {
+    throw new Error('Either competitor_name or competitor_linkedin_url is required')
+  }
+
+  // Build company page URL
+  let companyUrl = ''
+  if (competitor_linkedin_url && competitor_linkedin_url.includes('linkedin.com/company/')) {
+    companyUrl = competitor_linkedin_url.replace(/\/posts\/?$/, '').replace(/\/$/, '') + '/'
+  } else if (competitor_name) {
+    const slug = competitor_name.toLowerCase().replace(/[^a-z0-9]/g, '')
+    companyUrl = `https://www.linkedin.com/company/${slug}/`
+  } else {
+    throw new Error('Cannot determine company LinkedIn URL')
+  }
+
+  console.log(`[linkedin-ad-capture] Starting organic capture: ${companyUrl}`)
+
+  // Start company post scraper
+  const run = await startActorRun(apifyToken, {
+    linkedin_url: companyUrl,
+  }, APIFY_COMPANY_POST_ACTOR)
+  const runId = run.id
+
+  // Poll for completion
+  const completedRun = await pollRunCompletion(apifyToken, runId)
+  const items = await fetchDatasetItems(apifyToken, completedRun.defaultDatasetId)
+
+  // Extract posts — actor returns { data: [...posts] } or flat array
+  const posts: Record<string, unknown>[] = []
+  for (const item of items) {
+    const dataArr = Array.isArray(item.data) ? item.data as Record<string, unknown>[] : [item]
+    for (const post of dataArr) {
+      if (typeof post.text === 'string' && post.text.trim()) {
+        posts.push(post)
+      }
+    }
+  }
+
+  console.log(`[linkedin-ad-capture] Got ${posts.length} organic posts from ${competitor_name ?? companyUrl}`)
+
+  // Find watchlist entry
+  const watchlistEntry = await findWatchlistEntry(
+    serviceClient, orgId, competitor_name, competitor_linkedin_url,
+  )
+
+  // Normalize posts into ad format
+  const normalizedAds: NormalizedAd[] = posts.map((post) => {
+    const likes = Number(post.num_likes ?? 0)
+    const comments = Number(post.num_comments ?? 0)
+    const empathy = Number(post.num_empathy ?? 0)
+    const praises = Number(post.num_praises ?? 0)
+    const appreciations = Number(post.num_appreciations ?? 0)
+    const interests = Number(post.num_interests ?? 0)
+    const totalReactions = likes + empathy + praises + appreciations + interests
+    const posterName = (post.poster as Record<string, unknown>)?.name as string | undefined
+    const posterUrl = (post.poster as Record<string, unknown>)?.linkedin_url as string | undefined
+
+    // Extract images
+    const images = (post.images as Array<Record<string, unknown>> ?? [])
+      .map((img) => String(img.url ?? '')).filter(Boolean)
+
+    const postDate = String(post.posted ?? new Date().toISOString())
+
+    return {
+      org_id: orgId,
+      watchlist_id: watchlistEntry?.id ?? null,
+      advertiser_name: posterName ?? competitor_name ?? 'Unknown',
+      advertiser_linkedin_url: posterUrl ?? competitor_linkedin_url ?? null,
+      headline: null,
+      body_text: String(post.text ?? ''),
+      cta_text: null,
+      destination_url: String(post.url ?? ''),
+      media_type: images.length > 1 ? 'carousel' as const
+        : images.length === 1 ? 'image' as const
+        : 'text' as const,
+      media_urls: images,
+      ad_format: 'Organic Post',
+      geography: null,
+      first_seen_at: postDate,
+      last_seen_at: postDate,
+      capture_source: 'organic' as const,
+      capture_run_id: runId,
+      raw_data: {
+        ...post,
+        advertiser_logo_url: null,
+        num_likes: likes,
+        num_comments: comments,
+        num_reactions: totalReactions,
+        engagement_post_url: String(post.url ?? ''),
+      },
+    }
+  })
+
+  // Upsert with dedup
+  const { inserted, updated } = await upsertAds(serviceClient, normalizedAds as NormalizedAd[])
+  console.log(`[linkedin-ad-capture] Organic upsert: ${inserted} inserted, ${updated} updated`)
+
+  // Update engagement columns directly since we have the data
+  for (const ad of normalizedAds) {
+    const raw = ad.raw_data as Record<string, unknown>
+    await serviceClient
+      .from('linkedin_ad_library_ads')
+      .update({
+        num_likes: raw.num_likes,
+        num_comments: raw.num_comments,
+        num_reactions: raw.num_reactions,
+        engagement_post_url: raw.engagement_post_url,
+        engagement_updated_at: new Date().toISOString(),
+      })
+      .eq('org_id', orgId)
+      .eq('body_text', ad.body_text)
+      .eq('advertiser_name', ad.advertiser_name)
+  }
+
+  return {
+    run_id: runId,
+    total_scraped: posts.length,
     inserted,
     updated,
   }
@@ -603,9 +737,9 @@ serve(async (req: Request) => {
     const body = await req.json() as CaptureRequest
     const { action } = body
 
-    if (!action || !['capture_competitor', 'capture_keyword', 'get_status'].includes(action)) {
+    if (!action || !['capture_competitor', 'capture_keyword', 'capture_organic', 'get_status'].includes(action)) {
       return new Response(
-        JSON.stringify({ error: 'Invalid action. Must be one of: capture_competitor, capture_keyword, get_status' }),
+        JSON.stringify({ error: 'Invalid action. Must be one of: capture_competitor, capture_keyword, capture_organic, get_status' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
@@ -687,6 +821,10 @@ serve(async (req: Request) => {
     if (action === 'capture_competitor') {
       result = await handleCaptureCompetitor(
         serviceClient, supabaseUrl, serviceRoleKey, apifyToken, orgId, body,
+      )
+    } else if (action === 'capture_organic') {
+      result = await handleCaptureOrganic(
+        serviceClient, apifyToken, orgId, body,
       )
     } else {
       result = await handleCaptureKeyword(

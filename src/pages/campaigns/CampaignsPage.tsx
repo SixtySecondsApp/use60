@@ -1,10 +1,10 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { toast } from 'sonner'
 import {
   BarChart3, Plus, RefreshCw, ArrowUpDown, Search, Loader2,
   Play, Pause, Archive, Eye, ChevronDown, Shield, Megaphone,
-  Target, DollarSign, MousePointerClick, Users, Layers, CheckCircle2, XCircle,
+  Target, DollarSign, MousePointerClick, Users, Layers, CheckCircle2, XCircle, Trash2, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,8 +16,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Textarea } from '@/components/ui/textarea'
 import { useLinkedInAdManager } from '@/lib/hooks/useLinkedInAdManager'
-import type { ManagedCampaign, ManagedCampaignGroup, CampaignApproval, ManagedCreative } from '@/lib/services/linkedinAdManagerService'
+import type { ManagedCampaign, ManagedCampaignGroup, CampaignApproval, ManagedCreative, MatchedAudience, AudienceEstimate } from '@/lib/services/linkedinAdManagerService'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -107,6 +109,8 @@ export default function CampaignsPage() {
     creatives, creativesLoading, loadCreatives, createCreative,
     approvals, approvalsLoading, loadApprovals, requestApproval, approveAction, rejectAction,
     syncing, syncCampaigns,
+    audiences, audiencesLoading, audienceEstimate, estimateLoading,
+    loadAudiences, createAudience, deleteAudience, estimateAudienceSize,
     ready,
   } = useLinkedInAdManager()
 
@@ -117,6 +121,11 @@ export default function CampaignsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showWizard, setShowWizard] = useState(false)
   const [confirmAction, setConfirmAction] = useState<{ campaignId: string; action: string; campaign: ManagedCampaign } | null>(null)
+  const [showCreateAudience, setShowCreateAudience] = useState(false)
+  const [newAudienceName, setNewAudienceName] = useState('')
+  const [newAudienceType, setNewAudienceType] = useState<'CONTACT_LIST' | 'COMPANY_LIST'>('CONTACT_LIST')
+  const [newAudienceDescription, setNewAudienceDescription] = useState('')
+  const [creatingAudience, setCreatingAudience] = useState(false)
 
   // -- Sorting & Filtering --
 
@@ -188,6 +197,25 @@ export default function CampaignsPage() {
     setSelectedCampaign(campaign)
     await loadCreatives(campaign.id)
   }, [setSelectedCampaign, loadCreatives])
+
+  const handleCreateAudience = useCallback(async () => {
+    if (!newAudienceName.trim()) return
+    setCreatingAudience(true)
+    try {
+      await createAudience({
+        ad_account_id: '',
+        name: newAudienceName.trim(),
+        audience_type: newAudienceType,
+        description: newAudienceDescription.trim() || undefined,
+      })
+      setShowCreateAudience(false)
+      setNewAudienceName('')
+      setNewAudienceType('CONTACT_LIST')
+      setNewAudienceDescription('')
+    } finally {
+      setCreatingAudience(false)
+    }
+  }, [newAudienceName, newAudienceType, newAudienceDescription, createAudience])
 
   // -- Summary stats --
   const stats = useMemo(() => {
@@ -291,6 +319,10 @@ export default function CampaignsPage() {
           <TabsList>
             <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
             <TabsTrigger value="groups">Campaign Groups</TabsTrigger>
+            <TabsTrigger value="audiences">
+              <Users className="h-3.5 w-3.5 mr-1" />
+              Audiences
+            </TabsTrigger>
             <TabsTrigger value="approvals">
               Approvals
               {approvals.length > 0 && (
@@ -492,6 +524,87 @@ export default function CampaignsPage() {
                             : 'Continuous'}
                         </TableCell>
                         <TableCell className="text-zinc-500 text-sm">{formatDate(group.last_synced_at)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* Audiences Tab */}
+          <TabsContent value="audiences" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-zinc-100">Matched Audiences</h2>
+              <Button size="sm" onClick={() => setShowCreateAudience(true)}>
+                <Plus className="h-4 w-4 mr-1" /> New Audience
+              </Button>
+            </div>
+            {audiencesLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12" />)}
+              </div>
+            ) : audiences.length === 0 ? (
+              <Card className="bg-zinc-900 border-zinc-800">
+                <CardContent className="p-12 text-center">
+                  <Users className="h-12 w-12 text-zinc-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-zinc-300 mb-2">No matched audiences</h3>
+                  <p className="text-sm text-zinc-500 mb-4">Create an audience to target contacts or companies from your pipeline</p>
+                  <Button size="sm" onClick={() => setShowCreateAudience(true)}>
+                    <Plus className="h-4 w-4 mr-1" /> New Audience
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="bg-zinc-900 border-zinc-800">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-zinc-800 hover:bg-transparent">
+                      <TableHead>Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="text-right">Members</TableHead>
+                      <TableHead className="text-right">Match Rate</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="w-[60px]" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {audiences.map((audience) => (
+                      <TableRow key={audience.id} className="border-zinc-800">
+                        <TableCell className="font-medium text-zinc-200">
+                          <div>{audience.name}</div>
+                          {audience.description && (
+                            <div className="text-xs text-zinc-500 mt-0.5 truncate max-w-[200px]">{audience.description}</div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-zinc-400 text-sm">
+                          {audience.audience_type === 'CONTACT_LIST' ? 'Contact List' : 'Company List'}
+                        </TableCell>
+                        <TableCell className="text-right text-zinc-300">{formatNumber(audience.member_count)}</TableCell>
+                        <TableCell className="text-right text-zinc-300">
+                          {audience.match_rate != null ? `${(audience.match_rate * 100).toFixed(1)}%` : '--'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={
+                            audience.upload_status === 'READY' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                            audience.upload_status === 'PROCESSING' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                            audience.upload_status === 'PENDING' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                            audience.upload_status === 'FAILED' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                            'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
+                          }>
+                            {audience.upload_status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-zinc-400 text-sm">{audience.source_type ?? '--'}</TableCell>
+                        <TableCell className="text-zinc-500 text-sm">{formatDate(audience.created_at)}</TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Delete audience"
+                            onClick={() => deleteAudience(audience.id)}>
+                            <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -788,7 +901,52 @@ export default function CampaignsPage() {
               }
             }}
             onCancel={() => setShowWizard(false)}
+            audiences={audiences}
+            audienceEstimate={audienceEstimate}
+            estimateLoading={estimateLoading}
+            onEstimateAudience={estimateAudienceSize}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Audience Dialog */}
+      <Dialog open={showCreateAudience} onOpenChange={setShowCreateAudience}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Audience</DialogTitle>
+            <DialogDescription>Create a matched audience to target with your campaigns</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Name</label>
+              <Input placeholder="e.g. Enterprise Decision Makers" className="bg-zinc-800 border-zinc-700"
+                value={newAudienceName} onChange={(e) => setNewAudienceName(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Type</label>
+              <Select value={newAudienceType} onValueChange={(v) => setNewAudienceType(v as 'CONTACT_LIST' | 'COMPANY_LIST')}>
+                <SelectTrigger className="bg-zinc-800 border-zinc-700">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CONTACT_LIST">Contact List</SelectItem>
+                  <SelectItem value="COMPANY_LIST">Company List</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Description (optional)</label>
+              <Textarea placeholder="Describe this audience..." className="bg-zinc-800 border-zinc-700 min-h-[80px]"
+                value={newAudienceDescription} onChange={(e) => setNewAudienceDescription(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateAudience(false)}>Cancel</Button>
+            <Button onClick={handleCreateAudience} disabled={!newAudienceName.trim() || creatingAudience}>
+              {creatingAudience ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+              Create
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
@@ -824,12 +982,270 @@ const BID_STRATEGIES = [
   { value: 'COST_CAP', label: 'Cost Cap', description: 'LinkedIn optimizes within a spending cap' },
 ]
 
+// ---------------------------------------------------------------------------
+// LinkedIn Targeting Taxonomy
+// ---------------------------------------------------------------------------
+
+const SENIORITIES = [
+  { value: 'UNPAID', label: 'Unpaid' },
+  { value: 'TRAINING', label: 'Training' },
+  { value: 'ENTRY', label: 'Entry' },
+  { value: 'SENIOR', label: 'Senior' },
+  { value: 'MANAGER', label: 'Manager' },
+  { value: 'DIRECTOR', label: 'Director' },
+  { value: 'VP', label: 'VP' },
+  { value: 'CXO', label: 'CXO' },
+  { value: 'PARTNER', label: 'Partner' },
+  { value: 'OWNER', label: 'Owner' },
+]
+
+const JOB_FUNCTIONS = [
+  { value: 'ACCOUNTING', label: 'Accounting' },
+  { value: 'ADMINISTRATIVE', label: 'Administrative' },
+  { value: 'ARTS_AND_DESIGN', label: 'Arts & Design' },
+  { value: 'BUSINESS_DEVELOPMENT', label: 'Business Development' },
+  { value: 'COMMUNITY_AND_SOCIAL_SERVICES', label: 'Community & Social Services' },
+  { value: 'CONSULTING', label: 'Consulting' },
+  { value: 'EDUCATION', label: 'Education' },
+  { value: 'ENGINEERING', label: 'Engineering' },
+  { value: 'ENTREPRENEURSHIP', label: 'Entrepreneurship' },
+  { value: 'FINANCE', label: 'Finance' },
+  { value: 'HEALTHCARE_SERVICES', label: 'Healthcare Services' },
+  { value: 'HUMAN_RESOURCES', label: 'Human Resources' },
+  { value: 'INFORMATION_TECHNOLOGY', label: 'Information Technology' },
+  { value: 'LEGAL', label: 'Legal' },
+  { value: 'MARKETING', label: 'Marketing' },
+  { value: 'MEDIA_AND_COMMUNICATION', label: 'Media & Communication' },
+  { value: 'MILITARY_AND_PROTECTIVE_SERVICES', label: 'Military & Protective Services' },
+  { value: 'OPERATIONS', label: 'Operations' },
+  { value: 'PRODUCT_MANAGEMENT', label: 'Product Management' },
+  { value: 'PROGRAM_AND_PROJECT_MANAGEMENT', label: 'Program & Project Management' },
+  { value: 'PURCHASING', label: 'Purchasing' },
+  { value: 'QUALITY_ASSURANCE', label: 'Quality Assurance' },
+  { value: 'REAL_ESTATE', label: 'Real Estate' },
+  { value: 'RESEARCH', label: 'Research' },
+  { value: 'SALES', label: 'Sales' },
+  { value: 'SUPPORT', label: 'Support' },
+]
+
+const TARGETING_INDUSTRIES = [
+  { value: 'COMPUTER_SOFTWARE', label: 'Computer Software' },
+  { value: 'INFORMATION_TECHNOLOGY', label: 'Information Technology & Services' },
+  { value: 'FINANCIAL_SERVICES', label: 'Financial Services' },
+  { value: 'BANKING', label: 'Banking' },
+  { value: 'INSURANCE', label: 'Insurance' },
+  { value: 'HOSPITAL_AND_HEALTH_CARE', label: 'Hospital & Health Care' },
+  { value: 'PHARMACEUTICALS', label: 'Pharmaceuticals' },
+  { value: 'BIOTECHNOLOGY', label: 'Biotechnology' },
+  { value: 'MARKETING_AND_ADVERTISING', label: 'Marketing & Advertising' },
+  { value: 'MANAGEMENT_CONSULTING', label: 'Management Consulting' },
+  { value: 'RETAIL', label: 'Retail' },
+  { value: 'CONSUMER_GOODS', label: 'Consumer Goods' },
+  { value: 'REAL_ESTATE', label: 'Real Estate' },
+  { value: 'CONSTRUCTION', label: 'Construction' },
+  { value: 'EDUCATION_MANAGEMENT', label: 'Education Management' },
+  { value: 'HIGHER_EDUCATION', label: 'Higher Education' },
+  { value: 'TELECOMMUNICATIONS', label: 'Telecommunications' },
+  { value: 'MEDIA_AND_ENTERTAINMENT', label: 'Media & Entertainment' },
+  { value: 'AUTOMOTIVE', label: 'Automotive' },
+  { value: 'MANUFACTURING', label: 'Manufacturing' },
+  { value: 'FOOD_AND_BEVERAGES', label: 'Food & Beverages' },
+  { value: 'TRANSPORTATION', label: 'Transportation' },
+  { value: 'LOGISTICS_AND_SUPPLY_CHAIN', label: 'Logistics & Supply Chain' },
+  { value: 'GOVERNMENT', label: 'Government Administration' },
+  { value: 'NONPROFIT', label: 'Nonprofit Organization Management' },
+  { value: 'LEGAL_SERVICES', label: 'Legal Services' },
+  { value: 'ENERGY', label: 'Oil & Energy' },
+  { value: 'STAFFING_AND_RECRUITING', label: 'Staffing & Recruiting' },
+  { value: 'DESIGN', label: 'Design' },
+]
+
+const COMPANY_SIZES = [
+  { value: 'SIZE_1', label: 'Myself only (1)' },
+  { value: 'SIZE_2_10', label: '2-10 employees' },
+  { value: 'SIZE_11_50', label: '11-50 employees' },
+  { value: 'SIZE_51_200', label: '51-200 employees' },
+  { value: 'SIZE_201_500', label: '201-500 employees' },
+  { value: 'SIZE_501_1000', label: '501-1,000 employees' },
+  { value: 'SIZE_1001_5000', label: '1,001-5,000 employees' },
+  { value: 'SIZE_5001_10000', label: '5,001-10,000 employees' },
+  { value: 'SIZE_10001_PLUS', label: '10,001+ employees' },
+]
+
+const TARGETING_GEOGRAPHIES = [
+  { value: 'US', label: 'United States' },
+  { value: 'GB', label: 'United Kingdom' },
+  { value: 'CA', label: 'Canada' },
+  { value: 'AU', label: 'Australia' },
+  { value: 'DE', label: 'Germany' },
+  { value: 'FR', label: 'France' },
+  { value: 'NL', label: 'Netherlands' },
+  { value: 'IE', label: 'Ireland' },
+  { value: 'SE', label: 'Sweden' },
+  { value: 'DK', label: 'Denmark' },
+  { value: 'FI', label: 'Finland' },
+  { value: 'CH', label: 'Switzerland' },
+  { value: 'AT', label: 'Austria' },
+  { value: 'BE', label: 'Belgium' },
+  { value: 'ES', label: 'Spain' },
+  { value: 'IT', label: 'Italy' },
+  { value: 'PT', label: 'Portugal' },
+  { value: 'PL', label: 'Poland' },
+  { value: 'IN', label: 'India' },
+  { value: 'SG', label: 'Singapore' },
+  { value: 'JP', label: 'Japan' },
+  { value: 'AE', label: 'United Arab Emirates' },
+  { value: 'SA', label: 'Saudi Arabia' },
+  { value: 'IL', label: 'Israel' },
+  { value: 'BR', label: 'Brazil' },
+  { value: 'MX', label: 'Mexico' },
+  { value: 'ZA', label: 'South Africa' },
+  { value: 'NZ', label: 'New Zealand' },
+  { value: 'HK', label: 'Hong Kong' },
+  { value: 'MY', label: 'Malaysia' },
+  { value: 'PH', label: 'Philippines' },
+  { value: 'ID', label: 'Indonesia' },
+  { value: 'TH', label: 'Thailand' },
+]
+
+const EU_COUNTRIES = ['DE', 'FR', 'NL', 'IE', 'SE', 'DK', 'FI', 'CH', 'AT', 'BE', 'ES', 'IT', 'PT', 'PL']
+
+// ---------------------------------------------------------------------------
+// Multi-Select Component
+// ---------------------------------------------------------------------------
+
+function TargetingMultiSelect({
+  label,
+  options,
+  selected,
+  onChange,
+  searchable = false,
+}: {
+  label: string
+  options: { value: string; label: string }[]
+  selected: string[]
+  onChange: (values: string[]) => void
+  searchable?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  const filtered = searchable && search
+    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    : options
+
+  const toggle = (value: string) => {
+    onChange(
+      selected.includes(value)
+        ? selected.filter((v) => v !== value)
+        : [...selected, value]
+    )
+  }
+
+  const selectedLabels = selected
+    .map((v) => options.find((o) => o.value === v)?.label)
+    .filter(Boolean)
+
+  // Close on click outside
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <label className="text-xs text-zinc-400 mb-1 block">{label}</label>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-left min-h-[36px] hover:border-zinc-600 transition-colors"
+      >
+        <span className="flex-1 truncate text-sm">
+          {selected.length === 0 ? (
+            <span className="text-zinc-500">Select {label.toLowerCase()}...</span>
+          ) : (
+            <span className="text-zinc-200">{selected.length} selected</span>
+          )}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-zinc-500 shrink-0 ml-2 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="mt-1 bg-zinc-900 border border-zinc-700 rounded-md shadow-lg">
+          {searchable && (
+            <div className="p-2 border-b border-zinc-700">
+              <Input
+                placeholder={`Search ${label.toLowerCase()}...`}
+                className="bg-zinc-800 border-zinc-700 h-8 text-sm"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+          )}
+          <div className="max-h-[200px] overflow-y-auto overscroll-contain p-2 space-y-0.5">
+            {filtered.map((option) => (
+              <label
+                key={option.value}
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800 cursor-pointer"
+              >
+                <Checkbox
+                  checked={selected.includes(option.value)}
+                  onCheckedChange={() => toggle(option.value)}
+                  className="border-zinc-600"
+                />
+                <span className="text-sm text-zinc-300">{option.label}</span>
+              </label>
+            ))}
+            {filtered.length === 0 && (
+              <p className="text-xs text-zinc-500 text-center py-4">No results</p>
+            )}
+          </div>
+          {selected.length > 0 && (
+            <div className="p-2 border-t border-zinc-700">
+              <button
+                type="button"
+                className="w-full text-xs text-zinc-400 hover:text-zinc-300 py-1"
+                onClick={() => onChange([])}
+              >
+                Clear all ({selected.length})
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {selectedLabels.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {selectedLabels.slice(0, 5).map((lbl) => (
+            <Badge key={lbl} variant="outline" className="text-[10px] bg-zinc-800 border-zinc-700 text-zinc-300">
+              {lbl}
+            </Badge>
+          ))}
+          {selectedLabels.length > 5 && (
+            <Badge variant="outline" className="text-[10px] bg-zinc-800 border-zinc-700 text-zinc-400">
+              +{selectedLabels.length - 5} more
+            </Badge>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface WizardProps {
   onComplete: (params: { ad_account_id: string; name: string; objective_type: string; format?: string; targeting_criteria?: Record<string, any>; daily_budget_amount?: number; total_budget_amount?: number; currency_code?: string; cost_type?: string; unit_cost_amount?: number; run_schedule_start?: string; run_schedule_end?: string; pacing_strategy?: string }) => void
   onCancel: () => void
+  audiences?: MatchedAudience[]
+  audienceEstimate?: AudienceEstimate | null
+  estimateLoading?: boolean
+  onEstimateAudience?: (criteria: Record<string, any>) => void
 }
 
-function CampaignWizard({ onComplete, onCancel }: WizardProps) {
+function CampaignWizard({ onComplete, onCancel, audiences = [], audienceEstimate, estimateLoading, onEstimateAudience }: WizardProps) {
   const [step, setStep] = useState(1)
   const TOTAL_STEPS = 5
 
@@ -840,11 +1256,12 @@ function CampaignWizard({ onComplete, onCancel }: WizardProps) {
   const [format, setFormat] = useState('')
 
   // Step 3: Targeting
-  const [jobTitles, setJobTitles] = useState('')
-  const [industries, setIndustries] = useState('')
-  const [seniorities, setSeniorities] = useState('')
-  const [geographies, setGeographies] = useState('')
-  const [companies, setCompanies] = useState('')
+  const [jobFunctions, setJobFunctions] = useState<string[]>([])
+  const [selectedIndustries, setSelectedIndustries] = useState<string[]>([])
+  const [selectedSeniorities, setSelectedSeniorities] = useState<string[]>([])
+  const [companySizes, setCompanySizes] = useState<string[]>([])
+  const [selectedGeographies, setSelectedGeographies] = useState<string[]>([])
+  const [selectedAudiences, setSelectedAudiences] = useState<string[]>([])
 
   // Step 4: Budget
   const [name, setName] = useState('')
@@ -859,6 +1276,20 @@ function CampaignWizard({ onComplete, onCancel }: WizardProps) {
     return FORMATS.filter((f) => f.objectives.includes(objective))
   }, [objective])
 
+  // Build current targeting criteria for estimate
+  const buildTargetingCriteria = useCallback(() => {
+    const criteria: Record<string, any> = {}
+    if (jobFunctions.length) criteria.job_functions = jobFunctions
+    if (selectedIndustries.length) criteria.industries = selectedIndustries
+    if (selectedSeniorities.length) criteria.seniorities = selectedSeniorities
+    if (companySizes.length) criteria.company_sizes = companySizes
+    if (selectedGeographies.length) criteria.geographies = selectedGeographies
+    if (selectedAudiences.length) criteria.matched_audiences = selectedAudiences
+    return criteria
+  }, [jobFunctions, selectedIndustries, selectedSeniorities, companySizes, selectedGeographies, selectedAudiences])
+
+  const hasTargeting = jobFunctions.length > 0 || selectedIndustries.length > 0 || selectedSeniorities.length > 0 || companySizes.length > 0 || selectedGeographies.length > 0 || selectedAudiences.length > 0
+
   const canAdvance = () => {
     switch (step) {
       case 1: return !!objective
@@ -870,13 +1301,16 @@ function CampaignWizard({ onComplete, onCancel }: WizardProps) {
     }
   }
 
+  const hasEuTargeting = selectedGeographies.some((g) => EU_COUNTRIES.includes(g))
+
   const handleCreate = () => {
     const targeting: Record<string, any> = {}
-    if (jobTitles.trim()) targeting.job_titles = jobTitles.split(',').map((s) => s.trim()).filter(Boolean)
-    if (industries.trim()) targeting.industries = industries.split(',').map((s) => s.trim()).filter(Boolean)
-    if (seniorities.trim()) targeting.seniorities = seniorities.split(',').map((s) => s.trim()).filter(Boolean)
-    if (geographies.trim()) targeting.geographies = geographies.split(',').map((s) => s.trim()).filter(Boolean)
-    if (companies.trim()) targeting.companies = companies.split(',').map((s) => s.trim()).filter(Boolean)
+    if (jobFunctions.length) targeting.job_functions = jobFunctions
+    if (selectedIndustries.length) targeting.industries = selectedIndustries
+    if (selectedSeniorities.length) targeting.seniorities = selectedSeniorities
+    if (companySizes.length) targeting.company_sizes = companySizes
+    if (selectedGeographies.length) targeting.geographies = selectedGeographies
+    if (selectedAudiences.length) targeting.matched_audiences = selectedAudiences
 
     onComplete({
       ad_account_id: '', // Will be filled from org integration
@@ -914,8 +1348,8 @@ function CampaignWizard({ onComplete, onCancel }: WizardProps) {
                 key={obj.value}
                 className={`cursor-pointer transition-colors ${
                   objective === obj.value
-                    ? 'bg-blue-500/10 border-blue-500/40'
-                    : 'bg-zinc-800/50 border-zinc-700/50 hover:border-zinc-600'
+                    ? '!bg-blue-500/10 !border-blue-500/40 ring-1 ring-blue-500/30'
+                    : '!bg-zinc-800/50 !border-zinc-700/50 hover:!border-zinc-600'
                 }`}
                 onClick={() => setObjective(obj.value)}
               >
@@ -940,8 +1374,8 @@ function CampaignWizard({ onComplete, onCancel }: WizardProps) {
                 key={fmt.value}
                 className={`cursor-pointer transition-colors ${
                   format === fmt.value
-                    ? 'bg-blue-500/10 border-blue-500/40'
-                    : 'bg-zinc-800/50 border-zinc-700/50 hover:border-zinc-600'
+                    ? '!bg-blue-500/10 !border-blue-500/40 ring-1 ring-blue-500/30'
+                    : '!bg-zinc-800/50 !border-zinc-700/50 hover:!border-zinc-600'
                 }`}
                 onClick={() => setFormat(fmt.value)}
               >
@@ -958,34 +1392,145 @@ function CampaignWizard({ onComplete, onCancel }: WizardProps) {
       {step === 3 && (
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-zinc-300">Define your audience</h3>
-          <p className="text-xs text-zinc-500">Comma-separated values. Leave empty to skip.</p>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Job Titles</label>
-              <Input placeholder="VP of Sales, Head of Marketing..." className="bg-zinc-800 border-zinc-700"
-                value={jobTitles} onChange={(e) => setJobTitles(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Industries</label>
-              <Input placeholder="SaaS, Financial Services..." className="bg-zinc-800 border-zinc-700"
-                value={industries} onChange={(e) => setIndustries(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Seniority Levels</label>
-              <Input placeholder="Director, VP, C-Suite..." className="bg-zinc-800 border-zinc-700"
-                value={seniorities} onChange={(e) => setSeniorities(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Geographies</label>
-              <Input placeholder="United States, United Kingdom..." className="bg-zinc-800 border-zinc-700"
-                value={geographies} onChange={(e) => setGeographies(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Companies</label>
-              <Input placeholder="Salesforce, HubSpot..." className="bg-zinc-800 border-zinc-700"
-                value={companies} onChange={(e) => setCompanies(e.target.value)} />
-            </div>
+          <p className="text-xs text-zinc-500">Select targeting criteria. All fields are optional.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <TargetingMultiSelect
+              label="Job Functions"
+              options={JOB_FUNCTIONS}
+              selected={jobFunctions}
+              onChange={setJobFunctions}
+              searchable
+            />
+            <TargetingMultiSelect
+              label="Seniority"
+              options={SENIORITIES}
+              selected={selectedSeniorities}
+              onChange={setSelectedSeniorities}
+            />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <TargetingMultiSelect
+              label="Industries"
+              options={TARGETING_INDUSTRIES}
+              selected={selectedIndustries}
+              onChange={setSelectedIndustries}
+              searchable
+            />
+            <TargetingMultiSelect
+              label="Company Size"
+              options={COMPANY_SIZES}
+              selected={companySizes}
+              onChange={setCompanySizes}
+            />
+          </div>
+          <TargetingMultiSelect
+            label="Geographies"
+            options={TARGETING_GEOGRAPHIES}
+            selected={selectedGeographies}
+            onChange={setSelectedGeographies}
+            searchable
+          />
+          {hasEuTargeting && (
+            <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+              <Shield className="h-4 w-4 text-yellow-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-yellow-300">
+                EU-targeted campaigns may be subject to political advertising regulations.
+              </p>
+            </div>
+          )}
+
+          {/* Matched Audiences selector */}
+          {audiences.length > 0 && (
+            <>
+              <div className="border-t border-zinc-700 pt-3">
+                <label className="text-xs text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5" /> Matched Audiences
+                </label>
+                <Select
+                  value=""
+                  onValueChange={(id) => {
+                    if (!selectedAudiences.includes(id)) {
+                      setSelectedAudiences((prev) => [...prev, id])
+                    }
+                  }}
+                >
+                  <SelectTrigger className="bg-zinc-800 border-zinc-700">
+                    <SelectValue placeholder="Add a matched audience..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {audiences
+                      .filter((a) => !selectedAudiences.includes(a.id))
+                      .map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.name} ({a.audience_type === 'CONTACT_LIST' ? 'Contacts' : 'Companies'})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {selectedAudiences.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {selectedAudiences.map((id) => {
+                      const aud = audiences.find((a) => a.id === id)
+                      return (
+                        <Badge key={id} variant="secondary" className="bg-blue-500/10 text-blue-400 border-blue-500/20 pr-1">
+                          {aud?.name ?? id.slice(0, 8)}
+                          <button
+                            type="button"
+                            className="ml-1 hover:text-blue-200"
+                            onClick={() => setSelectedAudiences((prev) => prev.filter((a) => a !== id))}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Audience size estimate */}
+          {hasTargeting && (
+            <div className="border-t border-zinc-700 pt-3">
+              {estimateLoading ? (
+                <div className="flex items-center gap-2 text-xs text-zinc-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Estimating audience size...
+                </div>
+              ) : audienceEstimate?.estimated_count != null ? (
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <Users className="h-3.5 w-3.5 text-blue-400" />
+                  ~{formatNumber(audienceEstimate.estimated_count)} members match
+                  <button
+                    type="button"
+                    className="ml-auto text-zinc-500 hover:text-zinc-300"
+                    onClick={() => onEstimateAudience?.(buildTargetingCriteria())}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : audienceEstimate?.error ? (
+                <div className="space-y-1">
+                  <div className="text-xs text-zinc-500">{audienceEstimate.error}</div>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300"
+                    onClick={() => onEstimateAudience?.(buildTargetingCriteria())}
+                  >
+                    <RefreshCw className="h-3 w-3" /> Retry estimate
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300"
+                  onClick={() => onEstimateAudience?.(buildTargetingCriteria())}
+                >
+                  <Users className="h-3.5 w-3.5" /> Estimate audience size
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1062,9 +1607,19 @@ function CampaignWizard({ onComplete, onCancel }: WizardProps) {
             <div className="flex justify-between"><span className="text-zinc-500">Format</span><span className="text-zinc-200">{FORMAT_LABELS[format]}</span></div>
             <div className="flex justify-between"><span className="text-zinc-500">Budget</span><span className="text-zinc-200">${budgetAmount} {budgetType}</span></div>
             <div className="flex justify-between"><span className="text-zinc-500">Bid Strategy</span><span className="text-zinc-200">{costType}{bidAmount ? ` ($${bidAmount})` : ''}</span></div>
-            {jobTitles && <div className="flex justify-between"><span className="text-zinc-500">Job Titles</span><span className="text-zinc-200 text-right max-w-[200px] truncate">{jobTitles}</span></div>}
-            {industries && <div className="flex justify-between"><span className="text-zinc-500">Industries</span><span className="text-zinc-200 text-right max-w-[200px] truncate">{industries}</span></div>}
-            {geographies && <div className="flex justify-between"><span className="text-zinc-500">Geographies</span><span className="text-zinc-200 text-right max-w-[200px] truncate">{geographies}</span></div>}
+            {jobFunctions.length > 0 && <div className="flex justify-between"><span className="text-zinc-500">Job Functions</span><span className="text-zinc-200 text-right max-w-[200px] truncate">{jobFunctions.map((v) => JOB_FUNCTIONS.find((o) => o.value === v)?.label ?? v).join(', ')}</span></div>}
+            {selectedSeniorities.length > 0 && <div className="flex justify-between"><span className="text-zinc-500">Seniorities</span><span className="text-zinc-200 text-right max-w-[200px] truncate">{selectedSeniorities.map((v) => SENIORITIES.find((o) => o.value === v)?.label ?? v).join(', ')}</span></div>}
+            {selectedIndustries.length > 0 && <div className="flex justify-between"><span className="text-zinc-500">Industries</span><span className="text-zinc-200 text-right max-w-[200px] truncate">{selectedIndustries.map((v) => TARGETING_INDUSTRIES.find((o) => o.value === v)?.label ?? v).join(', ')}</span></div>}
+            {companySizes.length > 0 && <div className="flex justify-between"><span className="text-zinc-500">Company Sizes</span><span className="text-zinc-200 text-right max-w-[200px] truncate">{companySizes.map((v) => COMPANY_SIZES.find((o) => o.value === v)?.label ?? v).join(', ')}</span></div>}
+            {selectedGeographies.length > 0 && <div className="flex justify-between"><span className="text-zinc-500">Geographies</span><span className="text-zinc-200 text-right max-w-[200px] truncate">{selectedGeographies.map((v) => TARGETING_GEOGRAPHIES.find((o) => o.value === v)?.label ?? v).join(', ')}</span></div>}
+            {selectedAudiences.length > 0 && (
+              <div className="flex justify-between">
+                <span className="text-zinc-500">Audiences</span>
+                <span className="text-zinc-200 text-right max-w-[200px]">
+                  {selectedAudiences.map((id) => audiences.find((a) => a.id === id)?.name ?? id.slice(0, 8)).join(', ')}
+                </span>
+              </div>
+            )}
             {scheduleStart && <div className="flex justify-between"><span className="text-zinc-500">Schedule</span><span className="text-zinc-200">{scheduleStart} - {scheduleEnd || 'No end'}</span></div>}
             <div className="flex justify-between pt-2 border-t border-zinc-700">
               <span className="text-zinc-500">Status</span>

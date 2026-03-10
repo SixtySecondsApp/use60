@@ -176,6 +176,56 @@ export interface SyncResult {
   drift_detected: number
 }
 
+export interface MatchedAudience {
+  id: string
+  org_id: string
+  ad_account_id: string
+  linkedin_segment_id: string | null
+  name: string
+  audience_type: 'CONTACT_LIST' | 'COMPANY_LIST'
+  description: string | null
+  member_count: number
+  match_rate: number | null
+  upload_status: 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED' | 'EXPIRED'
+  source_type: string | null
+  source_table_id: string | null
+  source_row_count: number | null
+  last_upload_at: string | null
+  error_message: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AudienceEstimate {
+  estimated_count: number | null
+  error?: string
+}
+
+export interface CreateAudienceParams {
+  org_id: string
+  ad_account_id: string
+  name: string
+  audience_type: 'CONTACT_LIST' | 'COMPANY_LIST'
+  description?: string
+}
+
+export interface UploadAudienceMembersParams {
+  audience_id: string
+  members: Array<{ email?: string; company_name?: string; domain?: string }>
+}
+
+export interface PushOpsToAudienceParams {
+  org_id: string
+  ad_account_id: string
+  table_id: string
+  row_ids: string[]
+  field_mapping: { email_column_id?: string; company_column_id?: string; domain_column_id?: string }
+  audience_id?: string
+  audience_name?: string
+  audience_type?: 'CONTACT_LIST' | 'COMPANY_LIST'
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -342,6 +392,70 @@ class LinkedInAdManagerService {
     if (error) throw new Error(error.message || 'Failed to load pending approvals')
     if (data?.error) throw new Error(data.error)
     return (data?.approvals ?? data ?? []) as CampaignApproval[]
+  }
+
+  // -- Audiences --
+
+  async estimateAudience(orgId: string, adAccountId: string, targetingCriteria: Record<string, any>): Promise<AudienceEstimate> {
+    const { data, error } = await supabase.functions.invoke('linkedin-campaign-manager', {
+      body: { action: 'estimate_audience', org_id: orgId, ad_account_id: adAccountId, targeting_criteria: targetingCriteria },
+    })
+    if (error) throw new Error(error.message || 'Failed to estimate audience')
+    if (data?.error) throw new Error(data.error)
+    return (data?.estimate ?? data) as AudienceEstimate
+  }
+
+  async listAudiences(orgId: string): Promise<MatchedAudience[]> {
+    const { data, error } = await supabase.functions.invoke('linkedin-campaign-manager', {
+      body: { action: 'list_audiences', org_id: orgId },
+    })
+    if (error) throw new Error(error.message || 'Failed to load audiences')
+    if (data?.error) throw new Error(data.error)
+    return (data?.audiences ?? data ?? []) as MatchedAudience[]
+  }
+
+  async createAudience(params: CreateAudienceParams): Promise<MatchedAudience> {
+    const { data, error } = await supabase.functions.invoke('linkedin-campaign-manager', {
+      body: { action: 'create_audience', ...params },
+    })
+    if (error) throw new Error(error.message || 'Failed to create audience')
+    if (data?.error) throw new Error(data.error)
+    return (data?.audience ?? data) as MatchedAudience
+  }
+
+  async uploadAudienceMembers(params: UploadAudienceMembersParams): Promise<{ uploaded_count: number }> {
+    const { data, error } = await supabase.functions.invoke('linkedin-campaign-manager', {
+      body: { action: 'upload_audience_members', ...params },
+    })
+    if (error) throw new Error(error.message || 'Failed to upload audience members')
+    if (data?.error) throw new Error(data.error)
+    return (data ?? { uploaded_count: 0 }) as { uploaded_count: number }
+  }
+
+  async deleteAudience(audienceId: string): Promise<void> {
+    const { data, error } = await supabase.functions.invoke('linkedin-campaign-manager', {
+      body: { action: 'delete_audience', audience_id: audienceId },
+    })
+    if (error) throw new Error(error.message || 'Failed to delete audience')
+    if (data?.error) throw new Error(data.error)
+  }
+
+  async syncAudienceStatus(audienceId: string): Promise<MatchedAudience> {
+    const { data, error } = await supabase.functions.invoke('linkedin-campaign-manager', {
+      body: { action: 'sync_audience_status', audience_id: audienceId },
+    })
+    if (error) throw new Error(error.message || 'Failed to sync audience status')
+    if (data?.error) throw new Error(data.error)
+    return (data?.audience ?? data) as MatchedAudience
+  }
+
+  async pushOpsToAudience(params: PushOpsToAudienceParams): Promise<MatchedAudience> {
+    const { data, error } = await supabase.functions.invoke('linkedin-campaign-manager', {
+      body: { action: 'push_ops_to_audience', ...params },
+    })
+    if (error) throw new Error(error.message || 'Failed to push ops to audience')
+    if (data?.error) throw new Error(data.error)
+    return (data?.audience ?? data) as MatchedAudience
   }
 }
 

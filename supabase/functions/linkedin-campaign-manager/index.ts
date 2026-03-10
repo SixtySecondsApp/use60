@@ -13,16 +13,20 @@ import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse
 //   Campaign Groups: list_groups, create_group, update_group
 //   Campaigns:       list_campaigns, get_campaign, create_campaign, update_campaign, update_status
 //   Creatives:       list_creatives, create_creative, update_creative
+//   Audiences:       estimate_audience, list_audiences, create_audience, upload_audience_members,
+//                    delete_audience, sync_audience_status, push_ops_to_audience
 // ---------------------------------------------------------------------------
 
 const LOG_PREFIX = '[linkedin-campaign-manager]'
 const LINKEDIN_API_BASE = 'https://api.linkedin.com/rest'
-const LINKEDIN_API_VERSION = '202405'
+const LINKEDIN_API_VERSION = '202511'
 
 const VALID_ACTIONS = [
   'list_groups', 'create_group', 'update_group',
   'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign', 'update_status',
   'list_creatives', 'create_creative', 'update_creative',
+  'estimate_audience', 'list_audiences', 'create_audience', 'upload_audience_members',
+  'delete_audience', 'sync_audience_status', 'push_ops_to_audience',
 ] as const
 
 type Action = typeof VALID_ACTIONS[number]
@@ -133,9 +137,9 @@ async function validateOrgMembership(
 ): Promise<void> {
   const { data, error } = await serviceClient
     .from('organization_memberships')
-    .select('id')
+    .select('org_id')
     .eq('user_id', userId)
-    .eq('organization_id', orgId)
+    .eq('org_id', orgId)
     .maybeSingle()
 
   if (error || !data) {
@@ -887,6 +891,626 @@ async function handleUpdateCreative(
 }
 
 // ---------------------------------------------------------------------------
+// Audience handlers
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// LinkedIn URN ID mappings
+// ---------------------------------------------------------------------------
+
+const GEO_IDS: Record<string, string> = {
+  US: '103644278', GB: '101165590', CA: '101174742', AU: '101452733',
+  DE: '101282230', FR: '105015875', NL: '102890719', IE: '104738515',
+  SE: '105117694', NO: '103819153', DK: '104514075', FI: '100456013',
+  BE: '100565514', AT: '103883259', CH: '106693272', ES: '105646813',
+  IT: '103350119', PT: '100364837', PL: '105072130', CZ: '104508036',
+  RO: '106670623', HU: '100288700', BG: '105333783', HR: '104688944',
+  GR: '104677530', SK: '103061721', SI: '106137034', LT: '101464403',
+  LV: '104541993', EE: '102974008', CY: '104803721', MT: '100475185',
+  LU: '104042105', IN: '102713980', SG: '102454443', JP: '101355337',
+  BR: '106057199', MX: '103323778', AE: '104305776', SA: '100459316',
+  IL: '101620260', ZA: '104035573', NZ: '105490917', HK: '103291313',
+  KR: '105149562', NI: '100947516',
+}
+
+const INDUSTRY_IDS: Record<string, string> = {
+  COMPUTER_SOFTWARE: '4', INFORMATION_TECHNOLOGY: '96', FINANCIAL_SERVICES: '43',
+  BANKING: '41', INSURANCE: '42', HOSPITAL_AND_HEALTH_CARE: '14',
+  PHARMACEUTICALS: '82', BIOTECHNOLOGY: '49', MARKETING_AND_ADVERTISING: '80',
+  MANAGEMENT_CONSULTING: '11', RETAIL: '27', CONSUMER_GOODS: '25',
+  REAL_ESTATE: '44', CONSTRUCTION: '48', EDUCATION_MANAGEMENT: '69',
+  HIGHER_EDUCATION: '68', TELECOMMUNICATIONS: '8', MEDIA_AND_ENTERTAINMENT: '39',
+  AUTOMOTIVE: '53', MANUFACTURING: '56', FOOD_AND_BEVERAGES: '34',
+  TRANSPORTATION: '92', LOGISTICS_AND_SUPPLY_CHAIN: '150', GOVERNMENT: '75',
+  NONPROFIT: '84', LEGAL_SERVICES: '10', ENERGY: '57',
+  STAFFING_AND_RECRUITING: '104', DESIGN: '36',
+}
+
+const JOB_FUNCTION_IDS: Record<string, string> = {
+  ACCOUNTING: '1', ADMINISTRATIVE: '2', ARTS_AND_DESIGN: '3',
+  BUSINESS_DEVELOPMENT: '4', COMMUNITY_AND_SOCIAL_SERVICES: '5',
+  CONSULTING: '6', EDUCATION: '7', ENGINEERING: '8',
+  ENTREPRENEURSHIP: '9', FINANCE: '10', HEALTHCARE_SERVICES: '11',
+  HUMAN_RESOURCES: '12', INFORMATION_TECHNOLOGY: '13', LEGAL: '14',
+  MARKETING: '15', MEDIA_AND_COMMUNICATION: '16',
+  MILITARY_AND_PROTECTIVE_SERVICES: '17', OPERATIONS: '18',
+  PRODUCT_MANAGEMENT: '19', PROGRAM_AND_PROJECT_MANAGEMENT: '20',
+  PURCHASING: '21', QUALITY_ASSURANCE: '22', REAL_ESTATE: '23',
+  RESEARCH: '24', SALES: '25', SUPPORT: '26',
+}
+
+const SENIORITY_IDS: Record<string, string> = {
+  UNPAID: '1', TRAINING: '2', ENTRY: '3', SENIOR: '4',
+  MANAGER: '5', DIRECTOR: '6', VP: '7', CXO: '8',
+  PARTNER: '9', OWNER: '10',
+}
+
+const STAFF_COUNT_IDS: Record<string, string> = {
+  SIZE_1: '1', SIZE_2_10: '2', SIZE_11_50: '3', SIZE_51_200: '4',
+  SIZE_201_500: '5', SIZE_501_1000: '6', SIZE_1001_5000: '7',
+  SIZE_5001_10000: '8', SIZE_10001_PLUS: '9',
+}
+
+/** Map our targeting criteria keys to LinkedIn facet URNs */
+function buildTargetingFacets(
+  targeting: Record<string, any>,
+): Array<{ type: string; values: string[] }> {
+  const facets: Array<{ type: string; values: string[] }> = []
+
+  if (targeting.job_functions?.length) {
+    const values = targeting.job_functions
+      .map((v: string) => v.startsWith('urn:') ? v : JOB_FUNCTION_IDS[v] ? `urn:li:function:${JOB_FUNCTION_IDS[v]}` : null)
+      .filter(Boolean)
+    if (values.length) facets.push({ type: 'jobFunctions', values })
+  }
+
+  if (targeting.seniorities?.length) {
+    const values = targeting.seniorities
+      .map((v: string) => v.startsWith('urn:') ? v : SENIORITY_IDS[v] ? `urn:li:seniority:${SENIORITY_IDS[v]}` : null)
+      .filter(Boolean)
+    if (values.length) facets.push({ type: 'seniorities', values })
+  }
+
+  if (targeting.industries?.length) {
+    const values = targeting.industries
+      .map((v: string) => v.startsWith('urn:') ? v : INDUSTRY_IDS[v] ? `urn:li:industry:${INDUSTRY_IDS[v]}` : null)
+      .filter(Boolean)
+    if (values.length) facets.push({ type: 'industries', values })
+  }
+
+  if (targeting.company_sizes?.length) {
+    const values = targeting.company_sizes
+      .map((v: string) => v.startsWith('urn:') ? v : STAFF_COUNT_IDS[v] ? `urn:li:staffCountRange:${STAFF_COUNT_IDS[v]}` : null)
+      .filter(Boolean)
+    if (values.length) facets.push({ type: 'staffCountRanges', values })
+  }
+
+  if (targeting.geographies?.length) {
+    const values = targeting.geographies
+      .map((v: string) => v.startsWith('urn:') ? v : GEO_IDS[v] ? `urn:li:geo:${GEO_IDS[v]}` : null)
+      .filter(Boolean)
+    if (values.length) facets.push({ type: 'locations', values })
+  }
+
+  if (targeting.matched_audiences?.length) {
+    facets.push({ type: 'audienceMatchingSegments', values: targeting.matched_audiences })
+  }
+
+  return facets
+}
+
+async function handleEstimateAudience(
+  serviceClient: SupabaseClient,
+  body: Record<string, any>,
+): Promise<Record<string, unknown>> {
+  const { org_id, ad_account_id, targeting_criteria } = body
+
+  if (!org_id) return { estimated_count: null, error: 'org_id is required' }
+  if (!targeting_criteria) return { estimated_count: null, error: 'targeting_criteria is required' }
+
+  const facets = buildTargetingFacets(targeting_criteria)
+  if (facets.length === 0) return { estimated_count: null, error: 'At least one targeting facet is required' }
+
+  // Need a LinkedIn token + ad account to estimate
+  let token: string
+  let resolvedAdAccountId = ad_account_id
+
+  try {
+    const integration = await getLinkedInToken(serviceClient, org_id)
+    token = integration.token
+    if (!resolvedAdAccountId) resolvedAdAccountId = integration.adAccountId
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.log(`${LOG_PREFIX} estimate_audience: no LinkedIn token — ${message}`)
+    return { estimated_count: null, error: 'LinkedIn integration not connected. Connect your LinkedIn account to estimate audience size.' }
+  }
+
+  if (!resolvedAdAccountId) {
+    return { estimated_count: null, error: 'No LinkedIn Ad Account configured. Please connect one in Settings.' }
+  }
+
+  // audienceCounts only supports: locations, industries, seniorities
+  const SUPPORTED_FACETS = new Set(['locations', 'industries', 'seniorities'])
+  const supportedFacets = facets.filter(f => SUPPORTED_FACETS.has(f.type))
+
+  if (supportedFacets.length === 0) {
+    return { estimated_count: null, error: 'Select a location, industry, or seniority to estimate audience size.' }
+  }
+
+  // Build query string manually — LinkedIn expects raw brackets, not URL-encoded
+  // Do NOT encodeURIComponent on URN values — LinkedIn needs raw colons
+  const queryParts = ['q=targetingCriteria']
+
+  for (const facet of supportedFacets) {
+    for (let i = 0; i < facet.values.length; i++) {
+      queryParts.push(
+        `target.includedTargetingFacets.${facet.type}[${i}]=${facet.values[i]}`
+      )
+    }
+  }
+
+  const url = `${LINKEDIN_API_BASE}/audienceCounts?${queryParts.join('&')}`
+  console.log(`${LOG_PREFIX} audienceCounts URL:`, url)
+  console.log(`${LOG_PREFIX} audienceCounts adAccountId: ${resolvedAdAccountId}, facets: ${JSON.stringify(supportedFacets)}`)
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: linkedInHeaders(token),
+    })
+
+    if (response.status === 401) {
+      return { estimated_count: null, error: 'LinkedIn token expired. Please reconnect your LinkedIn account.' }
+    }
+
+    const text = await response.text()
+    let data: any = null
+    if (text) {
+      try { data = JSON.parse(text) } catch { data = { raw: text } }
+    }
+
+    console.log(`${LOG_PREFIX} audienceCounts response (${response.status}):`, text.slice(0, 1000))
+
+    if (!response.ok) {
+      // Return the actual LinkedIn error so we can debug
+      const liError = data?.message || data?.error || data?.errorDetailType || JSON.stringify(data)
+      if (response.status === 403) {
+        return { estimated_count: null, error: `LinkedIn 403: ${liError}`, errorDetails: data }
+      }
+      return { estimated_count: null, error: `LinkedIn API error (${response.status}): ${liError}`, errorDetails: data }
+    }
+
+    // Response format: { elements: [{ total, active }] } or { totalResultCount }
+    const total = data?.elements?.[0]?.total ?? data?.totalResultCount ?? data?.audienceCount ?? null
+    const active = data?.elements?.[0]?.active ?? null
+
+    return { estimated_count: total, active_count: active }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { estimated_count: null, error: `Fetch error: ${message}` }
+  }
+}
+
+async function handleListAudiences(
+  serviceClient: SupabaseClient,
+  body: Record<string, any>,
+): Promise<Record<string, unknown>> {
+  const { org_id } = body
+  if (!org_id) throw new Error('org_id is required')
+
+  const { data, error } = await serviceClient
+    .from('linkedin_matched_audiences')
+    .select('id, org_id, ad_account_id, linkedin_segment_id, name, audience_type, description, member_count, match_rate, upload_status, source_type, source_table_id, source_row_count, last_upload_at, error_message, version_tag, created_by, created_at, updated_at')
+    .eq('org_id', org_id)
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(`Failed to list audiences: ${error.message}`)
+
+  return { audiences: data ?? [] }
+}
+
+async function handleCreateAudience(
+  serviceClient: SupabaseClient,
+  body: Record<string, any>,
+  userId: string,
+): Promise<Record<string, unknown>> {
+  const { org_id, ad_account_id, name, audience_type, description } = body
+
+  if (!org_id) throw new Error('org_id is required')
+  if (!ad_account_id) throw new Error('ad_account_id is required')
+  if (!name) throw new Error('name is required')
+
+  const segmentType = audience_type === 'COMPANY_LIST' ? 'COMPANY' : 'USER'
+  const validAudienceType = audience_type === 'COMPANY_LIST' ? 'COMPANY_LIST' : 'CONTACT_LIST'
+
+  // Create DMP segment on LinkedIn
+  const { token } = await getLinkedInToken(serviceClient, org_id)
+  const linkedInPayload = {
+    name,
+    type: segmentType,
+    accessPolicy: 'PRIVATE',
+    sourcePlatform: 'ONA',
+    account: `urn:li:sponsoredAccount:${ad_account_id}`,
+  }
+
+  const response = await fetch(`${LINKEDIN_API_BASE}/dmpSegments`, {
+    method: 'POST',
+    headers: linkedInHeaders(token),
+    body: JSON.stringify(linkedInPayload),
+  })
+
+  if (response.status === 401) {
+    throw new Error('LinkedIn token expired. Please reconnect your LinkedIn account.')
+  }
+
+  let linkedInSegmentId: string | null = null
+
+  // Get segment ID from response headers or body
+  const locationHeader = response.headers.get('Location') || response.headers.get('location')
+  const restliId = response.headers.get('x-restli-id') || response.headers.get('X-RestLi-Id')
+
+  if (restliId) {
+    linkedInSegmentId = restliId
+  } else if (locationHeader) {
+    // Location header format: /dmpSegments/{segmentId}
+    const parts = locationHeader.split('/')
+    linkedInSegmentId = parts[parts.length - 1] || null
+  }
+
+  // Read response body — extract segment ID if not found in headers, or check for errors
+  const responseText = await response.text()
+  if (responseText) {
+    try {
+      const data = JSON.parse(responseText)
+      if (!linkedInSegmentId) {
+        linkedInSegmentId = data.id || data.value?.id || null
+      }
+      if (!response.ok) {
+        const errorMessage = data?.message || `LinkedIn API error (${response.status})`
+        console.error(`${LOG_PREFIX} ${errorMessage}`)
+        throw new Error(errorMessage)
+      }
+    } catch (parseErr) {
+      if (parseErr instanceof SyntaxError && !response.ok) {
+        throw new Error(`LinkedIn API error (${response.status})`)
+      }
+      if (!(parseErr instanceof SyntaxError)) throw parseErr
+    }
+  } else if (!response.ok) {
+    throw new Error(`LinkedIn API error (${response.status})`)
+  }
+
+  // Store locally
+  const { data: audience, error: insertError } = await serviceClient
+    .from('linkedin_matched_audiences')
+    .insert({
+      org_id,
+      ad_account_id,
+      linkedin_segment_id: linkedInSegmentId,
+      name,
+      audience_type: validAudienceType,
+      description: description || null,
+      upload_status: 'PENDING',
+      created_by: userId,
+    })
+    .select('id, org_id, ad_account_id, linkedin_segment_id, name, audience_type, description, member_count, match_rate, upload_status, source_type, source_table_id, source_row_count, last_upload_at, error_message, version_tag, created_by, created_at, updated_at')
+    .single()
+
+  if (insertError) throw new Error(`Failed to save audience: ${insertError.message}`)
+
+  return { audience }
+}
+
+async function handleUploadAudienceMembers(
+  serviceClient: SupabaseClient,
+  body: Record<string, any>,
+): Promise<Record<string, unknown>> {
+  const { audience_id, members } = body
+
+  if (!audience_id) throw new Error('audience_id is required')
+  if (!members || !Array.isArray(members) || members.length === 0) {
+    throw new Error('members array is required and must not be empty')
+  }
+
+  // Look up the audience
+  const { data: audience, error: fetchError } = await serviceClient
+    .from('linkedin_matched_audiences')
+    .select('id, org_id, ad_account_id, linkedin_segment_id, audience_type')
+    .eq('id', audience_id)
+    .maybeSingle()
+
+  if (fetchError || !audience) throw new Error('Audience not found')
+  if (!audience.linkedin_segment_id) throw new Error('Audience has not been synced to LinkedIn yet')
+
+  const { token } = await getLinkedInToken(serviceClient, audience.org_id)
+  const segmentId = audience.linkedin_segment_id
+
+  if (audience.audience_type === 'CONTACT_LIST') {
+    // Upload user list — emails
+    const emails = members.map((m: Record<string, any>) => m.email).filter(Boolean)
+    if (emails.length === 0) throw new Error('No valid emails found in members')
+
+    const csvLines = ['email', ...emails]
+    const csvBody = csvLines.join('\n')
+
+    const uploadResponse = await fetch(
+      `${LINKEDIN_API_BASE}/dmpSegments/${segmentId}/users`,
+      {
+        method: 'POST',
+        headers: {
+          ...linkedInHeaders(token),
+          'Content-Type': 'text/csv',
+        },
+        body: csvBody,
+      },
+    )
+
+    if (!uploadResponse.ok) {
+      const errText = await uploadResponse.text()
+      console.error(`${LOG_PREFIX} Upload failed: ${errText}`)
+      throw new Error(`LinkedIn upload failed (${uploadResponse.status})`)
+    }
+  } else {
+    // COMPANY_LIST — upload companies
+    const companies = members.map((m: Record<string, any>) => ({
+      companyName: m.company_name || '',
+      domain: m.domain || '',
+    })).filter((c: { companyName: string; domain: string }) => c.companyName || c.domain)
+
+    if (companies.length === 0) throw new Error('No valid companies found in members')
+
+    const csvLines = ['companyName,domain']
+    for (const c of companies) {
+      csvLines.push(`"${(c.companyName || '').replace(/"/g, '""')}","${(c.domain || '').replace(/"/g, '""')}"`)
+    }
+    const csvBody = csvLines.join('\n')
+
+    const uploadResponse = await fetch(
+      `${LINKEDIN_API_BASE}/dmpSegments/${segmentId}/companies`,
+      {
+        method: 'POST',
+        headers: {
+          ...linkedInHeaders(token),
+          'Content-Type': 'text/csv',
+        },
+        body: csvBody,
+      },
+    )
+
+    if (!uploadResponse.ok) {
+      const errText = await uploadResponse.text()
+      console.error(`${LOG_PREFIX} Upload failed: ${errText}`)
+      throw new Error(`LinkedIn upload failed (${uploadResponse.status})`)
+    }
+  }
+
+  // Update local record
+  const { error: updateError } = await serviceClient
+    .from('linkedin_matched_audiences')
+    .update({
+      upload_status: 'PROCESSING',
+      last_upload_at: new Date().toISOString(),
+      source_row_count: members.length,
+    })
+    .eq('id', audience_id)
+
+  if (updateError) {
+    console.warn(`${LOG_PREFIX} Failed to update audience status: ${updateError.message}`)
+  }
+
+  return { uploaded: members.length, status: 'PROCESSING' }
+}
+
+async function handleDeleteAudience(
+  serviceClient: SupabaseClient,
+  body: Record<string, any>,
+): Promise<Record<string, unknown>> {
+  const { audience_id } = body
+  if (!audience_id) throw new Error('audience_id is required')
+
+  // Look up the audience
+  const { data: audience, error: fetchError } = await serviceClient
+    .from('linkedin_matched_audiences')
+    .select('id, org_id, linkedin_segment_id')
+    .eq('id', audience_id)
+    .maybeSingle()
+
+  if (fetchError || !audience) throw new Error('Audience not found')
+
+  // Delete from LinkedIn if synced
+  if (audience.linkedin_segment_id) {
+    try {
+      const { token } = await getLinkedInToken(serviceClient, audience.org_id)
+      await linkedInFetch(
+        `${LINKEDIN_API_BASE}/dmpSegments/${audience.linkedin_segment_id}`,
+        {
+          method: 'DELETE',
+          headers: linkedInHeaders(token),
+        },
+      )
+    } catch (err) {
+      // Log but don't block local deletion
+      console.warn(`${LOG_PREFIX} LinkedIn segment deletion failed: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+
+  // Delete from local table
+  const { error: deleteError } = await serviceClient
+    .from('linkedin_matched_audiences')
+    .delete()
+    .eq('id', audience_id)
+
+  if (deleteError) throw new Error(`Failed to delete audience: ${deleteError.message}`)
+
+  return { deleted: true }
+}
+
+async function handleSyncAudienceStatus(
+  serviceClient: SupabaseClient,
+  body: Record<string, any>,
+): Promise<Record<string, unknown>> {
+  const { audience_id } = body
+  if (!audience_id) throw new Error('audience_id is required')
+
+  // Look up the audience
+  const { data: audience, error: fetchError } = await serviceClient
+    .from('linkedin_matched_audiences')
+    .select('id, org_id, linkedin_segment_id')
+    .eq('id', audience_id)
+    .maybeSingle()
+
+  if (fetchError || !audience) throw new Error('Audience not found')
+  if (!audience.linkedin_segment_id) throw new Error('Audience has not been synced to LinkedIn yet')
+
+  const { token } = await getLinkedInToken(serviceClient, audience.org_id)
+  const result = await linkedInFetch(
+    `${LINKEDIN_API_BASE}/dmpSegments/${audience.linkedin_segment_id}`,
+    {
+      method: 'GET',
+      headers: linkedInHeaders(token),
+    },
+  )
+
+  // Map LinkedIn status to our upload_status
+  const segmentData = result.data || {}
+  const linkedInStatus = segmentData.status || segmentData.state || null
+  let uploadStatus: string = 'PROCESSING'
+
+  if (linkedInStatus === 'READY' || linkedInStatus === 'ACTIVE') {
+    uploadStatus = 'READY'
+  } else if (linkedInStatus === 'FAILED' || linkedInStatus === 'ERROR') {
+    uploadStatus = 'FAILED'
+  } else if (linkedInStatus === 'EXPIRED') {
+    uploadStatus = 'EXPIRED'
+  }
+
+  const memberCount = segmentData.matchedCount ?? segmentData.audienceCount ?? segmentData.size ?? null
+  const matchRate = segmentData.matchRate ?? null
+
+  // Update local record
+  const updatePayload: Record<string, any> = {
+    upload_status: uploadStatus,
+  }
+  if (memberCount !== null) updatePayload.member_count = memberCount
+  if (matchRate !== null) updatePayload.match_rate = matchRate
+
+  const { data: updated, error: updateError } = await serviceClient
+    .from('linkedin_matched_audiences')
+    .update(updatePayload)
+    .eq('id', audience_id)
+    .select('id, org_id, ad_account_id, linkedin_segment_id, name, audience_type, description, member_count, match_rate, upload_status, source_type, source_table_id, source_row_count, last_upload_at, error_message, version_tag, created_by, created_at, updated_at')
+    .single()
+
+  if (updateError) throw new Error(`Failed to update audience: ${updateError.message}`)
+
+  return { audience: updated }
+}
+
+async function handlePushOpsToAudience(
+  serviceClient: SupabaseClient,
+  body: Record<string, any>,
+  userId: string,
+): Promise<Record<string, unknown>> {
+  const {
+    org_id, ad_account_id, table_id, row_ids, field_mapping,
+    audience_id, audience_name, audience_type,
+  } = body
+
+  if (!org_id) throw new Error('org_id is required')
+  if (!ad_account_id) throw new Error('ad_account_id is required')
+  if (!table_id) throw new Error('table_id is required')
+  if (!row_ids || !Array.isArray(row_ids) || row_ids.length === 0) {
+    throw new Error('row_ids array is required and must not be empty')
+  }
+  if (!field_mapping) throw new Error('field_mapping is required')
+
+  // Determine which column IDs to fetch
+  const columnIds: string[] = []
+  if (field_mapping.email_column_id) columnIds.push(field_mapping.email_column_id)
+  if (field_mapping.company_column_id) columnIds.push(field_mapping.company_column_id)
+  if (field_mapping.domain_column_id) columnIds.push(field_mapping.domain_column_id)
+
+  if (columnIds.length === 0) {
+    throw new Error('field_mapping must contain at least one of: email_column_id, company_column_id, domain_column_id')
+  }
+
+  // Read cells from dynamic_table_cells
+  const { data: cells, error: cellsError } = await serviceClient
+    .from('dynamic_table_cells')
+    .select('row_id, column_id, value')
+    .in('row_id', row_ids)
+    .in('column_id', columnIds)
+
+  if (cellsError) throw new Error(`Failed to read ops table data: ${cellsError.message}`)
+
+  // Group cell values by row
+  const rowData: Record<string, Record<string, string>> = {}
+  for (const cell of (cells || [])) {
+    if (!rowData[cell.row_id]) rowData[cell.row_id] = {}
+    rowData[cell.row_id][cell.column_id] = cell.value || ''
+  }
+
+  // Build members list
+  const resolvedType = audience_type === 'COMPANY_LIST' ? 'COMPANY_LIST' : 'CONTACT_LIST'
+  const members: Array<Record<string, string>> = []
+
+  for (const rowId of row_ids) {
+    const row = rowData[rowId]
+    if (!row) continue
+
+    if (resolvedType === 'CONTACT_LIST' && field_mapping.email_column_id) {
+      const email = row[field_mapping.email_column_id]
+      if (email) members.push({ email })
+    } else if (resolvedType === 'COMPANY_LIST') {
+      const companyName = field_mapping.company_column_id ? row[field_mapping.company_column_id] || '' : ''
+      const domain = field_mapping.domain_column_id ? row[field_mapping.domain_column_id] || '' : ''
+      if (companyName || domain) members.push({ company_name: companyName, domain })
+    }
+  }
+
+  if (members.length === 0) {
+    throw new Error('No valid members found in the selected rows')
+  }
+
+  // Create or reuse audience
+  let targetAudienceId = audience_id
+  if (!targetAudienceId) {
+    if (!audience_name) throw new Error('audience_name is required when creating a new audience')
+    const createResult = await handleCreateAudience(serviceClient, {
+      org_id,
+      ad_account_id,
+      name: audience_name,
+      audience_type: resolvedType,
+      description: `Auto-created from ops table`,
+    }, userId)
+    const created = createResult.audience as Record<string, any>
+    targetAudienceId = created.id
+  }
+
+  // Upload members
+  await handleUploadAudienceMembers(serviceClient, {
+    audience_id: targetAudienceId,
+    members,
+  })
+
+  // Update the audience with source info
+  const { error: updateError } = await serviceClient
+    .from('linkedin_matched_audiences')
+    .update({
+      source_type: 'ops_table',
+      source_table_id: table_id,
+      source_row_count: members.length,
+    })
+    .eq('id', targetAudienceId)
+
+  if (updateError) {
+    console.warn(`${LOG_PREFIX} Failed to update audience source info: ${updateError.message}`)
+  }
+
+  return { audience_id: targetAudienceId, uploaded: members.length, status: 'PROCESSING' }
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -943,7 +1567,7 @@ serve(async (req: Request) => {
     })
 
     // For actions that reference a record by ID without org_id, look up the org
-    if (!orgId && (body.campaign_id || body.group_id || body.creative_id)) {
+    if (!orgId && (body.campaign_id || body.group_id || body.creative_id || body.audience_id)) {
       let resolvedOrgId: string | null = null
 
       if (body.campaign_id && ['get_campaign', 'update_campaign', 'update_status', 'list_creatives'].includes(action)) {
@@ -967,6 +1591,13 @@ serve(async (req: Request) => {
           .eq('id', body.creative_id)
           .maybeSingle()
         resolvedOrgId = cr?.org_id || null
+      } else if (body.audience_id && ['upload_audience_members', 'delete_audience', 'sync_audience_status'].includes(action)) {
+        const { data: a } = await serviceClient
+          .from('linkedin_matched_audiences')
+          .select('org_id')
+          .eq('id', body.audience_id)
+          .maybeSingle()
+        resolvedOrgId = a?.org_id || null
       }
 
       if (resolvedOrgId) {
@@ -1014,6 +1645,29 @@ serve(async (req: Request) => {
         break
       case 'update_creative':
         result = await handleUpdateCreative(serviceClient, body)
+        break
+
+      // Audiences
+      case 'estimate_audience':
+        result = await handleEstimateAudience(serviceClient, body)
+        break
+      case 'list_audiences':
+        result = await handleListAudiences(serviceClient, body)
+        break
+      case 'create_audience':
+        result = await handleCreateAudience(serviceClient, body, user.id)
+        break
+      case 'upload_audience_members':
+        result = await handleUploadAudienceMembers(serviceClient, body)
+        break
+      case 'delete_audience':
+        result = await handleDeleteAudience(serviceClient, body)
+        break
+      case 'sync_audience_status':
+        result = await handleSyncAudienceStatus(serviceClient, body)
+        break
+      case 'push_ops_to_audience':
+        result = await handlePushOpsToAudience(serviceClient, body, user.id)
         break
 
       default:

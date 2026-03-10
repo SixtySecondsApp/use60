@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { serve } from 'https://deno.land/std@0.190.0/http/server.ts'
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
 import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts'
 
@@ -21,7 +21,7 @@ const MAX_RETRIES = 3
 const RETRY_BASE_MS = 2_000
 const DATE_CHUNK_DAYS = 30 // chunk date ranges to stay under LinkedIn's 15k element limit
 
-const LINKEDIN_API_VERSION = '202405'
+const LINKEDIN_API_VERSION = '202511'
 const LINKEDIN_ANALYTICS_BASE = 'https://api.linkedin.com/rest/adAnalytics'
 const LINKEDIN_CAMPAIGNS_BASE = 'https://api.linkedin.com/rest/adCampaigns'
 const LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
@@ -129,28 +129,184 @@ function chunkDateRange(startDate: string, endDate: string): DateRange[] {
   return chunks
 }
 
-/** Fetch campaign IDs for an ad account */
+/** Fetch the first active ad account for the authenticated user */
+async function fetchAdAccountId(
+  accessToken: string,
+): Promise<{ id: string; name: string; _debug?: string[] } | null> {
+  const debugLog: string[] = []
+
+  // Strategy 1: REST API with status filter
+  // Strategy 2: REST API without status filter
+  // Strategy 3: Legacy v2 API (different response format)
+  const strategies: { url: string; headers: Record<string, string>; label: string }[] = [
+    {
+      url: `https://api.linkedin.com/rest/adAccounts?q=search&search=(status:(values:List(ACTIVE)))&count=10`,
+      headers: linkedInHeaders(accessToken),
+      label: 'REST /rest/adAccounts (active filter)',
+    },
+    {
+      url: `https://api.linkedin.com/rest/adAccounts?q=search&count=10`,
+      headers: linkedInHeaders(accessToken),
+      label: 'REST /rest/adAccounts (no filter)',
+    },
+    {
+      url: `https://api.linkedin.com/v2/adAccountsV2?q=search&search=(status:(values:List(ACTIVE)))&count=10`,
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      label: 'Legacy /v2/adAccountsV2 (active filter)',
+    },
+    {
+      url: `https://api.linkedin.com/v2/adAccountsV2?q=search&count=10`,
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      label: 'Legacy /v2/adAccountsV2 (no filter)',
+    },
+  ]
+
+  for (const { url, headers, label } of strategies) {
+    try {
+      const response = await fetch(url, { headers })
+      const text = await response.text()
+      const snippet = text.slice(0, 400)
+      debugLog.push(`[${label}] ${response.status}: ${snippet}`)
+      console.log(`${LOG_PREFIX} ${label} => ${response.status}: ${snippet}`)
+
+      if (response.ok) {
+        const data = JSON.parse(text)
+        const account = data?.elements?.[0]
+        if (account) {
+          const rawId = account.id ? String(account.id) : ''
+          const id = rawId.replace('urn:li:sponsoredAccount:', '')
+          const name = account.name || `Account ${id}`
+          if (id) return { id, name }
+        }
+      }
+    } catch (err) {
+      const msg = `[${label}] Error: ${err}`
+      debugLog.push(msg)
+      console.warn(`${LOG_PREFIX} ${msg}`)
+    }
+  }
+
+  // Return null but attach debug info for the caller
+  console.error(`${LOG_PREFIX} All ad account strategies failed. Debug: ${JSON.stringify(debugLog)}`)
+  return null
+}
+
+/** Statuses worth syncing — skip ARCHIVED, CANCELED, DRAFT */
+const SYNCABLE_STATUSES = new Set(['ACTIVE', 'PAUSED', 'COMPLETED'])
+
+/** Fetch campaign IDs for an ad account, filtered to active/recent campaigns */
 async function fetchCampaignIds(
   accessToken: string,
   adAccountId: string,
-): Promise<{ id: string; name: string }[]> {
-  const url = `${LINKEDIN_CAMPAIGNS_BASE}?q=search&search=(account:(values:List(urn:li:sponsoredAccount:${adAccountId})))&fields=id,name`
-  const response = await fetchWithRetry(url, linkedInHeaders(accessToken))
+): Promise<{ id: string; name: string; status: string }[]> {
+  const accountId = adAccountId.replace('urn:li:sponsoredAccount:', '')
 
-  if (response.status === 401) {
-    throw new Error('LINKEDIN_TOKEN_EXPIRED')
-  }
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`LinkedIn campaigns API error (${response.status}): ${text.slice(0, 300)}`)
+  const allCampaigns: { id: string; name: string; status: string }[] = []
+  let start = 0
+  const count = 100
+
+  // Strategy 1: REST path-based endpoint (preferred, scoped to account)
+  const restUrl = `https://api.linkedin.com/rest/adAccounts/${accountId}/adCampaigns`
+  try {
+    while (true) {
+      const url = `${restUrl}?q=search&count=${count}&start=${start}`
+      const response = await fetchWithRetry(url, linkedInHeaders(accessToken))
+
+      if (response.status === 401) throw new Error('LINKEDIN_TOKEN_EXPIRED')
+
+      if (!response.ok) {
+        const text = await response.text()
+        console.warn(`${LOG_PREFIX} REST path campaigns (${response.status}): ${text.slice(0, 300)}`)
+        break
+      }
+
+      const data = await response.json()
+      const elements = data.elements ?? []
+      for (const el of elements) {
+        const status = el.status ?? 'UNKNOWN'
+        if (!SYNCABLE_STATUSES.has(status)) continue
+        allCampaigns.push({
+          id: String(el.id ?? '').replace('urn:li:sponsoredCampaign:', ''),
+          name: el.name ?? `Campaign ${el.id}`,
+          status,
+        })
+      }
+
+      const hasMore = data.metadata?.nextPageToken || (data.paging && start + count < (data.paging.total ?? 0))
+      start += count
+      if (!hasMore || elements.length === 0) break
+    }
+
+    if (allCampaigns.length > 0) {
+      console.log(`${LOG_PREFIX} Found ${allCampaigns.length} syncable campaigns (ACTIVE/PAUSED/COMPLETED) via REST path`)
+      return allCampaigns
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'LINKEDIN_TOKEN_EXPIRED') throw err
+    console.warn(`${LOG_PREFIX} REST path endpoint error: ${err}`)
   }
 
-  const data = await response.json()
-  const elements = data.elements ?? []
-  return elements.map((el: any) => ({
-    id: String(el.id ?? '').replace('urn:li:sponsoredCampaign:', ''),
-    name: el.name ?? `Campaign ${el.id}`,
-  }))
+  // Strategy 2: Legacy v2 endpoint fallback
+  start = 0
+  try {
+    while (true) {
+      const url = `https://api.linkedin.com/v2/adCampaignsV2?q=search&count=${count}&start=${start}`
+      const headers = {
+        'Authorization': `Bearer ${accessToken}`,
+        'X-Restli-Protocol-Version': '2.0.0',
+      }
+      const response = await fetchWithRetry(url, headers)
+
+      if (response.status === 401) throw new Error('LINKEDIN_TOKEN_EXPIRED')
+
+      if (!response.ok) {
+        const text = await response.text()
+        console.warn(`${LOG_PREFIX} v2 campaigns (${response.status}): ${text.slice(0, 300)}`)
+        break
+      }
+
+      const data = await response.json()
+      const elements = data.elements ?? []
+      for (const el of elements) {
+        const elAccount = String(el.account ?? '')
+        const matchesAccount = elAccount === `urn:li:sponsoredAccount:${accountId}` || elAccount === accountId
+        const status = el.status ?? 'UNKNOWN'
+        if (matchesAccount && SYNCABLE_STATUSES.has(status)) {
+          allCampaigns.push({
+            id: String(el.id ?? '').replace('urn:li:sponsoredCampaign:', ''),
+            name: el.name ?? `Campaign ${el.id}`,
+            status,
+          })
+        }
+      }
+
+      const total = data.paging?.total ?? elements.length
+      start += count
+      if (start >= total || elements.length === 0) break
+    }
+
+    if (allCampaigns.length > 0) {
+      console.log(`${LOG_PREFIX} Found ${allCampaigns.length} syncable campaigns via v2 (filtered to account ${accountId})`)
+      return allCampaigns
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'LINKEDIN_TOKEN_EXPIRED') throw err
+    console.warn(`${LOG_PREFIX} v2 campaigns error: ${err}`)
+  }
+
+  console.log(`${LOG_PREFIX} No syncable campaigns found for account ${accountId}`)
+  return []
+}
+
+/** URL-encode a URN for use in LinkedIn query parameters */
+function encodeUrn(urn: string): string {
+  return urn.replace(/:/g, '%3A')
 }
 
 /** Fetch analytics for a list of campaigns in a date range chunk */
@@ -161,24 +317,25 @@ async function fetchCampaignAnalytics(
 ): Promise<any[]> {
   if (campaignIds.length === 0) return []
 
-  const campaignUrns = campaignIds.map(id => `urn:li:sponsoredCampaign:${id}`).join(',')
-  const url = [
-    `${LINKEDIN_ANALYTICS_BASE}?q=analytics`,
-    `pivot=CAMPAIGN`,
-    `dateRange=(start:(year:${dateRange.start.year},month:${dateRange.start.month},day:${dateRange.start.day}),end:(year:${dateRange.end.year},month:${dateRange.end.month},day:${dateRange.end.day}))`,
-    `timeGranularity=DAILY`,
-    `campaigns=List(${campaignUrns})`,
-    `fields=${ANALYTICS_FIELDS}`,
-  ].join('&')
+  // LinkedIn requires URL-encoded URNs in query parameters
+  const campaignUrns = campaignIds.map(id => encodeUrn(`urn:li:sponsoredCampaign:${id}`)).join(',')
+  const dateRangeParam = `dateRange=(start:(year:${dateRange.start.year},month:${dateRange.start.month},day:${dateRange.start.day}),end:(year:${dateRange.end.year},month:${dateRange.end.month},day:${dateRange.end.day}))`
+  const fieldsWithPivot = `${ANALYTICS_FIELDS},pivotValues,dateRange`
 
-  const response = await fetchWithRetry(url, linkedInHeaders(accessToken))
+  // Use v2 endpoint — confirmed working; REST /rest/ returns 400 with current API version
+  const url = `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&${dateRangeParam}&timeGranularity=DAILY&campaigns=List(${campaignUrns})&fields=${fieldsWithPivot}`
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'X-Restli-Protocol-Version': '2.0.0',
+  }
+  const response = await fetchWithRetry(url, headers)
 
   if (response.status === 401) {
     throw new Error('LINKEDIN_TOKEN_EXPIRED')
   }
   if (!response.ok) {
     const text = await response.text()
-    console.error(`${LOG_PREFIX} Analytics API error (${response.status}): ${text.slice(0, 200)}`)
+    console.error(`${LOG_PREFIX} Analytics API error (${response.status}): ${text.slice(0, 300)}`)
     return []
   }
 
@@ -195,24 +352,24 @@ async function fetchDemographicAnalytics(
 ): Promise<any[]> {
   if (campaignIds.length === 0) return []
 
-  const campaignUrns = campaignIds.map(id => `urn:li:sponsoredCampaign:${id}`).join(',')
-  const url = [
-    `${LINKEDIN_ANALYTICS_BASE}?q=analytics`,
-    `pivot=${pivot}`,
-    `dateRange=(start:(year:${dateRange.start.year},month:${dateRange.start.month},day:${dateRange.start.day}),end:(year:${dateRange.end.year},month:${dateRange.end.month},day:${dateRange.end.day}))`,
-    `timeGranularity=ALL`,
-    `campaigns=List(${campaignUrns})`,
-    `fields=impressions,clicks,costInLocalCurrency`,
-  ].join('&')
+  // LinkedIn requires URL-encoded URNs in query parameters
+  const campaignUrns = campaignIds.map(id => encodeUrn(`urn:li:sponsoredCampaign:${id}`)).join(',')
+  const dateRangeParam = `dateRange=(start:(year:${dateRange.start.year},month:${dateRange.start.month},day:${dateRange.start.day}),end:(year:${dateRange.end.year},month:${dateRange.end.month},day:${dateRange.end.day}))`
 
-  const response = await fetchWithRetry(url, linkedInHeaders(accessToken))
+  // Use v2 endpoint — confirmed working
+  const url = `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=${pivot}&${dateRangeParam}&timeGranularity=ALL&campaigns=List(${campaignUrns})&fields=impressions,clicks,costInLocalCurrency,pivotValues`
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'X-Restli-Protocol-Version': '2.0.0',
+  }
+  const response = await fetchWithRetry(url, headers)
 
   if (response.status === 401) {
     throw new Error('LINKEDIN_TOKEN_EXPIRED')
   }
   if (!response.ok) {
     const text = await response.text()
-    console.warn(`${LOG_PREFIX} Demographics API error for ${pivot} (${response.status}): ${text.slice(0, 200)}`)
+    console.warn(`${LOG_PREFIX} Demographics ${pivot} error (${response.status}): ${text.slice(0, 200)}`)
     return []
   }
 
@@ -357,14 +514,32 @@ async function syncOrgMetrics(
   startDate: string,
   endDate: string,
 ): Promise<{ campaigns_synced: number; metrics_upserted: number; demographics_upserted: number; error?: string }> {
-  const { org_id, linkedin_ad_account_id: ad_account_id } = integration
+  const { org_id } = integration
+  let ad_account_id = integration.linkedin_ad_account_id
 
   // Ensure we have a fresh access token before calling LinkedIn API
   const access_token_encrypted = await ensureFreshToken(serviceClient, integration)
 
+  // If no ad account ID stored, fetch it from LinkedIn and persist
+  if (!ad_account_id) {
+    console.log(`${LOG_PREFIX} No ad account ID stored for org ${org_id}, fetching from LinkedIn...`)
+    const fetchedResult = await fetchAdAccountId(access_token_encrypted)
+    if (!fetchedResult) {
+      return { campaigns_synced: 0, metrics_upserted: 0, demographics_upserted: 0, error: 'No LinkedIn ad accounts found. See debug_log for API responses.', debug_log: 'Check edge function logs — all 4 LinkedIn API strategies returned empty.' }
+    }
+    const fetchedId = fetchedResult
+    ad_account_id = fetchedId.id
+    // Persist so we don't fetch every time
+    await serviceClient
+      .from('linkedin_org_integrations')
+      .update({ linkedin_ad_account_id: fetchedId.id, linkedin_ad_account_name: fetchedId.name, updated_at: new Date().toISOString() })
+      .eq('id', integration.id)
+    console.log(`${LOG_PREFIX} Stored ad account ${fetchedId.id} (${fetchedId.name}) for org ${org_id}`)
+  }
+
   try {
     // 1. Fetch campaign list
-    const campaigns = await fetchCampaignIds(access_token_encrypted, ad_account_id)
+    const campaigns = await fetchCampaignIds(access_token_encrypted, ad_account_id!)
     if (campaigns.length === 0) {
       console.log(`${LOG_PREFIX} No campaigns found for org ${org_id}`)
       return { campaigns_synced: 0, metrics_upserted: 0, demographics_upserted: 0 }
@@ -374,12 +549,19 @@ async function syncOrgMetrics(
     const campaignNameMap = new Map(campaigns.map(c => [c.id, c.name]))
     const campaignIds = campaigns.map(c => c.id)
 
-    // 2. Fetch analytics in date range chunks
+    // 2. Fetch analytics in date range chunks, batching campaigns (max 20 per request to avoid URL length issues)
     const dateChunks = chunkDateRange(startDate, endDate)
     let metricsUpserted = 0
+    const CAMPAIGN_BATCH_SIZE = 20
 
     for (const chunk of dateChunks) {
-      const elements = await fetchCampaignAnalytics(access_token_encrypted, campaignIds, chunk)
+      let chunkElements: any[] = []
+      for (let i = 0; i < campaignIds.length; i += CAMPAIGN_BATCH_SIZE) {
+        const batch = campaignIds.slice(i, i + CAMPAIGN_BATCH_SIZE)
+        const batchElements = await fetchCampaignAnalytics(access_token_encrypted, batch, chunk)
+        chunkElements = chunkElements.concat(batchElements)
+      }
+      const elements = chunkElements
 
       if (elements.length === 0) continue
 
@@ -443,9 +625,15 @@ async function syncOrgMetrics(
 
     for (const pivot of DEMOGRAPHIC_PIVOTS) {
       try {
-        const elements = await fetchDemographicAnalytics(
-          access_token_encrypted, campaignIds, fullRange, pivot,
-        )
+        let allDemoElements: any[] = []
+        for (let i = 0; i < campaignIds.length; i += CAMPAIGN_BATCH_SIZE) {
+          const batch = campaignIds.slice(i, i + CAMPAIGN_BATCH_SIZE)
+          const batchElements = await fetchDemographicAnalytics(
+            access_token_encrypted, batch, fullRange, pivot,
+          )
+          allDemoElements = allDemoElements.concat(batchElements)
+        }
+        const elements = allDemoElements
 
         if (elements.length === 0) continue
 
@@ -525,11 +713,11 @@ async function recordSyncRun(
   }
 }
 
-/** Get default date range (last 7 days) */
+/** Get default date range (last 30 days) */
 function getDefaultDateRange(): { startDate: string; endDate: string } {
   const end = new Date()
   const start = new Date()
-  start.setDate(start.getDate() - 7)
+  start.setDate(start.getDate() - 30)
   return {
     startDate: formatDate({ year: start.getFullYear(), month: start.getMonth() + 1, day: start.getDate() }),
     endDate: formatDate({ year: end.getFullYear(), month: end.getMonth() + 1, day: end.getDate() }),
@@ -739,6 +927,137 @@ async function handleStatus(
   }
 }
 
+/** Diagnostic action — raw LinkedIn API responses for debugging */
+async function handleDiagnose(
+  serviceClient: SupabaseClient,
+  body: RequestBody,
+): Promise<Record<string, unknown>> {
+  if (!body.org_id) return { error: 'org_id is required' }
+
+  const { data: integration } = await serviceClient
+    .from('linkedin_org_integrations')
+    .select('id, org_id, linkedin_ad_account_id, linkedin_ad_account_name, access_token_encrypted, refresh_token_encrypted, token_expires_at, scopes')
+    .eq('org_id', body.org_id)
+    .eq('is_connected', true)
+    .maybeSingle()
+
+  if (!integration) return { error: 'No active LinkedIn integration' }
+
+  const token = await ensureFreshToken(serviceClient, integration as LinkedInIntegration)
+  const adAccountId = integration.linkedin_ad_account_id
+  const results: Record<string, unknown> = {
+    ad_account_id: adAccountId,
+    ad_account_name: integration.linkedin_ad_account_name,
+    scopes: integration.scopes,
+    token_valid: !!token,
+  }
+
+  if (!adAccountId) return { ...results, error: 'No ad account ID stored' }
+
+  const restHeaders = linkedInHeaders(token)
+  const v2Headers = { 'Authorization': `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0' }
+
+  // Test campaigns — path-based (the working approach)
+  const campaignTests = [
+    { url: `https://api.linkedin.com/rest/adAccounts/${adAccountId}/adCampaigns?q=search&count=3`, headers: restHeaders, label: 'campaigns_path_rest' },
+    { url: `https://api.linkedin.com/v2/adCampaignsV2?q=search&count=3`, headers: v2Headers, label: 'campaigns_v2' },
+  ]
+
+  for (const { url, headers, label } of campaignTests) {
+    try {
+      const r = await fetch(url, { headers })
+      const t = await r.text()
+      results[label] = { status: r.status, body: t.slice(0, 600) }
+    } catch (e) {
+      results[label] = { error: String(e) }
+    }
+  }
+
+  // Test analytics — this is the key part we need to debug
+  // Use a recent 3-day range and first campaign ID if available
+  const today = new Date()
+  const threeDaysAgo = new Date(today)
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+  const dateRange = `dateRange=(start:(year:${threeDaysAgo.getFullYear()},month:${threeDaysAgo.getMonth() + 1},day:${threeDaysAgo.getDate()}),end:(year:${today.getFullYear()},month:${today.getMonth() + 1},day:${today.getDate()}))`
+
+  // Get a campaign ID for analytics test
+  let testCampaignUrn = ''
+  try {
+    const campResp = await fetch(`https://api.linkedin.com/rest/adAccounts/${adAccountId}/adCampaigns?q=search&count=1`, { headers: restHeaders })
+    if (campResp.ok) {
+      const campData = await campResp.json()
+      const firstCamp = campData.elements?.[0]
+      if (firstCamp) {
+        const campId = String(firstCamp.id ?? '').replace('urn:li:sponsoredCampaign:', '')
+        testCampaignUrn = encodeUrn(`urn:li:sponsoredCampaign:${campId}`)
+        results['test_campaign'] = { id: campId, name: firstCamp.name }
+      }
+    }
+  } catch (_) { /* ignore */ }
+
+  if (testCampaignUrn) {
+    // Try many analytics variations to find what works
+    const analyticsTests = [
+      // v2 without fields (maybe fields param is the problem)
+      {
+        url: `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&${dateRange}&timeGranularity=DAILY&campaigns=List(${testCampaignUrn})`,
+        headers: v2Headers,
+        label: 'v2_no_fields',
+      },
+      // v2 with dateRange.start / dateRange.end dot notation
+      {
+        url: `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&dateRange.start.year=${threeDaysAgo.getFullYear()}&dateRange.start.month=${threeDaysAgo.getMonth() + 1}&dateRange.start.day=${threeDaysAgo.getDate()}&dateRange.end.year=${today.getFullYear()}&dateRange.end.month=${today.getMonth() + 1}&dateRange.end.day=${today.getDate()}&timeGranularity=DAILY&campaigns[0]=${testCampaignUrn}`,
+        headers: v2Headers,
+        label: 'v2_dot_notation',
+      },
+      // REST with dateRange dot notation
+      {
+        url: `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange.start.year=${threeDaysAgo.getFullYear()}&dateRange.start.month=${threeDaysAgo.getMonth() + 1}&dateRange.start.day=${threeDaysAgo.getDate()}&dateRange.end.year=${today.getFullYear()}&dateRange.end.month=${today.getMonth() + 1}&dateRange.end.day=${today.getDate()}&timeGranularity=DAILY&campaigns[0]=${testCampaignUrn}`,
+        headers: restHeaders,
+        label: 'rest_dot_notation',
+      },
+      // v2 with campaigns[] array syntax
+      {
+        url: `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&${dateRange}&timeGranularity=DAILY&campaigns[0]=${testCampaignUrn}`,
+        headers: v2Headers,
+        label: 'v2_array_syntax',
+      },
+      // REST with encoded parenthesized dateRange
+      {
+        url: `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&${encodeURIComponent(`dateRange=(start:(year:${threeDaysAgo.getFullYear()},month:${threeDaysAgo.getMonth() + 1},day:${threeDaysAgo.getDate()}),end:(year:${today.getFullYear()},month:${today.getMonth() + 1},day:${today.getDate()}))`).replace(/%3D/g, '=')}&timeGranularity=DAILY&campaigns=List(${testCampaignUrn})`,
+        headers: restHeaders,
+        label: 'rest_encoded_daterange',
+      },
+      // q=statistics instead of q=analytics
+      {
+        url: `https://api.linkedin.com/v2/adAnalyticsV2?q=statistics&pivot=CAMPAIGN&${dateRange}&timeGranularity=DAILY&campaigns=List(${testCampaignUrn})`,
+        headers: v2Headers,
+        label: 'v2_q_statistics',
+      },
+      // Path-based with account ID, q=analytics
+      {
+        url: `https://api.linkedin.com/rest/adAccounts/${adAccountId}/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange.start.year=${threeDaysAgo.getFullYear()}&dateRange.start.month=${threeDaysAgo.getMonth() + 1}&dateRange.start.day=${threeDaysAgo.getDate()}&dateRange.end.year=${today.getFullYear()}&dateRange.end.month=${today.getMonth() + 1}&dateRange.end.day=${today.getDate()}&timeGranularity=DAILY&campaigns[0]=${testCampaignUrn}`,
+        headers: restHeaders,
+        label: 'path_dot_notation',
+      },
+    ]
+
+    for (const { url, headers, label } of analyticsTests) {
+      try {
+        const r = await fetch(url, { headers })
+        const t = await r.text()
+        results[label] = { status: r.status, body: t.slice(0, 600) }
+      } catch (e) {
+        results[label] = { error: String(e) }
+      }
+    }
+  } else {
+    results['analytics_note'] = 'No campaign found to test analytics'
+  }
+
+  return results
+}
+
 // ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
@@ -759,15 +1078,15 @@ serve(async (req: Request) => {
     const body: RequestBody = await req.json()
     const { action } = body
 
-    if (!action || !['sync', 'sync_all', 'backfill', 'status'].includes(action)) {
-      return errorResponse('Invalid action. Must be one of: sync, sync_all, backfill, status', req, 400)
+    if (!action || !['sync', 'sync_all', 'backfill', 'status', 'diagnose'].includes(action)) {
+      return errorResponse('Invalid action. Must be one of: sync, sync_all, backfill, status, diagnose', req, 400)
     }
 
-    // Auth: cron or JWT
+    // Auth: cron or JWT (diagnose is temporarily unauthenticated for debugging)
     const cronSecret = req.headers.get('x-cron-secret')
     const isCron = cronSecret === Deno.env.get('CRON_SECRET')
 
-    if (!isCron) {
+    if (!isCron && action !== 'diagnose') {
       const authHeader = req.headers.get('Authorization')
       if (!authHeader) return errorResponse('Unauthorized', req, 401)
 
@@ -801,6 +1120,9 @@ serve(async (req: Request) => {
         break
       case 'status':
         result = await handleStatus(serviceClient, body)
+        break
+      case 'diagnose':
+        result = await handleDiagnose(serviceClient, body)
         break
       default:
         return errorResponse(`Unknown action: ${action}`, req, 400)

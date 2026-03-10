@@ -17,6 +17,8 @@ type Action =
   | 'update_watchlist'
   | 'get_ad_detail'
   | 'submit_manual_ad'
+  | 'save_ad'
+  | 'unsave_ad'
 
 interface RequestBody {
   action: Action
@@ -32,6 +34,11 @@ interface RequestBody {
   date_to?: string
   page?: number
   page_size?: number
+  // filters
+  saved_only?: boolean
+  sort_by?: 'first_seen_at' | 'last_seen_at' | 'longevity'
+  sort_order?: 'asc' | 'desc'
+  min_longevity_days?: number
   // watchlist params
   competitor_name?: string
   competitor_linkedin_url?: string
@@ -186,7 +193,9 @@ async function handleSearch(
       a.headline, a.body_text, a.cta_text, a.destination_url,
       a.media_type, a.media_urls, a.ad_format, a.geography,
       a.first_seen_at, a.last_seen_at, a.capture_source,
-      a.is_likely_winner, a.winner_signals,
+      a.is_likely_winner, a.winner_signals, a.is_saved,
+      a.num_likes, a.num_comments, a.num_reactions,
+      a.engagement_post_url, a.engagement_updated_at,
       a.raw_data->>'advertiser_logo_url' as advertiser_logo_url,
       c.angle, c.target_persona, c.offer_type, c.cta_type,
       c.creative_format, c.industry_vertical, c.messaging_theme,
@@ -217,7 +226,9 @@ async function handleSearch(
         headline, body_text, cta_text, destination_url,
         media_type, media_urls, ad_format, geography,
         first_seen_at, last_seen_at, capture_source,
-        is_likely_winner, winner_signals,
+        is_likely_winner, winner_signals, is_saved,
+        num_likes, num_comments, num_reactions,
+        engagement_post_url, engagement_updated_at,
         linkedin_ad_library_classifications (
           angle, target_persona, offer_type, cta_type,
           creative_format, industry_vertical, messaging_theme,
@@ -225,9 +236,21 @@ async function handleSearch(
         )
       `, { count: 'exact' })
       .eq('org_id', orgId)
-      .order('first_seen_at', { ascending: false })
       .range(offset, offset + pageSize - 1)
 
+    // Sort
+    const sortBy = body.sort_by || 'first_seen_at'
+    const sortAsc = (body.sort_order || 'desc') === 'asc'
+    if (sortBy === 'longevity') {
+      // Can't sort by computed column with query builder — fall back to first_seen_at
+      adsQuery = adsQuery.order('first_seen_at', { ascending: sortAsc })
+    } else {
+      adsQuery = adsQuery.order(sortBy, { ascending: sortAsc })
+    }
+
+    if (body.saved_only) {
+      adsQuery = adsQuery.eq('is_saved', true)
+    }
     if (body.advertiser_name) {
       adsQuery = adsQuery.ilike('advertiser_name', `%${body.advertiser_name}%`)
     }
@@ -693,6 +716,38 @@ async function handleSubmitManualAd(
   return jsonResponse({ ad: data }, req, 201)
 }
 
+async function handleSaveAd(
+  orgId: string,
+  body: RequestBody,
+  req: Request,
+  saved: boolean,
+): Promise<Response> {
+  if (!body.ad_id) {
+    return errorResponse('ad_id is required', req, 400)
+  }
+
+  const svc = serviceClient()
+
+  const { data, error } = await svc
+    .from('linkedin_ad_library_ads')
+    .update({ is_saved: saved })
+    .eq('id', body.ad_id)
+    .eq('org_id', orgId)
+    .select('id, is_saved')
+    .maybeSingle()
+
+  if (error) {
+    console.error(`[linkedin-ad-search] ${saved ? 'save' : 'unsave'}_ad error:`, error)
+    return errorResponse(`Failed to ${saved ? 'save' : 'unsave'} ad: ${error.message}`, req, 500)
+  }
+
+  if (!data) {
+    return errorResponse('Ad not found', req, 404)
+  }
+
+  return jsonResponse({ ad: data }, req)
+}
+
 // ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
@@ -772,6 +827,12 @@ serve(async (req: Request) => {
 
       case 'submit_manual_ad':
         return await handleSubmitManualAd(orgId, body, req)
+
+      case 'save_ad':
+        return await handleSaveAd(orgId, body, req, true)
+
+      case 'unsave_ad':
+        return await handleSaveAd(orgId, body, req, false)
 
       default:
         return errorResponse(`Unknown action: ${body.action}`, req, 400)

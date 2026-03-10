@@ -33,6 +33,12 @@ export interface AdLibraryAd {
   winner_signals: any[]
   created_at: string
   advertiser_logo_url?: string | null
+  num_likes: number
+  num_comments: number
+  num_reactions: number
+  engagement_post_url?: string | null
+  engagement_updated_at?: string | null
+  is_saved: boolean
   classification?: AdClassification
 }
 
@@ -86,6 +92,10 @@ export interface SearchParams {
   offer_type?: string
   date_from?: string
   date_to?: string
+  sort_by?: 'first_seen_at' | 'last_seen_at' | 'longevity'
+  sort_order?: 'asc' | 'desc'
+  min_longevity_days?: number
+  saved_only?: boolean
   page?: number
   page_size?: number
 }
@@ -192,6 +202,21 @@ class AdLibraryService {
     }
   }
 
+  async captureOrganic(
+    competitorName: string,
+    linkedinUrl?: string
+  ): Promise<{ status: string; ads_captured: number }> {
+    const { data, error } = await supabase.functions.invoke('linkedin-ad-capture', {
+      body: { action: 'capture_organic', competitor_name: competitorName, competitor_linkedin_url: linkedinUrl },
+    })
+    if (error) throw new Error(error.message || 'Failed to capture organic posts')
+    if (data?.error) throw new Error(data.error)
+    return {
+      status: 'success',
+      ads_captured: data?.inserted ?? data?.total_scraped ?? 0,
+    }
+  }
+
   async captureByKeyword(
     keyword: string,
     geography?: string
@@ -269,6 +294,33 @@ class AdLibraryService {
     if (error) throw new Error(error.message || 'Failed to load likely winners')
     if (data?.error) throw new Error(data.error)
     return (data?.ads ?? data ?? []) as AdLibraryAd[]
+  }
+
+  async enrichEngagement(advertiserName?: string): Promise<{ matched: number }> {
+    const { data, error } = await supabase.functions.invoke('linkedin-ad-enrich', {
+      body: advertiserName
+        ? { action: 'enrich_advertiser', advertiser_name: advertiserName }
+        : { action: 'enrich_all' },
+    })
+    if (error) throw new Error(error.message || 'Failed to enrich engagement')
+    if (data?.error) throw new Error(data.error)
+    return { matched: data?.matched ?? data?.results?.reduce((s: number, r: { matched: number }) => s + r.matched, 0) ?? 0 }
+  }
+
+  async saveAd(adId: string): Promise<void> {
+    const { data, error } = await supabase.functions.invoke('linkedin-ad-search', {
+      body: { action: 'save_ad', ad_id: adId },
+    })
+    if (error) throw new Error(error.message || 'Failed to save ad')
+    if (data?.error) throw new Error(data.error)
+  }
+
+  async unsaveAd(adId: string): Promise<void> {
+    const { data, error } = await supabase.functions.invoke('linkedin-ad-search', {
+      body: { action: 'unsave_ad', ad_id: adId },
+    })
+    if (error) throw new Error(error.message || 'Failed to unsave ad')
+    if (data?.error) throw new Error(data.error)
   }
 
   async classifyAds(adIds?: string[]): Promise<{ classified: number }> {

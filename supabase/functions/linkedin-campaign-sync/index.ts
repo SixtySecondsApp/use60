@@ -19,7 +19,7 @@ const MAX_RETRIES = 3
 const RETRY_BASE_MS = 2_000
 const BATCH_SIZE = 100
 const LINKEDIN_API_BASE = 'https://api.linkedin.com/rest'
-const LINKEDIN_API_VERSION = '202405'
+const LINKEDIN_API_VERSION = '202511'
 
 type Action = 'sync' | 'sync_all'
 

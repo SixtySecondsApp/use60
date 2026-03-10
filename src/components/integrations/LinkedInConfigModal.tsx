@@ -25,7 +25,9 @@ export function LinkedInConfigModal({ open, onOpenChange }: { open: boolean; onO
     integration,
     leadSources,
     loading,
+    connecting,
     canManage,
+    connectLinkedIn,
     disconnectLinkedIn,
     refreshStatus,
   } = useLinkedInIntegration();
@@ -133,7 +135,7 @@ export function LinkedInConfigModal({ open, onOpenChange }: { open: boolean; onO
             </Button>
           </div>
 
-          {isConnected && (
+          {isConnected ? (
             <div className="grid grid-cols-2 gap-3 pt-2">
               <div className="rounded-lg border p-3">
                 <div className="text-xs text-gray-500 dark:text-gray-400">Scopes</div>
@@ -155,6 +157,26 @@ export function LinkedInConfigModal({ open, onOpenChange }: { open: boolean; onO
                   {connectedAt ? new Date(connectedAt).toLocaleDateString() : '-'}
                 </div>
               </div>
+            </div>
+          ) : (
+            <div className="pt-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Connect your LinkedIn account to receive leads from Lead Gen Forms and Events automatically.
+              </p>
+              <Button
+                onClick={async () => {
+                  try {
+                    await connectLinkedIn();
+                  } catch (e: any) {
+                    toast.error(e?.message || 'Failed to start LinkedIn connection');
+                  }
+                }}
+                disabled={!canManage || connecting}
+                className="w-full"
+              >
+                {connecting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Connect with LinkedIn
+              </Button>
             </div>
           )}
         </div>

@@ -141,6 +141,134 @@ export function useAdLibrary() {
     }
   }, [ready, searchAds, searchParams])
 
+  const searchLinkedIn = useCallback(async (query: string, geography?: string) => {
+    if (!ready || !query.trim()) throw new Error('Search query required')
+    try {
+      const isUrl = query.trim().includes('linkedin.com')
+      const isCompanyName = !query.trim().includes(' ') || isUrl
+
+      // For company searches, capture both ads AND organic posts in parallel
+      if (isUrl || isCompanyName) {
+        const [adsResult, organicResult] = await Promise.allSettled([
+          isUrl
+            ? adLibraryService.captureCompetitor(query.trim(), query.trim())
+            : adLibraryService.captureCompetitor(query.trim()),
+          adLibraryService.captureOrganic(query.trim(), isUrl ? query.trim() : undefined),
+        ])
+
+        const adsCount = adsResult.status === 'fulfilled' ? adsResult.value.ads_captured : 0
+        const organicCount = organicResult.status === 'fulfilled' ? organicResult.value.ads_captured : 0
+        const total = adsCount + organicCount
+
+        if (total > 0) {
+          toast.success(`Found ${adsCount} ads + ${organicCount} organic posts from LinkedIn`)
+        } else {
+          toast.info('No new content found on LinkedIn for that search')
+        }
+      } else {
+        // Multi-word = keyword search (ads only)
+        const result = await adLibraryService.captureByKeyword(query.trim(), geography)
+        if (result.ads_captured > 0) {
+          toast.success(`Found ${result.ads_captured} ads from LinkedIn`)
+        } else {
+          toast.info('No new ads found on LinkedIn for that search')
+        }
+      }
+
+      // Refresh with the search term as advertiser filter
+      await searchAds({
+        advertiser_name: isUrl ? undefined : query.trim(),
+        geography,
+        sort_by: 'longevity',
+        sort_order: 'desc',
+        page: 0,
+        page_size: 20,
+      })
+      return { ads_captured: 0 } // Return value not used by caller
+    } catch (e: any) {
+      toast.error(e.message || 'LinkedIn search failed')
+      throw e
+    }
+  }, [ready, searchAds])
+
+  const captureAll = useCallback(async () => {
+    if (!ready || watchlist.length === 0) throw new Error('No competitors on watchlist')
+    try {
+      toast.info(`Capturing ads from ${watchlist.length} competitors... this may take a few minutes`)
+      const result = await adLibraryService.captureAll(
+        watchlist.map((w) => ({
+          competitor_name: w.competitor_name,
+          competitor_linkedin_url: w.competitor_linkedin_url,
+        }))
+      )
+      const successes = result.results.filter((r) => !r.error)
+      const failures = result.results.filter((r) => r.error)
+      if (successes.length > 0) {
+        toast.success(`Captured ${result.total_captured} ads from ${successes.length} competitors`)
+      }
+      if (failures.length > 0) {
+        toast.error(`Failed for ${failures.length}: ${failures.map((f) => f.name).join(', ')}`)
+      }
+      await searchAds(searchParams)
+      return result
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to capture all')
+      throw e
+    }
+  }, [ready, watchlist, searchAds, searchParams])
+
+  // ---------------------------------------------------------------------------
+  // Engagement enrichment
+  // ---------------------------------------------------------------------------
+
+  const enrichEngagement = useCallback(async (advertiserName?: string) => {
+    if (!ready) throw new Error('Not ready')
+    try {
+      toast.info(advertiserName
+        ? `Enriching engagement for ${advertiserName}...`
+        : 'Enriching engagement for all advertisers...')
+      const result = await adLibraryService.enrichEngagement(advertiserName)
+      if (result.matched > 0) {
+        toast.success(`Matched engagement data for ${result.matched} ads`)
+      } else {
+        toast.info('No engagement matches found — posts may differ from ad copy')
+      }
+      await searchAds(searchParams)
+      return result
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to enrich engagement')
+      throw e
+    }
+  }, [ready, searchAds, searchParams])
+
+  // ---------------------------------------------------------------------------
+  // Save / unsave ads
+  // ---------------------------------------------------------------------------
+
+  const saveAd = useCallback(async (adId: string) => {
+    if (!ready) throw new Error('Not ready')
+    try {
+      await adLibraryService.saveAd(adId)
+      setAds((prev) => prev.map((a) => a.id === adId ? { ...a, is_saved: true } : a))
+      toast.success('Ad saved')
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to save ad')
+      throw e
+    }
+  }, [ready])
+
+  const unsaveAd = useCallback(async (adId: string) => {
+    if (!ready) throw new Error('Not ready')
+    try {
+      await adLibraryService.unsaveAd(adId)
+      setAds((prev) => prev.map((a) => a.id === adId ? { ...a, is_saved: false } : a))
+      toast.success('Ad removed from saved')
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to unsave ad')
+      throw e
+    }
+  }, [ready])
+
   // ---------------------------------------------------------------------------
   // Manual ad submission
   // ---------------------------------------------------------------------------
@@ -265,6 +393,15 @@ export function useAdLibrary() {
     addCompetitor,
     removeCompetitor,
     captureCompetitor,
+    captureAll,
+    searchLinkedIn,
+
+    // Save / unsave
+    saveAd,
+    unsaveAd,
+
+    // Engagement
+    enrichEngagement,
 
     // Manual submission
     submitManualAd,

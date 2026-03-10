@@ -137,10 +137,10 @@ class LinkedInAnalyticsService {
    */
   async getCampaignSummaries(
     orgId: string,
-    dateFrom: string,
-    dateTo: string
+    dateFrom?: string,
+    dateTo?: string
   ): Promise<CampaignSummary[]> {
-    const { data, error } = await supabase
+    let query = supabase
       .from('linkedin_analytics_with_pipeline')
       .select(
         'campaign_id, campaign_name, campaign_group_name, campaign_status, campaign_type, ' +
@@ -150,9 +150,11 @@ class LinkedInAnalyticsService {
         'pipeline_revenue, pipeline_proposals, cost_per_meeting, cost_per_deal, roas'
       )
       .eq('org_id', orgId)
-      .gte('date_from', dateFrom)
-      .lte('date_to', dateTo)
-      .order('total_spend', { ascending: false })
+
+    if (dateFrom) query = query.gte('first_date', dateFrom)
+    if (dateTo) query = query.lte('last_date', dateTo)
+
+    const { data, error } = await query.order('total_spend', { ascending: false })
 
     if (error) throw new Error(error.message || 'Failed to load campaign summaries')
     return (data ?? []) as CampaignSummary[]
@@ -187,43 +189,58 @@ class LinkedInAnalyticsService {
   }
 
   /**
-   * Aggregate totals for overview stats.
+   * Aggregate totals for overview stats from campaign metrics table.
    */
   async getOverview(
     orgId: string,
     dateFrom: string,
     dateTo: string
   ): Promise<AnalyticsOverview> {
-    const { data, error } = await supabase.functions.invoke('linkedin-analytics-sync', {
-      body: {
-        action: 'get_overview',
-        org_id: orgId,
-        date_from: dateFrom,
-        date_to: dateTo,
-      },
-    })
+    const { data, error } = await supabase
+      .from('linkedin_campaign_metrics')
+      .select('impressions, clicks, spend, leads, conversions')
+      .eq('org_id', orgId)
+      .gte('date', dateFrom)
+      .lte('date', dateTo)
+
     if (error) throw new Error(error.message || 'Failed to load analytics overview')
-    if (data?.error) throw new Error(data.error)
-    return data as AnalyticsOverview
+
+    const rows = data ?? []
+    const totalSpend = rows.reduce((s, r) => s + Number(r.spend || 0), 0)
+    const totalImpressions = rows.reduce((s, r) => s + Number(r.impressions || 0), 0)
+    const totalClicks = rows.reduce((s, r) => s + Number(r.clicks || 0), 0)
+    const totalLeads = rows.reduce((s, r) => s + Number(r.leads || 0), 0)
+
+    return {
+      total_spend: totalSpend,
+      total_impressions: totalImpressions,
+      total_clicks: totalClicks,
+      total_leads: totalLeads,
+      avg_ctr: totalImpressions > 0 ? Math.round((totalClicks / totalImpressions) * 10000) / 100 : 0,
+      avg_cpc: totalClicks > 0 ? Math.round((totalSpend / totalClicks) * 100) / 100 : 0,
+      avg_cpl: totalLeads > 0 ? Math.round((totalSpend / totalLeads) * 100) / 100 : 0,
+      pipeline_meetings: 0,
+      pipeline_deals: 0,
+      pipeline_revenue: 0,
+      roas: null,
+    }
   }
 
   /**
    * Trigger a manual sync of LinkedIn analytics data.
    */
   async triggerSync(
-    orgId: string,
-    syncType?: string
-  ): Promise<{ sync_run_id: string; status: string }> {
+    orgId: string
+  ): Promise<{ status: string; campaigns_synced?: number }> {
     const { data, error } = await supabase.functions.invoke('linkedin-analytics-sync', {
       body: {
-        action: 'trigger_sync',
+        action: 'sync',
         org_id: orgId,
-        sync_type: syncType,
       },
     })
     if (error) throw new Error(error.message || 'Failed to trigger sync')
     if (data?.error) throw new Error(data.error)
-    return data as { sync_run_id: string; status: string }
+    return data as { status: string; campaigns_synced?: number }
   }
 
   /**

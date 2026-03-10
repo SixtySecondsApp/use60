@@ -320,10 +320,11 @@ export default function LinkedInAnalyticsPage() {
     if (!activeOrgId) return
     try {
       setSyncing(true)
-      const { error } = await supabase.functions.invoke('linkedin-analytics-sync', {
+      const { data, error } = await supabase.functions.invoke('linkedin-analytics-sync', {
         body: { action: 'sync', org_id: activeOrgId },
       })
       if (error) throw error
+      if (data?.error) throw new Error(data.error)
       toast.success('Sync started')
       setTimeout(() => {
         fetchSyncHistory()
