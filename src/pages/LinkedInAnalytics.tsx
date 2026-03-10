@@ -1,11 +1,11 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { toast } from 'sonner'
 import {
   BarChart3, TrendingUp, DollarSign, MousePointerClick, Users, Eye,
-  RefreshCw, Download, ArrowUpDown, ChevronDown, Activity, Target,
+  RefreshCw, Download, ArrowUpDown, ChevronDown, ChevronRight, Activity, Target,
   Calendar, Building2, Briefcase, Globe, Loader2, AlertTriangle,
-  CheckCircle2, Clock, XCircle, Filter,
+  CheckCircle2, Clock, XCircle, Filter, Layers, Image, Video, LayoutGrid, Type, Zap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,6 +18,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { supabase } from '@/lib/supabase/clientV2'
 import { useOrgStore } from '@/lib/stores/orgStore'
 import { useAuth } from '@/lib/contexts/AuthContext'
+import { useOrgMoney } from '@/lib/hooks/useOrgMoney'
+import { linkedinAdManagerService, type ManagedCreative } from '@/lib/services/linkedinAdManagerService'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -128,14 +130,14 @@ type SortDir = 'asc' | 'desc'
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatCurrency(val: number | null, currency = 'USD'): string {
+function formatCurrency(val: number | null, currency = 'GBP', locale = 'en-GB'): string {
   if (val == null) return '—'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val)
+  return new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val)
 }
 
 function formatNumber(val: number | null): string {
   if (val == null) return '—'
-  return new Intl.NumberFormat('en-US').format(val)
+  return new Intl.NumberFormat('en-GB').format(val)
 }
 
 function formatPercent(val: number | null): string {
@@ -143,9 +145,9 @@ function formatPercent(val: number | null): string {
   return `${val.toFixed(2)}%`
 }
 
-function formatDecimal(val: number | null, currency = 'USD'): string {
+function formatDecimal(val: number | null, currency = 'GBP', locale = 'en-GB'): string {
   if (val == null) return '—'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
+  return new Intl.NumberFormat(locale, { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
 }
 
 function formatDate(iso: string | null): string {
@@ -176,9 +178,10 @@ export default function LinkedInAnalyticsPage() {
   const activeOrgId = useOrgStore((s) => s.activeOrgId)
   const { isAuthenticated, user, loading: authLoading } = useAuth()
   const orgLoading = useOrgStore((s) => s.loading)
+  const { currencyCode: orgCurrency, locale: orgLocale } = useOrgMoney()
 
   const [activeTab, setActiveTab] = useState('performance')
-  const [datePreset, setDatePreset] = useState(30)
+  const [datePreset, setDatePreset] = useState<number | 'custom'>(30)
   const [dateFrom, setDateFrom] = useState(daysAgo(30))
   const [dateTo, setDateTo] = useState(today())
 
@@ -189,6 +192,9 @@ export default function LinkedInAnalyticsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Campaign group expansion
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   // Demographics state
   const [demographics, setDemographics] = useState<DemographicMetric[]>([])
@@ -205,6 +211,10 @@ export default function LinkedInAnalyticsPage() {
   const [campaignMetrics, setCampaignMetrics] = useState<DailyMetric[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
 
+  // Creatives for detail panel
+  const [detailCreatives, setDetailCreatives] = useState<ManagedCreative[]>([])
+  const [loadingCreatives, setLoadingCreatives] = useState(false)
+
   const initialLoadDone = useRef(false)
 
   const ready = isAuthenticated && user && activeOrgId && !authLoading && !orgLoading
@@ -217,19 +227,88 @@ export default function LinkedInAnalyticsPage() {
     if (!activeOrgId) return
     try {
       setLoadingCampaigns(true)
-      const { data, error } = await supabase
+
+      // Query raw metrics with date filters for accurate date-range performance
+      const { data: metricsData, error: metricsError } = await supabase
+        .from('linkedin_campaign_metrics')
+        .select('campaign_id, campaign_name, campaign_group_name, campaign_status, campaign_type, currency, impressions, clicks, spend, leads, conversions, total_engagements')
+        .eq('org_id', activeOrgId)
+        .gte('date', dateFrom)
+        .lte('date', dateTo)
+
+      if (metricsError) throw metricsError
+
+      // Aggregate by campaign_id
+      const campaignMap = new Map<string, CampaignSummary>()
+      for (const row of metricsData ?? []) {
+        const existing = campaignMap.get(row.campaign_id)
+        if (existing) {
+          existing.total_impressions += Number(row.impressions || 0)
+          existing.total_clicks += Number(row.clicks || 0)
+          existing.total_spend += Number(row.spend || 0)
+          existing.total_leads += Number(row.leads || 0)
+          existing.total_conversions += Number(row.conversions || 0)
+          existing.total_engagements += Number(row.total_engagements || 0)
+        } else {
+          campaignMap.set(row.campaign_id, {
+            campaign_id: row.campaign_id,
+            campaign_name: row.campaign_name,
+            campaign_group_name: row.campaign_group_name,
+            campaign_status: row.campaign_status,
+            campaign_type: row.campaign_type,
+            currency: row.currency || orgCurrency,
+            total_impressions: Number(row.impressions || 0),
+            total_clicks: Number(row.clicks || 0),
+            total_spend: Number(row.spend || 0),
+            total_leads: Number(row.leads || 0),
+            total_conversions: Number(row.conversions || 0),
+            total_engagements: Number(row.total_engagements || 0),
+            avg_ctr: 0, avg_cpc: 0, avg_cpm: 0, avg_cpl: 0,
+            pipeline_leads: 0, pipeline_meetings: 0, pipeline_deals: 0,
+            pipeline_won_deals: 0, pipeline_revenue: 0, pipeline_proposals: 0,
+            cost_per_meeting: null, cost_per_deal: null, roas: null,
+            first_date: null, last_date: null,
+          })
+        }
+      }
+
+      // Calculate derived metrics
+      for (const [, c] of campaignMap) {
+        c.avg_ctr = c.total_impressions > 0 ? (c.total_clicks / c.total_impressions) * 100 : 0
+        c.avg_cpc = c.total_clicks > 0 ? c.total_spend / c.total_clicks : 0
+        c.avg_cpm = c.total_impressions > 0 ? (c.total_spend / c.total_impressions) * 1000 : 0
+        c.avg_cpl = c.total_leads > 0 ? c.total_spend / c.total_leads : 0
+      }
+
+      // Fetch pipeline overlay data (not date-filtered — pipeline events are campaign-lifetime)
+      const { data: pipelineData } = await supabase
         .from('linkedin_analytics_with_pipeline')
-        .select('campaign_id, campaign_name, campaign_group_name, campaign_status, campaign_type, currency, total_impressions, total_clicks, total_spend, total_leads, total_conversions, total_engagements, avg_ctr, avg_cpc, avg_cpm, avg_cpl, pipeline_leads, pipeline_meetings, pipeline_deals, pipeline_won_deals, pipeline_revenue, pipeline_proposals, cost_per_meeting, cost_per_deal, roas, first_date, last_date')
+        .select('campaign_id, pipeline_leads, pipeline_meetings, pipeline_deals, pipeline_won_deals, pipeline_revenue, pipeline_proposals, cost_per_meeting, cost_per_deal, roas')
         .eq('org_id', activeOrgId)
 
-      if (error) throw error
-      setCampaigns((data ?? []) as CampaignSummary[])
+      // Merge pipeline data
+      for (const p of pipelineData ?? []) {
+        const c = campaignMap.get(p.campaign_id)
+        if (c) {
+          c.pipeline_leads = Number(p.pipeline_leads || 0)
+          c.pipeline_meetings = Number(p.pipeline_meetings || 0)
+          c.pipeline_deals = Number(p.pipeline_deals || 0)
+          c.pipeline_won_deals = Number(p.pipeline_won_deals || 0)
+          c.pipeline_revenue = Number(p.pipeline_revenue || 0)
+          c.pipeline_proposals = Number(p.pipeline_proposals || 0)
+          c.cost_per_meeting = p.cost_per_meeting
+          c.cost_per_deal = p.cost_per_deal
+          c.roas = c.total_spend > 0 && c.pipeline_revenue > 0 ? c.pipeline_revenue / c.total_spend : null
+        }
+      }
+
+      setCampaigns(Array.from(campaignMap.values()))
     } catch (e: any) {
       toast.error(e.message || 'Failed to load campaigns')
     } finally {
       setLoadingCampaigns(false)
     }
-  }, [activeOrgId])
+  }, [activeOrgId, dateFrom, dateTo, orgCurrency])
 
   const fetchDemographics = useCallback(async (pivot?: string) => {
     if (!activeOrgId) return
@@ -316,6 +395,18 @@ export default function LinkedInAnalyticsPage() {
     }
   }, [activeOrgId, dateFrom, dateTo])
 
+  const fetchCreatives = useCallback(async (campaignId: string) => {
+    try {
+      setLoadingCreatives(true)
+      const result = await linkedinAdManagerService.listCreatives(campaignId)
+      setDetailCreatives(result)
+    } catch {
+      setDetailCreatives([])
+    } finally {
+      setLoadingCreatives(false)
+    }
+  }, [])
+
   const triggerSync = useCallback(async () => {
     if (!activeOrgId) return
     try {
@@ -392,6 +483,15 @@ export default function LinkedInAnalyticsPage() {
     setDateTo(today())
   }, [])
 
+  const toggleGroup = useCallback((groupName: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(groupName)) next.delete(groupName)
+      else next.add(groupName)
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     if (ready && initialLoadDone.current) {
       fetchCampaigns()
@@ -421,6 +521,40 @@ export default function LinkedInAnalyticsPage() {
     })
     return list
   }, [campaigns, statusFilter, searchQuery, sortField, sortDir])
+
+  // Group campaigns by campaign_group_name (ad sets)
+  const groupedCampaigns = useMemo(() => {
+    const groups = new Map<string, { name: string; campaigns: CampaignSummary[] }>()
+    for (const c of filteredCampaigns) {
+      const groupName = c.campaign_group_name || 'Ungrouped'
+      const existing = groups.get(groupName)
+      if (existing) {
+        existing.campaigns.push(c)
+      } else {
+        groups.set(groupName, { name: groupName, campaigns: [c] })
+      }
+    }
+    return Array.from(groups.values()).map(g => {
+      const totalSpend = g.campaigns.reduce((s, c) => s + c.total_spend, 0)
+      const totalImpressions = g.campaigns.reduce((s, c) => s + c.total_impressions, 0)
+      const totalClicks = g.campaigns.reduce((s, c) => s + c.total_clicks, 0)
+      const totalLeads = g.campaigns.reduce((s, c) => s + c.total_leads, 0)
+      const totalRevenue = g.campaigns.reduce((s, c) => s + c.pipeline_revenue, 0)
+      return {
+        ...g,
+        total_spend: totalSpend,
+        total_impressions: totalImpressions,
+        total_clicks: totalClicks,
+        total_leads: totalLeads,
+        avg_ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+        avg_cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
+        avg_cpl: totalLeads > 0 ? totalSpend / totalLeads : 0,
+        pipeline_revenue: totalRevenue,
+        roas: totalSpend > 0 && totalRevenue > 0 ? totalRevenue / totalSpend : null,
+        currency: g.campaigns[0]?.currency || orgCurrency,
+      }
+    }).sort((a, b) => b.total_spend - a.total_spend)
+  }, [filteredCampaigns, orgCurrency])
 
   const overview = useMemo(() => {
     const totals = campaigns.reduce(
@@ -498,7 +632,34 @@ export default function LinkedInAnalyticsPage() {
                   {p.label}
                 </button>
               ))}
+              <button
+                onClick={() => setDatePreset('custom')}
+                className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                  datePreset === 'custom'
+                    ? 'bg-zinc-700 text-zinc-100'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Custom
+              </button>
             </div>
+            {datePreset === 'custom' && (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-[130px] h-8 text-xs bg-zinc-900/60 border-zinc-800"
+                />
+                <span className="text-xs text-zinc-500">to</span>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-[130px] h-8 text-xs bg-zinc-900/60 border-zinc-800"
+                />
+              </div>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -521,22 +682,22 @@ export default function LinkedInAnalyticsPage() {
 
         {/* Overview Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-          <StatCard icon={DollarSign} label="Total Spend" value={formatCurrency(overview.spend)} />
+          <StatCard icon={DollarSign} label="Total Spend" value={formatCurrency(overview.spend, orgCurrency, orgLocale)} />
           <StatCard icon={Eye} label="Impressions" value={formatNumber(overview.impressions)} />
           <StatCard icon={MousePointerClick} label="Clicks" value={formatNumber(overview.clicks)} />
           <StatCard icon={TrendingUp} label="CTR" value={formatPercent(overview.ctr)} />
           <StatCard icon={Target} label="Leads" value={formatNumber(overview.leads)} />
           <StatCard icon={Calendar} label="Meetings" value={formatNumber(overview.meetings)} />
           <StatCard icon={Activity} label="Won Deals" value={formatNumber(overview.wonDeals)} />
-          <StatCard icon={DollarSign} label="Revenue" value={formatCurrency(overview.revenue)} accent />
+          <StatCard icon={DollarSign} label="Revenue" value={formatCurrency(overview.revenue, orgCurrency, orgLocale)} accent />
         </div>
 
         {/* Derived Metrics */}
         {(overview.roas != null || overview.costPerMeeting != null) && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MetricCard label="Avg CPC" value={formatDecimal(overview.cpc)} />
-            <MetricCard label="Avg CPL" value={formatDecimal(overview.cpl)} />
-            <MetricCard label="Cost / Meeting" value={overview.costPerMeeting ? formatDecimal(overview.costPerMeeting) : '—'} />
+            <MetricCard label="Avg CPC" value={formatDecimal(overview.cpc, orgCurrency, orgLocale)} />
+            <MetricCard label="Avg CPL" value={formatDecimal(overview.cpl, orgCurrency, orgLocale)} />
+            <MetricCard label="Cost / Meeting" value={overview.costPerMeeting ? formatDecimal(overview.costPerMeeting, orgCurrency, orgLocale) : '—'} />
             <MetricCard
               label="ROAS"
               value={overview.roas ? `${overview.roas.toFixed(1)}x` : '—'}
@@ -590,10 +751,10 @@ export default function LinkedInAnalyticsPage() {
                   <SelectItem value="DRAFT">Draft</SelectItem>
                 </SelectContent>
               </Select>
-              <span className="text-xs text-zinc-500">{filteredCampaigns.length} campaigns</span>
+              <span className="text-xs text-zinc-500">{groupedCampaigns.length} ad set{groupedCampaigns.length !== 1 ? 's' : ''} · {filteredCampaigns.length} campaigns</span>
             </div>
 
-            {/* Campaign Table */}
+            {/* Campaign Table — grouped by Ad Set (campaign group) */}
             {loadingCampaigns ? (
               <div className="space-y-2">
                 {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-14" />)}
@@ -616,7 +777,7 @@ export default function LinkedInAnalyticsPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-zinc-800/60 bg-zinc-900/40">
-                        <th className="text-left p-3 text-zinc-400 font-medium">Campaign</th>
+                        <th className="text-left p-3 text-zinc-400 font-medium">Ad Set / Campaign</th>
                         <th className="text-left p-3 text-zinc-400 font-medium">Status</th>
                         <SortHeader field="total_spend" label="Spend" current={sortField} dir={sortDir} onSort={toggleSort} />
                         <SortHeader field="total_impressions" label="Impr." current={sortField} dir={sortDir} onSort={toggleSort} />
@@ -630,49 +791,96 @@ export default function LinkedInAnalyticsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredCampaigns.map((c) => (
-                        <tr
-                          key={c.campaign_id}
-                          className="border-b border-zinc-800/40 hover:bg-zinc-800/30 cursor-pointer transition-colors"
-                          onClick={() => {
-                            setSelectedCampaign(c)
-                            fetchCampaignDetail(c.campaign_id)
-                          }}
-                        >
-                          <td className="p-3">
-                            <div className="font-medium text-zinc-200 max-w-[200px] truncate">{c.campaign_name || 'Unnamed'}</div>
-                            {c.campaign_group_name && (
-                              <div className="text-xs text-zinc-500 truncate max-w-[200px]">{c.campaign_group_name}</div>
-                            )}
-                          </td>
-                          <td className="p-3">
-                            <Badge variant="outline" className={STATUS_COLORS[c.campaign_status] ?? 'text-zinc-400'}>
-                              {c.campaign_status}
-                            </Badge>
-                          </td>
-                          <td className="p-3 text-zinc-300 font-mono text-right">{formatCurrency(c.total_spend, c.currency)}</td>
-                          <td className="p-3 text-zinc-400 text-right">{formatNumber(c.total_impressions)}</td>
-                          <td className="p-3 text-zinc-400 text-right">{formatNumber(c.total_clicks)}</td>
-                          <td className="p-3 text-zinc-400 text-right">{formatPercent(c.avg_ctr)}</td>
-                          <td className="p-3 text-zinc-400 text-right">{formatDecimal(c.avg_cpc, c.currency)}</td>
-                          <td className="p-3 text-zinc-300 text-right">{formatNumber(c.total_leads)}</td>
-                          <td className="p-3 text-zinc-400 text-right">{formatDecimal(c.avg_cpl, c.currency)}</td>
-                          <td className="p-3 text-right">
-                            <span className={c.pipeline_revenue > 0 ? 'text-green-400 font-medium' : 'text-zinc-500'}>
-                              {c.pipeline_revenue > 0 ? formatCurrency(c.pipeline_revenue, c.currency) : '—'}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right">
-                            {c.roas != null ? (
-                              <span className={c.roas >= 1 ? 'text-green-400 font-medium' : 'text-amber-400'}>
-                                {c.roas.toFixed(1)}x
-                              </span>
-                            ) : (
-                              <span className="text-zinc-500">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                      {groupedCampaigns.map((group) => {
+                        const isExpanded = expandedGroups.has(group.name)
+                        const cur = orgCurrency
+                        return (
+                          <React.Fragment key={group.name}>
+                            {/* Ad Set (Campaign Group) row */}
+                            <tr
+                              className="border-b border-zinc-800/40 bg-zinc-900/20 hover:bg-zinc-800/30 cursor-pointer transition-colors"
+                              onClick={() => toggleGroup(group.name)}
+                            >
+                              <td className="p-3">
+                                <div className="flex items-center gap-2">
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4 text-zinc-400 shrink-0" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-zinc-400 shrink-0" />
+                                  )}
+                                  <Layers className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                                  <div>
+                                    <div className="font-medium text-zinc-100 max-w-[200px] truncate">{group.name}</div>
+                                    <div className="text-xs text-zinc-500">{group.campaigns.length} campaign{group.campaigns.length !== 1 ? 's' : ''}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-3 text-zinc-500 text-xs">—</td>
+                              <td className="p-3 text-zinc-200 font-mono text-right font-medium">{formatCurrency(group.total_spend, cur, orgLocale)}</td>
+                              <td className="p-3 text-zinc-300 text-right font-medium">{formatNumber(group.total_impressions)}</td>
+                              <td className="p-3 text-zinc-300 text-right font-medium">{formatNumber(group.total_clicks)}</td>
+                              <td className="p-3 text-zinc-300 text-right font-medium">{formatPercent(group.avg_ctr)}</td>
+                              <td className="p-3 text-zinc-300 text-right font-medium">{formatDecimal(group.avg_cpc, cur, orgLocale)}</td>
+                              <td className="p-3 text-zinc-200 text-right font-medium">{formatNumber(group.total_leads)}</td>
+                              <td className="p-3 text-zinc-300 text-right font-medium">{formatDecimal(group.avg_cpl, cur, orgLocale)}</td>
+                              <td className="p-3 text-right font-medium">
+                                <span className={group.pipeline_revenue > 0 ? 'text-green-400' : 'text-zinc-500'}>
+                                  {group.pipeline_revenue > 0 ? formatCurrency(group.pipeline_revenue, cur, orgLocale) : '—'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-medium">
+                                {group.roas != null ? (
+                                  <span className={group.roas >= 1 ? 'text-green-400' : 'text-amber-400'}>{group.roas.toFixed(1)}x</span>
+                                ) : (
+                                  <span className="text-zinc-500">—</span>
+                                )}
+                              </td>
+                            </tr>
+                            {/* Expanded campaigns */}
+                            {isExpanded && group.campaigns.map((c) => (
+                              <tr
+                                key={c.campaign_id}
+                                className="border-b border-zinc-800/40 hover:bg-zinc-800/30 cursor-pointer transition-colors bg-zinc-950/30"
+                                onClick={() => {
+                                  setSelectedCampaign(c)
+                                  fetchCampaignDetail(c.campaign_id)
+                                  fetchCreatives(c.campaign_id)
+                                }}
+                              >
+                                <td className="p-3 pl-12">
+                                  <div className="font-medium text-zinc-200 max-w-[200px] truncate">{c.campaign_name || 'Unnamed'}</div>
+                                </td>
+                                <td className="p-3">
+                                  <Badge variant="outline" className={STATUS_COLORS[c.campaign_status] ?? 'text-zinc-400'}>
+                                    {c.campaign_status}
+                                  </Badge>
+                                </td>
+                                <td className="p-3 text-zinc-300 font-mono text-right">{formatCurrency(c.total_spend, orgCurrency, orgLocale)}</td>
+                                <td className="p-3 text-zinc-400 text-right">{formatNumber(c.total_impressions)}</td>
+                                <td className="p-3 text-zinc-400 text-right">{formatNumber(c.total_clicks)}</td>
+                                <td className="p-3 text-zinc-400 text-right">{formatPercent(c.avg_ctr)}</td>
+                                <td className="p-3 text-zinc-400 text-right">{formatDecimal(c.avg_cpc, orgCurrency, orgLocale)}</td>
+                                <td className="p-3 text-zinc-300 text-right">{formatNumber(c.total_leads)}</td>
+                                <td className="p-3 text-zinc-400 text-right">{formatDecimal(c.avg_cpl, orgCurrency, orgLocale)}</td>
+                                <td className="p-3 text-right">
+                                  <span className={c.pipeline_revenue > 0 ? 'text-green-400 font-medium' : 'text-zinc-500'}>
+                                    {c.pipeline_revenue > 0 ? formatCurrency(c.pipeline_revenue, orgCurrency, orgLocale) : '—'}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-right">
+                                  {c.roas != null ? (
+                                    <span className={c.roas >= 1 ? 'text-green-400 font-medium' : 'text-amber-400'}>
+                                      {c.roas.toFixed(1)}x
+                                    </span>
+                                  ) : (
+                                    <span className="text-zinc-500">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -691,8 +899,8 @@ export default function LinkedInAnalyticsPage() {
                     <PipelineStat label="Meetings Booked" value={overview.meetings} />
                     <PipelineStat label="Deals Created" value={overview.deals} />
                     <PipelineStat label="Deals Won" value={overview.wonDeals} />
-                    <PipelineStat label="Revenue" value={formatCurrency(overview.revenue)} isText />
-                    <PipelineStat label="Cost / Deal" value={overview.costPerDeal ? formatDecimal(overview.costPerDeal) : '—'} isText />
+                    <PipelineStat label="Revenue" value={formatCurrency(overview.revenue, orgCurrency, orgLocale)} isText />
+                    <PipelineStat label="Cost / Deal" value={overview.costPerDeal ? formatDecimal(overview.costPerDeal, orgCurrency, orgLocale) : '—'} isText />
                   </div>
                   <p className="text-xs text-zinc-600 mt-3">
                     Attribution based on LinkedIn-sourced contacts matched to downstream pipeline events in 60. Last-touch attribution by source channel.
@@ -759,9 +967,9 @@ export default function LinkedInAnalyticsPage() {
                           <td className="p-3 text-zinc-400 text-right">{formatNumber(d.impressions)}</td>
                           <td className="p-3 text-zinc-400 text-right">{formatNumber(d.clicks)}</td>
                           <td className="p-3 text-zinc-400 text-right">{formatPercent(ctr)}</td>
-                          <td className="p-3 text-zinc-300 font-mono text-right">{formatDecimal(d.spend)}</td>
+                          <td className="p-3 text-zinc-300 font-mono text-right">{formatDecimal(d.spend, orgCurrency, orgLocale)}</td>
                           <td className="p-3 text-zinc-300 text-right">{formatNumber(d.leads)}</td>
-                          <td className="p-3 text-zinc-400 text-right">{formatDecimal(cpc)}</td>
+                          <td className="p-3 text-zinc-400 text-right">{formatDecimal(cpc, orgCurrency, orgLocale)}</td>
                         </tr>
                       )
                     })}
@@ -871,14 +1079,14 @@ export default function LinkedInAnalyticsPage() {
                   <div>
                     <h4 className="text-xs font-medium text-zinc-500 uppercase mb-3">Ad Performance</h4>
                     <div className="grid grid-cols-2 gap-3">
-                      <DetailStat label="Spend" value={formatCurrency(selectedCampaign.total_spend, selectedCampaign.currency)} />
+                      <DetailStat label="Spend" value={formatCurrency(selectedCampaign.total_spend, orgCurrency, orgLocale)} />
                       <DetailStat label="Impressions" value={formatNumber(selectedCampaign.total_impressions)} />
                       <DetailStat label="Clicks" value={formatNumber(selectedCampaign.total_clicks)} />
                       <DetailStat label="CTR" value={formatPercent(selectedCampaign.avg_ctr)} />
-                      <DetailStat label="CPC" value={formatDecimal(selectedCampaign.avg_cpc, selectedCampaign.currency)} />
+                      <DetailStat label="CPC" value={formatDecimal(selectedCampaign.avg_cpc, orgCurrency, orgLocale)} />
                       <DetailStat label="Leads" value={formatNumber(selectedCampaign.total_leads)} />
-                      <DetailStat label="CPL" value={formatDecimal(selectedCampaign.avg_cpl, selectedCampaign.currency)} />
-                      <DetailStat label="CPM" value={formatDecimal(selectedCampaign.avg_cpm, selectedCampaign.currency)} />
+                      <DetailStat label="CPL" value={formatDecimal(selectedCampaign.avg_cpl, orgCurrency, orgLocale)} />
+                      <DetailStat label="CPM" value={formatDecimal(selectedCampaign.avg_cpm, orgCurrency, orgLocale)} />
                     </div>
                   </div>
 
@@ -890,14 +1098,40 @@ export default function LinkedInAnalyticsPage() {
                       <DetailStat label="Meetings" value={formatNumber(selectedCampaign.pipeline_meetings)} />
                       <DetailStat label="Proposals" value={formatNumber(selectedCampaign.pipeline_proposals)} />
                       <DetailStat label="Won Deals" value={formatNumber(selectedCampaign.pipeline_won_deals)} />
-                      <DetailStat label="Revenue" value={formatCurrency(selectedCampaign.pipeline_revenue, selectedCampaign.currency)} accent />
+                      <DetailStat label="Revenue" value={formatCurrency(selectedCampaign.pipeline_revenue, orgCurrency, orgLocale)} accent />
                       <DetailStat label="ROAS" value={selectedCampaign.roas ? `${selectedCampaign.roas.toFixed(1)}x` : '—'} accent={selectedCampaign.roas != null && selectedCampaign.roas >= 1} />
-                      <DetailStat label="Cost / Meeting" value={selectedCampaign.cost_per_meeting ? formatDecimal(selectedCampaign.cost_per_meeting, selectedCampaign.currency) : '—'} />
-                      <DetailStat label="Cost / Deal" value={selectedCampaign.cost_per_deal ? formatDecimal(selectedCampaign.cost_per_deal, selectedCampaign.currency) : '—'} />
+                      <DetailStat label="Cost / Meeting" value={selectedCampaign.cost_per_meeting ? formatDecimal(selectedCampaign.cost_per_meeting, orgCurrency, orgLocale) : '—'} />
+                      <DetailStat label="Cost / Deal" value={selectedCampaign.cost_per_deal ? formatDecimal(selectedCampaign.cost_per_deal, orgCurrency, orgLocale) : '—'} />
                     </div>
                   </div>
 
-                  {/* Daily Metrics Chart (simplified table for now) */}
+                  {/* Creatives */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-medium text-zinc-500 uppercase flex items-center gap-2">
+                        <Image className="h-3.5 w-3.5" />
+                        Creatives
+                      </h4>
+                      {!loadingCreatives && (
+                        <span className="text-xs text-zinc-500">{detailCreatives.length} creative{detailCreatives.length !== 1 ? 's' : ''}</span>
+                      )}
+                    </div>
+                    {loadingCreatives ? (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
+                      </div>
+                    ) : detailCreatives.length === 0 ? (
+                      <p className="text-xs text-zinc-500">No creatives for this campaign</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {detailCreatives.map((creative) => (
+                          <AnalyticsCreativeCard key={creative.id} creative={creative} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Daily Metrics */}
                   <div>
                     <h4 className="text-xs font-medium text-zinc-500 uppercase mb-3">Daily Trend</h4>
                     {loadingDetail ? (
@@ -922,7 +1156,7 @@ export default function LinkedInAnalyticsPage() {
                             {campaignMetrics.map((m) => (
                               <tr key={m.date} className="border-b border-zinc-800/30">
                                 <td className="p-2 text-zinc-400">{formatDateShort(m.date)}</td>
-                                <td className="p-2 text-zinc-300 text-right font-mono">{formatDecimal(m.spend)}</td>
+                                <td className="p-2 text-zinc-300 text-right font-mono">{formatDecimal(m.spend, orgCurrency, orgLocale)}</td>
                                 <td className="p-2 text-zinc-400 text-right">{formatNumber(m.impressions)}</td>
                                 <td className="p-2 text-zinc-400 text-right">{formatNumber(m.clicks)}</td>
                                 <td className="p-2 text-zinc-300 text-right">{formatNumber(m.leads)}</td>
@@ -1005,6 +1239,45 @@ function DetailStat({ label, value, accent }: { label: string; value: string; ac
     <div className="bg-zinc-800/30 rounded-lg p-2.5">
       <span className="text-xs text-zinc-500 block">{label}</span>
       <span className={`text-sm font-medium ${accent ? 'text-green-400' : 'text-zinc-200'}`}>{value}</span>
+    </div>
+  )
+}
+
+const MEDIA_TYPE_ICONS: Record<string, typeof Image> = {
+  IMAGE: Image,
+  VIDEO: Video,
+  CAROUSEL: LayoutGrid,
+  TEXT: Type,
+}
+
+function AnalyticsCreativeCard({ creative }: { creative: ManagedCreative }) {
+  const Icon = MEDIA_TYPE_ICONS[creative.media_type?.toUpperCase()] || Zap
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-lg border border-zinc-800/40 bg-zinc-900/30">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-500/10">
+        <Icon className="h-4 w-4 text-blue-400" />
+      </div>
+      <div className="min-w-0 flex-1">
+        {creative.headline && (
+          <p className="text-sm font-medium text-zinc-200 truncate">{creative.headline}</p>
+        )}
+        {creative.body_text && (
+          <p className="text-xs text-zinc-500 line-clamp-2 mt-0.5">{creative.body_text}</p>
+        )}
+        <div className="flex items-center gap-2 mt-1.5">
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-zinc-700">
+            {creative.media_type?.toLowerCase() || 'unknown'}
+          </Badge>
+          {creative.cta_text && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-zinc-700">
+              {creative.cta_text}
+            </Badge>
+          )}
+          <span className={`text-[10px] font-medium ${creative.status === 'ACTIVE' ? 'text-green-400' : 'text-zinc-500'}`}>
+            {creative.status}
+          </span>
+        </div>
+      </div>
     </div>
   )
 }
