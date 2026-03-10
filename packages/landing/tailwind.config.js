@@ -9,12 +9,14 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
-        // Clash Display for V6 landing page display headings
-        display: ['Clash Display', 'sans-serif'],
+        // Cabinet Grotesk for V7 landing page display headings
+        display: ['Cabinet Grotesk', 'sans-serif'],
         // Urbanist for headings (local font)
         heading: ['Urbanist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-        // Questrial for body copy (local font)
-        body: ['Questrial', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        // Source Sans 3 for V7 body copy
+        body: ['Source Sans 3', 'Inter', 'system-ui', 'sans-serif'],
+        // IBM Plex Mono for V7 code/mono text
+        mono: ['IBM Plex Mono', 'monospace'],
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',

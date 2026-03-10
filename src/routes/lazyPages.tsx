@@ -160,6 +160,7 @@ export const FreepikFlow = lazyWithRetry(() => import('@/components/workflows/Fr
 export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m => ({ default: m.Copilot })));
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const LandingPageBuilderPage = lazyWithRetry(() => import('@/pages/LandingPageBuilderPage'));
+export const LandingPagesPage = lazyWithRetry(() => import('@/pages/platform/LandingPagesPage'));
 export const CampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/CampaignsPage'));
 export const AbmCampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/AbmCampaignsPage'));
 export const OutreachAnalyticsPage = lazyWithRetry(() => import('@/pages/OutreachAnalyticsPage'));

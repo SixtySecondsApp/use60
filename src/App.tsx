@@ -90,7 +90,7 @@ import {
   // Features
   MeetingsPage, MeetingLibraryPage, ProposalsList, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   Events, ActivityLog,
-  ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage,
+  ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage, LandingPagesPage,
   CampaignsPage,
   AbmCampaignsPage,
   OutreachAnalyticsPage,
@@ -353,6 +353,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/copilot/:conversationId" element={<InternalRouteGuard><AppLayout><CopilotPage /></AppLayout></InternalRouteGuard>} />
                 {/* Landing Page Builder */}
                 <Route path="/landing-page-builder" element={<InternalRouteGuard><AppLayout><LandingPageBuilderPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/landing-pages" element={<InternalRouteGuard><AppLayout><LandingPagesPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/action-centre" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/command-centre" element={<InternalRouteGuard><AppLayout><CommandCentre /></AppLayout></InternalRouteGuard>} />
                 <Route path="/activity" element={<InternalRouteGuard><AppLayout><ActivityLog /></AppLayout></InternalRouteGuard>} />
