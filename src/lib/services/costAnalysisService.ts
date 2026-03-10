@@ -635,7 +635,7 @@ export async function estimateCosts(input: CostEstimationInput): Promise<CostEst
     : 0;
 
   // Meeting searches (Gemini)
-  const geminiRate = getCostRateForModel('gemini-2.5-flash', 'gemini', rates);
+  const geminiRate = getCostRateForModel('gemini-3.1-flash-lite-preview', 'gemini', rates);
   const searchCost = geminiRate && input.meeting_searches_per_month
     ? calculateTokenCost(2000, 500, geminiRate) * input.meeting_searches_per_month
     : 0;
@@ -662,7 +662,7 @@ export async function estimateCosts(input: CostEstimationInput): Promise<CostEst
       percentage: totalCost > 0 ? ((copilotCost + proposalCost) / totalCost) * 100 : 0,
     },
     {
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.1-flash-lite-preview',
       cost: searchCost,
       percentage: totalCost > 0 ? (searchCost / totalCost) * 100 : 0,
     },

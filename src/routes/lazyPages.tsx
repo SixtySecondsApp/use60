@@ -59,6 +59,7 @@ export const GodsEyeAdmin = lazyWithRetry(() => import('@/pages/platform/GodsEye
 export const CreditMenuAdmin = lazyWithRetry(() => import('@/pages/platform/CreditMenuAdmin'));
 export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo/EnrichmentComparison'));
 export const ResearchComparisonDemo = lazyWithRetry(() => import('@/pages/demo/ResearchComparison'));
+export const GeminiModelComparison = lazyWithRetry(() => import('@/pages/demo/GeminiModelComparison'));
 export const ExaAbilitiesDemo = lazyWithRetry(() => import('@/pages/demo/ExaAbilitiesDemo'));
 export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailSequenceTest'));
 export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));

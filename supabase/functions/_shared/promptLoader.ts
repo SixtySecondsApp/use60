@@ -324,7 +324,7 @@ Return a JSON object with:
 }
 
 IMPORTANT: Only include information you can verify through web search. Use null for fields you cannot find.`,
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.1-flash-lite-preview',
     temperature: 0.7,
     maxTokens: 4096,
     source: 'default',
@@ -377,7 +377,7 @@ Return a JSON object with:
   },
   "confidence_score": 0.0-1.0
 }`,
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.1-flash-lite-preview',
     temperature: 0.7,
     maxTokens: 4096,
     source: 'default',
@@ -428,7 +428,7 @@ Return a JSON object with:
   },
   "confidence_score": 0.0-1.0
 }`,
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.1-flash-lite-preview',
     temperature: 0.7,
     maxTokens: 4096,
     source: 'default',
@@ -474,7 +474,7 @@ Return a JSON object with:
   "recommendations": ["Strategic recommendations"],
   "confidence_score": 0.0-1.0
 }`,
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.1-flash-lite-preview',
     temperature: 0.7,
     maxTokens: 4096,
     source: 'default',
@@ -519,7 +519,7 @@ Return a JSON object with:
   "thought_leadership": ["Topics that position us as experts"],
   "confidence_score": 0.0-1.0
 }`,
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.1-flash-lite-preview',
     temperature: 0.7,
     maxTokens: 4096,
     source: 'default',

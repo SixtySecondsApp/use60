@@ -1,122 +1,451 @@
 {
   "version": 2,
-  "runSlug": "native-scheduling-engine",
-  "project": "Native Scheduling Engine",
-  "description": "Close 6 UX and reliability gaps in 60's scheduling infrastructure inspired by Claude Code Desktop patterns",
-  "phase": "build",
-  "startedAt": "2026-03-07T12:00:00Z",
-  "lastUpdatedAt": "2026-03-07T12:00:00Z",
+  "runSlug": "linkedin-lead-response-copilot",
+  "project": "LinkedIn Lead Response Copilot",
+  "description": "LinkedIn-native lead capture → enrich → score → draft → approve → send pipeline",
+  "phase": "deliver",
+  "startedAt": "2026-03-09T12:00:00Z",
+  "lastUpdatedAt": "2026-03-09T21:30:00Z",
+
   "input": {
-    "type": "description",
-    "source": "Claude Code scheduled tasks analysis + codebase audit",
+    "type": "prd",
+    "source": "tasks/prd-linkedin-lead-response-copilot.md",
     "extractedRequirements": [
-      "Friendly frequency picker replacing raw cron input",
-      "Agent schedule runs table and history UI",
-      "Missed run catch-up logic",
-      "Per-schedule permission mode",
-      "One-shot reminders via copilot"
+      "OAuth connection to LinkedIn ad accounts and event forms",
+      "Webhook-first real-time lead ingestion with HMAC verification",
+      "Contact-first matching with email > LinkedIn URL > domain heuristics",
+      "Custom form fields map to contact custom fields",
+      "Auto-triggered LinkedIn enrichment via Apify",
+      "ICP scoring 0-100 with owner routing",
+      "Follow-up email draft referencing campaign/form context",
+      "Slack approval with send channel choice (Gmail/Outlook or Instantly)",
+      "Autonomy progression: 5 clean approvals → auto-send prompt",
+      "Reconciliation polling for missed webhooks"
     ],
     "extractedConstraints": [
-      "Must not rebuild existing scheduler — extend only",
-      "Must follow existing patterns (React Query, explicit columns, maybeSingle)",
-      "Migrations must be idempotent (DROP POLICY IF EXISTS before CREATE)"
+      "Reuse integration_credentials table (provider = 'linkedin')",
+      "Reuse existing OAuth initiate router pattern",
+      "Reuse emailDraftApproval adapter for Slack HITL",
+      "Reuse unified autonomy resolver for progression",
+      "webhook-linkedin must be verify_jwt=false with HMAC-SHA256 verification",
+      "LinkedIn API requires explicit field projection",
+      "Webhook notifications may duplicate — dedup by notification ID"
     ],
     "openQuestions": [],
-    "answeredQuestions": []
+    "answeredQuestions": [
+      "CRM model: contact-first, no separate leads table",
+      "Multi-org: supported, routing by subscription ID",
+      "Send channel: user choice (Gmail/Outlook or Instantly)",
+      "Custom fields: contact custom fields",
+      "Webhook: dedicated public function with HMAC",
+      "Enrichment: auto-triggered by default",
+      "Autonomy: 5 clean approvals then prompt"
+    ]
   },
+
   "phaseGates": {
-    "launch": { "status": "skipped", "completedAt": null },
-    "discover": { "status": "complete", "completedAt": "2026-03-07T11:30:00Z" },
-    "define": { "status": "complete", "completedAt": "2026-03-07T12:00:00Z" },
-    "plan": { "status": "complete", "completedAt": "2026-03-07T12:00:00Z" },
-    "sync": { "status": "skipped", "completedAt": null },
-    "build": { "status": "in_progress", "completedAt": null },
-    "deliver": { "status": "pending", "completedAt": null },
+    "launch":    { "status": "skipped", "completedAt": null },
+    "discover":  { "status": "complete", "completedAt": "2026-03-09T11:00:00Z" },
+    "define":    { "status": "complete", "completedAt": "2026-03-09T11:30:00Z" },
+    "plan":      { "status": "complete", "completedAt": "2026-03-09T12:30:00Z" },
+    "sync":      { "status": "skipped", "completedAt": null },
+    "build":     { "status": "complete", "completedAt": "2026-03-09T21:30:00Z" },
+    "deliver":   { "status": "in_progress", "completedAt": null },
     "housekeeping": { "status": "pending", "completedAt": null }
   },
+
   "team": {
-    "tier": 2,
-    "tierReason": "7 stories, 2 schema changes, familiar patterns, no external APIs",
-    "workers": { "model": "opus", "count": 1 },
-    "reviewer": { "model": "opus" }
+    "tier": 3,
+    "tierReason": "16 stories, 2 schema changes, external API (LinkedIn OAuth + webhooks), security surface (HMAC, tokens, PII), reuses battle-tested patterns",
+    "workers": { "model": "sonnet", "count": 3 },
+    "reviewer": { "model": "opus" },
+    "architect": { "model": "opus", "phaseOnly": "plan" },
+    "manager": { "model": "opus" }
   },
-  "prdFile": "tasks/prd-native-scheduling-engine.md",
-  "branch": "feat/native-scheduling-engine",
+
+  "prdFile": "tasks/prd-linkedin-lead-response-copilot.md",
+  "branch": "feat/linkedin-lead-response-copilot",
+
   "stories": [
     {
-      "id": "US-001",
-      "title": "Friendly Frequency Picker Component",
-      "type": "component",
-      "status": "pending",
-      "priority": 1,
-      "dependencies": { "stories": [], "schema": [] },
-      "parallelWith": ["US-003"],
-      "estimatedMinutes": 30
-    },
-    {
-      "id": "US-002",
-      "title": "Wire FrequencyPicker into AgentTeamSettings",
-      "type": "integration",
-      "status": "pending",
-      "priority": 2,
-      "dependencies": { "stories": ["US-001"], "schema": [] },
-      "parallelWith": ["US-004"],
-      "estimatedMinutes": 15
-    },
-    {
-      "id": "US-003",
-      "title": "Agent Schedule Runs Migration",
+      "id": "LI-001",
+      "title": "Database migration: LinkedIn tables + contact source columns",
       "type": "schema",
       "status": "pending",
-      "priority": 3,
+      "priority": 1,
+      "parallelGroup": "A",
       "dependencies": { "stories": [], "schema": [] },
-      "parallelWith": ["US-001"],
-      "estimatedMinutes": 15
+      "acceptance": [
+        "linkedin_lead_sources table created with org_id, form_id, source_type, campaign_name, is_active",
+        "linkedin_sync_runs table created with org_id, run_type, lead counts, timestamps",
+        "contacts table gains: linkedin_lead_source_id, linkedin_lead_payload (JSONB), linkedin_lead_received_at",
+        "RLS policies on all new tables (org-scoped)",
+        "Migration is idempotent (DROP POLICY IF EXISTS before CREATE POLICY)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/2026030XXXXXX_linkedin_lead_tables.sql"
+      ]
     },
     {
-      "id": "US-004",
-      "title": "Schedule Run History in AgentTeamSettings",
+      "id": "LI-002",
+      "title": "OAuth initiate provider: linkedin.ts",
+      "type": "service",
+      "status": "pending",
+      "priority": 1,
+      "parallelGroup": "A",
+      "dependencies": { "stories": [], "schema": [] },
+      "acceptance": [
+        "New file oauth-initiate/providers/linkedin.ts following hubspot.ts pattern",
+        "Validates user JWT + org admin/owner role",
+        "Creates CSRF state in linkedin_oauth_states (10min TTL) or reuses hubspot_oauth_states pattern",
+        "Returns authorization_url with scopes: r_marketing_leadgen_automation, r_events, r_organization_admin",
+        "Registered in oauth-initiate/index.ts router"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/oauth-initiate/providers/linkedin.ts",
+        "supabase/functions/oauth-initiate/index.ts"
+      ]
+    },
+    {
+      "id": "LI-003",
+      "title": "LinkedIn OAuth callback handler",
+      "type": "service",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "A",
+      "dependencies": { "stories": [], "schema": [] },
+      "acceptance": [
+        "New edge function linkedin-oauth-callback/index.ts",
+        "Validates CSRF state from linkedin_oauth_states",
+        "Exchanges authorization code for access + refresh tokens",
+        "Stores credentials in integration_credentials (provider='linkedin')",
+        "Creates/updates linkedin_org_integrations row with connection metadata",
+        "Redirects to frontend with ?linkedin_status=connected or ?linkedin_error=...",
+        "config.toml entry: verify_jwt = false"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/linkedin-oauth-callback/index.ts",
+        "supabase/config.toml"
+      ]
+    },
+    {
+      "id": "LI-004",
+      "title": "Webhook endpoint: webhook-linkedin with HMAC verification",
+      "type": "service",
+      "status": "pending",
+      "priority": 2,
+      "parallelGroup": "B",
+      "dependencies": { "stories": ["LI-001"], "schema": ["linkedin_lead_sources", "linkedin_sync_runs"] },
+      "acceptance": [
+        "New edge function webhook-linkedin/index.ts with verify_jwt=false",
+        "HMAC-SHA256 signature verification using X-LI-Signature header + app clientSecret",
+        "Idempotency: dedup by LinkedIn notification ID (stored in sync_runs or separate dedup table)",
+        "Explicit field projection for formResponse, submittedAt, ownerInfo, associatedEntityInfo",
+        "Handles both SPONSORED and EVENTS leadType",
+        "Stores raw payload, routes org by webhook subscription ID",
+        "Enqueues async processing (does not block on enrichment/scoring/drafting)",
+        "Returns 200 to LinkedIn quickly"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/webhook-linkedin/index.ts",
+        "supabase/config.toml"
+      ]
+    },
+    {
+      "id": "LI-005",
+      "title": "Frontend: useLinkedInIntegration hook + Integrations page UI",
+      "type": "component",
+      "status": "pending",
+      "priority": 3,
+      "parallelGroup": "B",
+      "dependencies": { "stories": ["LI-002", "LI-003"], "schema": [] },
+      "acceptance": [
+        "useLinkedInIntegration hook with connectLinkedIn(), disconnectLinkedIn(), connectionStatus",
+        "LinkedIn card on Integrations page with Connect/Disconnect button",
+        "Handles ?linkedin_status=connected URL param with success toast",
+        "Shows connection health: connected, disconnected, error, token expiry",
+        "Uses Lucide LinkedIn icon (not emoji)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/lib/hooks/useLinkedInIntegration.ts",
+        "src/pages/Integrations.tsx"
+      ]
+    },
+    {
+      "id": "LI-006",
+      "title": "Lead source configuration UI (form/event selection)",
       "type": "component",
       "status": "pending",
       "priority": 4,
-      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedule_runs"] },
-      "parallelWith": ["US-002"],
-      "estimatedMinutes": 30
+      "parallelGroup": "C",
+      "dependencies": { "stories": ["LI-005"], "schema": ["linkedin_lead_sources"] },
+      "acceptance": [
+        "Settings panel showing available LinkedIn lead gen forms and event forms",
+        "Toggle to enable/disable sync per form",
+        "Fetches form list from LinkedIn API via edge function",
+        "Writes selected forms to linkedin_lead_sources table",
+        "Registers webhook subscription for each enabled form"
+      ],
+      "estimatedMinutes": 40,
+      "files": [
+        "src/components/integrations/LinkedInLeadSourcesConfig.tsx",
+        "supabase/functions/linkedin-oauth-callback/index.ts"
+      ]
     },
     {
-      "id": "US-005",
-      "title": "Missed Run Catch-Up Logic",
+      "id": "LI-007",
+      "title": "Contact/company matching + dedup on lead ingestion",
+      "type": "service",
+      "status": "pending",
+      "priority": 3,
+      "parallelGroup": "C",
+      "dependencies": { "stories": ["LI-001", "LI-004"], "schema": ["contacts", "companies"] },
+      "acceptance": [
+        "Match priority: email exact → LinkedIn URL → domain + company name",
+        "Creates new contact if no match, links to campaign/form metadata",
+        "Creates new company if domain not found (skips personal domains)",
+        "Ambiguous matches (multiple partial hits) flagged for review, not auto-merged",
+        "Source metadata written to contact: linkedin_lead_source_id, linkedin_lead_payload, linkedin_lead_received_at",
+        "Custom form question/answer pairs stored as contact custom fields"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/linkedin-lead-ingest/matching.ts"
+      ]
+    },
+    {
+      "id": "LI-008",
+      "title": "LinkedIn enrichment auto-trigger on lead ingestion",
+      "type": "integration",
+      "status": "pending",
+      "priority": 4,
+      "parallelGroup": "D",
+      "dependencies": { "stories": ["LI-007"], "schema": [] },
+      "acceptance": [
+        "After contact match/create, fire-and-forget call to linkedinEnrichmentService",
+        "Enrichment runs async (5-15s) — does not block downstream scoring/drafting",
+        "If LinkedIn URL available from form data, skip URL discovery step",
+        "Enrichment results stored in contacts.social_media_urls (existing pattern)",
+        "Failure does not block pipeline — scoring/drafting proceed with available data"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/linkedin-lead-ingest/enrichment.ts"
+      ]
+    },
+    {
+      "id": "LI-009",
+      "title": "ICP scoring + owner routing for LinkedIn leads",
+      "type": "service",
+      "status": "pending",
+      "priority": 4,
+      "parallelGroup": "D",
+      "dependencies": { "stories": ["LI-007"], "schema": [] },
+      "acceptance": [
+        "ICP score 0-100 using: company size, role seniority, industry, domain, form context",
+        "Incorporates enrichment data if available (non-blocking wait with timeout)",
+        "Routing rules: territory → campaign → fallback owner",
+        "High-fit leads (>70) optionally create a deal",
+        "Low-fit leads create contact + tasks only",
+        "Score stored on command centre item context for prioritisation"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "supabase/functions/linkedin-lead-ingest/scoring.ts",
+        "supabase/functions/linkedin-lead-ingest/routing.ts"
+      ]
+    },
+    {
+      "id": "LI-010",
+      "title": "First follow-up email draft generation",
       "type": "service",
       "status": "pending",
       "priority": 5,
-      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedule_runs"] },
-      "parallelWith": ["US-006"],
-      "estimatedMinutes": 45
+      "parallelGroup": "E",
+      "dependencies": { "stories": ["LI-009"], "schema": [] },
+      "acceptance": [
+        "Generates personalized follow-up referencing campaign/form/event context",
+        "Uses org voice settings + owner writing style (user_tone_settings)",
+        "CTA matches lead intent: demo request, content follow-up, event follow-up",
+        "Draft stored in hitl_pending_approvals with resource_type='linkedin_lead_email'",
+        "Em-dashes stripped (existing pattern)",
+        "Tier-1 Sonnet for first draft, can fall back to Gemini"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "supabase/functions/linkedin-lead-ingest/drafting.ts"
+      ]
     },
     {
-      "id": "US-006",
-      "title": "Per-Schedule Permission Mode",
-      "type": "schema+service",
+      "id": "LI-011",
+      "title": "Task work package creation",
+      "type": "service",
+      "status": "pending",
+      "priority": 5,
+      "parallelGroup": "E",
+      "dependencies": { "stories": ["LI-009"], "schema": [] },
+      "acceptance": [
+        "Creates follow-up task linked to contact/company/deal",
+        "Creates research/prep task if high-value company",
+        "CRM hygiene task only when material update needed",
+        "Tasks due within configurable SLA (default: follow-up 1h, research 24h)",
+        "Uses create-task-unified pattern"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/linkedin-lead-ingest/tasks.ts"
+      ]
+    },
+    {
+      "id": "LI-012",
+      "title": "Slack approval flow for LinkedIn lead responses",
+      "type": "integration",
       "status": "pending",
       "priority": 6,
-      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedules"] },
-      "parallelWith": ["US-005"],
-      "estimatedMinutes": 45
+      "parallelGroup": "F",
+      "dependencies": { "stories": ["LI-010"], "schema": [] },
+      "acceptance": [
+        "Slack DM with: lead summary, ICP score badge, campaign context, email preview",
+        "Buttons: Approve & Send, Edit Draft, Reassign, Dismiss",
+        "Send channel selector: Gmail/Outlook or Instantly",
+        "Notification dedup: 4hr cooldown per lead (existing dedupe.ts pattern)",
+        "Approval logged in hitl_pending_approvals",
+        "If Slack not connected, item queued in command centre"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "supabase/functions/linkedin-lead-ingest/notification.ts",
+        "supabase/functions/slack-interactive/handlers/linkedin-lead.ts",
+        "supabase/functions/_shared/slackBlocks.ts"
+      ]
     },
     {
-      "id": "US-007",
-      "title": "One-Shot Reminders",
-      "type": "schema+service",
+      "id": "LI-013",
+      "title": "Email send execution (Gmail/Outlook + Instantly)",
+      "type": "integration",
       "status": "pending",
       "priority": 7,
-      "dependencies": { "stories": [], "schema": [] },
-      "parallelWith": [],
-      "estimatedMinutes": 45
+      "parallelGroup": "F",
+      "dependencies": { "stories": ["LI-012"], "schema": [] },
+      "acceptance": [
+        "On approve: sends via email-send-as-rep (Gmail/Outlook) or Instantly based on user choice",
+        "Email includes threading headers if replying to existing thread",
+        "Instantly push includes custom variables from form data",
+        "Send logged in email_send_log with linkedin_lead source",
+        "Failure notification sent back to Slack"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-interactive/handlers/linkedin-lead.ts"
+      ]
+    },
+    {
+      "id": "LI-014",
+      "title": "Autonomy progression for LinkedIn lead responses",
+      "type": "service",
+      "status": "pending",
+      "priority": 8,
+      "parallelGroup": "G",
+      "dependencies": { "stories": ["LI-012", "LI-013"], "schema": [] },
+      "acceptance": [
+        "Records autopilot_signals on every approve/reject/edit action",
+        "Tracks consecutive clean approvals per user for 'linkedin_lead_email' action type",
+        "After 5 consecutive no-edit approvals, sends autonomy promotion Slack DM",
+        "Promotion uses existing autonomy_promote_approve/dismiss pattern",
+        "Auto-send applies configurable delay (default 5min) with cancel window",
+        "Any edit or rejection resets counter",
+        "Autonomy level visible in settings, revocable"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "supabase/functions/slack-interactive/handlers/linkedin-lead.ts",
+        "supabase/functions/_shared/orchestrator/unifiedAutonomyResolver.ts"
+      ]
+    },
+    {
+      "id": "LI-015",
+      "title": "LinkedIn lead ingest orchestrator (main pipeline function)",
+      "type": "service",
+      "status": "pending",
+      "priority": 3,
+      "parallelGroup": "C",
+      "dependencies": { "stories": ["LI-001", "LI-004"], "schema": [] },
+      "acceptance": [
+        "Orchestrates: normalize → match → enrich → score → route → draft → tasks → notify",
+        "Each step is fault-tolerant: failure in enrichment/scoring/drafting does not block contact creation",
+        "Records linkedin_sync_runs with counts and duration",
+        "Logs errors with toast-friendly messages",
+        "Respects autonomy level: auto-send if permitted, otherwise HITL"
+      ],
+      "estimatedMinutes": 40,
+      "files": [
+        "supabase/functions/linkedin-lead-ingest/index.ts"
+      ]
+    },
+    {
+      "id": "LI-016",
+      "title": "Reconciliation polling job for missed webhooks",
+      "type": "service",
+      "status": "pending",
+      "priority": 9,
+      "parallelGroup": "G",
+      "dependencies": { "stories": ["LI-004", "LI-015"], "schema": [] },
+      "acceptance": [
+        "Edge function linkedin-lead-reconcile triggered by cron (every 15min)",
+        "Polls LinkedIn leadFormResponses API with field projection",
+        "Compares against linkedin_sync_runs to find missed leads",
+        "Feeds missed leads into same ingest pipeline",
+        "Records reconciliation run in linkedin_sync_runs with run_type='poll_reconciliation'"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/linkedin-lead-reconcile/index.ts"
+      ]
     }
   ],
+
   "execution": {
-    "totalStories": 7,
+    "totalStories": 16,
     "completedStories": 0,
-    "lastUpdated": "2026-03-07T12:00:00Z"
-  }
+    "lastUpdated": "2026-03-09T12:00:00Z",
+    "parallelGroups": {
+      "A": { "stories": ["LI-001", "LI-002", "LI-003"], "description": "Schema + OAuth (no deps)" },
+      "B": { "stories": ["LI-004", "LI-005"], "description": "Webhook endpoint + Frontend integration" },
+      "C": { "stories": ["LI-006", "LI-007", "LI-015"], "description": "Source config + Matching + Orchestrator" },
+      "D": { "stories": ["LI-008", "LI-009"], "description": "Enrichment + Scoring (parallel)" },
+      "E": { "stories": ["LI-010", "LI-011"], "description": "Draft + Tasks (parallel)" },
+      "F": { "stories": ["LI-012", "LI-013"], "description": "Slack approval + Send execution" },
+      "G": { "stories": ["LI-014", "LI-016"], "description": "Autonomy + Reconciliation" }
+    }
+  },
+
+  "devHub": {
+    "projectId": null,
+    "taskId": null,
+    "taskCode": null
+  },
+
+  "slack": {
+    "warRoomChannel": null,
+    "warRoomThreadTs": null
+  },
+
+  "documentation": {
+    "devDocs": [],
+    "userDocs": [],
+    "visibility": {}
+  },
+
+  "learnings": {
+    "file": ".sixty/learnings.json",
+    "calibrationApplied": false,
+    "recurringIssuesLoaded": []
+  },
+
+  "crossRunConflicts": []
 }
