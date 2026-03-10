@@ -386,18 +386,25 @@ curiosity_line (max 15 words)
   "you were trying to sort [pain_ref]. [curiosity_line]"
 
   MUST be personalised to the prospect's specific pain or situation.
-  Reference their industry, their challenge, or what they told you
-  in the meeting. Do NOT use generic filler.
+  Reference their challenge or what they told you in the meeting.
+  Do NOT use generic filler.
+
+  IMPORTANT — OWNERSHIP TONE: The rep works for the company that
+  BUILT use60. We made it. Never sound like you "found" or "saw"
+  or "came across" something external. You're telling them about
+  something YOUR team built. Use "we've" language, not "I saw"
+  language.
 
   EVERY curiosity_line must be UNIQUE to this contact. Never reuse
   the same phrase across different contacts.
 
-  GOOD (outbound pain): "Just seen something that would sort the follow-up side for you."
-  GOOD (scaling pain): "Found something that might crack the scaling thing without hiring."
-  GOOD (budget blocker): "There's a cheaper way to do it now that didn't exist back then."
-  GOOD (SDR pain): "Something just launched that basically replaces the SDR you were looking for."
-  BAD: "Saw something the other day that made me think of you." (generic, not tailored)
-  BAD: "Something came across my desk." (vague, says nothing about their situation)
+  GOOD (outbound pain): "We've actually sorted the follow-up side since we last spoke."
+  GOOD (scaling pain): "We've built something since then that cracks the scaling thing without hiring."
+  GOOD (budget blocker): "We've actually built a cheaper way to do it since then."
+  GOOD (SDR pain): "We've launched something that basically replaces the SDR function."
+  BAD: "Just seen something that would sort..." (sounds like you found a third-party tool)
+  BAD: "Found something that might help." (you didn't find it, you built it)
+  BAD: "Saw something the other day." (implies external discovery)
   BAD: "I wanted to reach out to discuss potential synergies" (corporate)
 
 use60_intro (pick one of two fixed options)
@@ -423,12 +430,14 @@ use60_bridge (max 6 words)
   Must work grammatically after "we've" and before "that's".
 
   Tailor to the prospect's blocker or pain. Pick the phrasing that
-  best connects to WHY this is relevant to them now.
+  best connects to WHY this is relevant to them now. Remember: we
+  built this — the phrasing should reflect ownership.
 
-  GOOD (budget blocker): "put together a much cheaper version"
+  GOOD (budget blocker): "built a much cheaper version"
   GOOD (scaling pain): "built something that handles the scaling side"
   GOOD (admin pain): "launched a tool that automates the admin"
   GOOD (SDR pain): "built a self-serve version"
+  GOOD (follow-up pain): "built something that sorts the follow-up"
   GOOD (general): "put together a lighter option"
   BAD: "built a self-serve version" for every contact (no variation)
   BAD: "built a comprehensive self-serve AI-powered platform" (too long, too corporate)
@@ -482,9 +491,9 @@ OUTPUT:
   "pain_short": "the outbound thing",
   "hook_line": "I know you'd been doing the LinkedIn stuff yourself and getting traction but",
   "blocker_ref": "the managed service wasn't the right fit budget-wise",
-  "curiosity_line": "There's a cheaper way to do it now that didn't exist back then.",
+  "curiosity_line": "We've actually built a cheaper way to do it since then.",
   "use60_intro": "Anyway, we've actually got a self-serve version that might be a better fit.",
-  "use60_bridge": "put together a much cheaper version",
+  "use60_bridge": "built a much cheaper version",
   "pain_reframe": "the LinkedIn outreach working but being impossible to scale alongside everything else you've got on"
 }
 
@@ -510,7 +519,7 @@ OUTPUT:
   "pain_short": "the outbound setup",
   "hook_line": "I know you'd tried outsourcing the SDR side and it hadn't really worked out.",
   "blocker_ref": "I think you just had too much on at the time",
-  "curiosity_line": "Something just launched that basically replaces the SDR you were looking for.",
+  "curiosity_line": "We've launched something since then that basically replaces the SDR function.",
   "use60_intro": "Anyway, we've actually built a self-serve version since then.",
   "use60_bridge": "built something that handles the follow-up side",
   "pain_reframe": "the outbound not being systemised and leads slipping through the cracks because nobody's owning the follow-up"
