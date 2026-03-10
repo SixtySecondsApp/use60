@@ -1,16 +1,20 @@
 /**
  * Landing Page Builder Empty State
- * Welcome screen with 4 starter cards → discovery wizard → compiled brief
+ * Welcome screen with 5 starter cards → discovery wizard → compiled brief
  */
 
 import React, { useState } from 'react';
-import { Layers, FileText, Palette, Code, ArrowRight } from 'lucide-react';
+import { Layers, FileText, Palette, Code, Layout, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PIPELINE_PHASES } from './types';
 import { DiscoveryWizard } from './DiscoveryWizard';
+import { TemplateGallery } from './TemplateGallery';
+import type { LandingTemplate } from './templates';
 
 interface LandingBuilderEmptyProps {
   onStart: (seedPrompt: string, wizardAnswers?: Record<string, string>) => void;
+  /** Callback when user selects a pre-built template */
+  onSelectTemplate?: (template: LandingTemplate) => void;
   /** Pre-loaded company name from org profile */
   companyName?: string;
   /** Pre-loaded company description */
@@ -96,20 +100,32 @@ const starterCards = [
     action: 'prompt' as const,
     prompt: SKIP_PREAMBLE + 'Build this landing page with everything I\'m about to provide. Go straight to production code.\n\n[Paste your complete spec here]',
   },
+  {
+    id: 'template',
+    icon: Layout,
+    label: 'Start from Template',
+    desc: 'Pre-built page you can customize',
+    iconColor: 'text-pink-400',
+    action: 'template' as const,
+  },
 ];
 
 export const LandingBuilderEmpty: React.FC<LandingBuilderEmptyProps> = ({
   onStart,
+  onSelectTemplate,
   companyName,
   companyDescription,
   productName,
   valueProp,
 }) => {
   const [showWizard, setShowWizard] = useState(false);
+  const [showTemplateGallery, setShowTemplateGallery] = useState(false);
 
   const handleCardClick = (card: typeof starterCards[number]) => {
     if (card.action === 'wizard') {
       setShowWizard(true);
+    } else if (card.action === 'template') {
+      setShowTemplateGallery(true);
     } else if (card.prompt) {
       onStart(card.prompt);
     }
@@ -152,9 +168,9 @@ export const LandingBuilderEmpty: React.FC<LandingBuilderEmptyProps> = ({
           </p>
         </div>
 
-        {/* 2x2 Starter Cards Grid */}
-        <div className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6">
-          {starterCards.map((card) => (
+        {/* Starter Cards Grid — top 4 in 2x2, template card full-width below */}
+        <div className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
+          {starterCards.slice(0, 4).map((card) => (
             <button
               key={card.id}
               onClick={() => handleCardClick(card)}
@@ -191,6 +207,52 @@ export const LandingBuilderEmpty: React.FC<LandingBuilderEmptyProps> = ({
           ))}
         </div>
 
+        {/* Template card — full width accent row */}
+        {(() => {
+          const templateCard = starterCards[4];
+          if (!templateCard) return null;
+          const TemplateIcon = templateCard.icon;
+          return (
+            <div className="w-full max-w-2xl mb-6">
+              <button
+                onClick={() => handleCardClick(templateCard)}
+                className={cn(
+                  'group relative w-full p-4 sm:p-5 rounded-2xl text-left transition-all flex items-center gap-4',
+                  'bg-white dark:bg-white/[0.03] backdrop-blur-xl',
+                  'border border-gray-200 dark:border-white/10',
+                  'hover:bg-gray-50 dark:hover:bg-white/[0.06]',
+                  'hover:border-gray-300 dark:hover:border-white/20',
+                  'hover:scale-[1.01] hover:shadow-xl dark:hover:shadow-pink-500/10',
+                  'focus:outline-none focus:ring-2 focus:ring-violet-500'
+                )}
+              >
+                <div
+                  className={cn(
+                    'w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0',
+                    'bg-white/5 dark:bg-white/[0.08] backdrop-blur-xl',
+                    'border border-gray-200/50 dark:border-white/10',
+                    'group-hover:bg-white/10 dark:group-hover:bg-white/[0.12]',
+                    'group-hover:border-gray-300/50 dark:group-hover:border-white/20',
+                    'group-hover:scale-110 transition-all shadow-lg shadow-black/5'
+                  )}
+                >
+                  <TemplateIcon className={cn('w-6 h-6', templateCard.iconColor)} />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 dark:text-white mb-0.5 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+                    {templateCard.label}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-slate-500 group-hover:text-gray-600 dark:group-hover:text-slate-400 transition-colors">
+                    {templateCard.desc}
+                  </p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-gray-300 dark:text-slate-600 ml-auto flex-shrink-0 group-hover:text-gray-400 dark:group-hover:text-slate-500 transition-colors" />
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              </button>
+            </div>
+          );
+        })()}
+
         {/* Pipeline Overview */}
         <div className="w-full max-w-2xl">
           <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase mb-4 text-center tracking-wider">
@@ -216,6 +278,17 @@ export const LandingBuilderEmpty: React.FC<LandingBuilderEmptyProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Template Gallery Modal */}
+      {showTemplateGallery && onSelectTemplate && (
+        <TemplateGallery
+          onSelect={(template) => {
+            setShowTemplateGallery(false);
+            onSelectTemplate(template);
+          }}
+          onClose={() => setShowTemplateGallery(false)}
+        />
+      )}
     </div>
   );
 };

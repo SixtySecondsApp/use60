@@ -27,6 +27,7 @@ interface AssemblyPreviewProps {
   onToggleDividers?: () => void;
   onSectionUpdate?: (sectionId: string, updates: Partial<LandingSection>) => void;
   onRegenerateAsset?: (sectionId: string, assetType: 'image' | 'svg') => void;
+  onUploadAsset?: (sectionId: string, file: File) => Promise<string>;
 }
 
 type DeviceWidth = 'mobile' | 'tablet' | 'desktop';
@@ -74,6 +75,7 @@ export const AssemblyPreview: React.FC<AssemblyPreviewProps> = ({
   onToggleDividers,
   onSectionUpdate,
   onRegenerateAsset,
+  onUploadAsset,
 }) => {
   const [device, setDevice] = useState<DeviceWidth>('desktop');
   const [recentlyCompleted, setRecentlyCompleted] = useState<Set<string>>(new Set());
@@ -241,6 +243,7 @@ export const AssemblyPreview: React.FC<AssemblyPreviewProps> = ({
             showDividers={showDividers}
             onSectionUpdate={onSectionUpdate}
             onRegenerateAsset={onRegenerateAsset}
+            onUploadAsset={onUploadAsset}
           />
         </div>
       </div>

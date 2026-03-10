@@ -33,12 +33,15 @@ import { AssetGenerationQueue } from './assetQueue';
 import { AssemblyPreview } from './AssemblyPreview';
 import { LandingEditorPanel } from './LandingEditorPanel';
 import { FloatingChatBar, type ChatOverlayState } from './FloatingChatBar';
+import { PublishModal } from './PublishModal';
 import type { ModelTier } from './IntelligenceToggle';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Globe } from 'lucide-react';
 import type { WorkspacePhaseKey } from '@/lib/services/landingBuilderWorkspaceService';
 import type { FactProfile } from '@/lib/types/factProfile';
 import type { ProductProfile } from '@/lib/types/productProfile';
+import type { LandingTemplate } from './templates';
 
 
 /**
@@ -351,6 +354,8 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
   const [modelTier, setModelTier] = useState<ModelTier>('balanced');
   // Divider toggle — defaults true, persisted in workspace visuals
   const [showDividers, setShowDividers] = useState(true);
+  // Publish modal state
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
 
   // Sync phase from workspace on load
   React.useEffect(() => {
@@ -519,6 +524,55 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     assetQueueRef.current = null;
     resetResearch();
   }, [startNewChat, setConversationId, resetResearch]);
+
+  // Template selection — skip Strategy & Copy phases, jump straight to Assembly
+  const handleSelectTemplate = useCallback((template: LandingTemplate) => {
+    // Generate fresh UUIDs for all sections to avoid ID conflicts
+    const freshSections = template.sections.map((section) => ({
+      ...section,
+      id: crypto.randomUUID(),
+    }));
+
+    setAssemblySections(freshSections);
+    setAssemblyBrandConfig(template.brandConfig);
+    setIsAssemblyMode(true);
+    setCurrentPhase(2); // Assembly phase
+
+    // Persist sections to workspace for session recovery
+    if (conversationId) {
+      updateSections(freshSections);
+
+      // Mark strategy & copy as skipped, assembly as active
+      const phaseStatus: Record<string, string> = {
+        '0': 'skipped',
+        '1': 'skipped',
+        '2': 'active',
+      };
+      advancePhase({ nextPhase: 2, phaseStatus });
+
+      // Store brand config in visuals
+      updatePhaseOutput({
+        phase: 'visuals',
+        output: {
+          palette: {
+            primary: template.brandConfig.primary_color,
+            secondary: template.brandConfig.secondary_color,
+            accent: template.brandConfig.accent_color,
+            background: template.brandConfig.bg_color,
+            text: template.brandConfig.text_color,
+          },
+          typography: {
+            heading: template.brandConfig.font_heading,
+            body: template.brandConfig.font_body,
+          },
+          show_dividers: template.brandConfig.show_dividers ?? true,
+          template_id: template.id,
+        },
+      });
+    }
+
+    toast.success(`Template "${template.name}" loaded — customize in the editor`);
+  }, [conversationId, updateSections, advancePhase, updatePhaseOutput]);
 
   // Agent system prompts by phase
   const agentSystemPrompts: Record<number, string> = useMemo(() => ({
@@ -912,6 +966,17 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
             onRegenerateAsset={handleRegenerateAsset}
           />
 
+          {/* Publish button — top-right overlay */}
+          <button
+            type="button"
+            onClick={() => setPublishModalOpen(true)}
+            className="absolute top-2 left-2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors"
+            title="Publish landing page"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Publish</span>
+          </button>
+
           {/* Floating chat bar — centered within preview area */}
           <FloatingChatBar
             apiContentTransform={builderApiTransform}
@@ -940,6 +1005,18 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
             onSelectSection={(id) => setHighlightSectionId(id)}
           />
         </div>
+
+        {/* Publish modal */}
+        <PublishModal
+          open={publishModalOpen}
+          onClose={() => setPublishModalOpen(false)}
+          sessionId={conversationId}
+          orgId={activeOrgId ?? ''}
+          userId={userId ?? ''}
+          sections={assemblySections}
+          brandConfig={assemblyBrandConfig}
+          companyName={orgProfile?.research_data?.company_overview?.name || orgProfile?.company_name || undefined}
+        />
       </div>
     );
   }
@@ -966,6 +1043,7 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
           emptyComponent={
             <LandingBuilderEmpty
               onStart={handleStart}
+              onSelectTemplate={handleSelectTemplate}
               companyName={orgProfile?.research_data?.company_overview?.name || orgProfile?.company_name || undefined}
               companyDescription={orgProfile?.research_data?.company_overview?.description || undefined}
               productName={products?.[0]?.name || orgProfile?.research_data?.products_services?.products?.[0] || undefined}

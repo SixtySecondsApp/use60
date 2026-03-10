@@ -27,6 +27,7 @@ interface InlineEditControllerProps {
   sections: LandingSection[];
   onSectionUpdate: (sectionId: string, updates: Partial<LandingSection>) => void;
   onRegenerateAsset?: (sectionId: string, assetType: 'image' | 'svg') => void;
+  onUploadAsset?: (sectionId: string, file: File) => Promise<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,15 +180,42 @@ function AssetActionToolbar({
   sectionId,
   rect,
   onRegenerateAsset,
+  onUploadAsset,
   onRemoveAsset,
   onDismiss,
 }: {
   sectionId: string;
   rect: DOMRect;
   onRegenerateAsset?: (sectionId: string, assetType: 'image' | 'svg') => void;
+  onUploadAsset?: (sectionId: string, file: File) => Promise<string>;
   onRemoveAsset: (sectionId: string) => void;
   onDismiss: () => void;
 }) {
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // Create a hidden file input for the upload flow
+  React.useEffect(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.style.display = 'none';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (file && onUploadAsset) {
+        onUploadAsset(sectionId, file);
+        onDismiss();
+      }
+      // Cleanup
+      input.value = '';
+    });
+    document.body.appendChild(input);
+    fileInputRef.current = input;
+
+    return () => {
+      document.body.removeChild(input);
+    };
+  }, [sectionId, onUploadAsset, onDismiss]);
+
   return (
     <FloatingToolbar rect={rect} onDismiss={onDismiss}>
       {onRegenerateAsset && (
@@ -196,6 +224,14 @@ function AssetActionToolbar({
           onClick={() => {
             onRegenerateAsset(sectionId, 'image');
             onDismiss();
+          }}
+        />
+      )}
+      {onUploadAsset && (
+        <ToolbarButton
+          label="Upload"
+          onClick={() => {
+            fileInputRef.current?.click();
           }}
         />
       )}
@@ -263,6 +299,7 @@ export function InlineEditController({
   sections,
   onSectionUpdate,
   onRegenerateAsset,
+  onUploadAsset,
 }: InlineEditControllerProps) {
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const sectionsRef = useRef(sections);
@@ -428,6 +465,7 @@ export function InlineEditController({
         sectionId={editTarget.sectionId}
         rect={editTarget.rect}
         onRegenerateAsset={onRegenerateAsset}
+        onUploadAsset={onUploadAsset}
         onRemoveAsset={handleRemoveAsset}
         onDismiss={() => setEditTarget(null)}
       />

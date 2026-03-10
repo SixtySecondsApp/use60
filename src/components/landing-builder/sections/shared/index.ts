@@ -4,3 +4,4 @@ export { AssetSlot } from './AssetSlot';
 export { ContentBlockRenderer } from './ContentBlockRenderer';
 export { SectionDivider } from './SectionDivider';
 export { MicroCopy } from './MicroCopy';
+export { FormBlock } from './FormBlock';
