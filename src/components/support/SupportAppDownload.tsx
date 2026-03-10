@@ -1,7 +1,7 @@
 import { Download, Monitor } from 'lucide-react';
 
 const WINDOWS_URL =
-  'https://github.com/SixtySecondsApp/sixty-support-app/releases/latest/download/sixty-support-win.zip';
+  'https://github.com/SixtySecondsApp/sixty-support-app/releases/latest/download/sixty-support-setup.exe';
 const MACOS_URL =
   'https://github.com/SixtySecondsApp/sixty-support-app/releases/latest/download/sixty-support.dmg';
 
