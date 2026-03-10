@@ -204,7 +204,7 @@ function LogRow({ event, rates, fxRate }: LogRowProps) {
 
   return (
     <div
-      className={`grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_52px] gap-1 px-2 py-1 text-[10px] font-mono border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors ${
+      className={`grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1fr)_90px_52px] gap-1 px-2 py-1 text-[10px] font-mono border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors ${
         isFlagged ? 'bg-orange-950/20' : ''
       }`}
     >
@@ -225,7 +225,7 @@ function LogRow({ event, rates, fxRate }: LogRowProps) {
       </span>
 
       {/* Tokens in/out */}
-      <span className="truncate" title={dummy ? 'Estimated — tokens may be approximate' : undefined}>
+      <span className="whitespace-nowrap" title={dummy ? 'Estimated — tokens may be approximate' : undefined}>
         <span className={isTest ? SALMON : dummy ? 'text-slate-500' : 'text-indigo-300'}>{formatTokens(event.input_tokens)}</span>
         <span className={isTest ? SALMON : 'text-slate-600'}>/</span>
         <span className={isTest ? SALMON : dummy ? 'text-slate-500' : 'text-emerald-300'}>{formatTokens(event.output_tokens)}</span>
@@ -320,7 +320,7 @@ export function ActivityLogTerminal({ events, llmEndpoints, isPaused, onOpenMode
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_52px] gap-1 px-2 py-1 text-[9px] font-mono text-slate-600 uppercase tracking-wider border-b border-slate-800/50 shrink-0 bg-[#0d1321]/50">
+      <div className="grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1fr)_90px_52px] gap-1 px-2 py-1 text-[9px] font-mono text-slate-600 uppercase tracking-wider border-b border-slate-800/50 shrink-0 bg-[#0d1321]/50">
         <span>Time</span>
         <span>User</span>
         <span>Model</span>
@@ -357,10 +357,11 @@ export function ActivityLogTerminal({ events, llmEndpoints, isPaused, onOpenMode
       </div>
 
       {/* Sticky 24hr totals footer — same grid as rows */}
-      <div className="shrink-0 grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_52px] gap-1 px-2 py-1.5 bg-[#0d1321] border-t border-slate-800/50 font-mono text-[10px] items-center">
-        <span className="text-slate-500 uppercase tracking-wider col-span-2">24hr Total</span>
+      <div className="shrink-0 grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1fr)_90px_52px] gap-1 px-2 py-1.5 bg-[#0d1321] border-t border-slate-800/50 font-mono text-[10px] items-center">
+        <span className="text-slate-500 uppercase tracking-wider">24hr</span>
+        <span className="text-slate-500 uppercase tracking-wider">Total</span>
         <span />
-        <span>
+        <span className="whitespace-nowrap">
           <span className="text-indigo-300 font-semibold">{formatTokens(totals24h.tokensIn)}</span>
           <span className="text-slate-600">/</span>
           <span className="text-emerald-300 font-semibold">{formatTokens(totals24h.tokensOut)}</span>

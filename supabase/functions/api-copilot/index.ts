@@ -215,7 +215,7 @@ serve(async (req) => {
   const corsPreflightResponse = handleCorsPreflightRequest(req);
   if (corsPreflightResponse) return corsPreflightResponse;
   const corsHeaders = getCorsHeaders(req);
-  const clientIp = extractClientIp(req);
+  let clientIp = extractClientIp(req);
 
   try {
     // Authenticate request using JWT token (not API key)
@@ -385,7 +385,12 @@ async function handleChat(
 
   try {
     const body: ChatRequest = await req.json()
-    
+
+    // Prefer client_ip from request body (set by frontend) over header extraction
+    if ((body as Record<string, unknown>).client_ip && !clientIp) {
+      clientIp = (body as Record<string, unknown>).client_ip as string;
+    }
+
     if (!body.message || !body.message.trim()) {
       return createErrorResponse('Message is required', 400, 'MISSING_MESSAGE')
     }

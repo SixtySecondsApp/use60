@@ -226,27 +226,7 @@ async function handleCreate(
     return errorResponse('Failed to create credit menu entry', req, 500);
   }
 
-  // Insert history record (non-fatal — audit trail failure must not block the response)
-  try {
-    await adminClient.from('credit_menu_history').insert({
-      action_id: action_id.trim(),
-      event_type: 'created',
-      prev_cost_low: null,
-      prev_cost_medium: null,
-      prev_cost_high: null,
-      prev_is_active: null,
-      new_cost_low: cost_low,
-      new_cost_medium: cost_medium,
-      new_cost_high: cost_high,
-      new_is_active: false,
-      menu_version: 1,
-      reason: 'Draft created',
-      changed_by: adminIdentifier,
-      changed_at: now,
-    });
-  } catch (histErr) {
-    console.warn('[admin-credit-menu] history insert failed (non-fatal):', histErr);
-  }
+  // History record is auto-inserted by the log_credit_menu_history trigger
 
   return jsonResponse({ data, error: null }, req, 201);
 }
@@ -334,27 +314,7 @@ async function handleUpdate(
     return errorResponse('Failed to update credit menu entry', req, 500);
   }
 
-  // History record for pricing change (non-fatal)
-  try {
-    await adminClient.from('credit_menu_history').insert({
-      action_id: actionId,
-      event_type: 'updated',
-      prev_cost_low: current.cost_low,
-      prev_cost_medium: current.cost_medium,
-      prev_cost_high: current.cost_high,
-      prev_is_active: current.is_active,
-      new_cost_low: (updates.cost_low ?? current.cost_low) as number,
-      new_cost_medium: (updates.cost_medium ?? current.cost_medium) as number,
-      new_cost_high: (updates.cost_high ?? current.cost_high) as number,
-      new_is_active: current.is_active,
-      menu_version: newVersion,
-      reason: 'Pricing/metadata updated',
-      changed_by: adminIdentifier,
-      changed_at: now,
-    });
-  } catch (histErr) {
-    console.warn('[admin-credit-menu] history insert failed (non-fatal):', histErr);
-  }
+  // History record is auto-inserted by the log_credit_menu_history trigger
 
   return jsonResponse({ data, error: null }, req);
 }
@@ -430,27 +390,7 @@ async function handleActivate(
     return errorResponse('Failed to activate entry', req, 500);
   }
 
-  // History record for activation (non-fatal)
-  try {
-    await adminClient.from('credit_menu_history').insert({
-      action_id: actionId,
-      event_type: 'activated',
-      prev_cost_low: current.cost_low,
-      prev_cost_medium: current.cost_medium,
-      prev_cost_high: current.cost_high,
-      prev_is_active: false,
-      new_cost_low: current.cost_low,
-      new_cost_medium: current.cost_medium,
-      new_cost_high: current.cost_high,
-      new_is_active: true,
-      menu_version: newVersion,
-      reason: body.reason ?? 'Activated by admin',
-      changed_by: adminIdentifier,
-      changed_at: now,
-    });
-  } catch (histErr) {
-    console.warn('[admin-credit-menu] history insert failed (non-fatal):', histErr);
-  }
+  // History record is auto-inserted by the log_credit_menu_history trigger
 
   return jsonResponse({ data, error: null }, req);
 }
@@ -511,27 +451,7 @@ async function handleDeactivate(
     return errorResponse('Failed to deactivate entry', req, 500);
   }
 
-  // History record for deactivation (non-fatal)
-  try {
-    await adminClient.from('credit_menu_history').insert({
-      action_id: actionId,
-      event_type: 'deactivated',
-      prev_cost_low: current.cost_low,
-      prev_cost_medium: current.cost_medium,
-      prev_cost_high: current.cost_high,
-      prev_is_active: true,
-      new_cost_low: current.cost_low,
-      new_cost_medium: current.cost_medium,
-      new_cost_high: current.cost_high,
-      new_is_active: false,
-      menu_version: newVersion,
-      reason: body.reason ?? 'Deactivated by admin',
-      changed_by: adminIdentifier,
-      changed_at: now,
-    });
-  } catch (histErr) {
-    console.warn('[admin-credit-menu] history insert failed (non-fatal):', histErr);
-  }
+  // History record is auto-inserted by the log_credit_menu_history trigger
 
   return jsonResponse({ data, error: null }, req);
 }

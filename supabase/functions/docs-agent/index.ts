@@ -454,7 +454,7 @@ serve(async (req: Request) => {
   if (preflightResponse) return preflightResponse;
 
   const corsHeaders = getCorsHeaders(req);
-  const clientIp = extractClientIp(req);
+  let clientIp = extractClientIp(req);
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -497,6 +497,11 @@ serve(async (req: Request) => {
     // Parse request body
     const body = await req.json() as RequestBody;
     const { message, conversationHistory } = body;
+
+    // Prefer client_ip from request body (set by frontend) over header extraction
+    if ((body as Record<string, unknown>).client_ip && !clientIp) {
+      clientIp = (body as Record<string, unknown>).client_ip as string;
+    }
 
     if (!message || typeof message !== 'string' || message.trim() === '') {
       return new Response(

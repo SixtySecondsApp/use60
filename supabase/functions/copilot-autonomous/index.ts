@@ -2432,7 +2432,7 @@ function detectHITLSignal(message: string): ApprovalSignal | null {
 
 serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
-  const clientIp = extractClientIp(req);
+  let clientIp = extractClientIp(req);
 
   // Handle CORS preflight
   const preflightResponse = handleCorsPreflightRequest(req);
@@ -2458,6 +2458,11 @@ serve(async (req: Request) => {
     // Parse request
     const body: RequestBody = await req.json();
     const { message, organizationId, context = {}, stream = true, fact_profile_id, product_profile_id } = body;
+
+    // Prefer client_ip from request body (set by frontend) over header extraction
+    if ((body as Record<string, unknown>).client_ip && !clientIp) {
+      clientIp = (body as Record<string, unknown>).client_ip as string;
+    }
 
     // Ensure orgId is available in context for model router and downstream consumers
     if (organizationId && !context.orgId) {
