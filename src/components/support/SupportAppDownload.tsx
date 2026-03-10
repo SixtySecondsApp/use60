@@ -1,11 +1,11 @@
 import { Download, Monitor } from 'lucide-react';
 
-const STORAGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/app-releases`;
+const DOWNLOAD_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/app-download`;
 
 const ASSETS = {
-  windows: `${STORAGE_BASE}/sixty-support-setup.exe`,
-  macArm64: `${STORAGE_BASE}/sixty-support-arm64.dmg`,
-  macX64: `${STORAGE_BASE}/sixty-support-x64.dmg`,
+  windows: `${DOWNLOAD_BASE}/sixty-support-setup.exe`,
+  macArm64: `${DOWNLOAD_BASE}/sixty-support-arm64.dmg`,
+  macX64: `${DOWNLOAD_BASE}/sixty-support-x64.dmg`,
 };
 
 function detectOS(): 'mac' | 'windows' | 'unknown' {
