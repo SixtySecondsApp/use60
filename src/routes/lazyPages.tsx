@@ -211,6 +211,7 @@ export const CompetitiveIntelPage = lazyWithRetry(() => import('@/pages/Competit
 export const AdLibraryPage = lazyWithRetry(() => import('@/pages/AdLibrary'));
 export const LinkedInRevenuePage = lazyWithRetry(() => import('@/pages/LinkedInRevenue'));
 export const LinkedInAnalyticsPage = lazyWithRetry(() => import('@/pages/LinkedInAnalytics'));
+export const LinkedInHubPage = lazyWithRetry(() => import('@/pages/LinkedInHub'));
 export const FollowUpDraftsPage = lazyWithRetry(() => import('@/pages/FollowUpDraftsPage'));
 export const CoachingDashboardPage = lazyWithRetry(() => import('@/pages/CoachingDashboardPage'));
 export const CoachingRepDetailPage = lazyWithRetry(() => import('@/pages/CoachingRepDetailPage'));

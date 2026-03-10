@@ -10,6 +10,9 @@ import {
   SearchResult,
   AdCluster,
   AdTrend,
+  CompetitorStats,
+  AdRemixResult,
+  LandingPageData,
 } from '@/lib/services/adLibraryService'
 
 export function useAdLibrary() {
@@ -34,6 +37,10 @@ export function useAdLibrary() {
   const [trendsLoading, setTrendsLoading] = useState(false)
   const [likelyWinners, setLikelyWinners] = useState<AdLibraryAd[]>([])
   const [winnersLoading, setWinnersLoading] = useState(false)
+
+  // Competitor stats state
+  const [competitorStats, setCompetitorStats] = useState<CompetitorStats[]>([])
+  const [competitorStatsLoading, setCompetitorStatsLoading] = useState(false)
 
   // Prevent duplicate initial loads
   const initialLoadDone = useRef(false)
@@ -242,6 +249,40 @@ export function useAdLibrary() {
   }, [ready, searchAds, searchParams])
 
   // ---------------------------------------------------------------------------
+  // AI Remix
+  // ---------------------------------------------------------------------------
+
+  const remixAd = useCallback(async (adId: string): Promise<AdRemixResult> => {
+    if (!ready) throw new Error('Not ready')
+    try {
+      const result = await adLibraryService.remixAd(adId)
+      toast.success('Ad remix generated!')
+      return result
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to remix ad')
+      throw e
+    }
+  }, [ready])
+
+  // ---------------------------------------------------------------------------
+  // Landing page capture
+  // ---------------------------------------------------------------------------
+
+  const captureLandingPage = useCallback(async (adId: string): Promise<LandingPageData> => {
+    if (!ready) throw new Error('Not ready')
+    try {
+      const result = await adLibraryService.captureLandingPage(adId)
+      toast.success('Landing page captured!')
+      // Update the ad in local state
+      setAds((prev) => prev.map((a) => a.id === adId ? { ...a, landing_page: result } : a))
+      return result
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to capture landing page')
+      throw e
+    }
+  }, [ready])
+
+  // ---------------------------------------------------------------------------
   // Save / unsave ads
   // ---------------------------------------------------------------------------
 
@@ -341,6 +382,20 @@ export function useAdLibrary() {
     }
   }, [ready])
 
+  const fetchCompetitorStats = useCallback(async () => {
+    if (!ready) return
+    try {
+      setCompetitorStatsLoading(true)
+      const stats = await adLibraryService.getCompetitorStats()
+      setCompetitorStats(stats)
+    } catch (e: any) {
+      console.error('[useAdLibrary] fetchCompetitorStats error:', e)
+      toast.error(e.message || 'Failed to load competitor stats')
+    } finally {
+      setCompetitorStatsLoading(false)
+    }
+  }, [ready])
+
   // ---------------------------------------------------------------------------
   // Refresh all data
   // ---------------------------------------------------------------------------
@@ -353,8 +408,9 @@ export function useAdLibrary() {
       fetchClusters(),
       fetchTrends(),
       fetchWinners(),
+      fetchCompetitorStats(),
     ])
-  }, [ready, searchAds, searchParams, fetchWatchlist, fetchClusters, fetchTrends, fetchWinners])
+  }, [ready, searchAds, searchParams, fetchWatchlist, fetchClusters, fetchTrends, fetchWinners, fetchCompetitorStats])
 
   // ---------------------------------------------------------------------------
   // Initial load when auth + org are ready
@@ -375,6 +431,7 @@ export function useAdLibrary() {
     setClusters([])
     setTrends([])
     setLikelyWinners([])
+    setCompetitorStats([])
     setSearchParams({ page: 0, page_size: 20 })
   }, [activeOrgId])
 
@@ -403,6 +460,10 @@ export function useAdLibrary() {
     // Engagement
     enrichEngagement,
 
+    // AI Remix + Landing page
+    remixAd,
+    captureLandingPage,
+
     // Manual submission
     submitManualAd,
 
@@ -415,6 +476,12 @@ export function useAdLibrary() {
     fetchTrends,
     likelyWinners,
     winnersLoading,
+    fetchWinners,
+
+    // Competitor stats
+    competitorStats,
+    competitorStatsLoading,
+    fetchCompetitorStats,
 
     // Refresh
     refreshAll,

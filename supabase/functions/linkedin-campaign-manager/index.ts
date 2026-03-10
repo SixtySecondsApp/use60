@@ -1029,29 +1029,44 @@ async function handleEstimateAudience(
     return { estimated_count: null, error: 'No LinkedIn Ad Account configured. Please connect one in Settings.' }
   }
 
-  // audienceCounts only supports: locations, industries, seniorities
-  const SUPPORTED_FACETS = new Set(['locations', 'industries', 'seniorities'])
-  const supportedFacets = facets.filter(f => SUPPORTED_FACETS.has(f.type))
-
-  if (supportedFacets.length === 0) {
-    return { estimated_count: null, error: 'Select a location, industry, or seniority to estimate audience size.' }
+  if (facets.length === 0) {
+    return { estimated_count: null, error: 'Select at least one targeting criterion to estimate audience size.' }
   }
 
-  // Build query string manually — LinkedIn expects raw brackets, not URL-encoded
-  // Do NOT encodeURIComponent on URN values — LinkedIn needs raw colons
-  const queryParts = ['q=targetingCriteria']
+  // LinkedIn audienceCounts uses Rest.li 2.0 targetingCriteriaV2 format:
+  // q=targetingCriteriaV2&targetingCriteria=(include:(and:List(
+  //   (or:(urn%3Ali%3AadTargetingFacet%3Alocations:List(urn%3Ali%3Ageo%3A103644278))),
+  //   (or:(urn%3Ali%3AadTargetingFacet%3Aindustries:List(urn%3Ali%3Aindustry%3A4)))
+  // )))
+  // URNs must be URL-encoded in query params per Rest.li 2.0
 
-  for (const facet of supportedFacets) {
-    for (let i = 0; i < facet.values.length; i++) {
-      queryParts.push(
-        `target.includedTargetingFacets.${facet.type}[${i}]=${facet.values[i]}`
-      )
-    }
+  // Map our facet type names to LinkedIn adTargetingFacet URN names
+  const FACET_TYPE_MAP: Record<string, string> = {
+    locations: 'locations',
+    industries: 'industries',
+    seniorities: 'seniorities',
+    jobFunctions: 'jobFunctions',
+    staffCountRanges: 'staffCountRanges',
   }
 
-  const url = `${LINKEDIN_API_BASE}/audienceCounts?${queryParts.join('&')}`
+  const andClauses: string[] = []
+  for (const facet of facets) {
+    const facetName = FACET_TYPE_MAP[facet.type]
+    if (!facetName) continue
+
+    const encodedFacetUrn = encodeURIComponent(`urn:li:adTargetingFacet:${facetName}`)
+    const encodedValues = facet.values.map(v => encodeURIComponent(v)).join(',')
+    andClauses.push(`(or:(${encodedFacetUrn}:List(${encodedValues})))`)
+  }
+
+  if (andClauses.length === 0) {
+    return { estimated_count: null, error: 'No valid targeting facets to estimate.' }
+  }
+
+  const targetingParam = `(include:(and:List(${andClauses.join(',')})))`
+  const url = `${LINKEDIN_API_BASE}/audienceCounts?q=targetingCriteriaV2&targetingCriteria=${targetingParam}`
   console.log(`${LOG_PREFIX} audienceCounts URL:`, url)
-  console.log(`${LOG_PREFIX} audienceCounts adAccountId: ${resolvedAdAccountId}, facets: ${JSON.stringify(supportedFacets)}`)
+  console.log(`${LOG_PREFIX} audienceCounts facets: ${JSON.stringify(facets)}`)
 
   try {
     const response = await fetch(url, {

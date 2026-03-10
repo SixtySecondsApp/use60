@@ -9,6 +9,7 @@
 -- Rollback strategy:
 --   DROP POLICY "auth_insert_linkedin_org_integrations" ON linkedin_org_integrations;
 --   DROP POLICY "auth_update_linkedin_org_integrations" ON linkedin_org_integrations;
+--   DROP POLICY "auth_insert_linkedin_lead_sources" ON linkedin_lead_sources;
 --   DROP POLICY "auth_update_linkedin_lead_sources" ON linkedin_lead_sources;
 
 -- linkedin_org_integrations: INSERT (connect)
@@ -31,6 +32,18 @@ CREATE POLICY "auth_update_linkedin_org_integrations" ON linkedin_org_integratio
     AND EXISTS (
       SELECT 1 FROM organization_memberships
       WHERE organization_memberships.org_id = linkedin_org_integrations.org_id
+        AND organization_memberships.user_id = auth.uid()
+    )
+  );
+
+-- linkedin_lead_sources: INSERT (register new form/event source)
+DROP POLICY IF EXISTS "auth_insert_linkedin_lead_sources" ON linkedin_lead_sources;
+CREATE POLICY "auth_insert_linkedin_lead_sources" ON linkedin_lead_sources
+  FOR INSERT WITH CHECK (
+    auth.role() = 'authenticated'
+    AND EXISTS (
+      SELECT 1 FROM organization_memberships
+      WHERE organization_memberships.org_id = linkedin_lead_sources.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );

@@ -103,7 +103,7 @@ import {
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, AutonomyDashboardPage, SearchResultsPage, CompetitiveIntelPage, AdLibraryPage, LinkedInRevenuePage, LinkedInAnalyticsPage, CoachingDashboardPage, CoachingRepDetailPage, TeachSixtySection, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
+  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, AutonomyDashboardPage, SearchResultsPage, CompetitiveIntelPage, AdLibraryPage, LinkedInRevenuePage, LinkedInAnalyticsPage, LinkedInHubPage, CoachingDashboardPage, CoachingRepDetailPage, TeachSixtySection, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
   CreditPurchaseSuccess, CreditsSettingsPage, ModelPreferencesPage, BillingSettingsPage, SalesGoalsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage, MeetingSettingsPage,
   OrgBilling,
@@ -558,7 +558,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/tasks" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/crm/tasks" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/projects" element={<Navigate to="/command-centre" replace />} />
-                <Route path="/campaigns" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><CampaignsPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                <Route path="/campaigns" element={<Navigate to="/linkedin?tab=campaigns" replace />} />
                 <Route path="/outreach/analytics" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><OutreachAnalyticsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/analytics/win-loss" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><WinLossPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/follow-ups/drafts" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><FollowUpDraftsPage /></Suspense></AppLayout></InternalRouteGuard>} />
@@ -630,9 +630,11 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/autonomy" element={<InternalRouteGuard><AppLayout><AutonomyDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/search" element={<AppLayout><SearchResultsPage /></AppLayout>} />
                 <Route path="/intelligence/competitive" element={<AppLayout><CompetitiveIntelPage /></AppLayout>} />
-                <Route path="/intelligence/ads" element={<InternalRouteGuard><AppLayout><AdLibraryPage /></AppLayout></InternalRouteGuard>} />
-                <Route path="/intelligence/linkedin-revenue" element={<AppLayout><LinkedInRevenuePage /></AppLayout>} />
-                <Route path="/intelligence/linkedin-analytics" element={<AppLayout><LinkedInAnalyticsPage /></AppLayout>} />
+                <Route path="/linkedin" element={<AppLayout><Suspense fallback={null}><LinkedInHubPage /></Suspense></AppLayout>} />
+                {/* Legacy LinkedIn routes → redirect to hub tabs */}
+                <Route path="/intelligence/ads" element={<Navigate to="/linkedin?tab=ad_library" replace />} />
+                <Route path="/intelligence/linkedin-revenue" element={<Navigate to="/linkedin?tab=revenue" replace />} />
+                <Route path="/intelligence/linkedin-analytics" element={<Navigate to="/linkedin?tab=analytics" replace />} />
                 <Route path="/coaching" element={<InternalRouteGuard><AppLayout><CoachingDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/coaching/rep/:userId" element={<InternalRouteGuard><AppLayout><CoachingRepDetailPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/methodology" element={<OrgAdminRouteGuard><AppLayout><SalesMethodologySettings /></AppLayout></OrgAdminRouteGuard>} />

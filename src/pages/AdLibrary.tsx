@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Helmet } from 'react-helmet-async'
 import {
   Eye,
@@ -27,11 +27,16 @@ import {
   Sparkles,
   Bookmark,
   BookmarkCheck,
+  Users,
+  Copy,
+  Download,
+  Globe,
+  FlaskConical,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useAdLibrary } from '@/lib/hooks/useAdLibrary'
-import type { AdLibraryAd, WatchlistEntry, AdCluster, AdTrend } from '@/lib/services/adLibraryService'
+import type { AdLibraryAd, WatchlistEntry, AdCluster, AdTrend, CompetitorStats, AdRemixResult, LandingPageData } from '@/lib/services/adLibraryService'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -269,6 +274,15 @@ function AdCard({ ad, onClick, onSave, onUnsave }: { ad: AdLibraryAd; onClick: (
             )
           })()}
           {ad.geography && <span>{ad.geography}</span>}
+          {ad.landing_page && (
+            <span className="flex items-center gap-1 text-emerald-400">
+              <Globe className="h-3 w-3" />
+              LP
+            </span>
+          )}
+          {ad.is_likely_dead && (
+            <Badge className="text-[9px] bg-red-500/10 text-red-400 border-red-500/20 px-1 py-0">Dead</Badge>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -285,13 +299,31 @@ function AdDetailSheet({
   onClose,
   onSave,
   onUnsave,
+  onRemix,
+  onCaptureLanding,
 }: {
   ad: AdLibraryAd | null
   open: boolean
   onClose: () => void
   onSave?: (id: string) => void
   onUnsave?: (id: string) => void
+  onRemix?: (adId: string) => Promise<AdRemixResult>
+  onCaptureLanding?: (adId: string) => Promise<LandingPageData>
 }) {
+  const [remixLoading, setRemixLoading] = useState(false)
+  const [remixResults, setRemixResults] = useState<AdRemixResult | null>(null)
+  const [landingLoading, setLandingLoading] = useState(false)
+  const [landingData, setLandingData] = useState<LandingPageData | null>(null)
+  const [prevAdId, setPrevAdId] = useState<string | null>(null)
+
+  // Reset state when ad changes — and auto-load landing page from DB
+  const adId = ad?.id ?? null
+  if (adId !== prevAdId) {
+    setPrevAdId(adId)
+    setRemixResults(null)
+    setLandingData(ad?.landing_page ?? null)
+  }
+
   if (!ad) return null
 
   const MediaIcon = MEDIA_TYPE_ICONS[ad.media_type] ?? FileText
@@ -312,6 +344,28 @@ function AdDetailSheet({
               >
                 {ad.is_saved ? <BookmarkCheck className="h-4 w-4 mr-1.5" /> : <Bookmark className="h-4 w-4 mr-1.5" />}
                 {ad.is_saved ? 'Saved' : 'Save'}
+              </Button>
+            )}
+            {onRemix && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  // Auto-save if not already saved
+                  if (!ad.is_saved && onSave) onSave(ad.id)
+                  setRemixLoading(true)
+                  try {
+                    const result = await onRemix(ad.id)
+                    setRemixResults(result)
+                  } finally {
+                    setRemixLoading(false)
+                  }
+                }}
+                disabled={remixLoading}
+                className="text-purple-400 border-purple-500/30 hover:bg-purple-500/10"
+              >
+                {remixLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1.5" />}
+                {remixLoading ? 'Remixing...' : 'Remix'}
               </Button>
             )}
           </div>
@@ -485,6 +539,123 @@ function AdDetailSheet({
             <span>{ad.capture_source === 'organic' ? 'Posted' : 'First seen'}: {formatDate(ad.first_seen_at)}</span>
             {ad.first_seen_at !== ad.last_seen_at && <span>Last seen: {formatDate(ad.last_seen_at)}</span>}
           </div>
+
+          {/* Landing Page Section */}
+          {ad.destination_url && (
+            <div className="border-t border-zinc-800 pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Globe className="h-4 w-4 text-emerald-400" />
+                <span className="text-sm font-medium text-zinc-200">Landing Page</span>
+                {!landingData && onCaptureLanding && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      setLandingLoading(true)
+                      try {
+                        const result = await onCaptureLanding(ad.id)
+                        setLandingData(result)
+                      } finally {
+                        setLandingLoading(false)
+                      }
+                    }}
+                    disabled={landingLoading}
+                    className="ml-auto h-7 text-xs text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                  >
+                    {landingLoading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Globe className="h-3 w-3 mr-1" />}
+                    {landingLoading ? 'Capturing...' : 'Capture Page'}
+                  </Button>
+                )}
+                {landingData && (
+                  <Badge className="ml-auto text-[9px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">Captured</Badge>
+                )}
+              </div>
+              {landingData ? (
+                <div className="space-y-2 rounded-lg border border-emerald-500/20 bg-zinc-950 p-3">
+                  {landingData.og_image && (
+                    <img src={landingData.og_image} alt="" className="w-full rounded-md object-cover max-h-40" />
+                  )}
+                  {landingData.title && (
+                    <p className="text-sm font-semibold text-zinc-100">{landingData.title}</p>
+                  )}
+                  {landingData.description && (
+                    <p className="text-xs text-zinc-400">{landingData.description}</p>
+                  )}
+                  {landingData.h1 && landingData.h1 !== landingData.title && (
+                    <p className="text-xs text-zinc-300">H1: {landingData.h1}</p>
+                  )}
+                  {landingData.ctas && landingData.ctas.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {landingData.ctas.map((cta, i) => (
+                        <Badge key={i} className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">{cta}</Badge>
+                      ))}
+                    </div>
+                  )}
+                  <a href={landingData.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:underline flex items-center gap-1 pt-1">
+                    <ExternalLink className="h-3 w-3" />
+                    {landingData.url.length > 60 ? landingData.url.slice(0, 60) + '...' : landingData.url}
+                  </a>
+                </div>
+              ) : !landingLoading ? (
+                <p className="text-xs text-zinc-500">Click "Capture Page" to extract the landing page title, description, CTAs, and OG image.</p>
+              ) : null}
+            </div>
+          )}
+
+          {/* Remix Results */}
+          {remixResults && (
+            <div className="border-t border-zinc-800 pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-purple-400" />
+                <span className="text-sm font-medium text-zinc-200">AI Remix Variants</span>
+              </div>
+              <div className="space-y-3">
+                {remixResults.variants.map((variant, i) => {
+                  const accentColors = ['border-l-blue-500', 'border-l-emerald-500', 'border-l-amber-500']
+                  const angleBadgeColors = ['bg-blue-500/10 text-blue-400 border-blue-500/20', 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', 'bg-amber-500/10 text-amber-400 border-amber-500/20']
+                  return (
+                    <div key={i} className={`rounded-lg border border-zinc-800 border-l-2 ${accentColors[i] ?? 'border-l-zinc-500'} bg-zinc-950 p-3 space-y-2`}>
+                      <div className="flex items-center gap-2">
+                        <Badge className={`text-[9px] ${angleBadgeColors[i] ?? ''}`}>{variant.angle}</Badge>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${variant.headline}\n\n${variant.body}\n\n${variant.cta}`)
+                            toast.success('Copied to clipboard')
+                          }}
+                          className="ml-auto text-zinc-500 hover:text-zinc-300 transition-colors"
+                          title="Copy"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      {variant.headline && (
+                        <p className="text-sm font-semibold text-zinc-100">{variant.headline}</p>
+                      )}
+                      <p className="text-xs text-zinc-300 leading-relaxed">{variant.body}</p>
+                      {variant.cta && (
+                        <Badge className="text-[10px] bg-zinc-800 text-zinc-300 border-zinc-700">{variant.cta}</Badge>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {remixResults.image_url && (
+                <div className="mt-3">
+                  <p className="text-xs text-zinc-500 mb-2">Generated Creative</p>
+                  <div className="relative rounded-lg overflow-hidden border border-zinc-800">
+                    <img src={remixResults.image_url} alt="AI generated creative" className="w-full object-contain max-h-[300px]" />
+                    <a
+                      href={remixResults.image_url}
+                      download="remix-creative.png"
+                      className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 backdrop-blur-sm text-zinc-300 hover:text-white transition-colors"
+                    >
+                      <Download className="h-4 w-4" />
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>
@@ -1436,6 +1607,223 @@ function WinnersTab({
 // ---------------------------------------------------------------------------
 // Main Page
 // ---------------------------------------------------------------------------
+// Competitor Dashboard Tab
+// ---------------------------------------------------------------------------
+
+function CompetitorDashboardTab({
+  stats,
+  loading,
+  onRefresh,
+  onSelectCompetitor,
+}: {
+  stats: CompetitorStats[]
+  loading: boolean
+  onRefresh: () => void
+  onSelectCompetitor: (name: string) => void
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-zinc-200">{stats.length} Competitors tracked</h3>
+        <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1.5" />}
+          Refresh
+        </Button>
+      </div>
+
+      {loading && stats.length === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="border-zinc-800/60 bg-zinc-900/60">
+              <CardContent className="p-4 space-y-3">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-4/5" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : stats.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Users className="h-10 w-10 text-zinc-600 mb-3" />
+          <p className="text-sm text-zinc-500">No competitor data yet. Search LinkedIn to start tracking competitors.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {stats.map((comp) => (
+            <Card
+              key={comp.advertiser_name}
+              className="cursor-pointer border-zinc-800/60 bg-zinc-900/60 hover:border-zinc-700 transition-colors"
+              onClick={() => onSelectCompetitor(comp.advertiser_name)}
+            >
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-300">
+                    {comp.advertiser_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-zinc-100 truncate">{comp.advertiser_name}</p>
+                    <p className="text-[10px] text-zinc-500">{comp.total_count} total · {comp.saved_count} saved</p>
+                  </div>
+                </div>
+
+                {/* Format breakdown */}
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(comp.format_breakdown).map(([format, count]) => (
+                    <Badge key={format} variant="outline" className="text-[9px] border-zinc-700 text-zinc-400">
+                      {count} {format}
+                    </Badge>
+                  ))}
+                </div>
+
+                {/* Engagement */}
+                {comp.total_engagement > 0 && (
+                  <div className="flex items-center gap-3 text-[10px]">
+                    <span className="flex items-center gap-1 text-rose-400">
+                      <Heart className="h-3 w-3" />
+                      {comp.total_engagement.toLocaleString()} total
+                    </span>
+                    <span className="text-zinc-500">
+                      ~{Math.round(comp.avg_engagement).toLocaleString()} avg/post
+                    </span>
+                  </div>
+                )}
+
+                {/* Timeline */}
+                <div className="text-[10px] text-zinc-500">
+                  {daysAgo(comp.first_capture)} — {daysAgo(comp.last_capture)}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Remixes Tab
+// ---------------------------------------------------------------------------
+
+function RemixesTab({
+  remixes,
+  onSelectAd,
+  onRemoveRemix,
+}: {
+  remixes: Record<string, { ad: AdLibraryAd; result: AdRemixResult }>
+  onSelectAd: (ad: AdLibraryAd) => void
+  onRemoveRemix: (adId: string) => void
+}) {
+  const entries = Object.entries(remixes)
+
+  if (entries.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-zinc-700/50 bg-gradient-to-br from-purple-500/10 to-pink-500/10 mb-4">
+          <Sparkles className="h-6 w-6 text-purple-400" />
+        </div>
+        <h3 className="text-base font-semibold text-zinc-200 mb-1">No remixes yet</h3>
+        <p className="text-sm text-zinc-500 max-w-sm">
+          Open any saved ad and click the purple Remix button to generate AI copy variants and creatives.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {entries.map(([adId, { ad, result }]) => (
+        <Card key={adId} className="border-zinc-800/60 bg-zinc-900/60 overflow-hidden">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-3">
+              {/* Original ad preview */}
+              {getMediaUrls(ad)[0] && (
+                <img
+                  src={getMediaUrls(ad)[0]}
+                  alt=""
+                  className="h-14 w-14 rounded-lg object-cover bg-zinc-950 border border-zinc-800 shrink-0 cursor-pointer"
+                  onClick={() => onSelectAd(ad)}
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <button
+                  onClick={() => onSelectAd(ad)}
+                  className="text-sm font-semibold text-zinc-100 hover:text-white transition-colors truncate block text-left"
+                >
+                  {ad.advertiser_name}
+                </button>
+                {ad.headline && (
+                  <p className="text-xs text-zinc-400 truncate">{ad.headline}</p>
+                )}
+              </div>
+              <Badge className="text-[9px] bg-purple-500/10 text-purple-400 border-purple-500/20 shrink-0">
+                {result.variants.length} variants
+              </Badge>
+              <button
+                onClick={() => onRemoveRemix(adId)}
+                className="text-zinc-600 hover:text-zinc-400 transition-colors shrink-0"
+                title="Remove"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {result.variants.map((variant, i) => {
+                const accentColors = ['border-l-blue-500', 'border-l-emerald-500', 'border-l-amber-500']
+                const angleBadgeColors = ['bg-blue-500/10 text-blue-400 border-blue-500/20', 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', 'bg-amber-500/10 text-amber-400 border-amber-500/20']
+                return (
+                  <div key={i} className={`rounded-lg border border-zinc-800 border-l-2 ${accentColors[i] ?? 'border-l-zinc-500'} bg-zinc-950 p-3 space-y-2`}>
+                    <div className="flex items-center gap-2">
+                      <Badge className={`text-[9px] ${angleBadgeColors[i] ?? ''}`}>{variant.angle}</Badge>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${variant.headline}\n\n${variant.body}\n\n${variant.cta}`)
+                          toast.success('Copied to clipboard')
+                        }}
+                        className="ml-auto text-zinc-500 hover:text-zinc-300 transition-colors"
+                        title="Copy"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {variant.headline && (
+                      <p className="text-sm font-semibold text-zinc-100">{variant.headline}</p>
+                    )}
+                    <p className="text-xs text-zinc-300 leading-relaxed">{variant.body}</p>
+                    {variant.cta && (
+                      <Badge className="text-[10px] bg-zinc-800 text-zinc-300 border-zinc-700">{variant.cta}</Badge>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {result.image_url && (
+              <div className="mt-3">
+                <div className="relative rounded-lg overflow-hidden border border-zinc-800 max-w-sm">
+                  <img src={result.image_url} alt="AI generated creative" className="w-full object-contain max-h-[200px]" />
+                  <a
+                    href={result.image_url}
+                    download="remix-creative.png"
+                    className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 backdrop-blur-sm text-zinc-300 hover:text-white transition-colors"
+                  >
+                    <Download className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
 
 export default function AdLibrary() {
   const {
@@ -1463,12 +1851,28 @@ export default function AdLibrary() {
     fetchTrends,
     likelyWinners,
     winnersLoading,
+    competitorStats,
+    competitorStatsLoading,
+    fetchCompetitorStats,
+    remixAd,
+    captureLandingPage,
   } = useAdLibrary()
 
   const [selectedAd, setSelectedAd] = useState<AdLibraryAd | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('gallery')
+  const [remixCache, setRemixCache] = useState<Record<string, { ad: AdLibraryAd; result: AdRemixResult }>>({})
+
+  // Wrap remixAd to cache results at page level
+  const handleRemix = async (adId: string): Promise<AdRemixResult> => {
+    const result = await remixAd(adId)
+    const ad = ads.find((a) => a.id === adId) ?? selectedAd
+    if (ad) {
+      setRemixCache((prev) => ({ ...prev, [adId]: { ad, result } }))
+    }
+    return result
+  }
 
   const handleSelectAd = (ad: AdLibraryAd) => {
     setSelectedAd(ad)
@@ -1524,7 +1928,10 @@ export default function AdLibrary() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={(v) => {
+          setActiveTab(v)
+          if (v === 'competitors' && competitorStats.length === 0) fetchCompetitorStats()
+        }}>
           <TabsList className="mb-6">
             <TabsTrigger value="gallery" className="gap-1.5">
               <LayoutGrid className="h-3.5 w-3.5" />
@@ -1545,6 +1952,19 @@ export default function AdLibrary() {
             <TabsTrigger value="winners" className="gap-1.5">
               <Trophy className="h-3.5 w-3.5" />
               Winners
+            </TabsTrigger>
+            <TabsTrigger value="competitors" className="gap-1.5">
+              <Users className="h-3.5 w-3.5" />
+              Competitors
+            </TabsTrigger>
+            <TabsTrigger value="remixes" className="gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              Remixes
+              {Object.keys(remixCache).length > 0 && (
+                <Badge className="ml-1 text-[9px] bg-purple-500/20 text-purple-400 border-purple-500/30 px-1.5 py-0">
+                  {Object.keys(remixCache).length}
+                </Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -1599,11 +2019,39 @@ export default function AdLibrary() {
               onSelectAd={handleSelectAd}
             />
           </TabsContent>
+
+          <TabsContent value="competitors">
+            <CompetitorDashboardTab
+              stats={competitorStats}
+              loading={competitorStatsLoading}
+              onRefresh={fetchCompetitorStats}
+              onSelectCompetitor={(name) => {
+                setActiveTab('gallery')
+                searchAds({ advertiser_name: name, page: 0, page_size: 20 })
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="remixes">
+            <RemixesTab
+              remixes={remixCache}
+              onSelectAd={(ad) => { setSelectedAd(ad); setDetailOpen(true) }}
+              onRemoveRemix={(adId) => setRemixCache((prev) => { const next = { ...prev }; delete next[adId]; return next })}
+            />
+          </TabsContent>
         </Tabs>
       </div>
 
       {/* Detail sheet */}
-      <AdDetailSheet ad={selectedAd} open={detailOpen} onClose={() => setDetailOpen(false)} onSave={saveAd} onUnsave={unsaveAd} />
+      <AdDetailSheet
+        ad={selectedAd}
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        onSave={saveAd}
+        onUnsave={unsaveAd}
+        onRemix={handleRemix}
+        onCaptureLanding={captureLandingPage}
+      />
 
       {/* Manual submission sheet */}
       <ManualAdSheet open={manualOpen} onClose={() => setManualOpen(false)} onSubmit={handleManualSubmit} />

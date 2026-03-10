@@ -10,7 +10,7 @@ import { captureException } from '../_shared/sentryEdge.ts'
  * in integration_credentials, and mark the org integration connected.
  */
 
-const STATE_TTL_MS = 10 * 60 * 1000
+const STATE_TTL_MS = 5 * 60 * 1000
 
 serve(async (req) => {
   if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 })
@@ -45,7 +45,7 @@ serve(async (req) => {
     // Validate CSRF state
     const { data: oauthState, error: stateError } = await supabase
       .from('linkedin_oauth_states')
-      .select('user_id, org_id, redirect_uri, expires_at, created_at')
+      .select('user_id, org_id, redirect_uri, expires_at, created_at, used_at')
       .eq('state', state)
       .single()
 
@@ -55,6 +55,20 @@ serve(async (req) => {
         linkedin_error_description: 'Invalid or expired OAuth state. Please try again.',
       })
     }
+
+    // Single-use check — prevent replay attacks
+    if (oauthState.used_at) {
+      return redirectToFrontend(frontendUrl, '/integrations', {
+        linkedin_error: 'state_already_used',
+        linkedin_error_description: 'OAuth state already used. Please try again.',
+      })
+    }
+
+    // Mark state as used immediately to prevent concurrent replays
+    await supabase
+      .from('linkedin_oauth_states')
+      .update({ used_at: new Date().toISOString() })
+      .eq('state', state)
 
     // TTL check
     const createdAt = oauthState.created_at ? new Date(oauthState.created_at) : null

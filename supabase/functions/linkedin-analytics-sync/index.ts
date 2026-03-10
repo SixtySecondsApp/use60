@@ -309,72 +309,171 @@ function encodeUrn(urn: string): string {
   return urn.replace(/:/g, '%3A')
 }
 
-/** Fetch analytics for a list of campaigns in a date range chunk */
-async function fetchCampaignAnalytics(
+/** Build dot-notation dateRange params for v2 API */
+function buildV2DateRange(dr: DateRange): string {
+  return `dateRange.start.year=${dr.start.year}&dateRange.start.month=${dr.start.month}&dateRange.start.day=${dr.start.day}&dateRange.end.year=${dr.end.year}&dateRange.end.month=${dr.end.month}&dateRange.end.day=${dr.end.day}`
+}
+
+/** Build parenthesized dateRange param for REST API */
+function buildRestDateRange(dr: DateRange): string {
+  return `dateRange=(start:(year:${dr.start.year},month:${dr.start.month},day:${dr.start.day}),end:(year:${dr.end.year},month:${dr.end.month},day:${dr.end.day}))`
+}
+
+/** Fetch analytics for an ad account in a date range chunk (account-level query) */
+async function fetchAccountAnalytics(
   accessToken: string,
-  campaignIds: string[],
+  adAccountId: string,
   dateRange: DateRange,
 ): Promise<any[]> {
-  if (campaignIds.length === 0) return []
+  const accountUrn = encodeUrn(`urn:li:sponsoredAccount:${adAccountId}`)
+  const restFields = `${ANALYTICS_FIELDS},pivotValues,dateRange`
+  const v2Fields = `${ANALYTICS_FIELDS},pivotValue,dateRange`
 
-  // LinkedIn requires URL-encoded URNs in query parameters
-  const campaignUrns = campaignIds.map(id => encodeUrn(`urn:li:sponsoredCampaign:${id}`)).join(',')
-  const dateRangeParam = `dateRange=(start:(year:${dateRange.start.year},month:${dateRange.start.month},day:${dateRange.start.day}),end:(year:${dateRange.end.year},month:${dateRange.end.month},day:${dateRange.end.day}))`
-  const fieldsWithPivot = `${ANALYTICS_FIELDS},pivotValues,dateRange`
+  // Strategy 1: REST endpoint with parenthesized dateRange — official format
+  // Use count=10000 to minimize pagination (LinkedIn allows up to 10000)
+  const restBaseUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&${buildRestDateRange(dateRange)}&timeGranularity=DAILY&accounts=List(${accountUrn})&fields=${restFields}&count=10000`
+  try {
+    let allElements: any[] = []
+    let start = 0
+    while (true) {
+      const restUrl = `${restBaseUrl}&start=${start}`
+      const response = await fetchWithRetry(restUrl, linkedInHeaders(accessToken))
+      if (response.status === 401) throw new Error('LINKEDIN_TOKEN_EXPIRED')
+      if (!response.ok) {
+        const text = await response.text()
+        console.warn(`${LOG_PREFIX} REST account analytics (${response.status}): ${text.slice(0, 300)}`)
+        break
+      }
+      const data = await response.json()
+      const elements = data.elements ?? []
+      allElements = allElements.concat(elements)
+      // Check if more pages exist
+      const hasNext = data.paging?.links?.some((l: any) => l.rel === 'next')
+      if (!hasNext || elements.length === 0) break
+      start += elements.length
+    }
+    if (allElements.length > 0) {
+      console.log(`${LOG_PREFIX} REST account analytics: ${allElements.length} elements`)
+      return allElements
+    }
+    console.log(`${LOG_PREFIX} REST account analytics: 0 elements (200 OK)`)
+  } catch (err) {
+    if (err instanceof Error && err.message === 'LINKEDIN_TOKEN_EXPIRED') throw err
+    console.warn(`${LOG_PREFIX} REST account analytics error: ${err}`)
+  }
 
-  // Use v2 endpoint — confirmed working; REST /rest/ returns 400 with current API version
-  const url = `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&${dateRangeParam}&timeGranularity=DAILY&campaigns=List(${campaignUrns})&fields=${fieldsWithPivot}`
-  const headers = {
+  // Strategy 2: v2 endpoint with dot-notation dateRange — legacy but often works
+  const v2Url = `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&${buildV2DateRange(dateRange)}&timeGranularity=DAILY&accounts=${accountUrn}&fields=${v2Fields}`
+  const v2Headers = {
     'Authorization': `Bearer ${accessToken}`,
     'X-Restli-Protocol-Version': '2.0.0',
   }
-  const response = await fetchWithRetry(url, headers)
-
-  if (response.status === 401) {
-    throw new Error('LINKEDIN_TOKEN_EXPIRED')
+  try {
+    const response = await fetchWithRetry(v2Url, v2Headers)
+    if (response.status === 401) throw new Error('LINKEDIN_TOKEN_EXPIRED')
+    if (response.ok) {
+      const data = await response.json()
+      const elements = data.elements ?? []
+      // v2 uses pivotValue (singular) — normalize to pivotValues array
+      for (const el of elements) {
+        if (el.pivotValue && !el.pivotValues) {
+          el.pivotValues = [el.pivotValue]
+        }
+      }
+      if (elements.length > 0) {
+        console.log(`${LOG_PREFIX} v2 account analytics: ${elements.length} elements`)
+        return elements
+      }
+      console.log(`${LOG_PREFIX} v2 account analytics: 0 elements (200 OK)`)
+    } else {
+      const text = await response.text()
+      console.warn(`${LOG_PREFIX} v2 account analytics (${response.status}): ${text.slice(0, 300)}`)
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'LINKEDIN_TOKEN_EXPIRED') throw err
+    console.warn(`${LOG_PREFIX} v2 account analytics error: ${err}`)
   }
-  if (!response.ok) {
-    const text = await response.text()
-    console.error(`${LOG_PREFIX} Analytics API error (${response.status}): ${text.slice(0, 300)}`)
-    return []
+
+  // Strategy 3: v2 with parenthesized dateRange (old format, last resort)
+  const v2ParenUrl = `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&dateRange=(start:(year:${dateRange.start.year},month:${dateRange.start.month},day:${dateRange.start.day}),end:(year:${dateRange.end.year},month:${dateRange.end.month},day:${dateRange.end.day}))&timeGranularity=DAILY&accounts=${accountUrn}&fields=${v2Fields}`
+  try {
+    const response = await fetchWithRetry(v2ParenUrl, v2Headers)
+    if (response.status === 401) throw new Error('LINKEDIN_TOKEN_EXPIRED')
+    if (response.ok) {
+      const data = await response.json()
+      const elements = data.elements ?? []
+      for (const el of elements) {
+        if (el.pivotValue && !el.pivotValues) {
+          el.pivotValues = [el.pivotValue]
+        }
+      }
+      if (elements.length > 0) {
+        console.log(`${LOG_PREFIX} v2 paren account analytics: ${elements.length} elements`)
+        return elements
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'LINKEDIN_TOKEN_EXPIRED') throw err
+    console.warn(`${LOG_PREFIX} v2 paren account analytics error: ${err}`)
   }
 
-  const data = await response.json()
-  return data.elements ?? []
+  console.warn(`${LOG_PREFIX} All analytics strategies returned 0 elements for account ${adAccountId}`)
+  return []
 }
 
-/** Fetch demographic analytics for a specific pivot */
+/** Fetch demographic analytics for an ad account with a specific pivot */
 async function fetchDemographicAnalytics(
   accessToken: string,
-  campaignIds: string[],
+  adAccountId: string,
   dateRange: DateRange,
   pivot: string,
 ): Promise<any[]> {
-  if (campaignIds.length === 0) return []
+  const accountUrn = encodeUrn(`urn:li:sponsoredAccount:${adAccountId}`)
 
-  // LinkedIn requires URL-encoded URNs in query parameters
-  const campaignUrns = campaignIds.map(id => encodeUrn(`urn:li:sponsoredCampaign:${id}`)).join(',')
-  const dateRangeParam = `dateRange=(start:(year:${dateRange.start.year},month:${dateRange.start.month},day:${dateRange.start.day}),end:(year:${dateRange.end.year},month:${dateRange.end.month},day:${dateRange.end.day}))`
+  // Strategy 1: REST endpoint
+  const restUrl = `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=${pivot}&${buildRestDateRange(dateRange)}&timeGranularity=ALL&accounts=List(${accountUrn})&fields=impressions,clicks,costInLocalCurrency,pivotValues&count=10000`
+  try {
+    const response = await fetchWithRetry(restUrl, linkedInHeaders(accessToken))
+    if (response.status === 401) throw new Error('LINKEDIN_TOKEN_EXPIRED')
+    if (response.ok) {
+      const data = await response.json()
+      const elements = data.elements ?? []
+      if (elements.length > 0) return elements
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'LINKEDIN_TOKEN_EXPIRED') throw err
+    console.warn(`${LOG_PREFIX} REST demographics ${pivot} error: ${err}`)
+  }
 
-  // Use v2 endpoint — confirmed working
-  const url = `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=${pivot}&${dateRangeParam}&timeGranularity=ALL&campaigns=List(${campaignUrns})&fields=impressions,clicks,costInLocalCurrency,pivotValues`
-  const headers = {
+  // Strategy 2: v2 endpoint with dot notation
+  const v2Url = `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=${pivot}&${buildV2DateRange(dateRange)}&timeGranularity=ALL&accounts=${accountUrn}&fields=impressions,clicks,costInLocalCurrency,pivotValue`
+  const v2Headers = {
     'Authorization': `Bearer ${accessToken}`,
     'X-Restli-Protocol-Version': '2.0.0',
   }
-  const response = await fetchWithRetry(url, headers)
-
-  if (response.status === 401) {
-    throw new Error('LINKEDIN_TOKEN_EXPIRED')
+  try {
+    const response = await fetchWithRetry(v2Url, v2Headers)
+    if (response.status === 401) throw new Error('LINKEDIN_TOKEN_EXPIRED')
+    if (response.ok) {
+      const data = await response.json()
+      const elements = data.elements ?? []
+      // Normalize v2 pivotValue → pivotValues
+      for (const el of elements) {
+        if (el.pivotValue && !el.pivotValues) {
+          el.pivotValues = [el.pivotValue]
+        }
+      }
+      if (elements.length > 0) return elements
+    } else {
+      const text = await response.text()
+      console.warn(`${LOG_PREFIX} v2 demographics ${pivot} (${response.status}): ${text.slice(0, 200)}`)
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'LINKEDIN_TOKEN_EXPIRED') throw err
+    console.warn(`${LOG_PREFIX} v2 demographics ${pivot} error: ${err}`)
   }
-  if (!response.ok) {
-    const text = await response.text()
-    console.warn(`${LOG_PREFIX} Demographics ${pivot} error (${response.status}): ${text.slice(0, 200)}`)
-    return []
-  }
 
-  const data = await response.json()
-  return data.elements ?? []
+  return []
 }
 
 // ---------------------------------------------------------------------------
@@ -538,36 +637,21 @@ async function syncOrgMetrics(
   }
 
   try {
-    // 1. Fetch campaign list
-    const campaigns = await fetchCampaignIds(access_token_encrypted, ad_account_id!)
-    if (campaigns.length === 0) {
-      console.log(`${LOG_PREFIX} No campaigns found for org ${org_id}`)
-      return { campaigns_synced: 0, metrics_upserted: 0, demographics_upserted: 0 }
-    }
-    console.log(`${LOG_PREFIX} Found ${campaigns.length} campaigns for org ${org_id}`)
-
-    const campaignNameMap = new Map(campaigns.map(c => [c.id, c.name]))
-    const campaignIds = campaigns.map(c => c.id)
-
-    // 2. Fetch analytics in date range chunks, batching campaigns (max 20 per request to avoid URL length issues)
+    // 1. Fetch analytics by account — no need to list campaigns first
     const dateChunks = chunkDateRange(startDate, endDate)
     let metricsUpserted = 0
-    const CAMPAIGN_BATCH_SIZE = 20
+    const seenCampaignIds = new Set<string>()
 
     for (const chunk of dateChunks) {
-      let chunkElements: any[] = []
-      for (let i = 0; i < campaignIds.length; i += CAMPAIGN_BATCH_SIZE) {
-        const batch = campaignIds.slice(i, i + CAMPAIGN_BATCH_SIZE)
-        const batchElements = await fetchCampaignAnalytics(access_token_encrypted, batch, chunk)
-        chunkElements = chunkElements.concat(batchElements)
-      }
-      const elements = chunkElements
+      const elements = await fetchAccountAnalytics(access_token_encrypted, ad_account_id!, chunk)
 
       if (elements.length === 0) continue
 
       // Build rows for upsert
       const rows = elements.map((el: any) => {
-        const campaignId = extractCampaignId(el.pivotValue ?? el.pivot ?? '')
+        const pivotVal = el.pivotValues?.[0] ?? el.pivotValue ?? el.pivot ?? ''
+        const campaignId = extractCampaignId(pivotVal)
+        seenCampaignIds.add(campaignId)
         const derived = computeDerivedMetrics(el)
         const dateStart = el.dateRange?.start
         const metricDate = dateStart
@@ -577,7 +661,7 @@ async function syncOrgMetrics(
         return {
           org_id,
           campaign_id: campaignId,
-          campaign_name: campaignNameMap.get(campaignId) ?? `Campaign ${campaignId}`,
+          campaign_name: `Campaign ${campaignId}`, // placeholder — updated below
           ad_account_id,
           date: metricDate,
           impressions: el.impressions ?? 0,
@@ -616,59 +700,58 @@ async function syncOrgMetrics(
       }
     }
 
-    // 3. Fetch demographic analytics
-    let demographicsUpserted = 0
-    const fullRange: DateRange = {
-      start: parseDate(startDate),
-      end: parseDate(endDate),
-    }
-
-    for (const pivot of DEMOGRAPHIC_PIVOTS) {
+    // 2. Fetch campaign names — REST path endpoint with large page size
+    if (seenCampaignIds.size > 0) {
       try {
-        let allDemoElements: any[] = []
-        for (let i = 0; i < campaignIds.length; i += CAMPAIGN_BATCH_SIZE) {
-          const batch = campaignIds.slice(i, i + CAMPAIGN_BATCH_SIZE)
-          const batchElements = await fetchDemographicAnalytics(
-            access_token_encrypted, batch, fullRange, pivot,
-          )
-          allDemoElements = allDemoElements.concat(batchElements)
-        }
-        const elements = allDemoElements
-
-        if (elements.length === 0) continue
-
-        const demoRows = elements.map((el: any) => {
-          const campaignId = extractCampaignId(el.pivotValues?.[0] ?? '')
-          return {
-            org_id,
-            ad_account_id,
-            campaign_id: campaignId || campaignIds[0] || '',
-            date: startDate,
-            pivot_type: pivot.replace('MEMBER_', ''),
-            pivot_value: el.pivotValue ?? el.pivot ?? 'Unknown',
-            impressions: el.impressions ?? 0,
-            clicks: el.clicks ?? 0,
-            spend: parseFloat(el.costInLocalCurrency ?? '0'),
+        const accountId = ad_account_id!.replace('urn:li:sponsoredAccount:', '')
+        const nameMap = new Map<string, string>()
+        // Fetch campaigns with count=500 to cover most accounts in one request
+        // Paginate with fields=id,name using cursor-based pageToken (REST uses tokens, not offsets)
+        let pageToken: string | null = null
+        const NAME_PAGE = 100
+        let totalFetched = 0
+        while (true) {
+          let nameUrl = `https://api.linkedin.com/rest/adAccounts/${accountId}/adCampaigns?q=search&count=${NAME_PAGE}&fields=id,name`
+          if (pageToken) nameUrl += `&pageToken=${encodeURIComponent(pageToken)}`
+          const nameResp = await fetch(nameUrl, { headers: linkedInHeaders(access_token_encrypted) })
+          if (!nameResp.ok) {
+            console.warn(`${LOG_PREFIX} Campaign name fetch (${nameResp.status})`)
+            break
           }
-        })
-
-        const { error: demoError } = await serviceClient
-          .from('linkedin_demographic_metrics')
-          .upsert(demoRows, { onConflict: 'org_id,campaign_id,date,pivot_type,pivot_value' })
-
-        if (demoError) {
-          console.warn(`${LOG_PREFIX} Demo upsert error (${pivot}): ${demoError.message}`)
-        } else {
-          demographicsUpserted += demoRows.length
+          const nameData = await nameResp.json()
+          const elements = nameData.elements ?? []
+          totalFetched += elements.length
+          for (const el of elements) {
+            const id = String(el.id ?? '').replace('urn:li:sponsoredCampaign:', '')
+            if (seenCampaignIds.has(id) && el.name) {
+              nameMap.set(id, el.name)
+            }
+          }
+          // Stop if all names found or no more pages
+          if (nameMap.size >= seenCampaignIds.size) break
+          const nextToken = nameData.metadata?.nextPageToken
+          if (!nextToken || elements.length === 0) break
+          pageToken = nextToken
         }
-      } catch (demoErr) {
-        // Don't let one pivot failure break the entire sync
-        console.warn(`${LOG_PREFIX} Demographics fetch failed for ${pivot}: ${demoErr}`)
+        console.log(`${LOG_PREFIX} Scanned ${totalFetched} campaigns, matched ${nameMap.size}/${seenCampaignIds.size} names`)
+        for (const [cid, cname] of nameMap) {
+          await serviceClient
+            .from('linkedin_campaign_metrics')
+            .update({ campaign_name: cname })
+            .eq('org_id', org_id)
+            .eq('campaign_id', cid)
+        }
+      } catch (nameErr) {
+        console.warn(`${LOG_PREFIX} Campaign name fetch failed (non-critical): ${nameErr}`)
       }
     }
 
+    // 3. Skip demographics on regular sync (too slow — 6 API calls)
+    // Demographics are fetched on backfill action only
+    const demographicsUpserted = 0
+
     return {
-      campaigns_synced: campaigns.length,
+      campaigns_synced: seenCampaignIds.size,
       metrics_upserted: metricsUpserted,
       demographics_upserted: demographicsUpserted,
     }
@@ -957,10 +1040,9 @@ async function handleDiagnose(
   const restHeaders = linkedInHeaders(token)
   const v2Headers = { 'Authorization': `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0' }
 
-  // Test campaigns — path-based (the working approach)
+  // Test campaigns
   const campaignTests = [
-    { url: `https://api.linkedin.com/rest/adAccounts/${adAccountId}/adCampaigns?q=search&count=3`, headers: restHeaders, label: 'campaigns_path_rest' },
-    { url: `https://api.linkedin.com/v2/adCampaignsV2?q=search&count=3`, headers: v2Headers, label: 'campaigns_v2' },
+    { url: `https://api.linkedin.com/rest/adAccounts/${adAccountId}/adCampaigns?q=search&count=3&fields=id,name,status`, headers: restHeaders, label: 'campaigns' },
   ]
 
   for (const { url, headers, label } of campaignTests) {
@@ -973,86 +1055,47 @@ async function handleDiagnose(
     }
   }
 
-  // Test analytics — this is the key part we need to debug
-  // Use a recent 3-day range and first campaign ID if available
+  // Test analytics with account-level queries — wider date range (90 days)
   const today = new Date()
-  const threeDaysAgo = new Date(today)
-  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-  const dateRange = `dateRange=(start:(year:${threeDaysAgo.getFullYear()},month:${threeDaysAgo.getMonth() + 1},day:${threeDaysAgo.getDate()}),end:(year:${today.getFullYear()},month:${today.getMonth() + 1},day:${today.getDate()}))`
+  const ninetyDaysAgo = new Date(today)
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+  const accountUrn = encodeUrn(`urn:li:sponsoredAccount:${adAccountId}`)
 
-  // Get a campaign ID for analytics test
-  let testCampaignUrn = ''
-  try {
-    const campResp = await fetch(`https://api.linkedin.com/rest/adAccounts/${adAccountId}/adCampaigns?q=search&count=1`, { headers: restHeaders })
-    if (campResp.ok) {
-      const campData = await campResp.json()
-      const firstCamp = campData.elements?.[0]
-      if (firstCamp) {
-        const campId = String(firstCamp.id ?? '').replace('urn:li:sponsoredCampaign:', '')
-        testCampaignUrn = encodeUrn(`urn:li:sponsoredCampaign:${campId}`)
-        results['test_campaign'] = { id: campId, name: firstCamp.name }
-      }
+  const analyticsTests = [
+    // REST: account-level, parenthesized dateRange (official format per docs)
+    {
+      url: `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange=(start:(year:${ninetyDaysAgo.getFullYear()},month:${ninetyDaysAgo.getMonth() + 1},day:${ninetyDaysAgo.getDate()}),end:(year:${today.getFullYear()},month:${today.getMonth() + 1},day:${today.getDate()}))&timeGranularity=ALL&accounts=List(${accountUrn})&fields=impressions,clicks,costInLocalCurrency,pivotValues,dateRange`,
+      headers: restHeaders,
+      label: 'rest_account_paren',
+    },
+    // v2: account-level, dot-notation dateRange (v2 format per docs)
+    {
+      url: `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&dateRange.start.year=${ninetyDaysAgo.getFullYear()}&dateRange.start.month=${ninetyDaysAgo.getMonth() + 1}&dateRange.start.day=${ninetyDaysAgo.getDate()}&dateRange.end.year=${today.getFullYear()}&dateRange.end.month=${today.getMonth() + 1}&dateRange.end.day=${today.getDate()}&timeGranularity=ALL&accounts=${accountUrn}&fields=impressions,clicks,costInLocalCurrency,pivotValue,dateRange`,
+      headers: v2Headers,
+      label: 'v2_account_dot',
+    },
+    // v2: account-level, parenthesized dateRange (fallback)
+    {
+      url: `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&dateRange=(start:(year:${ninetyDaysAgo.getFullYear()},month:${ninetyDaysAgo.getMonth() + 1},day:${ninetyDaysAgo.getDate()}),end:(year:${today.getFullYear()},month:${today.getMonth() + 1},day:${today.getDate()}))&timeGranularity=ALL&accounts=${accountUrn}&fields=impressions,clicks,costInLocalCurrency,pivotValue,dateRange`,
+      headers: v2Headers,
+      label: 'v2_account_paren',
+    },
+    // REST: no fields param (test if fields is causing issues)
+    {
+      url: `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange=(start:(year:${ninetyDaysAgo.getFullYear()},month:${ninetyDaysAgo.getMonth() + 1},day:${ninetyDaysAgo.getDate()}),end:(year:${today.getFullYear()},month:${today.getMonth() + 1},day:${today.getDate()}))&timeGranularity=ALL&accounts=List(${accountUrn})`,
+      headers: restHeaders,
+      label: 'rest_account_no_fields',
+    },
+  ]
+
+  for (const { url, headers, label } of analyticsTests) {
+    try {
+      const r = await fetch(url, { headers })
+      const t = await r.text()
+      results[label] = { status: r.status, body: t.slice(0, 800) }
+    } catch (e) {
+      results[label] = { error: String(e) }
     }
-  } catch (_) { /* ignore */ }
-
-  if (testCampaignUrn) {
-    // Try many analytics variations to find what works
-    const analyticsTests = [
-      // v2 without fields (maybe fields param is the problem)
-      {
-        url: `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&${dateRange}&timeGranularity=DAILY&campaigns=List(${testCampaignUrn})`,
-        headers: v2Headers,
-        label: 'v2_no_fields',
-      },
-      // v2 with dateRange.start / dateRange.end dot notation
-      {
-        url: `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&dateRange.start.year=${threeDaysAgo.getFullYear()}&dateRange.start.month=${threeDaysAgo.getMonth() + 1}&dateRange.start.day=${threeDaysAgo.getDate()}&dateRange.end.year=${today.getFullYear()}&dateRange.end.month=${today.getMonth() + 1}&dateRange.end.day=${today.getDate()}&timeGranularity=DAILY&campaigns[0]=${testCampaignUrn}`,
-        headers: v2Headers,
-        label: 'v2_dot_notation',
-      },
-      // REST with dateRange dot notation
-      {
-        url: `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange.start.year=${threeDaysAgo.getFullYear()}&dateRange.start.month=${threeDaysAgo.getMonth() + 1}&dateRange.start.day=${threeDaysAgo.getDate()}&dateRange.end.year=${today.getFullYear()}&dateRange.end.month=${today.getMonth() + 1}&dateRange.end.day=${today.getDate()}&timeGranularity=DAILY&campaigns[0]=${testCampaignUrn}`,
-        headers: restHeaders,
-        label: 'rest_dot_notation',
-      },
-      // v2 with campaigns[] array syntax
-      {
-        url: `https://api.linkedin.com/v2/adAnalyticsV2?q=analytics&pivot=CAMPAIGN&${dateRange}&timeGranularity=DAILY&campaigns[0]=${testCampaignUrn}`,
-        headers: v2Headers,
-        label: 'v2_array_syntax',
-      },
-      // REST with encoded parenthesized dateRange
-      {
-        url: `https://api.linkedin.com/rest/adAnalytics?q=analytics&pivot=CAMPAIGN&${encodeURIComponent(`dateRange=(start:(year:${threeDaysAgo.getFullYear()},month:${threeDaysAgo.getMonth() + 1},day:${threeDaysAgo.getDate()}),end:(year:${today.getFullYear()},month:${today.getMonth() + 1},day:${today.getDate()}))`).replace(/%3D/g, '=')}&timeGranularity=DAILY&campaigns=List(${testCampaignUrn})`,
-        headers: restHeaders,
-        label: 'rest_encoded_daterange',
-      },
-      // q=statistics instead of q=analytics
-      {
-        url: `https://api.linkedin.com/v2/adAnalyticsV2?q=statistics&pivot=CAMPAIGN&${dateRange}&timeGranularity=DAILY&campaigns=List(${testCampaignUrn})`,
-        headers: v2Headers,
-        label: 'v2_q_statistics',
-      },
-      // Path-based with account ID, q=analytics
-      {
-        url: `https://api.linkedin.com/rest/adAccounts/${adAccountId}/adAnalytics?q=analytics&pivot=CAMPAIGN&dateRange.start.year=${threeDaysAgo.getFullYear()}&dateRange.start.month=${threeDaysAgo.getMonth() + 1}&dateRange.start.day=${threeDaysAgo.getDate()}&dateRange.end.year=${today.getFullYear()}&dateRange.end.month=${today.getMonth() + 1}&dateRange.end.day=${today.getDate()}&timeGranularity=DAILY&campaigns[0]=${testCampaignUrn}`,
-        headers: restHeaders,
-        label: 'path_dot_notation',
-      },
-    ]
-
-    for (const { url, headers, label } of analyticsTests) {
-      try {
-        const r = await fetch(url, { headers })
-        const t = await r.text()
-        results[label] = { status: r.status, body: t.slice(0, 600) }
-      } catch (e) {
-        results[label] = { error: String(e) }
-      }
-    }
-  } else {
-    results['analytics_note'] = 'No campaign found to test analytics'
   }
 
   return results
@@ -1082,11 +1125,11 @@ serve(async (req: Request) => {
       return errorResponse('Invalid action. Must be one of: sync, sync_all, backfill, status, diagnose', req, 400)
     }
 
-    // Auth: cron or JWT (diagnose is temporarily unauthenticated for debugging)
+    // Auth: cron or JWT
     const cronSecret = req.headers.get('x-cron-secret')
     const isCron = cronSecret === Deno.env.get('CRON_SECRET')
 
-    if (!isCron && action !== 'diagnose') {
+    if (!isCron) {
       const authHeader = req.headers.get('Authorization')
       if (!authHeader) return errorResponse('Unauthorized', req, 401)
 

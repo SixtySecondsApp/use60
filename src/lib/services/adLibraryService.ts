@@ -39,6 +39,8 @@ export interface AdLibraryAd {
   engagement_post_url?: string | null
   engagement_updated_at?: string | null
   is_saved: boolean
+  is_likely_dead: boolean
+  landing_page?: LandingPageData | null
   classification?: AdClassification
 }
 
@@ -82,6 +84,21 @@ export interface AdTrend {
   count: number
 }
 
+export interface CompetitorStats {
+  advertiser_name: string
+  advertiser_linkedin_url: string | null
+  advertiser_logo_url: string | null
+  ad_count: number
+  organic_count: number
+  total_count: number
+  format_breakdown: Record<string, number>
+  total_engagement: number
+  avg_engagement: number
+  first_capture: string
+  last_capture: string
+  saved_count: number
+}
+
 export interface SearchParams {
   query?: string
   advertiser_name?: string
@@ -105,6 +122,26 @@ export interface SearchResult {
   total: number
   page: number
   page_size: number
+}
+
+export interface AdRemixResult {
+  variants: Array<{
+    headline: string
+    body: string
+    cta: string
+    angle: string
+  }>
+  image_url?: string
+}
+
+export interface LandingPageData {
+  url: string
+  title: string | null
+  description: string | null
+  og_image: string | null
+  h1: string | null
+  ctas: string[]
+  captured_at: string
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +360,15 @@ class AdLibraryService {
     if (data?.error) throw new Error(data.error)
   }
 
+  async getCompetitorStats(): Promise<CompetitorStats[]> {
+    const { data, error } = await supabase.functions.invoke('linkedin-ad-search', {
+      body: { action: 'get_competitor_stats' },
+    })
+    if (error) throw new Error(error.message || 'Failed to get competitor stats')
+    if (data?.error) throw new Error(data.error)
+    return (data?.competitors ?? []) as CompetitorStats[]
+  }
+
   async classifyAds(adIds?: string[]): Promise<{ classified: number }> {
     const { data, error } = await supabase.functions.invoke('linkedin-ad-classify', {
       body: { action: adIds ? 'classify_single' : 'classify_ads', ad_ids: adIds, ad_id: adIds?.[0] },
@@ -330,6 +376,33 @@ class AdLibraryService {
     if (error) throw new Error(error.message || 'Failed to classify ads')
     if (data?.error) throw new Error(data.error)
     return data as { classified: number }
+  }
+
+  async remixAd(adId: string): Promise<AdRemixResult> {
+    const { data, error } = await supabase.functions.invoke('linkedin-ad-remix', {
+      body: { ad_id: adId },
+    })
+    if (error) throw new Error(error.message || 'Failed to remix ad')
+    if (data?.error) throw new Error(data.error)
+    return data as AdRemixResult
+  }
+
+  async captureLandingPage(adId: string): Promise<LandingPageData> {
+    const { data, error } = await supabase.functions.invoke('linkedin-ad-landing-capture', {
+      body: { ad_id: adId },
+    })
+    if (error) throw new Error(error.message || 'Failed to capture landing page')
+    if (data?.error) throw new Error(data.error)
+    return data.landing_page as LandingPageData
+  }
+
+  async detectAbTests(advertiserName?: string): Promise<any> {
+    const { data, error } = await supabase.functions.invoke('linkedin-ad-search', {
+      body: { action: 'detect_ab_tests', advertiser_name: advertiserName },
+    })
+    if (error) throw new Error(error.message || 'Failed to detect A/B tests')
+    if (data?.error) throw new Error(data.error)
+    return data
   }
 }
 

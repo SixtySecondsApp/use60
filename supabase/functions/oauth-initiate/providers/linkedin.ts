@@ -128,11 +128,16 @@ export async function handleInitiate(req: Request): Promise<Response> {
     }
 
     const scopes = [
+      // Read scopes — LinkedIn Advertising Analytics PRD
       'r_ads',
       'r_ads_reporting',
       'r_marketing_leadgen_automation',
       'r_events',
       'r_organization_admin',
+      // Write scopes — LinkedIn Ad Manager PRD (campaign CRUD)
+      'rw_ads',
+      // Write scopes — Revenue Feedback PRD (conversion tracking)
+      'rw_conversions',
     ]
 
     // Generate secure random state for CSRF protection

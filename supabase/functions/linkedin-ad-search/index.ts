@@ -11,6 +11,8 @@ type Action =
   | 'get_clusters'
   | 'get_trends'
   | 'get_likely_winners'
+  | 'get_competitor_stats'
+  | 'detect_ab_tests'
   | 'get_watchlist'
   | 'add_watchlist'
   | 'remove_watchlist'
@@ -194,6 +196,7 @@ async function handleSearch(
       a.media_type, a.media_urls, a.ad_format, a.geography,
       a.first_seen_at, a.last_seen_at, a.capture_source,
       a.is_likely_winner, a.winner_signals, a.is_saved,
+      a.is_likely_dead, a.landing_page,
       a.num_likes, a.num_comments, a.num_reactions,
       a.engagement_post_url, a.engagement_updated_at,
       a.raw_data->>'advertiser_logo_url' as advertiser_logo_url,
@@ -227,6 +230,7 @@ async function handleSearch(
         media_type, media_urls, ad_format, geography,
         first_seen_at, last_seen_at, capture_source,
         is_likely_winner, winner_signals, is_saved,
+        is_likely_dead, landing_page,
         num_likes, num_comments, num_reactions,
         engagement_post_url, engagement_updated_at,
         linkedin_ad_library_classifications (
@@ -716,6 +720,129 @@ async function handleSubmitManualAd(
   return jsonResponse({ ad: data }, req, 201)
 }
 
+async function handleGetCompetitorStats(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  req: Request,
+): Promise<Response> {
+  // Fetch all ads for this org with the columns needed for aggregation
+  const { data: allAds, error } = await supabase
+    .from('linkedin_ad_library_ads')
+    .select(
+      'advertiser_name, advertiser_linkedin_url, media_type, capture_source, ' +
+      'num_likes, num_comments, num_reactions, first_seen_at, last_seen_at, is_saved, raw_data'
+    )
+    .eq('org_id', orgId)
+
+  if (error) {
+    console.error('[linkedin-ad-search] get_competitor_stats error:', error)
+    return errorResponse(`Failed to get competitor stats: ${error.message}`, req, 500)
+  }
+
+  const items = allAds ?? []
+
+  // Aggregate in JavaScript grouped by advertiser_name
+  const grouped: Record<string, {
+    advertiser_name: string
+    advertiser_linkedin_url: string | null
+    advertiser_logo_url: string | null
+    ad_count: number
+    organic_count: number
+    format_breakdown: Record<string, number>
+    total_engagement: number
+    first_capture: string | null
+    last_capture: string | null
+    saved_count: number
+  }> = {}
+
+  for (const ad of items) {
+    const name = (ad as Record<string, unknown>).advertiser_name as string
+    if (!name) continue
+
+    if (!grouped[name]) {
+      grouped[name] = {
+        advertiser_name: name,
+        advertiser_linkedin_url: (ad as Record<string, unknown>).advertiser_linkedin_url as string | null,
+        advertiser_logo_url: null,
+        ad_count: 0,
+        organic_count: 0,
+        format_breakdown: {},
+        total_engagement: 0,
+        first_capture: null,
+        last_capture: null,
+        saved_count: 0,
+      }
+    }
+
+    const g = grouped[name]
+
+    // Count ads vs organic
+    const captureSource = (ad as Record<string, unknown>).capture_source as string | null
+    if (captureSource === 'organic') {
+      g.organic_count++
+    }
+    g.ad_count++
+
+    // Format breakdown
+    const mediaType = ((ad as Record<string, unknown>).media_type as string) || 'unknown'
+    g.format_breakdown[mediaType] = (g.format_breakdown[mediaType] || 0) + 1
+
+    // Engagement
+    const likes = ((ad as Record<string, unknown>).num_likes as number) || 0
+    const comments = ((ad as Record<string, unknown>).num_comments as number) || 0
+    const reactions = ((ad as Record<string, unknown>).num_reactions as number) || 0
+    g.total_engagement += likes + comments + reactions
+
+    // Date range
+    const firstSeen = (ad as Record<string, unknown>).first_seen_at as string | null
+    const lastSeen = (ad as Record<string, unknown>).last_seen_at as string | null
+    if (firstSeen && (!g.first_capture || firstSeen < g.first_capture)) {
+      g.first_capture = firstSeen
+    }
+    if (lastSeen && (!g.last_capture || lastSeen > g.last_capture)) {
+      g.last_capture = lastSeen
+    }
+
+    // Saved count
+    if ((ad as Record<string, unknown>).is_saved) {
+      g.saved_count++
+    }
+
+    // Logo — grab from raw_data if available
+    if (!g.advertiser_logo_url) {
+      const rawData = (ad as Record<string, unknown>).raw_data as Record<string, unknown> | null
+      if (rawData?.advertiser_logo_url) {
+        g.advertiser_logo_url = rawData.advertiser_logo_url as string
+      }
+    }
+
+    // Update linkedin url if we don't have one yet
+    if (!g.advertiser_linkedin_url && (ad as Record<string, unknown>).advertiser_linkedin_url) {
+      g.advertiser_linkedin_url = (ad as Record<string, unknown>).advertiser_linkedin_url as string
+    }
+  }
+
+  // Convert to array and compute averages
+  const competitors = Object.values(grouped)
+    .map((g) => ({
+      advertiser_name: g.advertiser_name,
+      advertiser_linkedin_url: g.advertiser_linkedin_url,
+      advertiser_logo_url: g.advertiser_logo_url,
+      ad_count: g.ad_count,
+      organic_count: g.organic_count,
+      total_count: g.ad_count,
+      format_breakdown: g.format_breakdown,
+      total_engagement: g.total_engagement,
+      avg_engagement: g.ad_count > 0 ? Math.round((g.total_engagement / g.ad_count) * 10) / 10 : 0,
+      first_capture: g.first_capture,
+      last_capture: g.last_capture,
+      saved_count: g.saved_count,
+    }))
+    .sort((a, b) => b.ad_count - a.ad_count)
+
+  return jsonResponse({ competitors }, req)
+}
+
 async function handleSaveAd(
   orgId: string,
   body: RequestBody,
@@ -746,6 +873,132 @@ async function handleSaveAd(
   }
 
   return jsonResponse({ ad: data }, req)
+}
+
+/** Normalize text for similarity matching */
+function normalizeText(text: string | null): string {
+  if (!text) return ''
+  return text.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+/** Jaccard word-set similarity */
+function textSimilarity(a: string, b: string): number {
+  const wordsA = new Set(normalizeText(a).split(' ').filter(w => w.length > 2))
+  const wordsB = new Set(normalizeText(b).split(' ').filter(w => w.length > 2))
+  if (wordsA.size === 0 || wordsB.size === 0) return 0
+  let intersection = 0
+  for (const word of wordsA) { if (wordsB.has(word)) intersection++ }
+  return intersection / new Set([...wordsA, ...wordsB]).size
+}
+
+async function handleDetectAbTests(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  body: RequestBody,
+  req: Request,
+): Promise<Response> {
+  // Get all ads (optionally filtered by advertiser)
+  let query = supabase
+    .from('linkedin_ad_library_ads')
+    .select('id, advertiser_name, headline, body_text, cta_text, media_type, first_seen_at, last_seen_at, num_likes, num_comments, num_reactions, is_saved')
+    .eq('org_id', orgId)
+    .neq('capture_source', 'organic')
+    .order('advertiser_name')
+
+  if (body.advertiser_name) {
+    query = query.ilike('advertiser_name', `%${body.advertiser_name}%`)
+  }
+
+  const { data: ads, error } = await query
+
+  if (error) {
+    console.error('[linkedin-ad-search] detect_ab_tests error:', error)
+    return errorResponse(`Failed to detect A/B tests: ${error.message}`, req, 500)
+  }
+
+  if (!ads || ads.length < 2) {
+    return jsonResponse({ test_groups: [], total_groups: 0 }, req)
+  }
+
+  // Group by advertiser
+  const byAdvertiser: Record<string, typeof ads> = {}
+  for (const ad of ads) {
+    const name = ad.advertiser_name || 'Unknown'
+    if (!byAdvertiser[name]) byAdvertiser[name] = []
+    byAdvertiser[name].push(ad)
+  }
+
+  // Within each advertiser, find similar ad pairs (>60% Jaccard)
+  const AB_THRESHOLD = 0.6
+  const testGroups: Array<{
+    advertiser: string
+    ads: typeof ads
+    variable_type: string
+    winner_id: string | null
+  }> = []
+
+  for (const [advertiser, advAds] of Object.entries(byAdvertiser)) {
+    if (advAds.length < 2) continue
+
+    const used = new Set<number>()
+
+    for (let i = 0; i < advAds.length; i++) {
+      if (used.has(i)) continue
+
+      const group = [advAds[i]]
+      used.add(i)
+
+      for (let j = i + 1; j < advAds.length; j++) {
+        if (used.has(j)) continue
+
+        const sim = textSimilarity(advAds[i].body_text, advAds[j].body_text)
+        if (sim >= AB_THRESHOLD) {
+          group.push(advAds[j])
+          used.add(j)
+        }
+      }
+
+      if (group.length >= 2) {
+        // Identify what's different
+        const sameHeadline = group.every(a => normalizeText(a.headline) === normalizeText(group[0].headline))
+        const sameCta = group.every(a => normalizeText(a.cta_text) === normalizeText(group[0].cta_text))
+        const sameMedia = group.every(a => a.media_type === group[0].media_type)
+
+        let variableType = 'body copy'
+        if (!sameHeadline) variableType = 'headline'
+        else if (!sameCta) variableType = 'CTA'
+        else if (!sameMedia) variableType = 'creative format'
+
+        // Pick winner: longest running or highest engagement
+        let winner = group[0]
+        for (const ad of group) {
+          const adDays = (new Date(ad.last_seen_at).getTime() - new Date(ad.first_seen_at).getTime()) / 86400000
+          const winnerDays = (new Date(winner.last_seen_at).getTime() - new Date(winner.first_seen_at).getTime()) / 86400000
+          const adEngagement = (ad.num_likes ?? 0) + (ad.num_comments ?? 0) + (ad.num_reactions ?? 0)
+          const winnerEngagement = (winner.num_likes ?? 0) + (winner.num_comments ?? 0) + (winner.num_reactions ?? 0)
+
+          if (adDays > winnerDays || (adDays === winnerDays && adEngagement > winnerEngagement)) {
+            winner = ad
+          }
+        }
+
+        testGroups.push({
+          advertiser,
+          ads: group,
+          variable_type: variableType,
+          winner_id: winner.id,
+        })
+      }
+    }
+  }
+
+  // Sort by group size descending
+  testGroups.sort((a, b) => b.ads.length - a.ads.length)
+
+  return jsonResponse({
+    test_groups: testGroups.slice(0, 20),
+    total_groups: testGroups.length,
+  }, req)
 }
 
 // ---------------------------------------------------------------------------
@@ -809,6 +1062,12 @@ serve(async (req: Request) => {
 
       case 'get_likely_winners':
         return await handleGetLikelyWinners(supabase, orgId, body, req)
+
+      case 'get_competitor_stats':
+        return await handleGetCompetitorStats(supabase, orgId, req)
+
+      case 'detect_ab_tests':
+        return await handleDetectAbTests(supabase, orgId, body, req)
 
       case 'get_watchlist':
         return await handleGetWatchlist(supabase, orgId, req)

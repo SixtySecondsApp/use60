@@ -17,6 +17,34 @@ import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelpe
 
 const LINKEDIN_CLIENT_SECRET = Deno.env.get('LINKEDIN_CLIENT_SECRET') || ''
 
+// ---------------------------------------------------------------------------
+// In-memory rate limiting — 10 requests per minute per IP
+// ---------------------------------------------------------------------------
+
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = 10
+const ipRequestLog = new Map<string, number[]>()
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now()
+  const timestamps = ipRequestLog.get(ip) || []
+  // Evict entries outside the window
+  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+  recent.push(now)
+  ipRequestLog.set(ip, recent)
+
+  // Periodically prune stale IPs (every 100th call)
+  if (Math.random() < 0.01) {
+    for (const [key, ts] of ipRequestLog) {
+      const alive = ts.filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+      if (alive.length === 0) ipRequestLog.delete(key)
+      else ipRequestLog.set(key, alive)
+    }
+  }
+
+  return recent.length > RATE_LIMIT_MAX
+}
+
 serve(async (req) => {
   const corsPreflightResponse = handleCorsPreflightRequest(req)
   if (corsPreflightResponse) return corsPreflightResponse
@@ -26,6 +54,19 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Rate limit by IP
+  const clientIp =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('x-real-ip') ||
+    'unknown'
+  if (isRateLimited(clientIp)) {
+    console.warn(`[webhook-linkedin] Rate limited IP: ${clientIp}`)
+    return new Response(JSON.stringify({ error: 'Too many requests' }), {
+      status: 429,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' },
     })
   }
 
@@ -103,6 +144,20 @@ serve(async (req) => {
 
     if (!orgId) {
       console.error('[webhook-linkedin] Could not resolve org for notification:', notificationId)
+
+      // Log the failure for debugging — insert with service-role client
+      const failureReason = `Could not resolve org. form_id=${normalized.form_id || 'none'}, ad_account=${normalized.ad_account_name || 'none'}`
+      const { error: failureInsertErr } = await supabase
+        .from('linkedin_webhook_failures')
+        .insert({
+          org_id: null,
+          payload: normalized.raw_payload,
+          failure_reason: failureReason,
+        })
+      if (failureInsertErr) {
+        console.error('[webhook-linkedin] Failed to log webhook failure:', failureInsertErr)
+      }
+
       return new Response(JSON.stringify({ status: 'error', error: 'Unknown organization' }), {
         status: 200, // Return 200 to prevent LinkedIn from retrying
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
