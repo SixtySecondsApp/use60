@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "lockedAt": "2026-03-10T12:00:00Z",
+  "direction": "B",
+  "name": "Electric Depth",
+
+  "palette": {
+    "background": { "value": "#09090b", "tailwind": "zinc-950" },
+    "surface": { "value": "rgba(24,24,27,0.8)", "tailwind": "zinc-900/80" },
+    "surfaceSubtle": { "value": "rgba(255,255,255,0.03)", "tailwind": "white/[0.03]" },
+    "border": { "value": "rgba(39,39,42,1)", "tailwind": "zinc-800" },
+    "borderSubtle": { "value": "rgba(255,255,255,0.06)", "tailwind": "white/[0.06]" },
+    "textPrimary": { "value": "#ffffff", "tailwind": "white" },
+    "textSecondary": { "value": "#a1a1aa", "tailwind": "zinc-400" },
+    "textMuted": { "value": "#52525b", "tailwind": "zinc-600" },
+    "accent1": { "value": "#8b5cf6", "tailwind": "violet-500" },
+    "accent2": { "value": "#2dd4bf", "tailwind": "teal-400" },
+    "cta": { "bg": "#ffffff", "text": "#09090b", "tailwind": "bg-white text-zinc-950" },
+    "ctaGradient": { "from": "violet-500", "to": "cyan-400" }
+  },
+
+  "typography": {
+    "display": { "family": "Clash Display", "weights": [400, 600, 700], "source": "fontsource", "fallback": "sans-serif" },
+    "body": { "family": "Inter", "weights": [400, 500, 600], "source": "google-fonts", "fallback": "system-ui, sans-serif" },
+    "mono": { "family": "Geist Mono", "weights": [400, 700], "source": "fontsource", "fallback": "monospace" }
+  },
+
+  "animation": {
+    "tier": 2,
+    "heroTier": 3,
+    "approach": "Framer Motion whileInView + staggered reveals. Hero gets cinematic sequenced entrance.",
+    "microInteractions": "CSS transitions on hover/focus. Spring physics on buttons.",
+    "scrollReveals": "fade-up (y:30→0, opacity:0→1), stagger 100ms between siblings"
+  },
+
+  "mode": "dark",
+  "style": "high-contrast-dark",
+
+  "antiConvergence": {
+    "bannedFonts": ["Inter as display", "Roboto", "Space Grotesk", "Open Sans", "Arial", "Lato"],
+    "requiredSurprises": [
+      "asymmetric hero or feature layout",
+      "gradient border on at least one key card/CTA",
+      "grid background pattern with mask fade",
+      "extreme type scale jumps (7xl heading vs base body)"
+    ],
+    "atmosphereEffects": [
+      "dot grid or line grid background (white/[0.03])",
+      "radial violet glow (very subtle, 4-6% opacity)",
+      "noise texture overlay (2-3% opacity)"
+    ]
+  },
+
+  "nanobananaPrefix": "Ultra-premium dark tech interface, zinc-950 near-black background, high contrast white typography, violet-500 accent glow, clean geometric forms, professional AI command center aesthetic, editorial quality, no clutter",
+
+  "geminiSvgStyle": "Geometric minimal, high contrast, white strokes on near-black, violet-500 accent highlights, smooth cubic-bezier easing, professional motion design, clean lines"
+}
