@@ -19,11 +19,12 @@ function useAgentName(agentId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('first_name')
+        .select('first_name, last_name, email')
         .eq('id', agentId!)
         .single();
       if (error) throw error;
-      return data.first_name || 'Support Agent';
+      const name = [data.first_name, data.last_name].filter(Boolean).join(' ');
+      return name || data.email || 'Support Agent';
     },
     enabled: !!agentId,
     staleTime: 5 * 60 * 1000,
