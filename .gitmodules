@@ -1,6 +1,3 @@
 [submodule "meeting-translation"]
 	path = meeting-translation
 	url = https://github.com/SixtySecondsApp/meeting-translation.git
-[submodule "sixty-support-app"]
-	path = sixty-support-app
-	url = https://github.com/SixtySecondsApp/sixty-support-app.git
