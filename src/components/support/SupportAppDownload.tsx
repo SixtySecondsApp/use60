@@ -1,8 +1,12 @@
-import { Download, Monitor, ExternalLink } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Download, Monitor } from 'lucide-react';
 
-const REPO_URL = 'https://github.com/SixtySecondsApp/sixty-support-app';
-const RELEASES_API = 'https://api.github.com/repos/SixtySecondsApp/sixty-support-app/releases/latest';
+const STORAGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/app-releases`;
+
+const ASSETS = {
+  windows: `${STORAGE_BASE}/sixty-support-setup.exe`,
+  macArm64: `${STORAGE_BASE}/sixty-support-arm64.dmg`,
+  macX64: `${STORAGE_BASE}/sixty-support-x64.dmg`,
+};
 
 function detectOS(): 'mac' | 'windows' | 'unknown' {
   const platform = navigator.platform ?? '';
@@ -11,44 +15,11 @@ function detectOS(): 'mac' | 'windows' | 'unknown' {
   return 'unknown';
 }
 
-interface ReleaseAsset {
-  name: string;
-  browser_download_url: string;
-}
-
 interface SupportAppDownloadProps {
   isAdmin: boolean;
 }
 
 export function SupportAppDownload({ isAdmin }: SupportAppDownloadProps) {
-  const [windowsUrl, setWindowsUrl] = useState<string | null>(null);
-  const [macArm64Url, setMacArm64Url] = useState<string | null>(null);
-  const [macX64Url, setMacX64Url] = useState<string | null>(null);
-  const [hasRelease, setHasRelease] = useState(false);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    fetch(RELEASES_API)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!data?.assets?.length) return;
-        setHasRelease(true);
-        const assets: ReleaseAsset[] = data.assets;
-        const win = assets.find((a) => a.name.endsWith('.exe'));
-        const macArm64 = assets.find((a) => a.name.includes('arm64') && a.name.endsWith('.dmg'));
-        const macX64 = assets.find((a) => a.name.includes('x64') && a.name.endsWith('.dmg'));
-        const macGeneric = assets.find((a) => a.name.endsWith('.dmg') && !a.name.includes('arm64') && !a.name.includes('x64'));
-        if (win) setWindowsUrl(win.browser_download_url);
-        if (macArm64) setMacArm64Url(macArm64.browser_download_url);
-        if (macX64) setMacX64Url(macX64.browser_download_url);
-        // Fallback: if only a single generic .dmg exists
-        if (!macArm64 && !macX64 && macGeneric) {
-          setMacArm64Url(macGeneric.browser_download_url);
-        }
-      })
-      .catch(() => {});
-  }, [isAdmin]);
-
   if (!isAdmin) return null;
 
   const os = detectOS();
@@ -66,48 +37,31 @@ export function SupportAppDownload({ isAdmin }: SupportAppDownloadProps) {
           Desktop app for ticket management
         </p>
         <div className="flex gap-2 mt-2">
-          {hasRelease ? (
-            <>
-              {(os === 'windows' || os === 'unknown') && windowsUrl && (
-                <a
-                  href={windowsUrl}
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Windows
-                </a>
-              )}
-              {(os === 'mac' || os === 'unknown') && macArm64Url && (
-                <a
-                  href={macArm64Url}
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  macOS (Apple Silicon)
-                </a>
-              )}
-              {(os === 'mac' || os === 'unknown') && macX64Url && (
-                <a
-                  href={macX64Url}
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  macOS (Intel)
-                </a>
-              )}
-            </>
-          ) : (
+          {(os === 'windows' || os === 'unknown') && (
             <a
-              href={REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+              href={ASSETS.windows}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              View on GitHub
+              <Download className="w-3.5 h-3.5" />
+              Windows
+            </a>
+          )}
+          {(os === 'mac' || os === 'unknown') && (
+            <a
+              href={ASSETS.macArm64}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              macOS (Apple Silicon)
+            </a>
+          )}
+          {(os === 'mac' || os === 'unknown') && (
+            <a
+              href={ASSETS.macX64}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              macOS (Intel)
             </a>
           )}
         </div>
