@@ -10,7 +10,7 @@ import { GraphToolbar } from './GraphToolbar';
 import { GraphDetailPanel } from './GraphDetailPanel';
 import { ClusterDetailPanel } from './ClusterDetailPanel';
 import { SelectionActionBar } from './SelectionActionBar';
-import type { GraphNode, WarmthTier, ContactCategory, ColdCluster } from './types';
+import type { GraphNode, WarmthTier, ContactCategory, ContactSource, ColdCluster } from './types';
 
 interface RelationshipGraphProps {
   onSelectNode?: (node: GraphNode | null) => void;
@@ -31,6 +31,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [hideNoInteraction, setHideNoInteraction] = useState(false);
   const [excludedCategories, setExcludedCategories] = useState<Set<ContactCategory>>(new Set(['employee', 'other']));
+  const [activeSources, setActiveSources] = useState<Set<ContactSource>>(new Set(['app']));
 
   // Multi-select state
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -93,7 +94,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
     }
   }, [multiSelectMode]);
 
-  const { data: contacts = [], isLoading, hasWarmthData } = useGraphData();
+  const { data: contacts = [], isLoading, hasWarmthData } = useGraphData(activeSources);
   const backfill = useWarmthBackfill();
 
   // Contact enrichment (company from email domain + category inference)
@@ -531,6 +532,19 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
         multiSelectMode={multiSelectMode}
         onToggleMultiSelect={toggleMultiSelect}
         selectedCount={selectedIds.size}
+        activeSources={activeSources}
+        onToggleSource={(source: ContactSource) => {
+          setActiveSources((prev) => {
+            const next = new Set(prev);
+            if (next.has(source)) {
+              // Don't allow removing all sources
+              if (next.size > 1) next.delete(source);
+            } else {
+              next.add(source);
+            }
+            return next;
+          });
+        }}
       />
 
       {/* Backfill banner — shown when contacts exist but no warmth data */}
