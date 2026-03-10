@@ -63,11 +63,17 @@ export interface AnomalyRule {
   is_enabled: boolean;
 }
 
+export interface UsageBucket {
+  tokensIn: number;
+  tokensOut: number;
+  cost: number;
+}
+
 export interface UsageTotals {
-  all_time: { tokens: number; cost: number };
-  last_30d: { tokens: number; cost: number };
-  last_7d: { tokens: number; cost: number };
-  last_24h: { tokens: number; cost: number };
+  all_time: UsageBucket;
+  last_30d: UsageBucket;
+  last_7d: UsageBucket;
+  last_24h: UsageBucket;
 }
 
 export interface GodsEyeData {
@@ -107,23 +113,33 @@ function applyAnomalyRules(events: RecentEvent[], rules: AnomalyRule[]): RecentE
 
 // ─── Hook ───────────────────────────────────────────────────────────────
 
-export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
+/**
+ * @param pollIntervalMs — Controls the lightweight event poll (default 5s).
+ *   Pass 0 to disable all polling (paused / seed-data mode).
+ *   The heavy full refresh (users, totals, models, rules) runs at 6× this
+ *   interval (default 30s) so it doesn't hammer the DB.
+ */
+export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
   const [llmEndpoints, setLlmEndpoints] = useState<LLMEndpoint[]>([]);
   const [anomalyRules, setAnomalyRules] = useState<AnomalyRule[]>([]);
   const [usageTotals, setUsageTotals] = useState<UsageTotals>({
-    all_time: { tokens: 0, cost: 0 },
-    last_30d: { tokens: 0, cost: 0 },
-    last_7d: { tokens: 0, cost: 0 },
-    last_24h: { tokens: 0, cost: 0 },
+    all_time: { tokensIn: 0, tokensOut: 0, cost: 0 },
+    last_30d: { tokensIn: 0, tokensOut: 0, cost: 0 },
+    last_7d: { tokensIn: 0, tokensOut: 0, cost: 0 },
+    last_24h: { tokensIn: 0, tokensOut: 0, cost: 0 },
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const eventPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fullPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const latestEventTimeRef = useRef<string | null>(null);
+  const rulesRef = useRef<AnomalyRule[]>([]);
+  const isPageVisibleRef = useRef(true);
 
-  const fetchData = useCallback(async () => {
+  const fetchFullData = useCallback(async () => {
     try {
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       const userHistoryWindow = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -149,7 +165,7 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
           .gte('created_at', userHistoryWindow)
           .order('created_at', { ascending: false }),
 
-        // Recent events for visualization (last 100 events)
+        // Recent events for visualization (last 200 events)
         supabase
           .from('ai_cost_events')
           .select('id, user_id, provider, model, feature, input_tokens, output_tokens, estimated_cost, created_at')
@@ -170,30 +186,30 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
           .select('id, rule_name, rule_type, description, threshold_value, time_window_minutes, severity, is_enabled')
           .order('severity'),
 
-        // Usage totals: all time (raise limit beyond default 1000)
+        // Usage totals: all time (model needed for client-side cost calc)
         supabase
           .from('ai_cost_events')
-          .select('input_tokens, output_tokens, estimated_cost')
+          .select('model, input_tokens, output_tokens')
           .limit(100000),
 
         // Usage totals: last 30 days
         supabase
           .from('ai_cost_events')
-          .select('input_tokens, output_tokens, estimated_cost')
+          .select('model, input_tokens, output_tokens')
           .gte('created_at', thirtyDaysAgo)
           .limit(100000),
 
         // Usage totals: last 7 days
         supabase
           .from('ai_cost_events')
-          .select('input_tokens, output_tokens, estimated_cost')
+          .select('model, input_tokens, output_tokens')
           .gte('created_at', sevenDaysAgo)
           .limit(100000),
 
         // Usage totals: last 24 hours
         supabase
           .from('ai_cost_events')
-          .select('input_tokens, output_tokens, estimated_cost')
+          .select('model, input_tokens, output_tokens')
           .gte('created_at', twentyFourHoursAgo)
           .limit(100000),
       ]);
@@ -277,6 +293,7 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
       // Process anomaly rules
       const rules = (rulesResult.data || []) as AnomalyRule[];
       setAnomalyRules(rules);
+      rulesRef.current = rules;
 
       // Process recent events with flagging
       if (recentEventsResult.data) {
@@ -306,7 +323,13 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
           }
         }
 
-        setRecentEvents(applyAnomalyRules(events, rules));
+        const flaggedEvents = applyAnomalyRules(events, rules);
+        setRecentEvents(flaggedEvents);
+
+        // Track the latest event timestamp for incremental polling
+        if (flaggedEvents.length > 0) {
+          latestEventTimeRef.current = flaggedEvents[0].created_at;
+        }
       }
 
       // Process LLM endpoints with active request counts
@@ -331,15 +354,35 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
         })));
       }
 
-      // Process usage totals
-      const sumTokensAndCost = (data: Array<{ input_tokens: number; output_tokens: number; estimated_cost: number }> | null) => {
-        if (!data) return { tokens: 0, cost: 0 };
+      // Build model rate map for client-side cost calculation (same as ActivityLogTerminal)
+      const modelRates = new Map<string, { inputRate: number; outputRate: number }>();
+      if (modelsResult.data) {
+        for (const m of modelsResult.data as AIModel[]) {
+          modelRates.set(m.model_id, {
+            inputRate: m.input_cost_per_million || 0,
+            outputRate: m.output_cost_per_million || 0,
+          });
+        }
+      }
+
+      // Process usage totals — cost derived from tokens × model rates (USD)
+      const sumTokensAndCost = (data: Array<{ model: string; input_tokens: number; output_tokens: number }> | null): UsageBucket => {
+        if (!data) return { tokensIn: 0, tokensOut: 0, cost: 0 };
         return data.reduce(
-          (acc, row) => ({
-            tokens: acc.tokens + (row.input_tokens || 0) + (row.output_tokens || 0),
-            cost: acc.cost + (row.estimated_cost || 0),
-          }),
-          { tokens: 0, cost: 0 }
+          (acc, row) => {
+            const inT = row.input_tokens || 0;
+            const outT = row.output_tokens || 0;
+            const rates = modelRates.get(row.model);
+            const usd = rates
+              ? (inT * rates.inputRate + outT * rates.outputRate) / 1_000_000
+              : 0;
+            return {
+              tokensIn: acc.tokensIn + inT,
+              tokensOut: acc.tokensOut + outT,
+              cost: acc.cost + usd,
+            };
+          },
+          { tokensIn: 0, tokensOut: 0, cost: 0 }
         );
       };
 
@@ -360,18 +403,88 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
     }
   }, []);
 
-  // Initial fetch + polling
-  useEffect(() => {
-    fetchData();
+  // Lightweight poll: only fetch events newer than the latest we already have
+  const fetchNewEvents = useCallback(async () => {
+    if (!latestEventTimeRef.current || !isPageVisibleRef.current) return;
 
-    intervalRef.current = setInterval(fetchData, pollIntervalMs);
+    try {
+      const { data: newRows } = await supabase
+        .from('ai_cost_events')
+        .select('id, user_id, provider, model, feature, input_tokens, output_tokens, estimated_cost, created_at')
+        .gt('created_at', latestEventTimeRef.current)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (!newRows || newRows.length === 0) return;
+
+      // Enrich with profile data
+      const newEvents: RecentEvent[] = newRows.map(e => ({
+        ...e,
+        user_email: null,
+        user_name: null,
+      }));
+
+      const eventUserIds = [...new Set(newEvents.map(e => e.user_id).filter(Boolean))];
+      if (eventUserIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, email, first_name, last_name')
+          .in('id', eventUserIds);
+
+        if (profiles) {
+          const profileMap = new Map(profiles.map(p => [p.id, p]));
+          for (const event of newEvents) {
+            const profile = profileMap.get(event.user_id);
+            if (profile) {
+              event.user_email = profile.email;
+              event.user_name = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || null;
+            }
+          }
+        }
+      }
+
+      const flaggedNew = applyAnomalyRules(newEvents, rulesRef.current);
+
+      // Update the latest timestamp
+      latestEventTimeRef.current = flaggedNew[0].created_at;
+
+      // Prepend new events, keep max 200
+      setRecentEvents(prev => [...flaggedNew, ...prev].slice(0, 200));
+      setLastUpdated(new Date());
+    } catch (err) {
+      // Swallow errors on incremental poll — full refresh will recover
+      console.warn('GodsEye incremental poll error:', err);
+    }
+  }, []);
+
+  // Pause polling when the tab is hidden
+  useEffect(() => {
+    const handleVisibility = () => {
+      isPageVisibleRef.current = !document.hidden;
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Initial full fetch + polling schedules
+  useEffect(() => {
+    // Always do a full fetch on mount
+    fetchFullData();
+
+    if (pollIntervalMs <= 0) return;
+
+    // Lightweight event poll (default every 5s)
+    eventPollRef.current = setInterval(fetchNewEvents, pollIntervalMs);
+
+    // Full refresh at 6× the event interval (default 30s)
+    const fullInterval = Math.max(pollIntervalMs * 6, 30_000);
+    fullPollRef.current = setInterval(fetchFullData, fullInterval);
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      if (eventPollRef.current) clearInterval(eventPollRef.current);
+      if (fullPollRef.current) clearInterval(fullPollRef.current);
     };
-  }, [fetchData, pollIntervalMs]);
+  }, [fetchFullData, fetchNewEvents, pollIntervalMs]);
 
   return {
     activeUsers,
@@ -382,6 +495,6 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
     isLoading,
     error,
     lastUpdated,
-    refetch: fetchData,
+    refetch: fetchFullData,
   };
 }

@@ -971,18 +971,48 @@ async function handleBotCompleted(
   // NOTE: S3 upload is NOT done here — Edge Functions cannot handle large file transfers
   // (memory + CPU time limits). S3 upload is handled separately by upload-recording-to-s3.
   const mediaUrl = video || audio;
+
+  // If bot completed with no media URL, it never actually recorded (e.g. couldn't join, was kicked)
+  if (!mediaUrl) {
+    console.warn(`[MeetingBaaS Webhook] bot.completed with NO media URL for bot ${bot_id} — bot likely never joined or was removed before recording`);
+    await supabase
+      .from('recordings')
+      .update({
+        status: 'failed',
+        error_message: 'Bot completed without recording — it may not have been able to join the meeting. Check that the meeting link is valid and bots are permitted.',
+        meeting_start_time: joined_at,
+        meeting_end_time: exited_at,
+        meeting_duration_seconds: duration_seconds,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', deployment.recording_id);
+
+    // Update deployment status
+    await supabase
+      .from('bot_deployments')
+      .update({
+        status: 'completed',
+        leave_time: exited_at,
+        video_url: null,
+        audio_url: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', deployment.id);
+
+    await syncMeetingStatus(supabase, bot_id, 'failed');
+    return { success: true };
+  }
+
   const updateData: Record<string, unknown> = {
     meeting_start_time: joined_at,
     meeting_end_time: exited_at,
     meeting_duration_seconds: duration_seconds,
     status: 'processing',
     updated_at: new Date().toISOString(),
-  };
-  if (mediaUrl) {
     // Store the MeetingBaaS URL so process-recording can use it for transcription
-    updateData.recording_s3_url = mediaUrl;
-    console.log('[MeetingBaaS Webhook] Stored MeetingBaaS video URL on recording');
-  }
+    recording_s3_url: mediaUrl,
+  };
+  console.log('[MeetingBaaS Webhook] Stored MeetingBaaS video URL on recording');
   if (resolvedAttendees && resolvedAttendees.length > 0) {
     updateData.attendees = resolvedAttendees;
   }

@@ -27,6 +27,7 @@ import {
   Pause,
   Play,
   FlaskConical,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -64,7 +65,7 @@ export default function GodsEyeAdmin() {
   const [selectedUser, setSelectedUser] = useState<ActiveUser | null>(null);
 
   // Seed data state
-  const [flowSpeed, setFlowSpeed] = useState(1.5);
+  const [flowSpeed, setFlowSpeed] = useState(10);
   const [useSeedData, setUseSeedData] = useState(false);
   const [seedData, setSeedData] = useState<SeedDataSet | null>(null);
   const [seedEvents, setSeedEvents] = useState<RecentEvent[]>([]);
@@ -72,7 +73,7 @@ export default function GodsEyeAdmin() {
   const seedCleanupRef = useRef<(() => void) | null>(null);
 
   // Live data from hook
-  const liveData = useGodsEyeData(isPaused || useSeedData ? 0 : 900_000); // 15 minutes
+  const liveData = useGodsEyeData(isPaused || useSeedData ? 0 : 5_000); // 5s event poll, 30s full refresh
 
   // Initialize seed data
   useEffect(() => {
@@ -108,9 +109,37 @@ export default function GodsEyeAdmin() {
     };
   }, [useSeedData, isPaused]);
 
+  // Test burst injection
+  const [testEvents, setTestEvents] = useState<RecentEvent[]>([]);
+  const triggerTestBurst = useCallback(() => {
+    const users = useSeedData ? seedUsers : liveData.activeUsers;
+    const endpoints = useSeedData && seedData ? seedData.llmEndpoints : liveData.llmEndpoints;
+    if (users.length === 0 || endpoints.length === 0) return;
+
+    const user = users[Math.floor(Math.random() * users.length)];
+    const ep = endpoints[Math.floor(Math.random() * endpoints.length)];
+
+    const testEvent: RecentEvent = {
+      id: `test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      user_id: user.user_id,
+      user_email: user.user_email,
+      user_name: user.user_name,
+      provider: ep.provider,
+      model: ep.model_id,
+      feature: 'test_burst',
+      input_tokens: Math.floor(Math.random() * 5000) + 500,
+      output_tokens: Math.floor(Math.random() * 2000) + 200,
+      estimated_cost: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    setTestEvents(prev => [testEvent, ...prev].slice(0, 10));
+  }, [useSeedData, seedUsers, seedData, liveData.activeUsers, liveData.llmEndpoints]);
+
   // Merged data: seed or live
   const activeUsers = useSeedData ? seedUsers : liveData.activeUsers;
-  const recentEvents = useSeedData ? seedEvents : liveData.recentEvents;
+  const baseEvents = useSeedData ? seedEvents : liveData.recentEvents;
+  const recentEvents = testEvents.length > 0 ? [...testEvents, ...baseEvents].slice(0, 200) : baseEvents;
   const llmEndpoints = useSeedData && seedData ? seedData.llmEndpoints : liveData.llmEndpoints;
   const anomalyRules = useSeedData && seedData ? seedData.anomalyRules : liveData.anomalyRules;
   const usageTotals = useSeedData && seedData ? seedData.usageTotals : liveData.usageTotals;
@@ -205,6 +234,16 @@ export default function GodsEyeAdmin() {
               onChange={(e) => setFlowSpeed(parseFloat(e.target.value))}
               className="w-16 h-1 accent-indigo-500 cursor-pointer"
             />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={triggerTestBurst}
+              className="text-slate-400 hover:text-amber-300 hover:bg-slate-800 h-6 px-1.5"
+              title="Trigger a test animation burst"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              <span className="text-[10px] ml-0.5">Test</span>
+            </Button>
           </div>
         </div>
 

@@ -209,10 +209,10 @@ export function generateSeedRules(): AnomalyRule[] {
 
 export function generateSeedUsageTotals(): UsageTotals {
   return {
-    all_time: { tokens: 847_293_451, cost: 1_247.83 },
-    last_30d: { tokens: 234_567_890, cost: 342.19 },
-    last_7d: { tokens: 67_234_567, cost: 98.47 },
-    last_24h: { tokens: 12_456_789, cost: 18.23 },
+    all_time: { tokensIn: 508_376_071, tokensOut: 338_917_380, cost: 1_247.83 },
+    last_30d: { tokensIn: 140_740_734, tokensOut: 93_827_156, cost: 342.19 },
+    last_7d: { tokensIn: 40_340_740, tokensOut: 26_893_827, cost: 98.47 },
+    last_24h: { tokensIn: 7_474_073, tokensOut: 4_982_716, cost: 18.23 },
   };
 }
 

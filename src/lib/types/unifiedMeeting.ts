@@ -174,7 +174,9 @@ export function recordingToUnified(r: any): UnifiedMeeting {
     talkTimeRepPct: r.talk_time_rep_pct ?? null,
     talkTimeJudgement: r.talk_time_judgement || null,
     meetingType: null,
-    status: r.status || null,
+    status: r.status === 'failed' && r.created_at && (Date.now() - new Date(r.created_at).getTime() < 24 * 60 * 60 * 1000)
+      ? 'processing'
+      : r.status || null,
     platform: r.meeting_platform || null,
     provider: null,
     thumbnailStatus: null,

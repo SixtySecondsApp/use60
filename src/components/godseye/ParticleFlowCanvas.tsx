@@ -7,7 +7,7 @@
  * Designed for 100+ concurrent user nodes using HTML5 Canvas.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import type { ActiveUser, RecentEvent, LLMEndpoint } from '@/lib/hooks/useGodsEyeData';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -18,43 +18,64 @@ interface ParticleFlowCanvasProps {
   llmEndpoints: LLMEndpoint[];
   width: number;
   height: number;
+  /** Pixels per frame for dot movement. Default 1.5 */
+  flowSpeed?: number;
   onUserClick?: (user: ActiveUser) => void;
   onEndpointClick?: (endpoint: LLMEndpoint) => void;
 }
 
-interface Particle {
-  x: number;
-  y: number;
-  targetX: number;
-  targetY: number;
-  startX: number;
-  startY: number;
-  progress: number;
-  speed: number;
-  type: 'request' | 'response';
+/** Precomputed spline path for fast distance→position lookup */
+interface SplinePath {
+  totalLength: number;
+  /** Flat array: [d0, x0, y0, d1, x1, y1, ...] */
+  samples: Float64Array;
+  sampleCount: number;
+}
+
+/** A Burst represents a Morse-pattern group that travels as a request→response cycle. */
+interface Burst {
+  /** 'outbound' = red elements going right, 'returning' = blue elements going left */
+  phase: 'outbound' | 'returning';
+  /** Per-element distance travelled in pixels, one per MORSE_PATTERN entry */
+  elementDistances: number[];
+  /** Precomputed S-curve spline path (same path used for both directions) */
+  path: SplinePath;
+  /** User node ID — only one active burst per user+endpoint pair */
+  userId: string;
+  /** Endpoint node ID */
+  endpointId: string;
+  userX: number;
+  userY: number;
+  endpointX: number;
+  endpointY: number;
   isFlagged: boolean;
   opacity: number;
   size: number;
-  curveOffset: number;
 }
 
 interface NodePosition {
   x: number;
   y: number;
   label: string;
+  orgName: string;
   id: string;
+  shortId: string;
+  lastRequestAt: string;
   radius: number;
+  isActive?: boolean;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
 const COLORS = {
   request: { r: 239, g: 68, b: 68 },      // Soft red
+  requestPassed: { r: 74, g: 222, b: 128 }, // Green — passed checkpoint rules
   response: { r: 96, g: 165, b: 250 },     // Soft blue
   flagged: { r: 251, g: 146, b: 60 },      // Orange warning
   checkpoint: { r: 74, g: 222, b: 128 },   // Green gate
   checkpointFlagged: { r: 251, g: 146, b: 60 },
   userNode: '#6366f1',
+  userNodeDim: '#4b4d8a',
   endpointNode: '#10b981',
   text: '#e2e8f0',
   textDim: '#94a3b8',
@@ -62,37 +83,163 @@ const COLORS = {
   bg: '#0f172a',
 };
 
-const PARTICLE_SPEED_MIN = 0.003;
-const PARTICLE_SPEED_MAX = 0.008;
-const MAX_PARTICLES = 500;
-const PARTICLE_SPAWN_RATE = 0.15; // per frame per recent event
+const FLOW_SPEED_PX = 10; // pixels per frame — constant for all dots
+const MAX_BURSTS = 80;
+
+// Morse pattern: ... - . . .-.. . (STEELE)
+// Unit = 6px. Dot = 1 unit, Dash = 3 units, intra-char gap = 1 unit, inter-char gap = 3 units
+const MORSE_UNIT = 6;
+const MORSE_PATTERN: Array<{ type: 'dot' | 'dash'; offset: number }> = [
+  // S: ...
+  { type: 'dot',  offset: 0 },
+  { type: 'dot',  offset: -2 * MORSE_UNIT },
+  { type: 'dot',  offset: -4 * MORSE_UNIT },
+  // T: -
+  { type: 'dash', offset: -8 * MORSE_UNIT },
+  // E: .
+  { type: 'dot',  offset: -14 * MORSE_UNIT },
+  // E: .
+  { type: 'dot',  offset: -18 * MORSE_UNIT },
+  // L: .-..
+  { type: 'dot',  offset: -22 * MORSE_UNIT },
+  { type: 'dash', offset: -24 * MORSE_UNIT },
+  { type: 'dot',  offset: -28 * MORSE_UNIT },
+  { type: 'dot',  offset: -30 * MORSE_UNIT },
+  // E: .
+  { type: 'dot',  offset: -34 * MORSE_UNIT },
+];
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-function getQuadraticPoint(
-  x0: number, y0: number,
-  cx: number, cy: number,
-  x1: number, y1: number,
-  t: number
-): { x: number; y: number } {
+/** Cubic bezier interpolation */
+function cubicBezier(t: number, p0: number, p1: number, p2: number, p3: number): number {
   const mt = 1 - t;
+  return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
+}
+
+const PATH_SAMPLES = 120; // samples per full path (60 per S-curve segment)
+
+/**
+ * Build a precomputed S-curve spline path: user → checkpoint → endpoint.
+ * Two cubic bezier S-curves joined at the checkpoint midpoint.
+ * Returns a lookup table for fast distance→position queries.
+ */
+function buildSplinePath(
+  startX: number, startY: number,
+  cpX: number, // checkpoint X position
+  cpYMin: number, cpYMax: number, // checkpoint vertical bounds
+  targetX: number, targetY: number,
+): SplinePath {
+  // Clamp to the central half of the checkpoint zone for tighter flow
+  const innerMargin = (cpYMax - cpYMin) / 4;
+  const innerMin = cpYMin + innerMargin;
+  const innerMax = cpYMax - innerMargin;
+  const midY = (startY + targetY) / 2;
+  const cpY = Math.max(innerMin, Math.min(innerMax, midY));
+
+  // S-curve 1: start → checkpoint
+  // Control points pull horizontally to create smooth S shape
+  const s1_cx0 = startX + (cpX - startX) * 0.5;
+  const s1_cy0 = startY;
+  const s1_cx1 = cpX - (cpX - startX) * 0.5;
+  const s1_cy1 = cpY;
+
+  // S-curve 2: checkpoint → target
+  const s2_cx0 = cpX + (targetX - cpX) * 0.5;
+  const s2_cy0 = cpY;
+  const s2_cx1 = targetX - (targetX - cpX) * 0.5;
+  const s2_cy1 = targetY;
+
+  const halfSamples = PATH_SAMPLES / 2;
+  const samples = new Float64Array(PATH_SAMPLES * 3);
+
+  let totalDist = 0;
+  let prevX = startX, prevY = startY;
+  let idx = 0;
+
+  // First S-curve: start → checkpoint
+  for (let i = 0; i < halfSamples; i++) {
+    const t = (i + 1) / halfSamples;
+    const x = cubicBezier(t, startX, s1_cx0, s1_cx1, cpX);
+    const y = cubicBezier(t, startY, s1_cy0, s1_cy1, cpY);
+    totalDist += Math.sqrt((x - prevX) ** 2 + (y - prevY) ** 2);
+    samples[idx++] = totalDist;
+    samples[idx++] = x;
+    samples[idx++] = y;
+    prevX = x;
+    prevY = y;
+  }
+
+  // Second S-curve: checkpoint → target
+  for (let i = 0; i < halfSamples; i++) {
+    const t = (i + 1) / halfSamples;
+    const x = cubicBezier(t, cpX, s2_cx0, s2_cx1, targetX);
+    const y = cubicBezier(t, cpY, s2_cy0, s2_cy1, targetY);
+    totalDist += Math.sqrt((x - prevX) ** 2 + (y - prevY) ** 2);
+    samples[idx++] = totalDist;
+    samples[idx++] = x;
+    samples[idx++] = y;
+    prevX = x;
+    prevY = y;
+  }
+
+  return { totalLength: totalDist, samples, sampleCount: PATH_SAMPLES };
+}
+
+/** Look up position at a given pixel distance along a precomputed spline path */
+function getSplinePoint(path: SplinePath, dist: number): { x: number; y: number } {
+  if (dist <= 0) {
+    // Before first sample — return first sample position
+    return { x: path.samples[1], y: path.samples[2] };
+  }
+  if (dist >= path.totalLength) {
+    const last = (path.sampleCount - 1) * 3;
+    return { x: path.samples[last + 1], y: path.samples[last + 2] };
+  }
+
+  // Binary search for the segment containing this distance
+  let lo = 0, hi = path.sampleCount - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (path.samples[mid * 3] < dist) lo = mid + 1;
+    else hi = mid;
+  }
+
+  const i1 = lo * 3;
+  const d1 = path.samples[i1];
+  const x1 = path.samples[i1 + 1];
+  const y1 = path.samples[i1 + 2];
+
+  if (lo === 0) return { x: x1, y: y1 };
+
+  const i0 = (lo - 1) * 3;
+  const d0 = path.samples[i0];
+  const x0 = path.samples[i0 + 1];
+  const y0 = path.samples[i0 + 2];
+
+  const segLen = d1 - d0;
+  const t = segLen > 0 ? (dist - d0) / segLen : 0;
+
   return {
-    x: mt * mt * x0 + 2 * mt * t * cx + t * t * x1,
-    y: mt * mt * y0 + 2 * mt * t * cy + t * t * y1,
+    x: x0 + (x1 - x0) * t,
+    y: y0 + (y1 - y0) * t,
   };
 }
 
 function truncateLabel(text: string, maxLen: number): string {
   if (!text) return '?';
   return text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
+}
+
+function formatRelativeDate(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────
@@ -103,22 +250,32 @@ export function ParticleFlowCanvas({
   llmEndpoints,
   width,
   height,
+  flowSpeed = FLOW_SPEED_PX,
   onUserClick,
   onEndpointClick,
 }: ParticleFlowCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particlesRef = useRef<Particle[]>([]);
+  const burstsRef = useRef<Burst[]>([]);
   const animFrameRef = useRef<number>(0);
   const userNodesRef = useRef<NodePosition[]>([]);
   const endpointNodesRef = useRef<NodePosition[]>([]);
   const mouseRef = useRef<{ x: number; y: number } | null>(null);
+  const flowSpeedRef = useRef(flowSpeed);
+  flowSpeedRef.current = flowSpeed;
+  const seenEventIdsRef = useRef<Set<string>>(new Set());
 
   // Layout zones
-  const leftZone = width * 0.15;
+  const leftZone = width * 0.18;
   const checkpointX = width * 0.5;
   const rightZone = width * 0.85;
   const topPad = 60;
   const bottomPad = 40;
+
+  // Checkpoint vertical bounds — middle 1/3 of usable height
+  const usableH = height - topPad - bottomPad;
+  const cpHeight = usableH / 3;
+  const cpTop = topPad + (usableH - cpHeight) / 2;
+  const cpBottom = cpTop + cpHeight;
 
   // Compute node positions
   const computeNodes = useCallback(() => {
@@ -130,9 +287,13 @@ export function ParticleFlowCanvas({
     userNodesRef.current = users.map((u, i) => ({
       x: leftZone,
       y: topPad + (users.length === 1 ? usableHeight / 2 : i * userSpacing),
-      label: u.user_name || u.user_email || u.user_id.slice(0, 8),
+      label: u.user_name || u.user_email || u.user_id.slice(0, 7),
+      orgName: u.org_name || '',
       id: u.user_id,
+      shortId: u.user_id.slice(0, 7),
+      lastRequestAt: u.last_request_at,
       radius: Math.min(6, Math.max(3, Math.log2(u.request_count + 1) * 2)),
+      isActive: u.is_active,
     }));
 
     // Endpoint nodes on the right — group by provider, show top models
@@ -148,49 +309,82 @@ export function ParticleFlowCanvas({
       x: rightZone,
       y: topPad + (endpoints.length === 1 ? usableHeight / 2 : i * epSpacing),
       label: e.display_name,
+      orgName: '',
       id: e.id,
+      shortId: '',
+      lastRequestAt: '',
       radius: Math.min(8, Math.max(4, Math.log2(e.active_request_count + 1) * 2.5)),
     }));
   }, [activeUsers, llmEndpoints, width, height, leftZone, rightZone, topPad, bottomPad]);
 
-  // Spawn particles from recent events
-  const spawnParticles = useCallback(() => {
-    if (particlesRef.current.length >= MAX_PARTICLES) return;
+  // Map model_id → endpoint node for quick lookup
+  const endpointByModel = useMemo(() => {
+    const map = new Map<string, string>(); // model_id → endpoint.id
+    for (const ep of llmEndpoints) {
+      map.set(ep.model_id, ep.id);
+    }
+    return map;
+  }, [llmEndpoints]);
+
+  // Spawn bursts from real events only — detect genuinely new events
+  useEffect(() => {
     if (userNodesRef.current.length === 0 || endpointNodesRef.current.length === 0) return;
 
-    for (const event of recentEvents.slice(0, 20)) {
-      if (Math.random() > PARTICLE_SPAWN_RATE) continue;
-      if (particlesRef.current.length >= MAX_PARTICLES) break;
+    // On first load, seed the seen set without spawning bursts
+    if (seenEventIdsRef.current.size === 0 && recentEvents.length > 0) {
+      for (const e of recentEvents) {
+        seenEventIdsRef.current.add(e.id);
+      }
+      return;
+    }
+
+    const newEvents = recentEvents.filter(e => !seenEventIdsRef.current.has(e.id));
+    if (newEvents.length === 0) return;
+
+    for (const event of newEvents) {
+      seenEventIdsRef.current.add(event.id);
+
+      if (burstsRef.current.length >= MAX_BURSTS) continue;
 
       // Find matching user node
-      const userNode = userNodesRef.current.find(n => n.id === event.user_id)
-        || userNodesRef.current[Math.floor(Math.random() * userNodesRef.current.length)];
+      const userNode = userNodesRef.current.find(n => n.id === event.user_id);
+      if (!userNode) continue;
 
-      // Find matching endpoint node
-      const endpointNode = endpointNodesRef.current.find(n =>
-        n.label.toLowerCase().includes(event.model?.toLowerCase()?.split('/').pop() || '')
-      ) || endpointNodesRef.current[Math.floor(Math.random() * endpointNodesRef.current.length)];
+      // Find matching endpoint node via model_id
+      const epId = endpointByModel.get(event.model);
+      const endpointNode = epId
+        ? endpointNodesRef.current.find(n => n.id === epId)
+        : null;
 
-      const isRequest = Math.random() > 0.4; // Slightly more requests visible
-      const curveOffset = (Math.random() - 0.5) * 80;
+      // Fall back to first endpoint if model not in visible nodes
+      const targetNode = endpointNode || endpointNodesRef.current[0];
+      if (!targetNode) continue;
 
-      particlesRef.current.push({
-        x: isRequest ? userNode.x : endpointNode.x,
-        y: isRequest ? userNode.y : endpointNode.y,
-        startX: isRequest ? userNode.x : endpointNode.x,
-        startY: isRequest ? userNode.y : endpointNode.y,
-        targetX: isRequest ? endpointNode.x : userNode.x,
-        targetY: isRequest ? endpointNode.y : userNode.y,
-        progress: 0,
-        speed: PARTICLE_SPEED_MIN + Math.random() * (PARTICLE_SPEED_MAX - PARTICLE_SPEED_MIN),
-        type: isRequest ? 'request' : 'response',
+      const splinePath = buildSplinePath(userNode.x, userNode.y, checkpointX, cpTop, cpBottom, targetNode.x, targetNode.y);
+      if (splinePath.totalLength === 0) continue;
+
+      burstsRef.current.push({
+        phase: 'outbound',
+        elementDistances: MORSE_PATTERN.map(p => p.offset),
+        path: splinePath,
+        userId: userNode.id,
+        endpointId: targetNode.id,
+        userX: userNode.x,
+        userY: userNode.y,
+        endpointX: targetNode.x,
+        endpointY: targetNode.y,
         isFlagged: event.is_flagged || false,
-        opacity: 0.6 + Math.random() * 0.4,
-        size: 1.5 + Math.random() * 2,
-        curveOffset,
+        opacity: 0.7 + Math.random() * 0.3,
+        size: 2 + Math.random() * 1.5,
       });
     }
-  }, [recentEvents]);
+
+    // Cap seen set to prevent unbounded growth
+    if (seenEventIdsRef.current.size > 500) {
+      const arr = Array.from(seenEventIdsRef.current);
+      seenEventIdsRef.current = new Set(arr.slice(arr.length - 300));
+    }
+  }, [recentEvents, endpointByModel]);
 
   // Main render loop
   const render = useCallback(() => {
@@ -220,8 +414,9 @@ export function ParticleFlowCanvas({
       ctx.stroke();
     }
 
-    // Draw checkpoint zone
+    // Draw checkpoint zone — 1/3 height, vertically centered
     const checkpointWidth = 40;
+
     const gradient = ctx.createLinearGradient(
       checkpointX - checkpointWidth, 0,
       checkpointX + checkpointWidth, 0
@@ -230,15 +425,15 @@ export function ParticleFlowCanvas({
     gradient.addColorStop(0.5, 'rgba(74, 222, 128, 0.08)');
     gradient.addColorStop(1, 'rgba(74, 222, 128, 0)');
     ctx.fillStyle = gradient;
-    ctx.fillRect(checkpointX - checkpointWidth, 0, checkpointWidth * 2, height);
+    ctx.fillRect(checkpointX - checkpointWidth, cpTop, checkpointWidth * 2, cpHeight);
 
     // Checkpoint line
     ctx.strokeStyle = 'rgba(74, 222, 128, 0.3)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 8]);
     ctx.beginPath();
-    ctx.moveTo(checkpointX, topPad - 20);
-    ctx.lineTo(checkpointX, height - bottomPad + 20);
+    ctx.moveTo(checkpointX, cpTop);
+    ctx.lineTo(checkpointX, cpBottom);
     ctx.stroke();
     ctx.setLineDash([]);
 
@@ -246,75 +441,136 @@ export function ParticleFlowCanvas({
     ctx.fillStyle = 'rgba(74, 222, 128, 0.6)';
     ctx.font = '10px Inter, system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('CHECKPOINT', checkpointX, topPad - 28);
+    ctx.fillText('CHECKPOINT', checkpointX, cpTop - 8);
 
     // Draw zone labels
     ctx.fillStyle = COLORS.textDim;
     ctx.font = '11px Inter, system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('ACTIVE USERS', leftZone, topPad - 28);
+    ctx.fillText('USERS (7D)', leftZone, topPad - 28);
     ctx.fillText('LLM ENDPOINTS', rightZone, topPad - 28);
 
-    // Draw connection paths (faint)
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.04)';
+    // Update and draw bursts — wrapped in try/catch to prevent render loop death
+    try {
+      const aliveBursts: Burst[] = [];
+      for (const b of burstsRef.current) {
+        // Advance all elements
+        const elemCount = b.elementDistances.length;
+        for (let i = 0; i < elemCount; i++) {
+          b.elementDistances[i] += flowSpeedRef.current;
+        }
+
+        // Check if all elements have completed their current phase
+        const pathLen = b.path.totalLength;
+        const allArrived = b.elementDistances.every(d => d >= pathLen);
+
+        if (allArrived) {
+          if (b.phase === 'outbound') {
+            // All red elements arrived at LLM — start blue elements returning on same path
+            b.phase = 'returning';
+            b.elementDistances = MORSE_PATTERN.map(p => p.offset);
+            aliveBursts.push(b);
+            continue;
+          } else {
+            // All blue elements arrived back at user — burst complete
+            continue;
+          }
+        }
+
+        const isOutbound = b.phase === 'outbound';
+
+        // Draw each element in the Morse pattern
+        for (let i = 0; i < elemCount; i++) {
+          const dist = b.elementDistances[i];
+          // Only draw if element has started and hasn't arrived yet
+          if (dist < 0 || dist >= pathLen) continue;
+
+          // Outbound: follow path forward. Returning: follow path in reverse.
+          const lookupDist = isOutbound ? dist : pathLen - dist;
+          const pos = getSplinePoint(b.path, lookupDist);
+
+          // Guard against NaN — skip this element if coords are invalid
+          if (!isFinite(pos.x) || !isFinite(pos.y)) continue;
+
+          const elemType = MORSE_PATTERN[i].type;
+
+          // Determine color
+          // Outbound: red before checkpoint, green after (if passed rules), stays red if flagged
+          // Returning: always blue
+          let color: { r: number; g: number; b: number };
+          if (!isOutbound) {
+            color = COLORS.response;
+          } else if (b.isFlagged) {
+            color = COLORS.flagged;
+          } else {
+            // Past the checkpoint? Turn green
+            const pastCheckpoint = pos.x > checkpointX;
+            color = pastCheckpoint ? COLORS.requestPassed : COLORS.request;
+          }
+
+          const colorStr = `rgba(${color.r}, ${color.g}, ${color.b}, ${b.opacity})`;
+          const glowStr = `rgba(${color.r}, ${color.g}, ${color.b}, ${b.opacity * 0.4})`;
+          const glowEnd = `rgba(${color.r}, ${color.g}, ${color.b}, 0)`;
+
+          // Glow effect
+          const glowRadius = b.size * 4;
+          const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, glowRadius);
+          glow.addColorStop(0, glowStr);
+          glow.addColorStop(1, glowEnd);
+          ctx.fillStyle = glow;
+          ctx.fillRect(pos.x - glowRadius, pos.y - glowRadius, glowRadius * 2, glowRadius * 2);
+
+          if (elemType === 'dash') {
+            // Dash — line with round caps trailing behind the lead point
+            const dashLen = MORSE_UNIT * 3;
+            const trailRawDist = Math.max(0, dist - dashLen);
+            const trailLookup = isOutbound ? trailRawDist : pathLen - trailRawDist;
+            const trailPos = getSplinePoint(b.path, trailLookup);
+            if (isFinite(trailPos.x) && isFinite(trailPos.y)) {
+              ctx.save();
+              ctx.beginPath();
+              ctx.moveTo(trailPos.x, trailPos.y);
+              ctx.lineTo(pos.x, pos.y);
+              ctx.strokeStyle = colorStr;
+              ctx.lineWidth = b.size * 2;
+              ctx.lineCap = 'round';
+              ctx.stroke();
+              ctx.restore();
+            }
+          } else {
+            // Circle dot
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, b.size, 0, Math.PI * 2);
+            ctx.fillStyle = colorStr;
+            ctx.fill();
+          }
+        }
+
+        aliveBursts.push(b);
+      }
+      burstsRef.current = aliveBursts;
+    } catch (e) {
+      // If burst drawing fails, clear all bursts to recover
+      console.error('Burst render error:', e);
+      burstsRef.current = [];
+    }
+
+    // Reset canvas state before drawing nodes
+    ctx.globalAlpha = 1;
     ctx.lineWidth = 1;
-    for (const user of userNodesRef.current) {
-      for (const endpoint of endpointNodesRef.current) {
-        ctx.beginPath();
-        ctx.moveTo(user.x, user.y);
-        ctx.quadraticCurveTo(checkpointX, (user.y + endpoint.y) / 2, endpoint.x, endpoint.y);
-        ctx.stroke();
-      }
-    }
+    ctx.lineCap = 'butt';
+    ctx.setLineDash([]);
 
-    // Spawn new particles
-    spawnParticles();
-
-    // Update and draw particles
-    const aliveParticles: Particle[] = [];
-    for (const p of particlesRef.current) {
-      p.progress += p.speed;
-
-      if (p.progress >= 1) continue; // Remove completed particles
-
-      const t = easeInOutCubic(p.progress);
-      const cx = checkpointX;
-      const cy = (p.startY + p.targetY) / 2 + p.curveOffset;
-      const pos = getQuadraticPoint(p.startX, p.startY, cx, cy, p.targetX, p.targetY, t);
-      p.x = pos.x;
-      p.y = pos.y;
-
-      // Determine color
-      let color: { r: number; g: number; b: number };
-      if (p.isFlagged && Math.abs(p.x - checkpointX) < 30) {
-        color = COLORS.flagged;
-      } else {
-        color = p.type === 'request' ? COLORS.request : COLORS.response;
-      }
-
-      // Glow effect
-      const glowRadius = p.size * 4;
-      const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowRadius);
-      glow.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, ${p.opacity * 0.4})`);
-      glow.addColorStop(1, `rgba(${color.r}, ${color.g}, ${color.b}, 0)`);
-      ctx.fillStyle = glow;
-      ctx.fillRect(p.x - glowRadius, p.y - glowRadius, glowRadius * 2, glowRadius * 2);
-
-      // Particle dot
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${p.opacity})`;
-      ctx.fill();
-
-      aliveParticles.push(p);
-    }
-    particlesRef.current = aliveParticles;
-
-    // Draw user nodes
+    // Draw user nodes — active users bright, historical users dimmed
     for (const node of userNodesRef.current) {
+      const isActive = node.isActive !== false;
+      const glowAlpha = isActive ? 0.3 : 0.1;
+      const labelColor = isActive ? COLORS.text : COLORS.textDim;
+      const nodeColor = isActive ? COLORS.userNode : COLORS.userNodeDim;
+
       // Outer glow
       const nodeGlow = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, node.radius * 3);
-      nodeGlow.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
+      nodeGlow.addColorStop(0, `rgba(99, 102, 241, ${glowAlpha})`);
       nodeGlow.addColorStop(1, 'rgba(99, 102, 241, 0)');
       ctx.fillStyle = nodeGlow;
       ctx.fillRect(node.x - node.radius * 3, node.y - node.radius * 3, node.radius * 6, node.radius * 6);
@@ -322,14 +578,28 @@ export function ParticleFlowCanvas({
       // Node circle
       ctx.beginPath();
       ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-      ctx.fillStyle = COLORS.userNode;
+      ctx.fillStyle = nodeColor;
+      ctx.globalAlpha = isActive ? 1 : 0.5;
       ctx.fill();
+      ctx.globalAlpha = 1;
 
-      // Label
-      ctx.fillStyle = COLORS.text;
-      ctx.font = '10px Inter, system-ui, sans-serif';
+      // Label: Name, Org, UUID + timestamp (3 lines, centered on node)
       ctx.textAlign = 'right';
-      ctx.fillText(truncateLabel(node.label, 16), node.x - node.radius - 8, node.y + 3);
+      const labelX = node.x - node.radius - 8;
+      // Line 1: User name
+      ctx.fillStyle = labelColor;
+      ctx.font = '10px Inter, system-ui, sans-serif';
+      ctx.fillText(truncateLabel(node.label, 18), labelX, node.y - 6);
+      // Line 2: Organisation name
+      if (node.orgName) {
+        ctx.fillStyle = COLORS.textDim;
+        ctx.font = '9px Inter, system-ui, sans-serif';
+        ctx.fillText(truncateLabel(node.orgName, 18), labelX, node.y + 5);
+      }
+      // Line 3: Short ID + relative date
+      ctx.fillStyle = COLORS.textDim;
+      ctx.font = '8px Inter, system-ui, sans-serif';
+      ctx.fillText(`${node.shortId}  ${formatRelativeDate(node.lastRequestAt)}`, labelX, node.y + (node.orgName ? 15 : 9));
     }
 
     // Draw endpoint nodes
@@ -355,7 +625,7 @@ export function ParticleFlowCanvas({
     }
 
     // Draw flagged checkpoint indicator
-    const flaggedCount = particlesRef.current.filter(p => p.isFlagged && Math.abs(p.x - checkpointX) < 30).length;
+    const flaggedCount = burstsRef.current.filter(b => b.isFlagged).length;
     if (flaggedCount > 0) {
       ctx.fillStyle = `rgba(251, 146, 60, ${0.4 + Math.sin(Date.now() / 300) * 0.2})`;
       ctx.font = 'bold 12px Inter, system-ui, sans-serif';
@@ -364,7 +634,7 @@ export function ParticleFlowCanvas({
     }
 
     animFrameRef.current = requestAnimationFrame(render);
-  }, [width, height, spawnParticles, checkpointX, leftZone, rightZone, topPad, bottomPad]);
+  }, [width, height, checkpointX, leftZone, rightZone, topPad, bottomPad, cpTop, cpBottom, cpHeight]);
 
   // Compute nodes when data changes
   useEffect(() => {
