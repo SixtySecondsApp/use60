@@ -45,6 +45,7 @@ import {
   LayoutGrid,
   Eye,
   Swords,
+  Linkedin,
   type LucideIcon,
 } from 'lucide-react';
 import { type UserType } from '@/lib/types/userTypes';
@@ -288,14 +289,27 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     displayGroup: 4, // Phase 2: same group as other tools to remove separator lines
     badge: 'New',
   },
+  // LinkedIn Integration Hub — consolidated from /campaigns, /intelligence/ads,
+  // /intelligence/linkedin-revenue, /intelligence/linkedin-analytics
+  {
+    path: '/linkedin',
+    access: 'any',
+    label: 'LinkedIn',
+    icon: Linkedin,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3.5,
+    displayGroup: 4,
+    badge: 'New',
+  },
   {
     path: '/campaigns',
     access: 'internal',
     label: 'Campaigns',
     icon: Send,
-    showInNav: false,
+    showInNav: false, // Redirects to /linkedin?tab=campaigns
     navSection: 'tools',
-    order: 3.5,
+    order: 3.51,
     displayGroup: 4,
   },
   {
@@ -338,6 +352,37 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     showInNav: true,
     navSection: 'tools',
     order: 3.95,
+    displayGroup: 4,
+  },
+  // Legacy LinkedIn routes — redirect to /linkedin hub tabs
+  {
+    path: '/intelligence/ads',
+    access: 'internal',
+    label: 'Ad Intelligence',
+    icon: Eye,
+    showInNav: false,
+    navSection: 'tools',
+    order: 3.96,
+    displayGroup: 4,
+  },
+  {
+    path: '/intelligence/linkedin-revenue',
+    access: 'any',
+    label: 'LinkedIn Revenue',
+    icon: TrendingUp,
+    showInNav: false,
+    navSection: 'tools',
+    order: 3.97,
+    displayGroup: 4,
+  },
+  {
+    path: '/intelligence/linkedin-analytics',
+    access: 'any',
+    label: 'Ad Analytics',
+    icon: BarChart3,
+    showInNav: false,
+    navSection: 'tools',
+    order: 3.975,
     displayGroup: 4,
   },
   // Coaching & Team Intelligence (COACH-UI-001)

@@ -47,6 +47,7 @@ import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
 import { ExplloriumConfigModal } from '@/components/integrations/ExplloriumConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
+import { LinkedInConfigModal } from '@/components/integrations/LinkedInConfigModal';
 import { HeyGenConfigModal } from '@/components/integrations/HeyGenConfigModal';
 import { ElevenLabsConfigModal } from '@/components/integrations/ElevenLabsConfigModal';
 
@@ -65,6 +66,7 @@ import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { useExploriumIntegration } from '@/lib/hooks/useExploriumIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
+import { useLinkedInIntegration } from '@/lib/hooks/useLinkedInIntegration';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
 import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
 import { getIntegrationDomain, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
@@ -633,6 +635,21 @@ const builtIntegrations: IntegrationConfig[] = [
     fallbackIcon: <Bot className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />,
     isBuilt: true,
   },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    description: 'Receive leads from LinkedIn Lead Gen Forms and Events.',
+    permissions: [
+      { title: 'Lead ingestion', description: 'Automatically receive and process LinkedIn leads.' },
+      { title: 'Auto-response', description: 'AI-drafted emails sent to new leads for approval.' },
+      { title: 'Contact matching', description: 'Match leads to existing contacts and companies.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    iconBorderColor: 'border-blue-100 dark:border-blue-800/40',
+    fallbackIcon: <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />,
+    isBuilt: true,
+  },
 ];
 
 // =====================================================
@@ -842,6 +859,11 @@ export default function Integrations() {
   } = useApifyIntegration();
 
   const {
+    isConnected: linkedinConnected,
+    loading: linkedinLoading,
+  } = useLinkedInIntegration();
+
+  const {
     isConnected: heygenConnected,
     loading: heygenLoading,
   } = useHeyGenIntegration();
@@ -964,6 +986,8 @@ export default function Integrations() {
         return instantlyConnected ? 'active' : 'inactive';
       case 'apify':
         return apifyConnected ? 'active' : 'inactive';
+      case 'linkedin':
+        return linkedinConnected ? 'active' : 'inactive';
       case 'heygen':
         return heygenConnected ? 'active' : 'inactive';
       case 'elevenlabs':
@@ -1037,6 +1061,10 @@ export default function Integrations() {
       }
       if (integrationId === 'apify') {
         setActiveConfigModal('apify');
+        return;
+      }
+      if (integrationId === 'linkedin') {
+        setActiveConfigModal('linkedin');
         return;
       }
       if (integrationId === 'elevenlabs') {
@@ -1142,8 +1170,9 @@ export default function Integrations() {
       explorium: exploriumLoading,
       instantly: instantlyLoading,
       apify: apifyLoading,
+      linkedin: linkedinLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading, linkedinLoading]
   );
 
   // Preload logo.dev URLs on page load to prevent any visible swap/flicker.
@@ -1337,6 +1366,10 @@ export default function Integrations() {
       />
       <ApifyConfigModal
         open={activeConfigModal === 'apify'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <LinkedInConfigModal
+        open={activeConfigModal === 'linkedin'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
       <HeyGenConfigModal

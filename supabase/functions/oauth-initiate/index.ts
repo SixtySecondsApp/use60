@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 
 import { handleInitiate as googleInitiate } from './providers/google.ts'
@@ -6,6 +6,7 @@ import { handleInitiate as hubspotInitiate } from './providers/hubspot.ts'
 import { handleInitiate as fathomInitiate } from './providers/fathom.ts'
 import { handleInitiate as attioInitiate } from './providers/attio.ts'
 import { handleInitiate as bullhornInitiate } from './providers/bullhorn.ts'
+import { handleInitiate as linkedinInitiate } from './providers/linkedin.ts'
 import { handleInitiate as microsoftInitiate } from './providers/microsoft.ts'
 
 const providerHandlers: Record<string, (req: Request) => Promise<Response>> = {
@@ -15,6 +16,7 @@ const providerHandlers: Record<string, (req: Request) => Promise<Response>> = {
   fathom: fathomInitiate,
   attio: attioInitiate,
   bullhorn: bullhornInitiate,
+  linkedin: linkedinInitiate,
 }
 
 serve(async (req) => {
