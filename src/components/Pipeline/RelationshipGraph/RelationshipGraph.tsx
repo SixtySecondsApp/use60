@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import { Zap, Loader2, Building2 } from 'lucide-react';
-import { ORBIT_RADII, ZOOM_EXTENT, CENTRE_NODE_RADIUS, TIER_COLORS, HEALTH_COLORS, NODE_SIZE_MIN, NODE_SIZE_MAX, COLD_CLUSTER_SIZE, CLUSTER_NODE_RADIUS, CLUSTER_INNER_ORBIT, CLUSTER_OUTER_ORBIT, CLUSTER_RING_CAPACITY, CLUSTER_OPACITY_DROP } from './constants';
+import { ORBIT_RADII, ZOOM_EXTENT, CENTRE_NODE_RADIUS, TIER_COLORS, HEALTH_COLORS, NODE_SIZE_MIN, NODE_SIZE_MAX, COLD_CLUSTER_SIZE, CLUSTER_NODE_RADIUS, CLUSTER_INNER_ORBIT, CLUSTER_RING_GAP, CLUSTER_RING_CAPACITY, CLUSTER_OPACITY_DROP } from './constants';
 import { useGraphData } from './hooks/useGraphData';
 import { useWarmthBackfill } from './hooks/useWarmthBackfill';
 import { useContactEnrich } from './hooks/useContactEnrich';
@@ -242,20 +242,20 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
     const clusters: ColdCluster[] = [];
     const totalClusters = Math.ceil(coldNodes.length / COLD_CLUSTER_SIZE);
 
-    // Distribute clusters across concentric rings
+    // Distribute clusters across concentric rings with fixed gap between rings
     const ringCount = Math.ceil(totalClusters / CLUSTER_RING_CAPACITY);
-    const orbitStep = ringCount > 1
-      ? (CLUSTER_OUTER_ORBIT - CLUSTER_INNER_ORBIT) / (ringCount - 1)
-      : 0;
+    // Angular step of the innermost ring (used to offset outer rings by half)
+    const innerRingCount = Math.min(CLUSTER_RING_CAPACITY, totalClusters);
+    const innerAngularStep = (Math.PI * 2) / innerRingCount;
 
     let clusterIdx = 0;
     for (let ring = 0; ring < ringCount; ring++) {
-      const orbitR = (CLUSTER_INNER_ORBIT + ring * orbitStep) * maxR;
-      // How many clusters fit on this ring
+      const orbitR = (CLUSTER_INNER_ORBIT + ring * CLUSTER_RING_GAP) * maxR;
       const remaining = totalClusters - clusterIdx;
       const onThisRing = Math.min(CLUSTER_RING_CAPACITY, remaining);
-      // Offset odd rings by half-step so clusters nestle between previous ring
-      const angleOffset = ring % 2 === 1 ? Math.PI / onThisRing : 0;
+      // Offset each ring by half the INNER ring's angular step
+      // This places outer clusters exactly between the two nearest inner clusters
+      const angleOffset = ring * (innerAngularStep / 2);
 
       for (let j = 0; j < onThisRing; j++) {
         const chunkStart = clusterIdx * COLD_CLUSTER_SIZE;
@@ -275,7 +275,8 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
       }
     }
 
-    return { displayNodes: nonColdNodes, coldClusters: clusters, allColdContacts: coldNodes };
+    const clusterOuterOrbit = CLUSTER_INNER_ORBIT + Math.max(0, ringCount - 1) * CLUSTER_RING_GAP;
+    return { displayNodes: nonColdNodes, coldClusters: clusters, allColdContacts: coldNodes, clusterOuterOrbit };
   }, [nodes, maxR]);
 
   // Compute deal arcs: connect contacts sharing the same deal
@@ -775,7 +776,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
           {coldClusters.map((cluster) => {
             const dist = Math.sqrt(cluster.x * cluster.x + cluster.y * cluster.y);
             const innerR = CLUSTER_INNER_ORBIT * maxR;
-            const outerR = CLUSTER_OUTER_ORBIT * maxR;
+            const outerR = clusterOuterOrbit * maxR;
             const ringProgress = outerR > innerR ? Math.max(0, (dist - innerR) / (outerR - innerR)) : 0;
             const lineOpacity = Math.max(0.02, 0.06 - ringProgress * 0.04);
             return (
@@ -946,7 +947,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
             // Calculate ring index from distance to derive opacity
             const dist = Math.sqrt(cluster.x * cluster.x + cluster.y * cluster.y);
             const innerR = CLUSTER_INNER_ORBIT * maxR;
-            const outerR = CLUSTER_OUTER_ORBIT * maxR;
+            const outerR = clusterOuterOrbit * maxR;
             const ringProgress = outerR > innerR ? Math.max(0, (dist - innerR) / (outerR - innerR)) : 0;
             const baseOpacity = Math.max(0.15, 0.6 - ringProgress * CLUSTER_OPACITY_DROP * 4);
             const nodeOpacity = isClusterSelected || isClusterHovered ? Math.min(0.95, baseOpacity + 0.3) : baseOpacity;
