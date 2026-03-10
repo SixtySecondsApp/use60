@@ -284,37 +284,37 @@ const GENERAL_TRANSCRIPT = `{{REP_NAME}}: Hey {{CONTACT_NAME}}, good to catch up
 export const TRANSCRIPT_TEMPLATES: TranscriptTemplate[] = [
   {
     meetingType: "discovery",
-    title: "Discovery Call — {{COMPANY_NAME}}",
+    title: "Call with {{CONTACT_NAME}}",
     durationMinutes: 35,
     transcript: DISCOVERY_TRANSCRIPT,
   },
   {
     meetingType: "demo",
-    title: "Product Demo — {{COMPANY_NAME}}",
+    title: "Demo with {{CONTACT_NAME}}",
     durationMinutes: 55,
     transcript: DEMO_TRANSCRIPT,
   },
   {
     meetingType: "negotiation",
-    title: "Pricing & Contract Discussion — {{COMPANY_NAME}}",
+    title: "Call with {{CONTACT_NAME}} — {{COMPANY_NAME}}",
     durationMinutes: 40,
     transcript: NEGOTIATION_TRANSCRIPT,
   },
   {
     meetingType: "follow_up",
-    title: "Follow-Up Check-In — {{COMPANY_NAME}}",
+    title: "Follow-up with {{CONTACT_NAME}}",
     durationMinutes: 30,
     transcript: FOLLOW_UP_TRANSCRIPT,
   },
   {
     meetingType: "closing",
-    title: "Closing Call — {{COMPANY_NAME}}",
+    title: "Call with {{CONTACT_NAME}} — {{COMPANY_NAME}}",
     durationMinutes: 45,
     transcript: CLOSING_TRANSCRIPT,
   },
   {
     meetingType: "general",
-    title: "Check-In — {{COMPANY_NAME}}",
+    title: "Check-in with {{CONTACT_NAME}}",
     durationMinutes: 25,
     transcript: GENERAL_TRANSCRIPT,
   },

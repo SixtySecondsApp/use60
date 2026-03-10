@@ -225,18 +225,25 @@ serve(async (req: Request) => {
 
     // ------------------------------------------------------------------
     // Check if org already has seeded data from another user.
-    // If so, reuse the existing companies/contacts and only create
-    // user-scoped data (meetings, deals, activities) for the new user.
+    // If so, skip entirely — new user sees shared org data instantly.
     // ------------------------------------------------------------------
-    let isJoiningExistingOrg = false;
     const { count: orgCompanyCount } = await supabase
       .from("companies")
       .select("id", { count: "exact", head: true })
       .eq("clerk_org_id", org_id);
 
     if ((orgCompanyCount ?? 0) > 3) {
-      isJoiningExistingOrg = true;
-      console.log("[seed-demo-data] Org already has data — seeding user-scoped data only for:", user_id);
+      // Org already has seed data — new users joining this org see shared data instantly.
+      // No need to re-seed companies, contacts, meetings, or deals.
+      console.log("[seed-demo-data] Org already has data — skipping seed for:", user_id);
+      const response: SeedResponse = {
+        success: true,
+        message: "Org already seeded — user joins shared data instantly",
+      };
+      return new Response(
+        JSON.stringify(response),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     // ------------------------------------------------------------------
@@ -282,41 +289,8 @@ serve(async (req: Request) => {
     const contactIds: string[] = [];
     const primaryContactByCompany: Record<string, string> = {};
 
-    if (isJoiningExistingOrg) {
-      // --- Reuse existing org companies & contacts ---
-      try {
-        const { data: existingCompanies } = await supabase
-          .from("companies")
-          .select("id, name")
-          .eq("clerk_org_id", org_id);
-
-        if (existingCompanies) {
-          existingCompanies.forEach((c) => {
-            const idx = COMPANIES.findIndex((seed) => seed.name === c.name);
-            if (idx !== -1) companyIds[idx] = c.id;
-          });
-          console.log("[seed-demo-data] Reusing", existingCompanies.length, "existing companies");
-        }
-
-        const { data: existingContacts } = await supabase
-          .from("contacts")
-          .select("id, company_id, is_primary, email")
-          .eq("clerk_org_id", org_id);
-
-        if (existingContacts) {
-          existingContacts.forEach((c) => {
-            contactIds.push(c.id);
-            if (c.is_primary && c.company_id) {
-              primaryContactByCompany[c.company_id] = c.id;
-            }
-          });
-          console.log("[seed-demo-data] Reusing", existingContacts.length, "existing contacts");
-        }
-      } catch (reuseErr) {
-        console.error("[seed-demo-data] Error loading existing org data:", reuseErr);
-      }
-    } else {
-      // --- Create new companies ---
+    {
+      // --- Create new companies (first user in this org) ---
       try {
         const companyRows = COMPANIES.map((c) => ({
           name: c.name,
@@ -476,18 +450,9 @@ serve(async (req: Request) => {
         // We match by email since contactIds is a flat list without index metadata
         const primaryContactEmail = primaryContactSeed.email;
 
-        // Generate a nice thumbnail for this meeting type
-        const meetingTypeColors: Record<string, string> = {
-          discovery: "4f46e5",   // indigo
-          demo: "0891b2",       // cyan
-          follow_up: "059669",  // emerald
-          negotiation: "d97706", // amber
-          closing: "dc2626",    // red
-          general: "7c3aed",    // violet
-        };
-        const thumbBg = meetingTypeColors[template.meetingType] || "6b7280";
-        const thumbInitials = companyName.split(" ").map((w: string) => w[0]).join("").slice(0, 2);
-        const thumbnailUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(thumbInitials)}&background=${thumbBg}&color=fff&size=640&font-size=0.4&bold=true&format=png`;
+        // Thumbnail: use contact initials on dark slate background (matches CallGridThumbnail style)
+        const contactInitials = primaryContactSeed.full_name.split(" ").map((w: string) => w[0]).join("").slice(0, 2);
+        const thumbnailUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(contactInitials)}&background=1e293b&color=94a3b8&size=640&font-size=0.4&bold=true&format=png`;
 
         const { data: insertedMeeting, error: meetingError } = await supabase
           .from("meetings")

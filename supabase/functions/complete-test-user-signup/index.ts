@@ -326,31 +326,27 @@ serve(async (req) => {
 
     // No email verification needed — admin-created test users are auto-confirmed
 
-    // --- Step 8: Seed demo data (async, best-effort) ---
-    // Only trigger for test users — populates the org with realistic demo data
+    // --- Step 8: Seed demo data (fire-and-forget, non-blocking) ---
+    // Trigger seeding but don't wait — user gets instant response.
+    // seed-demo-data has its own idempotency guard and will skip if org already has data.
     if (tokenData.is_test_user) {
-      try {
-        const seedUrl = `${SUPABASE_URL}/functions/v1/seed-demo-data`;
-        const seedRes = await fetch(seedUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          },
-          body: JSON.stringify({
-            org_id: tokenData.org_id,
-            user_id: userId,
-          }),
-        });
-        if (!seedRes.ok) {
-          console.error('seed-demo-data call failed:', seedRes.status);
-        } else {
-          console.log('seed-demo-data triggered successfully for org:', tokenData.org_id);
-        }
-      } catch (seedErr) {
-        console.error('Failed to trigger seed-demo-data:', seedErr);
-        // Non-fatal — user can still proceed without demo data
-      }
+      const seedUrl = `${SUPABASE_URL}/functions/v1/seed-demo-data`;
+      fetch(seedUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          org_id: tokenData.org_id,
+          user_id: userId,
+        }),
+      }).then(res => {
+        if (!res.ok) console.error('seed-demo-data call failed:', res.status);
+        else console.log('seed-demo-data triggered for org:', tokenData.org_id);
+      }).catch(err => {
+        console.error('Failed to trigger seed-demo-data:', err);
+      });
     }
 
     console.log('Test user signup complete:', request.email, 'org:', tokenData.org_id, 'existing:', isExistingUser);
