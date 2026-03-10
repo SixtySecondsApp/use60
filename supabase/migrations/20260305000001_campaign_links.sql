@@ -53,6 +53,7 @@ CREATE INDEX IF NOT EXISTS idx_campaign_links_created_by ON campaign_links(creat
 ALTER TABLE campaign_links ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can read active, non-expired links (needed for /t/{code} resolution)
+DROP POLICY IF EXISTS "Public can read active campaign links" ON campaign_links;
 CREATE POLICY "Public can read active campaign links"
   ON campaign_links FOR SELECT
   USING (
@@ -61,12 +62,14 @@ CREATE POLICY "Public can read active campaign links"
   );
 
 -- Authenticated users can create links
+DROP POLICY IF EXISTS "Authenticated users can create campaign links" ON campaign_links;
 CREATE POLICY "Authenticated users can create campaign links"
   ON campaign_links FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = created_by);
 
 -- Owners can update their own links
+DROP POLICY IF EXISTS "Owners can update their campaign links" ON campaign_links;
 CREATE POLICY "Owners can update their campaign links"
   ON campaign_links FOR UPDATE
   TO authenticated
@@ -108,11 +111,13 @@ CREATE INDEX IF NOT EXISTS idx_campaign_visitors_link ON campaign_visitors(campa
 ALTER TABLE campaign_visitors ENABLE ROW LEVEL SECURITY;
 
 -- Allow anonymous inserts for visitor tracking
+DROP POLICY IF EXISTS "Public can insert campaign visitors" ON campaign_visitors;
 CREATE POLICY "Public can insert campaign visitors"
   ON campaign_visitors FOR INSERT
   WITH CHECK (true);
 
 -- Link owners can read visitor data
+DROP POLICY IF EXISTS "Link owners can read visitor data" ON campaign_visitors;
 CREATE POLICY "Link owners can read visitor data"
   ON campaign_visitors FOR SELECT
   TO authenticated
