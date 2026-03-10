@@ -137,14 +137,43 @@ Store returned subtask IDs in `pipeline.json.stories[i].aiDevHubSubtaskId`.
 
 ## STEP 6: Create Git Branch
 
+### CRITICAL: Branch Protection
+
+Before creating ANY branch, check the current state:
+
 ```bash
-git checkout -b feature/<runSlug>
+CURRENT_BRANCH=$(git branch --show-current)
 ```
 
-If branch already exists:
-```bash
-git checkout feature/<runSlug>
-```
+**Decision tree:**
+
+1. **Already on `feature/<runSlug>`** → Do nothing. You're already on the right branch.
+
+2. **Already on a DIFFERENT `feature/*` branch with uncommitted changes** →
+   **STOP. Ask the user.** Do NOT silently switch branches or create a new one.
+   Present:
+   ```
+   You're on branch: feature/<current>
+   This pipeline wants: feature/<runSlug>
+
+   Options:
+   [S]tay on current branch (recommended — keep working here)
+   [N]ew branch from current (branch off your work)
+   [C]heckout the pipeline branch (switch — uncommitted changes will be stashed)
+   ```
+
+3. **Already on a `feature/*` branch with NO uncommitted changes AND pipeline.json.branch matches** →
+   Stay on current branch.
+
+4. **On main/master with no active work** → Safe to create:
+   ```bash
+   git checkout -b feature/<runSlug>
+   ```
+
+5. **Branch `feature/<runSlug>` already exists** →
+   ```bash
+   git checkout feature/<runSlug>
+   ```
 
 Store branch name in `pipeline.json.branch`.
 

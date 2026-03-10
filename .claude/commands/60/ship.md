@@ -91,6 +91,35 @@ If no conflicts found, proceed silently.
 
 ---
 
+## PRE-FLIGHT: Branch & Pipeline Check
+
+**Run this BEFORE anything else, even before input detection.**
+
+```bash
+CURRENT_BRANCH=$(git branch --show-current)
+```
+
+### If on a `feature/*` branch:
+
+1. Check if `.sixty/pipeline.json` exists with `phase != "complete"`
+2. If YES → **This is an active pipeline.** Auto-switch to `--resume` mode unless:
+   - User explicitly said "new feature", "start fresh", "different project"
+   - User provided input about a completely unrelated feature
+3. If pipeline.json exists but is stale/complete → Safe to start new, but WARN:
+   ```
+   You're on branch feature/<name> with a completed pipeline.
+   Starting a new pipeline will create a new branch.
+   Switch to main first? [Y]es / [N]o, continue here
+   ```
+
+### If on `main`/`master` with no active pipeline:
+→ Safe to proceed normally.
+
+### If there are uncommitted changes:
+→ ALWAYS warn before any branch operation. Never silently stash or lose work.
+
+---
+
 ## INPUT AUTO-DETECTION
 
 Determine what the user gave you:
