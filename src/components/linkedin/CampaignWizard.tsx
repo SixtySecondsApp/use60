@@ -4,7 +4,7 @@ import {
   ChevronDown, Shield, Plus, Loader2, X, RefreshCw, Check,
   Megaphone, MousePointerClick, Eye, Video, LayoutGrid, Type, Zap,
   ArrowLeft, ArrowRight, Upload, FileImage, FileVideo, Link2, Pencil,
-  Globe, ExternalLink,
+  Globe, ExternalLink, FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,6 +14,10 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
+import { supabase } from '@/lib/supabase/clientV2'
+import { useOrgStore } from '@/lib/stores/orgStore'
+import { useAuth } from '@/lib/contexts/AuthContext'
+import { toast } from 'sonner'
 import type { MatchedAudience, AudienceEstimate } from '@/lib/services/linkedinAdManagerService'
 
 // ---------------------------------------------------------------------------
@@ -244,6 +248,15 @@ const FORMAT_LABELS: Record<string, string> = {
 }
 
 const CTA_LABELS: Record<string, string> = Object.fromEntries(CTA_OPTIONS.map((c) => [c.value, c.label]))
+
+const LEAD_FORM_FIELDS = [
+  { key: 'first_name', label: 'First Name' },
+  { key: 'last_name', label: 'Last Name' },
+  { key: 'email', label: 'Email' },
+  { key: 'company', label: 'Company' },
+  { key: 'job_title', label: 'Job Title' },
+  { key: 'phone', label: 'Phone' },
+]
 
 function formatNumber(val: number | null | undefined): string {
   if (val == null) return '--'
@@ -544,6 +557,13 @@ export interface CampaignWizardProps {
     cta_text?: string
     destination_url?: string
     creative_file?: File | null
+    lead_form_id?: string
+    lead_form?: {
+      name: string
+      fields: Array<{ fieldType: string; label: string; required: boolean }>
+      privacy_policy_url?: string
+      thank_you_message?: string
+    }
   }) => Promise<void>
   onCancel: () => void
   creating?: boolean
@@ -568,6 +588,7 @@ export default function CampaignWizard({
   onEstimateAudience,
   orgCurrency = 'GBP',
 }: CampaignWizardProps) {
+  const { user } = useAuth()
   const [step, setStep] = useState(1)
 
   // Step 1: Objective
@@ -584,6 +605,19 @@ export default function CampaignWizard({
   const [creativeFile, setCreativeFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Lead form (for LEAD_GEN objective)
+  const [leadFormMode, setLeadFormMode] = useState<'select' | 'create'>('select')
+  const [selectedLeadFormId, setSelectedLeadFormId] = useState('')
+  const [leadFormName, setLeadFormName] = useState('')
+  const [leadFormFields, setLeadFormFields] = useState<Set<string>>(new Set(['first_name', 'last_name', 'email']))
+  const [leadFormPrivacyUrl, setLeadFormPrivacyUrl] = useState('')
+  const [leadFormThankYou, setLeadFormThankYou] = useState('')
+  const [existingForms, setExistingForms] = useState<Array<{ id: string; name: string; status: string }>>([])
+  const [formsLoaded, setFormsLoaded] = useState(false)
+  const [savingForm, setSavingForm] = useState(false)
+
+  const isLeadGen = objective === 'LEAD_GEN'
 
   // Step 4: Targeting
   const [jobTitles, setJobTitles] = useState('')
@@ -672,7 +706,84 @@ export default function CampaignWizard({
       cta_text: ctaText || undefined,
       destination_url: destinationUrl.trim() || undefined,
       creative_file: creativeFile,
+      lead_form_id: isLeadGen && leadFormMode === 'select' && selectedLeadFormId ? selectedLeadFormId : undefined,
+      lead_form: isLeadGen && leadFormMode === 'create' && leadFormName.trim() ? {
+        name: leadFormName.trim(),
+        fields: LEAD_FORM_FIELDS
+          .filter((f) => leadFormFields.has(f.key))
+          .map((f) => ({ fieldType: f.key.toUpperCase(), label: f.label, required: true })),
+        privacy_policy_url: leadFormPrivacyUrl.trim() || undefined,
+        thank_you_message: leadFormThankYou.trim() || undefined,
+      } : undefined,
     })
+  }
+
+  // Load existing lead forms when objective is LEAD_GEN
+  const activeOrgId = useOrgStore((s) => s.activeOrgId)
+
+  const refreshForms = useCallback(async () => {
+    if (!activeOrgId) return
+    const { data, error } = await supabase
+      .from('linkedin_managed_lead_forms')
+      .select('id, name, status')
+      .eq('org_id', activeOrgId)
+      .neq('status', 'ARCHIVED')
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error('[CampaignWizard] Failed to load lead forms:', error.message)
+    }
+    setExistingForms(data || [])
+    setFormsLoaded(true)
+  }, [activeOrgId])
+
+  useEffect(() => {
+    if (!isLeadGen || !activeOrgId || formsLoaded) return
+    refreshForms()
+  }, [isLeadGen, activeOrgId, formsLoaded, refreshForms])
+
+  // Save a new lead form to the database
+  const handleSaveLeadForm = async () => {
+    if (!activeOrgId || !leadFormName.trim()) return
+    const fields = LEAD_FORM_FIELDS
+      .filter((f) => leadFormFields.has(f.key))
+      .map((f) => ({ fieldType: f.key.toUpperCase(), label: f.label, required: true }))
+    if (fields.length === 0) {
+      toast.error('Select at least one form field')
+      return
+    }
+    setSavingForm(true)
+    try {
+      const { data, error } = await supabase
+        .from('linkedin_managed_lead_forms')
+        .insert({
+          org_id: activeOrgId,
+          name: leadFormName.trim(),
+          fields,
+          privacy_policy_url: leadFormPrivacyUrl.trim() || null,
+          thank_you_message: leadFormThankYou.trim() || null,
+          status: 'DRAFT',
+          created_by: user?.id ?? null,
+        })
+        .select('id')
+        .single()
+      if (error) throw error
+      toast.success('Lead form saved')
+      // Auto-select the new form and switch to select mode
+      setSelectedLeadFormId(data.id)
+      setLeadFormMode('select')
+      // Reset create form fields
+      setLeadFormName('')
+      setLeadFormPrivacyUrl('')
+      setLeadFormThankYou('')
+      setLeadFormFields(new Set(['first_name', 'last_name', 'email']))
+      // Refresh the forms list
+      await refreshForms()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to save form'
+      toast.error(msg)
+    } finally {
+      setSavingForm(false)
+    }
   }
 
   // Reset format when objective changes and current format is no longer valid
@@ -982,6 +1093,130 @@ export default function CampaignWizard({
               />
             </div>
           </div>
+
+          {/* Lead Form section — only for LEAD_GEN objective */}
+          {isLeadGen && (
+            <div className="mt-6 pt-5 border-t border-zinc-800">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="h-4 w-4 text-blue-400" />
+                <h4 className="text-sm font-medium text-zinc-100">Lead Gen Form</h4>
+              </div>
+              <p className="text-xs text-zinc-500 mb-4">
+                LinkedIn will show this form when someone clicks your ad. Configure form fields to collect lead information.
+              </p>
+
+              {/* Mode toggle */}
+              <div className="flex gap-2 mb-4">
+                <Button
+                  type="button"
+                  variant={leadFormMode === 'select' ? 'default' : 'outline'}
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => setLeadFormMode('select')}
+                >
+                  Use Existing Form
+                </Button>
+                <Button
+                  type="button"
+                  variant={leadFormMode === 'create' ? 'default' : 'outline'}
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => setLeadFormMode('create')}
+                >
+                  Create New Form
+                </Button>
+              </div>
+
+              {leadFormMode === 'select' ? (
+                <div>
+                  {existingForms.length > 0 ? (
+                    <Select value={selectedLeadFormId} onValueChange={setSelectedLeadFormId}>
+                      <SelectTrigger className="bg-zinc-800 border-zinc-700">
+                        <SelectValue placeholder="Select a lead form..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {existingForms.map((f) => (
+                          <SelectItem key={f.id} value={f.id}>
+                            {f.name} ({f.status})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-xs text-zinc-500 py-4 text-center">
+                      No existing forms. Create a new one instead.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-xs text-zinc-400 mb-1 block">Form Name</Label>
+                    <Input
+                      placeholder="e.g. Demo Request Form"
+                      className="bg-zinc-800 border-zinc-700"
+                      value={leadFormName}
+                      onChange={(e) => setLeadFormName(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-zinc-400 mb-2 block">Form Fields</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {LEAD_FORM_FIELDS.map((field) => (
+                        <label key={field.key} className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox
+                            checked={leadFormFields.has(field.key)}
+                            onCheckedChange={() => {
+                              setLeadFormFields((prev) => {
+                                const next = new Set(prev)
+                                if (next.has(field.key)) next.delete(field.key)
+                                else next.add(field.key)
+                                return next
+                              })
+                            }}
+                            className="border-zinc-600"
+                          />
+                          <span className="text-xs text-zinc-300">{field.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-zinc-400 mb-1 block">Privacy Policy URL</Label>
+                    <Input
+                      placeholder="https://yoursite.com/privacy"
+                      className="bg-zinc-800 border-zinc-700"
+                      value={leadFormPrivacyUrl}
+                      onChange={(e) => setLeadFormPrivacyUrl(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-zinc-400 mb-1 block">Thank You Message</Label>
+                    <Input
+                      placeholder="Thanks! We'll be in touch within 24 hours."
+                      className="bg-zinc-800 border-zinc-700"
+                      value={leadFormThankYou}
+                      onChange={(e) => setLeadFormThankYou(e.target.value)}
+                    />
+                  </div>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="text-xs gap-1.5"
+                    disabled={savingForm || !leadFormName.trim() || leadFormFields.size === 0}
+                    onClick={handleSaveLeadForm}
+                  >
+                    {savingForm ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                    Save Form
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1473,6 +1708,20 @@ export default function CampaignWizard({
                   <span className="text-xs text-zinc-500 pt-0.5">Audiences</span>
                   <span className="text-sm text-zinc-200 text-right max-w-[60%]">
                     {selectedAudiences.map((id) => audiences.find((a) => a.id === id)?.name ?? id.slice(0, 8)).join(', ')}
+                  </span>
+                </div>
+              )}
+
+              {/* Lead Form */}
+              {isLeadGen && (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-xs text-zinc-500">Lead Form</span>
+                  <span className="text-sm text-zinc-200">
+                    {leadFormMode === 'select' && selectedLeadFormId
+                      ? existingForms.find((f) => f.id === selectedLeadFormId)?.name || 'Selected'
+                      : leadFormMode === 'create' && leadFormName.trim()
+                        ? `${leadFormName} (${leadFormFields.size} fields)`
+                        : 'Not configured'}
                   </span>
                 </div>
               )}

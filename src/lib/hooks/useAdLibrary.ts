@@ -252,10 +252,10 @@ export function useAdLibrary() {
   // AI Remix
   // ---------------------------------------------------------------------------
 
-  const remixAd = useCallback(async (adId: string): Promise<AdRemixResult> => {
+  const remixAd = useCallback(async (adId: string, options?: { similarity?: number }): Promise<AdRemixResult> => {
     if (!ready) throw new Error('Not ready')
     try {
-      const result = await adLibraryService.remixAd(adId)
+      const result = await adLibraryService.remixAd(adId, options)
       toast.success('Ad remix generated!')
       return result
     } catch (e: any) {

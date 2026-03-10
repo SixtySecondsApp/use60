@@ -16,7 +16,8 @@ import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelpe
  */
 
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`
-const GEMINI_IMAGE_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent`
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const NANO_BANANA_MODEL = 'google/gemini-3-pro-image-preview'
 
 serve(async (req: Request) => {
   const corsResult = handleCorsPreflightRequest(req)
@@ -73,7 +74,7 @@ serve(async (req: Request) => {
 
     // Parse body
     const body = await req.json()
-    const { ad_id } = body
+    const { ad_id, similarity = 50 } = body
 
     if (!ad_id) {
       return new Response(JSON.stringify({ error: 'ad_id is required' }), {
@@ -97,15 +98,46 @@ serve(async (req: Request) => {
       })
     }
 
-    // Look up org profile
+    // Look up org profile with brand guidelines
     const { data: org } = await serviceClient
       .from('organizations')
-      .select('name, website')
+      .select('name, website, company_website, brand_guidelines, logo_url')
       .eq('id', orgId)
       .maybeSingle()
 
     const orgName = org?.name || 'Our Company'
-    const orgWebsite = org?.website || ''
+    const orgWebsite = org?.website || org?.company_website || ''
+    const brandGuidelines = org?.brand_guidelines as Record<string, unknown> | null
+
+    // Build brand context for prompts
+    let brandContext = ''
+    if (brandGuidelines) {
+      const parts: string[] = []
+      const colors = brandGuidelines.colors as Array<{ hex: string; role: string }> | undefined
+      if (colors?.length) {
+        parts.push(`Brand Colors: ${colors.map(c => `${c.role || 'accent'}: ${c.hex}`).join(', ')}`)
+      }
+      if (brandGuidelines.heading_font) parts.push(`Heading Font: ${brandGuidelines.heading_font}`)
+      if (brandGuidelines.body_font) parts.push(`Body Font: ${brandGuidelines.body_font}`)
+      if (brandGuidelines.tone) parts.push(`Brand Tone: ${brandGuidelines.tone}`)
+      if (parts.length > 0) brandContext = `\n\nBRAND GUIDELINES:\n${parts.join('\n')}`
+    }
+
+    // Map similarity (0-100) to creative direction
+    // 0 = completely different, 100 = very similar to original
+    const simPercent = Math.max(0, Math.min(100, Number(similarity) || 50))
+    const temperature = simPercent <= 25 ? 1.2 : simPercent <= 50 ? 0.9 : simPercent <= 75 ? 0.6 : 0.3
+
+    let styleDirection: string
+    if (simPercent <= 25) {
+      styleDirection = 'Create COMPLETELY DIFFERENT ads. New angles, new hooks, new messaging strategy. Only keep the general topic.'
+    } else if (simPercent <= 50) {
+      styleDirection = 'Create MODERATELY DIFFERENT ads. Keep the core message but use fresh angles, different hooks, and varied copy styles.'
+    } else if (simPercent <= 75) {
+      styleDirection = 'Create SIMILAR ads. Closely mirror the original structure and messaging, but adapt for the target company with minor variations.'
+    } else {
+      styleDirection = 'Create VERY SIMILAR ads. Keep the same structure, tone, hooks, and messaging pattern. Only change company-specific details.'
+    }
 
     // Build the Gemini copy generation prompt
     const prompt = `You are an expert LinkedIn ad copywriter. Given the following competitor ad, create 3 adapted variants for a different company.
@@ -117,12 +149,17 @@ CTA: ${ad.cta_text || '(none)'}
 Advertiser: ${ad.advertiser_name || '(unknown)'}
 
 TARGET COMPANY: ${orgName}
-${orgWebsite ? `Website: ${orgWebsite}` : ''}
+${orgWebsite ? `Website: ${orgWebsite}` : ''}${brandContext}
+
+CREATIVE DIRECTION (similarity: ${simPercent}%):
+${styleDirection}
 
 Create 3 variants with different angles:
 1. Direct adaptation (same angle, adapted for target company)
 2. Alternative hook (different opening, same core message)
 3. Bold/contrarian take (provocative angle on the same topic)
+
+${brandGuidelines?.tone ? `Match the brand tone: "${brandGuidelines.tone}".` : ''}
 
 Return ONLY valid JSON (no markdown, no code fences):
 {"variants":[{"headline":"...","body":"...","cta":"...","angle":"..."}]}`
@@ -134,7 +171,7 @@ Return ONLY valid JSON (no markdown, no code fences):
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.9,
+          temperature,
           maxOutputTokens: 2000,
           thinkingConfig: { thinkingBudget: 0 },
         },
@@ -168,48 +205,150 @@ Return ONLY valid JSON (no markdown, no code fences):
       throw new Error('Failed to parse Gemini response as JSON')
     }
 
-    // Optionally generate an image if the original ad has images
+    // Generate an image using Nano Banana 2 (Gemini 3 Pro Image via OpenRouter)
     let imageUrl: string | undefined
-    const hasImages = ad.media_type === 'image' || ad.media_type === 'carousel'
-    if (hasImages && variants.length > 0) {
+    let imageDebug: Record<string, unknown> | undefined
+    if (variants.length > 0) {
       try {
-        const firstVariant = variants[0]
-        const imagePrompt = `Create a professional LinkedIn ad creative image for a company called "${orgName}". The ad promotes: "${firstVariant.headline}". The message is about: "${firstVariant.body?.slice(0, 200)}". Style: clean, modern, professional B2B marketing visual. No text overlay needed — just the visual concept.`
+        // Get OpenRouter API key from user_settings
+        const { data: userSettings } = await serviceClient
+          .from('user_settings')
+          .select('ai_provider_keys')
+          .eq('user_id', user.id)
+          .maybeSingle()
 
-        const imageResponse = await fetch(`${GEMINI_IMAGE_URL}?key=${geminiApiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: imagePrompt }] }],
-            generationConfig: {
-              responseModalities: ['TEXT', 'IMAGE'],
+        const openrouterKey = userSettings?.ai_provider_keys?.openrouter as string | undefined
+
+        if (openrouterKey) {
+          const firstVariant = variants[0]
+          // Build brand-aware image prompt
+          const brandColorStr = brandGuidelines?.colors
+            ? (brandGuidelines.colors as Array<{ hex: string; role: string }>).map(c => c.hex).join(', ')
+            : ''
+          const imagePrompt = `Create a professional LinkedIn ad creative image for a company called "${orgName}". The ad headline is: "${firstVariant.headline}". The message: "${firstVariant.body?.slice(0, 200)}". Style: clean, modern, professional B2B SaaS marketing visual. Minimalist design, no text overlay — just the visual concept.${brandColorStr ? ` Use these brand colors: ${brandColorStr}.` : ''}${simPercent >= 70 ? ' Keep the visual style very close to a typical LinkedIn sponsored content ad.' : simPercent <= 30 ? ' Be bold and creative with an unconventional visual approach.' : ''}`
+
+          console.log('[linkedin-ad-remix] Generating image via Nano Banana 2 (OpenRouter)')
+          console.log('[linkedin-ad-remix] OpenRouter key length:', openrouterKey.length)
+
+          const imageResponse = await fetch(OPENROUTER_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${openrouterKey}`,
+              'HTTP-Referer': `${supabaseUrl}/functions/v1/linkedin-ad-remix`,
+              'X-Title': 'Sixty - Ad Remix',
             },
-          }),
-        })
+            body: JSON.stringify({
+              model: NANO_BANANA_MODEL,
+              messages: [{ role: 'user', content: [{ type: 'text', text: imagePrompt }] }],
+            }),
+          })
 
-        if (imageResponse.ok) {
-          const imageData = await imageResponse.json()
-          const imageCandidate = imageData?.candidates?.[0]
-          const imageParts = (imageCandidate?.content?.parts ?? []).filter(
-            (p: { inlineData?: { data: string; mimeType: string } }) => p.inlineData?.data
-          )
+          console.log('[linkedin-ad-remix] OpenRouter response status:', imageResponse.status)
 
-          if (imageParts.length > 0) {
-            const { mimeType, data: base64data } = imageParts[0].inlineData
-            imageUrl = `data:${mimeType};base64,${base64data}`
+          if (imageResponse.ok) {
+            const imageData = await imageResponse.json()
+            const content = imageData?.choices?.[0]?.message?.content
+
+            // Log the response structure for debugging
+            console.log('[linkedin-ad-remix] OpenRouter response keys:', JSON.stringify(Object.keys(imageData)))
+            console.log('[linkedin-ad-remix] Content type:', typeof content)
+            if (typeof content === 'string') {
+              console.log('[linkedin-ad-remix] Content preview (string):', content.slice(0, 300))
+            } else if (Array.isArray(content)) {
+              console.log('[linkedin-ad-remix] Content blocks:', content.length, 'types:', content.map((b: { type?: string }) => b.type))
+            } else if (content && typeof content === 'object') {
+              console.log('[linkedin-ad-remix] Content (object) keys:', Object.keys(content))
+            }
+
+            // Extract image from response — OpenRouter returns various formats
+            if (typeof content === 'string') {
+              // Check for direct data URL or HTTP URL
+              if (content.startsWith('data:image/') || content.startsWith('http')) {
+                imageUrl = content
+              } else {
+                // Try to extract base64 data URL
+                const b64Match = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+\/]+=*/)?.[0]
+                if (b64Match) {
+                  imageUrl = b64Match
+                } else {
+                  // Try to extract HTTP URL
+                  const urlMatch = content.match(/https?:\/\/[^\s\)\]\>\"\'\,]+/)?.[0]
+                  if (urlMatch) imageUrl = urlMatch
+                }
+              }
+            } else if (Array.isArray(content)) {
+              for (const block of content) {
+                // OpenAI-style image_url block
+                if (block.type === 'image_url' && block.image_url?.url) {
+                  imageUrl = block.image_url.url
+                  break
+                }
+                // Gemini-style inline_data block (via OpenRouter)
+                if (block.type === 'image' && block.source?.type === 'base64') {
+                  imageUrl = `data:${block.source.media_type};base64,${block.source.data}`
+                  break
+                }
+                if (block.type === 'image' && block.image) {
+                  imageUrl = typeof block.image === 'string' ? block.image : block.image.url
+                  break
+                }
+                // Text block that contains base64 image
+                if (block.type === 'text' && typeof block.text === 'string') {
+                  const b64 = block.text.match(/data:image\/[^;]+;base64,[A-Za-z0-9+\/]+=*/)?.[0]
+                  if (b64) { imageUrl = b64; break }
+                  const url = block.text.match(/https?:\/\/[^\s\)\]\>\"\'\,]+/)?.[0]
+                  if (url) { imageUrl = url; break }
+                }
+              }
+            }
+
+            // Fallback: scan entire response JSON for base64 images or URLs
+            if (!imageUrl) {
+              const fullJson = JSON.stringify(imageData)
+              const b64Fallback = fullJson.match(/data:image\/[^;]+;base64,[A-Za-z0-9+\/]+=*/)?.[0]
+              if (b64Fallback) {
+                imageUrl = b64Fallback
+              } else {
+                // Look for image URLs in the full response
+                const imgUrlMatch = fullJson.match(/https?:\/\/[^\s\"\'\,\\]+\.(?:png|jpg|jpeg|webp|gif)[^\s\"\'\,\\]*/)?.[0]
+                if (imgUrlMatch) imageUrl = imgUrlMatch
+              }
+            }
+
+            if (imageUrl) {
+              console.log('[linkedin-ad-remix] Image generated successfully, URL type:', imageUrl.startsWith('data:') ? 'base64' : 'http', 'length:', imageUrl.length)
+            } else {
+              // Return debug info so we can see exactly what OpenRouter returned
+              imageDebug = {
+                status: 'no_image_extracted',
+                openrouter_status: imageResponse.status,
+                response_keys: Object.keys(imageData),
+                content_type: typeof content,
+                content_preview: typeof content === 'string' ? content.slice(0, 500) : null,
+                content_array_types: Array.isArray(content) ? content.map((b: { type?: string }) => ({ type: b.type, keys: Object.keys(b) })) : null,
+                full_response_preview: JSON.stringify(imageData).slice(0, 2000),
+              }
+            }
+          } else {
+            const errText = await imageResponse.text()
+            imageDebug = {
+              status: 'openrouter_error',
+              openrouter_status: imageResponse.status,
+              error: errText.slice(0, 500),
+            }
           }
         } else {
-          // Image generation is optional — log but don't fail
-          const errText = await imageResponse.text()
-          console.warn('[linkedin-ad-remix] Image generation failed:', errText.slice(0, 300))
+          imageDebug = { status: 'no_openrouter_key' }
         }
       } catch (imgErr) {
         console.warn('[linkedin-ad-remix] Image generation error:', imgErr)
       }
     }
 
-    const result: { variants: typeof variants; image_url?: string } = { variants }
+    const result: Record<string, unknown> = { variants }
     if (imageUrl) result.image_url = imageUrl
+    if (imageDebug) result._image_debug = imageDebug
 
     return new Response(JSON.stringify(result), {
       status: 200,

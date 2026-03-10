@@ -650,7 +650,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Legacy routes for backwards compatibility */}
                 <Route path="/settings/team-members" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
                 <Route path="/settings/organization" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
-                <Route path="/settings/branding" element={<Navigate to="/settings" replace />} />
+                <Route path="/settings/branding" element={<ProtectedRoute><AppLayout><OrganizationSettingsPage /></AppLayout></ProtectedRoute>} />
                 {/* Agent Marketplace - org admins */}
                 <Route path="/agent/marketplace" element={
                   <OrgAdminRouteGuard>

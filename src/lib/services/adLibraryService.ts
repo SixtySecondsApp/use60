@@ -378,9 +378,9 @@ class AdLibraryService {
     return data as { classified: number }
   }
 
-  async remixAd(adId: string): Promise<AdRemixResult> {
+  async remixAd(adId: string, options?: { similarity?: number }): Promise<AdRemixResult> {
     const { data, error } = await supabase.functions.invoke('linkedin-ad-remix', {
-      body: { ad_id: adId },
+      body: { ad_id: adId, similarity: options?.similarity ?? 50 },
     })
     if (error) throw new Error(error.message || 'Failed to remix ad')
     if (data?.error) throw new Error(data.error)

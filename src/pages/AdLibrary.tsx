@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import {
   Eye,
@@ -32,6 +33,8 @@ import {
   Download,
   Globe,
   FlaskConical,
+  Settings,
+  Palette,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -307,14 +310,16 @@ function AdDetailSheet({
   onClose: () => void
   onSave?: (id: string) => void
   onUnsave?: (id: string) => void
-  onRemix?: (adId: string) => Promise<AdRemixResult>
+  onRemix?: (adId: string, options?: { similarity?: number }) => Promise<AdRemixResult>
   onCaptureLanding?: (adId: string) => Promise<LandingPageData>
 }) {
+  const navigate = useNavigate()
   const [remixLoading, setRemixLoading] = useState(false)
   const [remixResults, setRemixResults] = useState<AdRemixResult | null>(null)
   const [landingLoading, setLandingLoading] = useState(false)
   const [landingData, setLandingData] = useState<LandingPageData | null>(null)
   const [prevAdId, setPrevAdId] = useState<string | null>(null)
+  const [similarity, setSimilarity] = useState(50)
 
   // Reset state when ad changes — and auto-load landing page from DB
   const adId = ad?.id ?? null
@@ -351,11 +356,10 @@ function AdDetailSheet({
                 variant="outline"
                 size="sm"
                 onClick={async () => {
-                  // Auto-save if not already saved
                   if (!ad.is_saved && onSave) onSave(ad.id)
                   setRemixLoading(true)
                   try {
-                    const result = await onRemix(ad.id)
+                    const result = await onRemix(ad.id, { similarity })
                     setRemixResults(result)
                   } finally {
                     setRemixLoading(false)
@@ -375,6 +379,41 @@ function AdDetailSheet({
         </SheetHeader>
 
         <div className="mt-6 space-y-5">
+          {/* Remix Controls */}
+          {onRemix && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Palette className="h-3.5 w-3.5 text-purple-400" />
+                  <span className="text-xs font-medium text-zinc-300">Remix Style</span>
+                </div>
+                <button
+                  onClick={() => navigate('/settings/branding')}
+                  className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-purple-400 transition-colors"
+                  title="Set up brand colors, fonts, and tone"
+                >
+                  <Settings className="h-3 w-3" />
+                  Brand Guidelines
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                  <span>Different</span>
+                  <span className="text-zinc-400 font-medium">{similarity}%</span>
+                  <span>Similar</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={similarity}
+                  onChange={(e) => setSimilarity(Number(e.target.value))}
+                  className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-zinc-800 accent-purple-500"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Creative media */}
           {getMediaUrls(ad).length > 0 && (
             <div className="space-y-2">
@@ -609,6 +648,21 @@ function AdDetailSheet({
                 <Sparkles className="h-4 w-4 text-purple-400" />
                 <span className="text-sm font-medium text-zinc-200">AI Remix Variants</span>
               </div>
+              {remixResults.image_url && (
+                <div className="mb-4">
+                  <p className="text-xs text-zinc-500 mb-2">Generated Creative</p>
+                  <div className="relative rounded-lg overflow-hidden border border-zinc-800">
+                    <img src={remixResults.image_url} alt="AI generated creative" className="w-full object-contain max-h-[300px]" />
+                    <a
+                      href={remixResults.image_url}
+                      download="remix-creative.png"
+                      className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 backdrop-blur-sm text-zinc-300 hover:text-white transition-colors"
+                    >
+                      <Download className="h-4 w-4" />
+                    </a>
+                  </div>
+                </div>
+              )}
               <div className="space-y-3">
                 {remixResults.variants.map((variant, i) => {
                   const accentColors = ['border-l-blue-500', 'border-l-emerald-500', 'border-l-amber-500']
@@ -639,21 +693,6 @@ function AdDetailSheet({
                   )
                 })}
               </div>
-              {remixResults.image_url && (
-                <div className="mt-3">
-                  <p className="text-xs text-zinc-500 mb-2">Generated Creative</p>
-                  <div className="relative rounded-lg overflow-hidden border border-zinc-800">
-                    <img src={remixResults.image_url} alt="AI generated creative" className="w-full object-contain max-h-[300px]" />
-                    <a
-                      href={remixResults.image_url}
-                      download="remix-creative.png"
-                      className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 backdrop-blur-sm text-zinc-300 hover:text-white transition-colors"
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -1770,6 +1809,20 @@ function RemixesTab({
             </div>
           </CardHeader>
           <CardContent>
+            {result.image_url && (
+              <div className="mb-4">
+                <div className="relative rounded-lg overflow-hidden border border-zinc-800">
+                  <img src={result.image_url} alt="AI generated creative" className="w-full object-contain max-h-[300px]" />
+                  <a
+                    href={result.image_url}
+                    download="remix-creative.png"
+                    className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 backdrop-blur-sm text-zinc-300 hover:text-white transition-colors"
+                  >
+                    <Download className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {result.variants.map((variant, i) => {
                 const accentColors = ['border-l-blue-500', 'border-l-emerald-500', 'border-l-amber-500']
@@ -1800,20 +1853,6 @@ function RemixesTab({
                 )
               })}
             </div>
-            {result.image_url && (
-              <div className="mt-3">
-                <div className="relative rounded-lg overflow-hidden border border-zinc-800 max-w-sm">
-                  <img src={result.image_url} alt="AI generated creative" className="w-full object-contain max-h-[200px]" />
-                  <a
-                    href={result.image_url}
-                    download="remix-creative.png"
-                    className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 backdrop-blur-sm text-zinc-300 hover:text-white transition-colors"
-                  >
-                    <Download className="h-4 w-4" />
-                  </a>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       ))}
@@ -1865,8 +1904,8 @@ export default function AdLibrary() {
   const [remixCache, setRemixCache] = useState<Record<string, { ad: AdLibraryAd; result: AdRemixResult }>>({})
 
   // Wrap remixAd to cache results at page level
-  const handleRemix = async (adId: string): Promise<AdRemixResult> => {
-    const result = await remixAd(adId)
+  const handleRemix = async (adId: string, options?: { similarity?: number }): Promise<AdRemixResult> => {
+    const result = await remixAd(adId, options)
     const ad = ads.find((a) => a.id === adId) ?? selectedAd
     if (ad) {
       setRemixCache((prev) => ({ ...prev, [adId]: { ad, result } }))

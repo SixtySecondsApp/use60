@@ -4,12 +4,9 @@ import { useLinkedInAdManager } from '@/lib/hooks/useLinkedInAdManager'
 import { supabase } from '@/lib/supabase/clientV2'
 import { useOrgStore } from '@/lib/stores/orgStore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  CheckCircle2,
   XCircle,
-  Clock,
   Users,
   Send,
   BarChart3,
@@ -41,7 +38,7 @@ const ATTRIBUTION_STEPS = [
 // ---------------------------------------------------------------------------
 
 export default function LinkedInOverviewTab() {
-  const { isConnected, loading, integration, connectLinkedIn, leadSources } = useLinkedInIntegration()
+  const { isConnected, loading, connectLinkedIn } = useLinkedInIntegration()
   const { campaigns, campaignsLoading } = useLinkedInAdManager()
   const activeOrgId = useOrgStore((s) => s.activeOrgId)
 
@@ -129,41 +126,6 @@ export default function LinkedInOverviewTab() {
 
   return (
     <div className="space-y-6">
-      {/* Connection status */}
-      <Card className="border-zinc-800/60 bg-zinc-900/60">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-zinc-400 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-green-400" />
-            Connected
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4 text-sm flex-wrap">
-            {integration?.linkedin_ad_account_name && (
-              <span className="text-zinc-200">
-                {integration.linkedin_ad_account_name}
-              </span>
-            )}
-            {integration?.scopes && integration.scopes.length > 0 && (
-              <Badge variant="outline" className="text-xs text-zinc-500">
-                {integration.scopes.length} scopes
-              </Badge>
-            )}
-            {integration?.last_sync_at && (
-              <Badge variant="outline" className="text-xs">
-                <Clock className="w-3 h-3 mr-1" />
-                Synced {new Date(integration.last_sync_at).toLocaleDateString()}
-              </Badge>
-            )}
-            {leadSources.length > 0 && (
-              <Badge variant="outline" className="text-xs text-blue-400 border-blue-500/20">
-                {leadSources.filter((s) => s.is_active).length} lead forms active
-              </Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Quick stats grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <QuickStatCard

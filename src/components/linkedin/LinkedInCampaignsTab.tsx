@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, RefreshCw, Loader2, Play, Pause, Archive, Eye, DollarSign, MousePointerClick, Users, TrendingUp, Image, Video, LayoutGrid, Type, Zap, ChevronRight } from 'lucide-react'
+import { Plus, RefreshCw, Loader2, Play, Pause, Archive, Eye, DollarSign, MousePointerClick, Users, TrendingUp, Image, Video, LayoutGrid, Type, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -31,10 +31,9 @@ function statusBadge(status: string) {
   )
 }
 
-function formatCurrency(amount: number | null | undefined, currency?: string | null, orgCurrency = 'GBP') {
+function formatCurrency(amount: number | null | undefined, orgCurrency = 'GBP') {
   if (amount == null) return '—'
-  const code = currency || orgCurrency
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: code, maximumFractionDigits: 0 }).format(amount)
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: orgCurrency, maximumFractionDigits: 0 }).format(amount)
 }
 
 function formatNumber(n: number | null | undefined) {
@@ -85,7 +84,7 @@ function LinkedInCampaignCard({
             {campaign.daily_budget_amount != null && (
               <>
                 <span className="text-gray-300 dark:text-gray-600">|</span>
-                <span>{formatCurrency(campaign.daily_budget_amount, campaign.currency_code, orgCurrency)}/day</span>
+                <span>{formatCurrency(campaign.daily_budget_amount, orgCurrency)}/day</span>
               </>
             )}
           </div>
@@ -107,7 +106,7 @@ function LinkedInCampaignCard({
           )}
           {campaign.total_spend != null && (
             <div className="text-center">
-              <div className="font-medium text-gray-900 dark:text-white">{formatCurrency(campaign.total_spend, campaign.currency_code, orgCurrency)}</div>
+              <div className="font-medium text-gray-900 dark:text-white">{formatCurrency(campaign.total_spend, orgCurrency)}</div>
               <div>Spend</div>
             </div>
           )}
@@ -208,10 +207,10 @@ function CampaignDetailSheet({
   const metrics = [
     { label: 'Impressions', value: formatNumber(campaign.total_impressions), icon: Eye },
     { label: 'Clicks', value: formatNumber(campaign.total_clicks), icon: MousePointerClick },
-    { label: 'Spend', value: formatCurrency(campaign.total_spend, campaign.currency_code, orgCurrency), icon: DollarSign },
+    { label: 'Spend', value: formatCurrency(campaign.total_spend, orgCurrency), icon: DollarSign },
     { label: 'Leads', value: formatNumber(campaign.total_leads), icon: Users },
     { label: 'CTR', value: campaign.avg_ctr != null ? `${(campaign.avg_ctr * 100).toFixed(2)}%` : '—', icon: TrendingUp },
-    { label: 'CPC', value: formatCurrency(campaign.avg_cpc, campaign.currency_code, orgCurrency), icon: DollarSign },
+    { label: 'CPC', value: formatCurrency(campaign.avg_cpc, orgCurrency), icon: DollarSign },
   ]
 
   return (
@@ -248,11 +247,11 @@ function CampaignDetailSheet({
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Daily Budget</span>
-              <span className="text-gray-900 dark:text-white">{formatCurrency(campaign.daily_budget_amount, campaign.currency_code, orgCurrency)}</span>
+              <span className="text-gray-900 dark:text-white">{formatCurrency(campaign.daily_budget_amount, orgCurrency)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Total Budget</span>
-              <span className="text-gray-900 dark:text-white">{formatCurrency(campaign.total_budget_amount, campaign.currency_code, orgCurrency)}</span>
+              <span className="text-gray-900 dark:text-white">{formatCurrency(campaign.total_budget_amount, orgCurrency)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Pacing</span>
@@ -465,7 +464,7 @@ export default function LinkedInCampaignsTab() {
 
       {/* Campaign Wizard Dialog */}
       <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create New Campaign</DialogTitle>
             <DialogDescription>Set up a LinkedIn ad campaign step by step</DialogDescription>

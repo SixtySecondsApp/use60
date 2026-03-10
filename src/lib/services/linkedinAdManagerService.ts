@@ -144,6 +144,7 @@ export interface CreateCampaignParams {
   pacing_strategy?: string
   audience_expansion_enabled?: boolean
   offsite_delivery_enabled?: boolean
+  lead_form_id?: string
 }
 
 export interface CreateGroupParams {

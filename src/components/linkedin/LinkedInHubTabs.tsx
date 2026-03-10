@@ -41,9 +41,9 @@ const tabs: Array<{
   badge?: string;
 }> = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-  { id: 'leads', label: 'Leads', icon: <Users className="w-4 h-4" /> },
   { id: 'campaigns', label: 'Campaigns', icon: <Send className="w-4 h-4" /> },
   { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
+  { id: 'leads', label: 'Leads', icon: <Users className="w-4 h-4" /> },
   { id: 'revenue', label: 'Revenue', icon: <TrendingUp className="w-4 h-4" /> },
   { id: 'ad_library', label: 'Ad Library', icon: <Eye className="w-4 h-4" /> },
   { id: 'audiences', label: 'Audiences', icon: <Crosshair className="w-4 h-4" /> },
