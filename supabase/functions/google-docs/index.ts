@@ -1,5 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+// WS-027: Legacy refreshAccessToken removed — now uses centralized tokenManager
+import { getValidToken } from '../_shared/tokenManager.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -169,43 +171,13 @@ serve(async (req) => {
   }
 });
 
-async function refreshAccessToken(refreshToken: string, supabase: any, userId: string): Promise<string> {
-  const clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
-  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
-  
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error('Failed to refresh access token');
-  }
-
-  const data = await response.json();
-  const newAccessToken = data.access_token;
-  const expiresIn = data.expires_in || 3600;
-  
-  // Update the integration with new token
-  const expiresAt = new Date(Date.now() + (expiresIn * 1000));
-  await supabase
-    .from('google_integrations')
-    .update({
-      access_token: newAccessToken,
-      expires_at: expiresAt.toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('user_id', userId);
-  return newAccessToken;
+async function refreshAccessToken(_refreshToken: string, _supabase: any, userId: string): Promise<string> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const { createClient: cc } = await import('https://esm.sh/@supabase/supabase-js@2.43.4');
+  const supa = cc(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+  const { accessToken } = await getValidToken('google', userId, supa);
+  return accessToken;
 }
 
 async function createDocument(

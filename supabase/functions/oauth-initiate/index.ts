@@ -6,9 +6,11 @@ import { handleInitiate as hubspotInitiate } from './providers/hubspot.ts'
 import { handleInitiate as fathomInitiate } from './providers/fathom.ts'
 import { handleInitiate as attioInitiate } from './providers/attio.ts'
 import { handleInitiate as bullhornInitiate } from './providers/bullhorn.ts'
+import { handleInitiate as microsoftInitiate } from './providers/microsoft.ts'
 
 const providerHandlers: Record<string, (req: Request) => Promise<Response>> = {
   google: googleInitiate,
+  microsoft: microsoftInitiate,
   hubspot: hubspotInitiate,
   fathom: fathomInitiate,
   attio: attioInitiate,

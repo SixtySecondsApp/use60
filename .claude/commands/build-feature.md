@@ -4,6 +4,8 @@ requires-profile: true
 
 # /build-feature — Generate a PRD, create prd.json, and sync to AI Dev Hub
 
+> **DEPRECATED**: Use `/60/ship` instead. It runs DISCOVER → DEFINE → PLAN → SYNC → BUILD → DELIVER in one command with auto-detect, smart teams, and heartbeat. This command still works but will be removed in a future update.
+
 I want to build: $ARGUMENTS
 
 ---
@@ -189,38 +191,11 @@ Started: <timestamp>
 ---
 ```
 
-### Step 6: Select Dev Hub Project + Create Tasks
+### Step 6: Sync to AI Dev Hub
 
-#### Step 6a: Select Dev Hub Project
+Run the `/dev-hub-sync` workflow. This creates ONE parent ticket with subtasks (not individual tickets per story), deduplicates against existing tasks, and writes human-readable descriptions.
 
-If `prd.json.aiDevHubProjectId` is `null`:
-1. Check if AI Dev Hub MCP tools are available (call `search_projects` with keyword from feature name or "use60")
-2. If MCP unavailable, log `⚠️ AI Dev Hub MCP unavailable — skipping Dev Hub sync.` and continue to Step 7
-3. Present discovered projects to user as numbered list using `AskUserQuestion`:
-   - `1. <Project Name> (id: <id>)`
-   - `2. <Project Name> (id: <id>)`
-   - `[Skip] No Dev Hub sync`
-4. Store selected project ID in `prd.json.aiDevHubProjectId` (or leave `null` if skipped)
-
-#### Step 6b: Create Tasks
-
-**Skip entirely if `aiDevHubProjectId` is `null`.**
-
-For each story in `prd.json.userStories`:
-
-1. Call AI Dev Hub MCP to create a task:
-   - Project ID: from `prd.json.aiDevHubProjectId`
-   - Title: `[<runSlug>] <storyId>: <Story Title>`
-   - Description: Story description + acceptance criteria formatted as checklist
-   - Type: `"feature"`
-   - Status: `"todo"`
-   - Priority: mapped from story priority (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
-
-2. Store the returned `taskId` into `prd.json.userStories[i].aiDevHubTaskId`
-
-3. If individual task creation fails, set `aiDevHubTaskId: null`, log warning, and continue (never block)
-
-4. Write updated `prd.json` back to disk after all tasks processed.
+See `.claude/commands/dev-hub-sync.md` for the full protocol.
 
 ### Step 7: Output summary
 

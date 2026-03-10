@@ -6,6 +6,7 @@ export interface GoogleIntegration {
   email: string;
   expires_at: string | null;
   scopes: string;
+  scope_tier: 'free' | 'paid';
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -26,9 +27,9 @@ export class GoogleIntegrationAPI {
   /**
    * Initiate Google OAuth flow
    * Calls the google-oauth-initiate Edge Function to generate an authorization URL.
-   * @param scopeTier - 'base' (default) for sensitive-only scopes, 'full' for restricted scopes (gmail.send)
+   * @param scopeTier - 'free' (default) for sensitive-only scopes, 'paid' includes restricted scopes via Nylas
    */
-  static async initiateOAuth(scopeTier: 'base' | 'full' = 'base'): Promise<GoogleOAuthResponse> {
+  static async initiateOAuth(scopeTier: 'free' | 'paid' = 'free'): Promise<GoogleOAuthResponse> {
     // Get current origin to pass to Edge Function for dynamic redirect URI
     const origin = window.location.origin;
 
@@ -384,7 +385,7 @@ interface ServiceTestResult {
 
 // Export convenience methods for easier imports
 export const googleApi = {
-  initiateOAuth: (scopeTier?: 'base' | 'full') => GoogleIntegrationAPI.initiateOAuth(scopeTier),
+  initiateOAuth: (scopeTier?: 'free' | 'paid') => GoogleIntegrationAPI.initiateOAuth(scopeTier),
   getStatus: GoogleIntegrationAPI.getIntegrationStatus,
   getServiceStatus: GoogleIntegrationAPI.getServiceStatus,
   getHealth: GoogleIntegrationAPI.getIntegrationHealth,

@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { ArrowRightLeft, Loader2 } from 'lucide-react';
 import { DEFAULT_SIXTY_ICON_URL } from '@/lib/utils/sixtyBranding';
 
-export type IntegrationStatus = 'active' | 'inactive' | 'error' | 'syncing' | 'coming_soon';
+export type IntegrationStatus = 'active' | 'inactive' | 'error' | 'syncing' | 'coming_soon' | 'limited';
 
 interface IntegrationCardProps {
   name: string;
@@ -45,6 +45,11 @@ const statusConfig: Record<IntegrationStatus, { badge: string; text: string; dot
   coming_soon: {
     badge: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20',
     text: 'Coming Soon',
+  },
+  limited: {
+    badge: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20',
+    text: 'Limited',
+    dot: true,
   },
 };
 
@@ -119,7 +124,7 @@ export function IntegrationCard({
 }: IntegrationCardProps) {
   const config = statusConfig[status];
   const displayStatus = statusText || config.text;
-  const isActive = status === 'active' || status === 'syncing';
+  const isActive = status === 'active' || status === 'syncing' || status === 'limited';
   const isComingSoon = status === 'coming_soon';
   const sixtyLogo = sixtyLogoUrl || DEFAULT_SIXTY_ICON_URL;
 
@@ -163,7 +168,8 @@ export function IntegrationCard({
               className={cn(
                 'w-1.5 h-1.5 rounded-full',
                 status === 'active' && 'bg-emerald-500 animate-pulse',
-                status === 'syncing' && 'bg-blue-500 animate-pulse'
+                status === 'syncing' && 'bg-blue-500 animate-pulse',
+                status === 'limited' && 'bg-amber-500 animate-pulse'
               )}
             />
           )}

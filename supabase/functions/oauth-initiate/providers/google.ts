@@ -1,4 +1,3 @@
-;
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../../_shared/corsHelper.ts';
 
@@ -40,11 +39,15 @@ export async function handleInitiate(req: Request): Promise<Response> {
       throw new Error('No authorization header');
     }
 
-    // Get request body to extract redirect URI
+    // Get request body to extract redirect URI and scope tier
     let requestOrigin: string | undefined;
+    let scopeTier: 'free' | 'paid' = 'free';
     try {
       const requestBody = await req.json();
       requestOrigin = requestBody.origin;
+      if (requestBody.scope_tier === 'paid') {
+        scopeTier = 'paid';
+      }
     } catch (error) {
       // If JSON parsing fails, continue without origin
     }
@@ -118,6 +121,7 @@ export async function handleInitiate(req: Request): Promise<Response> {
         code_verifier: codeVerifier,
         code_challenge: codeChallenge,
         redirect_uri: redirectUri,
+        scope_tier: scopeTier,
         expires_at: expiresAt.toISOString(),
       });
 
@@ -139,33 +143,43 @@ export async function handleInitiate(req: Request): Promise<Response> {
       throw new Error('Google OAuth not configured');
     }
 
-    // Define the scopes we need
-    const scopes = [
+    // Base scopes: sensitive + non-sensitive only (no CASA assessment required)
+    const baseScopes = [
       // Google Docs
       'https://www.googleapis.com/auth/documents',
       'https://www.googleapis.com/auth/drive.file',
-      
-      // Google Drive
-      'https://www.googleapis.com/auth/drive.readonly',
+
+      // Google Drive (metadata only — drive.readonly is restricted)
       'https://www.googleapis.com/auth/drive.metadata.readonly',
-      
-      // Gmail
-      'https://www.googleapis.com/auth/gmail.compose',
+
+      // Gmail (send + labels only — gmail.readonly and gmail.compose are restricted)
       'https://www.googleapis.com/auth/gmail.send',
-      'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/gmail.labels',
-      
+
       // Google Calendar
       'https://www.googleapis.com/auth/calendar',
       'https://www.googleapis.com/auth/calendar.events',
-      
+
       // Google Tasks
       'https://www.googleapis.com/auth/tasks',
-      
+
       // User info
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile'
     ];
+
+    // Restricted scopes (require CASA assessment if requested directly)
+    // These are handled via Nylas for paid users, but kept here for
+    // users who complete Google verification on their own GCP app
+    const restrictedScopes = [
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.compose',
+      'https://www.googleapis.com/auth/drive.readonly',
+    ];
+
+    const scopes = scopeTier === 'paid'
+      ? [...baseScopes, ...restrictedScopes]
+      : baseScopes;
 
     // Build the authorization URL
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
@@ -204,4 +218,4 @@ export async function handleInitiate(req: Request): Promise<Response> {
       }
     );
   }
-});
+}

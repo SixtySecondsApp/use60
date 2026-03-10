@@ -2,6 +2,8 @@
 requires-profile: true
 ---
 
+> **DEPRECATED**: Use `/60/discover` instead. It deploys 5 parallel research agents (Codebase Scout, Patterns Analyst, Risk Scanner, GitHub Scout, Scope Sizer), auto-detects transcripts, and composes the right team. This command still works but will be removed in a future update.
+
 I want to achieve: $ARGUMENTS
 
 ---
