@@ -36,8 +36,11 @@ NONE of the above?
 
 | Signal | Intent | Route |
 |--------|--------|-------|
+| URL + "like this", "aim for this", "this is the standard", "build like [site]" | **Reference** | `/web/reference` → then `/web/ship` |
+| "Analyze [URL]", "deconstruct [site]", "what makes [site] good" | **Reference** | `/web/reference` |
 | "Plan the website", "what should our site look like", "site architecture", "SEO plan" | **Strategy** | `/web/brief` |
 | "Choose a style", "pick colors", "font pairing", "moodboard", "design direction" | **Design** | `/web/design` |
+| "Write the copy", "headlines", "content for the page", "write the sections" | **Copy** | `/web/copy` |
 | "Build a hero", "create pricing section", "make a landing page", "code the page" | **Build** | `/web/build` |
 | "Generate a logo", "create banner", "hero image", "SVG animation", "icons", "social graphics" | **Assets** | `/web/assets` |
 | "Make it better", "fix spacing", "accessibility check", "polish", "craft pass" | **Polish** | `/web/polish` |
@@ -45,6 +48,7 @@ NONE of the above?
 | "Continue", "resume", "keep going", "next phase" | **Resume** | `/web/ship --resume` |
 | "Quick", "just build", "add a section", small UI tweak | **Fast-path** | `/web/quick` |
 | Bug fix, "fix the button", "wrong color", small CSS change | **Fast-path** | `/web/quick` |
+| "Rewrite the copy", "make it punchier", "more technical" | **Copy iterate** | `/web/copy --rewrite` |
 | "Status", "where are we", "what's done" | **Status** | Read `.web/pipeline.json` and report |
 
 ### Step 3: Complexity Check (for ambiguous cases)
@@ -104,15 +108,21 @@ Wait for user to pick, then execute.
 ### Examples
 
 ```
+Routing to /web/reference → /web/ship — "build something like spacebot.sh" needs reference analysis first
+
 Routing to /web/brief — "what should our homepage look like" needs strategy before building
 
 Routing to /web/design — moodboard request, no style guide locked yet
+
+Routing to /web/copy — "write the content for the features section" — content generation
+
+Routing to /web/copy --rewrite hero — "make the hero punchier" — copy iteration
 
 Routing to /web/build — pricing section with style guide already in .web/
 
 Routing to /web/assets — logo generation request, routing to asset pipeline
 
-Routing to /web/ship --resume — active pipeline at BUILD phase (brief + design done)
+Routing to /web/ship --resume — active pipeline at COPY phase (brief + design done, writing content)
 
 Routing to /web/quick — "add a FAQ section" is a single component
 ```

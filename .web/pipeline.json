@@ -1,49 +1,50 @@
 {
-  "version": 1,
-  "project": "60 Landing Page V6",
-  "description": "Production landing page for use60.com — AI sales command center",
-  "phase": "complete",
-  "startedAt": "2026-03-10T12:00:00Z",
-  "lastUpdatedAt": "2026-03-10T12:30:00Z",
+  "version": 2,
+  "project": "60 Landing Page V7",
+  "description": "Rebuild use60.com landing page to spacebot.sh quality — deeper content, architecture explanation, product showcase, richer feature depth",
+  "phase": "copy",
+  "startedAt": "2026-03-10T21:15:00Z",
+  "lastUpdatedAt": "2026-03-10T21:15:00Z",
 
   "input": {
     "type": "description",
-    "source": "build me a landing page for 60",
+    "source": "Build use60 website landing page like spacebot",
     "productType": "AI SaaS — sales command center",
-    "industry": "sales technology"
+    "industry": "sales technology",
+    "referenceUrl": "https://spacebot.sh"
   },
 
   "phaseGates": {
-    "brief":  { "status": "complete", "completedAt": "2026-03-10T12:00:00Z" },
-    "design": { "status": "complete", "completedAt": "2026-03-10T12:05:00Z" },
-    "build":  { "status": "complete", "completedAt": "2026-03-10T12:30:00Z" },
-    "assets": { "status": "complete", "completedAt": "2026-03-10T12:45:00Z" },
-    "polish": { "status": "complete", "completedAt": "2026-03-10T13:00:00Z" }
+    "reference": { "status": "complete", "completedAt": "2026-03-10T21:15:00Z" },
+    "brief":     { "status": "complete", "completedAt": "2026-03-10T21:30:00Z" },
+    "design":    { "status": "complete", "completedAt": "2026-03-10T21:45:00Z" },
+    "copy":      { "status": "complete", "completedAt": "2026-03-10T22:00:00Z" },
+    "build":     { "status": "pending", "completedAt": null },
+    "assets":    { "status": "pending", "completedAt": null },
+    "polish":    { "status": "pending", "completedAt": null }
   },
 
   "artifacts": {
-    "brief": ".web/brief.md",
+    "reference": ".web/reference.md",
+    "brief": null,
     "styleGuide": ".web/style-guide.json",
-    "components": [
-      "packages/landing/src/components/landing-v6/NavbarV6.tsx",
-      "packages/landing/src/components/landing-v6/HeroV6.tsx",
-      "packages/landing/src/components/landing-v6/ProofBarV6.tsx",
-      "packages/landing/src/components/landing-v6/ProblemV6.tsx",
-      "packages/landing/src/components/landing-v6/SolutionV6.tsx",
-      "packages/landing/src/components/landing-v6/DemoGateV6.tsx",
-      "packages/landing/src/components/landing-v6/HowItWorksV6.tsx",
-      "packages/landing/src/components/landing-v6/FeaturesV6.tsx",
-      "packages/landing/src/components/landing-v6/TestimonialsV6.tsx",
-      "packages/landing/src/components/landing-v6/FinalCTAV6.tsx",
-      "packages/landing/src/components/landing-v6/FooterV6.tsx"
-    ],
+    "copy": null,
+    "components": [],
     "assets": [],
     "polishReport": null
   },
 
   "styleGuide": {
     "locked": true,
-    "direction": "B",
-    "name": "Electric Depth"
+    "direction": "C",
+    "name": "Ink & Light"
+  },
+
+  "contentProfile": {
+    "density": "heavy",
+    "technicalDepth": "mid-deep",
+    "codeExamples": 2,
+    "dataTables": 3,
+    "sectionCount": 14
   }
 }

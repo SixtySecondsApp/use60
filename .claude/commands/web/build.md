@@ -18,11 +18,14 @@ description: Generate production-ready React/Tailwind page code from brief + sty
 
 Read all available context in this order:
 
-1. **`.web/style-guide.json`** — locked palette, typography, animation tier, anti-convergence rules
-2. **`.web/brief.md`** — section stack, conversion strategy, build notes
-3. **`.web/assets/`** — any generated images, SVGs, or logos to wire in
-4. **User input** — specific section request, overrides, or iteration instructions
+1. **`.web/copy.md`** — approved content (headlines, body, code examples, tables, CTAs) — **this is the source of truth for all text on the page**
+2. **`.web/style-guide.json`** — locked palette, typography, animation tier, anti-convergence rules
+3. **`.web/brief.md`** — section stack, conversion strategy, build notes
+4. **`.web/reference.md`** — reference site patterns (section types, information density, visual approach)
+5. **`.web/assets/`** — any generated images, SVGs, or logos to wire in
+6. **User input** — specific section request, overrides, or iteration instructions
 
+If no copy exists: ask the user to run `/web/copy` first, or use `/web/quick` for one-off components. **Never generate code with placeholder copy when `.web/copy.md` should exist.**
 If no style guide exists: ask the user to run `/web/design` first, or infer from context and state assumptions.
 If no brief exists: infer section structure from user input or use standard landing page flow.
 
@@ -81,15 +84,31 @@ Follow `/frontend-design` Phase 3 rules exactly:
 - **Tier 2**: Framer Motion `whileInView`, staggered reveals (standard landing)
 - **Tier 3**: Scroll-linked parallax, aurora, spotlight, cinematic sequences (hero)
 
-**Section assembly** (from brief section stack):
-- Hero — 40% of effort. The most important section.
-- Social proof — logo marquee or stat bar
-- Problem/solution — pain points
-- Feature showcase — bento grid or spotlight cards
-- How it works — 3-step process
-- Testimonials — real quotes
-- Pricing — if applicable
-- CTA — final conversion
+**Section assembly** (from brief section stack + copy.md content):
+
+Use the section type from the brief/reference to pick the right component pattern. The old vocabulary (hero + 3 features + pricing + CTA) produces generic pages. Rich product pages need these:
+
+| Section Type | Component Pattern | When To Use |
+|-------------|-------------------|-------------|
+| `hero` | Full-width, headline + sub + CTA + visual/animation | Always first. 40% of effort. |
+| `architecture` | Diagram with labeled components + descriptions | System/product with multiple parts |
+| `deep-dive` | Headline + body + code block + data points | Technical feature explanation |
+| `integration-grid` | Icon grid with categories + names + descriptions | Supported tools/platforms |
+| `feature-matrix` | Bento grid or spotlight cards with icons + copy | Feature overview |
+| `code-example` | Syntax-highlighted code block + terminal styling | Usage examples, config snippets |
+| `comparison-table` | Responsive table with feature rows + tier columns | Pricing, plan comparison |
+| `pricing` | Tier cards with features, pricing, CTAs | Conversion section |
+| `process-flow` | Numbered steps with icons + descriptions | How it works |
+| `tech-stack` | Logo/icon grid with names + rationale | Build credibility |
+| `deployment` | Code block (docker/CLI) + deployment options | Self-host, setup instructions |
+| `taxonomy` | Categorized list with icons + descriptions | Feature categories, memory types |
+| `narrative` | Large text blocks with visual breaks | Philosophy, origin story |
+| `social-proof` | Logo marquee, testimonial cards, stat bars | Trust building |
+| `data-table` | Structured rows with specs/limits/values | Technical specifications |
+| `faq` | Accordion with smooth expand | Common questions |
+| `cta` | Headline + description + primary/secondary buttons | Final conversion |
+
+**Content source**: Pull ALL text from `.web/copy.md`. Code examples, table data, feature descriptions — everything comes from the approved copy. Never invent copy during build.
 
 Wire in assets from `.web/assets/` where they exist (images, SVGs, logos).
 
