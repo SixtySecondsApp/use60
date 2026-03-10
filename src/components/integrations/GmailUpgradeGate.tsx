@@ -1,4 +1,4 @@
-import { Lock, Mail, ArrowRight } from 'lucide-react';
+import { Lock, Calendar, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useIntegrationStore } from '@/lib/stores/integrationStore';
@@ -13,33 +13,33 @@ interface GmailUpgradeGateProps {
 }
 
 /**
- * Wraps Gmail-read-dependent UI with an upgrade prompt.
- * If the user has canReadGmail (paid scope_tier or Nylas connected),
- * children render normally. Otherwise shows an upgrade CTA.
+ * Wraps calendar-dependent UI with a Nylas connection prompt.
+ * If the user has nylasCalendarConnected, children render normally.
+ * Otherwise shows a connect CTA.
  */
 export function GmailUpgradeGate({
   children,
-  message = 'Upgrade to access your Gmail inbox, read emails, and create drafts.',
+  message = 'Connect your Google Calendar via Nylas to view and sync meetings.',
   showBlurredPreview = false,
 }: GmailUpgradeGateProps) {
   const { google, connectNylas } = useIntegrationStore();
 
-  // If user can read Gmail (paid tier or Nylas connected), show children
-  if (google.canReadGmail) {
+  // If user has Nylas calendar connected, show children
+  if (google.nylasCalendarConnected) {
     return <>{children}</>;
   }
 
-  // If Google isn't connected at all, don't show the gate — they need to connect first
+  // If Google isn't connected at all, don't show the gate
   if (!google.isConnected) {
     return <>{children}</>;
   }
 
-  const handleUpgrade = async () => {
+  const handleConnect = async () => {
     try {
       const authUrl = await connectNylas();
       window.location.href = authUrl;
     } catch (error: any) {
-      toast.error(error.message || 'Failed to start Gmail upgrade');
+      toast.error(error.message || 'Failed to start calendar connection');
     }
   };
 
@@ -56,19 +56,19 @@ export function GmailUpgradeGate({
             <Lock className="h-5 w-5 text-muted-foreground" />
           </div>
           <div className="space-y-1">
-            <p className="text-sm font-medium">Gmail Read Access</p>
+            <p className="text-sm font-medium">Google Calendar Access</p>
             <p className="text-xs text-muted-foreground max-w-[280px]">
               {message}
             </p>
           </div>
           <Button
             size="sm"
-            onClick={handleUpgrade}
+            onClick={handleConnect}
             disabled={google.isLoading}
             className="gap-2"
           >
-            <Mail className="h-4 w-4" />
-            Connect Gmail Fully
+            <Calendar className="h-4 w-4" />
+            Connect Calendar
             <ArrowRight className="h-3 w-3" />
           </Button>
         </CardContent>

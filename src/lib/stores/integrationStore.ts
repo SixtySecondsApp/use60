@@ -11,9 +11,7 @@ interface GoogleState {
   status: 'connected' | 'disconnected' | 'error' | 'refreshing';
   isLoading: boolean;
   error: string | null;
-  canReadGmail: boolean;
-  nylasConnected: boolean;
-  scopeTier: 'free' | 'paid';
+  nylasCalendarConnected: boolean;
 }
 
 interface MicrosoftServiceStatus {
@@ -71,9 +69,7 @@ const initialGoogleState: GoogleState = {
   status: 'disconnected',
   isLoading: false,
   error: null,
-  canReadGmail: false,
-  nylasConnected: false,
-  scopeTier: 'free' as const,
+  nylasCalendarConnected: false,
 };
 
 const initialMicrosoftState: MicrosoftState = {
@@ -141,21 +137,18 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
       const isConnected = !!integration && integration.is_active;
       const computedStatus: 'connected' | 'disconnected' | 'error' = isConnected ? 'connected' : 'error';
 
-      // Check Nylas integration status
-      const scopeTier = (integration as GoogleIntegration & { scope_tier?: string })?.scope_tier === 'paid' ? 'paid' : 'free';
-      let nylasConnected = false;
+      // Check Nylas calendar integration status
+      let nylasCalendarConnected = false;
       try {
         const { data: nylasInt } = await supabase
           .from('nylas_integrations')
           .select('id')
           .eq('is_active', true)
           .maybeSingle();
-        nylasConnected = !!nylasInt;
+        nylasCalendarConnected = !!nylasInt;
       } catch (e) {
         console.warn('[integrationStore] Failed to check Nylas status:', e);
       }
-
-      const canReadGmail = scopeTier === 'paid' || nylasConnected;
 
       set(state => ({
         google: {
@@ -168,9 +161,7 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
           status: computedStatus,
           isLoading: false,
           error: null,
-          canReadGmail,
-          nylasConnected,
-          scopeTier,
+          nylasCalendarConnected,
         }
       }));
     } catch (error: any) {
@@ -227,16 +218,31 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
         body: { origin }
       });
 
-      if (error) throw new Error(error.message || 'Failed to initiate Nylas OAuth');
+      if (error) {
+        // Extract actual error from edge function response body (Supabase hides it in non-2xx)
+        let msg = error.message;
+        try {
+          const ctx = (error as { context?: { json?: () => Promise<{ error?: string }> } }).context;
+          if (ctx?.json) {
+            const body = await ctx.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch {
+          // ignore parse errors
+        }
+        console.error('[connectNylas] nylas-oauth-initiate failed:', msg, error);
+        throw new Error(msg);
+      }
       if (!data?.authUrl) throw new Error('No authorization URL received from Nylas');
 
       return data.authUrl;
     } catch (error: any) {
+      const errMsg = error.message || 'Failed to initiate Nylas connection';
       set(state => ({
         google: {
           ...state.google,
           isLoading: false,
-          error: error.message || 'Failed to initiate Nylas connection'
+          error: errMsg
         }
       }));
       throw error;

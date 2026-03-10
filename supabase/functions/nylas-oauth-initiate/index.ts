@@ -7,8 +7,8 @@ import { getNylasClientId } from '../_shared/nylasClient.ts';
  * Nylas OAuth Initiate
  *
  * Starts the Nylas Hosted OAuth flow for Google provider.
- * Used by paid users to gain restricted Gmail scopes (gmail.readonly, gmail.compose)
- * through Nylas's pre-verified GCP app (no CASA assessment needed).
+ * Used to access Google Calendar through Nylas's pre-verified GCP app
+ * (no CASA assessment needed).
  */
 
 serve(async (req) => {
@@ -27,8 +27,7 @@ serve(async (req) => {
       throw new Error('No authorization header');
     }
 
-    const body = await req.json().catch(() => ({}));
-    const requestOrigin = body.origin || '';
+    await req.json().catch(() => ({}));
 
     // Authenticate user
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
@@ -80,8 +79,8 @@ serve(async (req) => {
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('state', state);
     authUrl.searchParams.set('provider', 'google');
-    // Request email read scopes through Nylas
-    authUrl.searchParams.set('scope', 'email.read_only,email.drafts');
+    // Request calendar scopes through Nylas
+    authUrl.searchParams.set('scope', 'calendar');
 
     console.log('[nylas-oauth-initiate] Auth URL generated for user:', user.id);
 

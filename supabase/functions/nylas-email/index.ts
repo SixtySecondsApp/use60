@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { authenticateRequest } from '../_shared/edgeAuth.ts';
-import { getNylasIntegration, nylasRequest } from '../_shared/nylasClient.ts';
+import { getNylasIntegration, nylasRequest, mapNylasMessageToGmail } from '../_shared/nylasClient.ts';
 
 /**
  * Nylas Email Edge Function
@@ -125,32 +125,4 @@ serve(async (req) => {
   }
 });
 
-/**
- * Maps a Nylas v3 message object to the google-gmail response shape
- * so the frontend doesn't need to know which provider served the data.
- */
-function mapNylasMessageToGmail(msg: Record<string, unknown>): Record<string, unknown> {
-  if (!msg) return {};
-
-  const from = (msg.from as Array<{ email: string; name?: string }>) || [];
-  const to = (msg.to as Array<{ email: string; name?: string }>) || [];
-
-  return {
-    id: msg.id,
-    threadId: msg.thread_id,
-    subject: msg.subject || '',
-    snippet: msg.snippet || '',
-    from: from[0]?.email || '',
-    fromName: from[0]?.name || '',
-    to: to.map((r) => r.email).join(', '),
-    date: msg.date ? new Date((msg.date as number) * 1000).toISOString() : null,
-    body: msg.body || '',
-    read: msg.read !== false,
-    starred: msg.starred === true,
-    hasAttachments: msg.has_attachments === true,
-    labels: msg.folders
-      ? [(msg.folders as Record<string, string>)?.display_name].filter(Boolean)
-      : [],
-    provider: 'nylas',
-  };
-}
+// mapNylasMessageToGmail is imported from _shared/nylasClient.ts

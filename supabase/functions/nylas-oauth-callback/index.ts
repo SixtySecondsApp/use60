@@ -4,9 +4,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 /**
  * Nylas OAuth Callback
  *
- * Handles redirect from Nylas after user authorizes Gmail read access.
+ * Handles redirect from Nylas after user authorizes Google Calendar access.
  * Exchanges code for grant_id and stores in nylas_integrations.
- * Updates google_integrations.scope_tier to 'paid'.
  *
  * This endpoint must have verify_jwt = false (redirect from Nylas, no Supabase JWT).
  */

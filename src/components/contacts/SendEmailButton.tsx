@@ -4,9 +4,7 @@ import {
   Mail,
   Loader2,
   AlertCircle,
-  ExternalLink,
-  Lock,
-  ArrowRight
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,7 +41,7 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
   showLabel = true,
   onEmailSent
 }) => {
-  const { google, checkGoogleConnection, connectNylas } = useIntegrationStore();
+  const { google, checkGoogleConnection } = useIntegrationStore();
   const [showComposer, setShowComposer] = useState(false);
 
   useEffect(() => {
@@ -55,17 +53,6 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
   const handleEmailClick = async () => {
     if (!google.isConnected) {
       toast.error('Connect Google account to send emails');
-      return;
-    }
-
-    // If connected but can't read Gmail (free tier), show upgrade prompt
-    if (!google.canReadGmail) {
-      try {
-        const authUrl = await connectNylas();
-        window.location.href = authUrl;
-      } catch (error: any) {
-        toast.error(error.message || 'Failed to start Gmail upgrade');
-      }
       return;
     }
 
@@ -98,15 +85,6 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
       );
     }
 
-    if (!google.canReadGmail) {
-      return (
-        <>
-          <Lock className="h-4 w-4" />
-          {showLabel && size !== 'icon' && <span>Upgrade Gmail</span>}
-        </>
-      );
-    }
-
     return (
       <>
         <Mail className="h-4 w-4" />
@@ -122,10 +100,6 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
 
     if (!google.isConnected) {
       return 'Connect Google account to send emails';
-    }
-
-    if (!google.canReadGmail) {
-      return 'Upgrade to full Gmail access for reading and drafting emails';
     }
 
     return `Send email to ${contactEmail}${google.email ? ` from ${google.email}` : ''}`;
@@ -156,7 +130,7 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
                 {getButtonContent()}
               </div>
 
-              {google.isConnected && google.canReadGmail && (
+              {google.isConnected && (
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
@@ -181,14 +155,6 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
                   </Badge>
                 </div>
               )}
-              {google.isConnected && !google.canReadGmail && (
-                <div className="mt-2">
-                  <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/30">
-                    <Lock className="h-3 w-3 mr-1" />
-                    Limited access
-                  </Badge>
-                </div>
-              )}
             </div>
           </TooltipContent>
         </Tooltip>
@@ -209,10 +175,8 @@ const SendEmailButton: React.FC<SendEmailButtonProps> = ({
             animate={{ opacity: 1 }}
             className="absolute -bottom-1 -right-1"
           >
-            {google.isConnected && google.canReadGmail ? (
+            {google.isConnected ? (
               <div className="w-2 h-2 bg-green-500 rounded-full" />
-            ) : google.isConnected ? (
-              <div className="w-2 h-2 bg-amber-500 rounded-full" />
             ) : (
               <div className="w-2 h-2 bg-red-500 rounded-full" />
             )}

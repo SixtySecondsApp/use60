@@ -740,9 +740,8 @@ export default function Integrations() {
     connect: connectGoogle,
   } = useGoogleIntegration();
 
-  // Scope tier awareness for Google
-  const googleScopeTier = useIntegrationStore(state => state.google.scopeTier);
-  const googleCanReadGmail = useIntegrationStore(state => state.google.canReadGmail);
+  // Nylas calendar connection status
+  const nylasCalendarConnected = useIntegrationStore(state => state.google.nylasCalendarConnected);
 
   // Microsoft 365
   const {
@@ -852,8 +851,8 @@ export default function Integrations() {
       checkMicrosoftConnection();
       window.history.replaceState({}, '', '/integrations');
     } else if (searchParams.get('nylas_status') === 'connected') {
-      toast.success('Gmail fully connected!', {
-        description: 'You now have full Gmail read, draft, and inbox access.',
+      toast.success('Calendar connected!', {
+        description: 'Nylas Calendar is now synced with your Google account.',
       });
       checkGoogleConnection();
       window.history.replaceState({}, '', '/integrations');
@@ -879,7 +878,7 @@ export default function Integrations() {
       case 'google-workspace':
         if (googleStatus === 'error') return 'error';
         if (googleStatus === 'refreshing') return 'syncing';
-        if (googleConnected && googleScopeTier === 'free' && !googleCanReadGmail) return 'limited';
+        if (googleConnected && !nylasCalendarConnected) return 'limited';
         return googleConnected ? 'active' : 'inactive';
       case 'microsoft-365':
         if (microsoftStatus === 'error') return 'error';
@@ -1147,7 +1146,7 @@ export default function Integrations() {
             {builtIntegrations
               .filter((integration) => (integration.id === 'hubspot' ? hubspotEnabled : true))
               .map((integration) => {
-                const isGoogleLimited = integration.id === 'google-workspace' && googleConnected && googleScopeTier === 'free' && !googleCanReadGmail;
+                const isGoogleLimited = integration.id === 'google-workspace' && googleConnected && !nylasCalendarConnected;
                 return (
                   <IntegrationCardWithLogo
                     key={integration.id}
