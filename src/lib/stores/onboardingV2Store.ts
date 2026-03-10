@@ -2205,10 +2205,19 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       const freshState = get();
       const enrichDomain = freshState.resolvedResearchDomain || freshState.domain;
 
+      // Always transition to enrichment_loading (the step handles domain mismatch picker)
       set({
         organizationId: org.id,
         ...(enrichDomain ? { currentStep: 'enrichment_loading', enrichmentSource: 'website' } : { currentStep: 'skills' }),
       });
+
+      // If there's an unresolved domain mismatch, don't start enrichment yet —
+      // EnrichmentLoadingStep will show the domain picker first, then start enrichment
+      if (freshState.hasDomainMismatch && !freshState.resolvedResearchDomain) {
+        console.log('[onboardingV2Store] Domain mismatch unresolved — deferring enrichment to picker');
+        return;
+      }
+
 
       if (enrichDomain) {
         const enrichmentResult = await get().startEnrichment(org.id, enrichDomain, false);
