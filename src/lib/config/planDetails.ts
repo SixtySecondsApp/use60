@@ -8,9 +8,11 @@ export interface PlanFeatureItem {
   highlight?: boolean;
 }
 
+export type PlanSlugConfig = 'free' | 'basic' | 'pro';
+
 export interface PlanDetail {
   name: string;
-  slug: 'basic' | 'pro';
+  slug: PlanSlugConfig;
   monthlyPrice: number; // in pounds, not pence
   yearlyPrice: number;
   currency: string;
@@ -20,7 +22,27 @@ export interface PlanDetail {
   features: PlanFeatureItem[];
 }
 
-export const PLAN_DETAILS: Record<'basic' | 'pro', PlanDetail> = {
+export const PLAN_DETAILS: Record<PlanSlugConfig, PlanDetail> = {
+  free: {
+    name: 'Free',
+    slug: 'free',
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    currency: '£',
+    tagline: 'Try 60 free for 14 days',
+    ctaText: 'Get Started Free',
+    features: [
+      { name: 'Monthly Credits', value: 'Complete set up for 100 free credits!', included: true },
+      { name: 'AI Intelligence Tier', value: 'Up to Low', included: true },
+      { name: 'Credit Rollover', value: 'None', included: false },
+      { name: 'Call Recordings', value: '3 per month', included: true },
+      { name: 'Call Recording Storage', value: '1 month', included: true },
+      { name: 'Call Insights', value: '1 per month', included: true },
+      { name: 'Dashboard & Analytics', value: 'Basic', included: true },
+      { name: 'Notifications', value: 'Email only', included: true },
+      { name: 'API & Webhooks', value: 'Not available', included: false },
+    ],
+  },
   basic: {
     name: 'Basic',
     slug: 'basic',
@@ -28,17 +50,16 @@ export const PLAN_DETAILS: Record<'basic' | 'pro', PlanDetail> = {
     yearlyPrice: 290,
     currency: '£',
     tagline: 'For individuals and small teams getting started',
-    ctaText: 'Get Started',
+    ctaText: 'Upgrade to Basic',
     features: [
-      { name: 'AI Intelligence Tier', value: 'Medium (default)', included: true },
-      { name: 'Meeting Processing', value: 'Unlimited (Low free, Med/High use credits)', included: true },
-      { name: 'Bundled Credits', value: '50 credits/month (refresh monthly)', included: true },
-      { name: 'CRM Integration', value: 'HubSpot read/write', included: true },
-      { name: 'AI Copilot', value: 'Available (uses credits)', included: true },
-      { name: 'Calendar Integration', value: 'Full read/write', included: true },
-      { name: 'Call Recording & Storage', value: 'Unlimited', included: true },
-      { name: 'Slack Notifications', value: 'Included', included: true },
-      { name: 'Dashboard & Analytics', value: 'Basic analytics', included: true },
+      { name: 'Monthly Credits', value: '30 free credits/month', included: true },
+      { name: 'AI Intelligence Tier', value: 'Up to Medium', included: true },
+      { name: 'Credit Rollover', value: '1 month', included: true },
+      { name: 'Call Recordings', value: '20 per month', included: true },
+      { name: 'Call Recording Storage', value: '6 months', included: true },
+      { name: 'Call Insights', value: 'Unlimited', included: true },
+      { name: 'Dashboard & Analytics', value: 'Advanced + coaching', included: true, highlight: true },
+      { name: 'Notifications', value: 'Email and Slack', included: true },
       { name: 'API & Webhooks', value: 'Not available', included: false },
     ],
   },
@@ -52,15 +73,14 @@ export const PLAN_DETAILS: Record<'basic' | 'pro', PlanDetail> = {
     badge: 'Most Popular',
     ctaText: 'Upgrade to Pro',
     features: [
-      { name: 'AI Intelligence Tier', value: 'Medium (default)', included: true },
-      { name: 'Meeting Processing', value: 'Unlimited (Low free, Med/High use credits)', included: true },
-      { name: 'Bundled Credits', value: '250 credits/month (refresh monthly)', included: true, highlight: true },
-      { name: 'CRM Integration', value: 'HubSpot read/write', included: true },
-      { name: 'AI Copilot', value: 'Uses bundled credits first', included: true },
-      { name: 'Calendar Integration', value: 'Full read/write', included: true },
-      { name: 'Call Recording & Storage', value: 'Unlimited', included: true },
-      { name: 'Slack Notifications', value: 'Included', included: true },
-      { name: 'Dashboard & Analytics', value: 'Advanced analytics & coaching', included: true, highlight: true },
+      { name: 'Monthly Credits', value: '120 free credits/month', included: true, highlight: true },
+      { name: 'AI Intelligence Tier', value: 'Up to High', included: true, highlight: true },
+      { name: 'Credit Rollover', value: '3 months', included: true, highlight: true },
+      { name: 'Call Recordings', value: '200 per month', included: true },
+      { name: 'Call Recording Storage', value: 'Unlimited', included: true, highlight: true },
+      { name: 'Call Insights', value: 'Unlimited', included: true },
+      { name: 'Dashboard & Analytics', value: 'Advanced + coaching', included: true },
+      { name: 'Notifications', value: 'Email and Slack', included: true },
       { name: 'API & Webhooks', value: 'Full access', included: true, highlight: true },
     ],
   },
@@ -74,7 +94,8 @@ export const CREDIT_PACK_DISPLAY = [
 ] as const;
 
 // Annual savings calculation
-export const ANNUAL_SAVINGS = {
+export const ANNUAL_SAVINGS: Record<PlanSlugConfig, { monthly: number; annual: number; saved: number }> = {
+  free: { monthly: 0, annual: 0, saved: 0 },
   basic: { monthly: 29 * 12, annual: 290, saved: 29 * 12 - 290 }, // £58
   pro: { monthly: 99 * 12, annual: 990, saved: 99 * 12 - 990 },   // £198
-} as const;
+};

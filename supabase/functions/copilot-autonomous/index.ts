@@ -33,7 +33,7 @@ import {
   rateLimitMiddleware,
   RATE_LIMIT_CONFIGS,
 } from '../_shared/rateLimiter.ts';
-import { logAICostEvent, checkAgentBudget, checkCreditBalance } from '../_shared/costTracking.ts';
+import { logAICostEvent, checkAgentBudget, checkCreditBalance, extractClientIp } from '../_shared/costTracking.ts';
 import { executeAction } from '../_shared/copilot_adapters/executeAction.ts';
 import type { ExecuteActionName } from '../_shared/copilot_adapters/types.ts';
 import { resolveEntity } from '../_shared/resolveEntityAdapter.ts';
@@ -2432,6 +2432,7 @@ function detectHITLSignal(message: string): ApprovalSignal | null {
 
 serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
+  const clientIp = extractClientIp(req);
 
   // Handle CORS preflight
   const preflightResponse = handleCorsPreflightRequest(req);
@@ -2910,7 +2911,8 @@ serve(async (req: Request) => {
                 'copilot_autonomous',
                 { request_type: 'copilot_autonomous' },
                 undefined,
-                'copilot-autonomous'
+                'copilot-autonomous',
+                clientIp,
               );
             }
 

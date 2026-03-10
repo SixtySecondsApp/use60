@@ -296,14 +296,21 @@ export function ParticleFlowCanvas({
       isActive: u.is_active,
     }));
 
-    // Endpoint nodes on the right — group by provider, show top models
+    // Endpoint nodes on the right — show top models by activity
+    // Also include endpoints referenced by recent events so particles always have a target
+    const recentModelIds = new Set(recentEvents.map(e => e.model));
+    const hasRecentEvent = (modelId: string) =>
+      recentModelIds.has(modelId) || Array.from(recentModelIds).some(m => modelId.startsWith(m));
     const topEndpoints = llmEndpoints
-      .filter(e => e.active_request_count > 0)
+      .filter(e => e.active_request_count > 0 || hasRecentEvent(e.model_id))
       .sort((a, b) => b.active_request_count - a.active_request_count)
       .slice(0, 15);
 
     // If no active endpoints, show all available (up to 8)
     const endpoints = topEndpoints.length > 0 ? topEndpoints : llmEndpoints.slice(0, 8);
+
+    // Stable sort by provider+model so vertical positions don't shuffle when counts change
+    endpoints.sort((a, b) => `${a.provider}/${a.model_id}`.localeCompare(`${b.provider}/${b.model_id}`));
     const epSpacing = endpoints.length > 1 ? usableHeight / (endpoints.length - 1) : 0;
     endpointNodesRef.current = endpoints.map((e, i) => ({
       x: rightZone,
@@ -315,9 +322,11 @@ export function ParticleFlowCanvas({
       lastRequestAt: '',
       radius: Math.min(8, Math.max(4, Math.log2(e.active_request_count + 1) * 2.5)),
     }));
-  }, [activeUsers, llmEndpoints, width, height, leftZone, rightZone, topPad, bottomPad]);
+  }, [activeUsers, llmEndpoints, recentEvents, width, height, leftZone, rightZone, topPad, bottomPad]);
 
   // Map model_id → endpoint node for quick lookup
+  // Also maps short model names (e.g. "claude-haiku-4-5") to endpoint IDs
+  // since events may log truncated model names vs full IDs in ai_models
   const endpointByModel = useMemo(() => {
     const map = new Map<string, string>(); // model_id → endpoint.id
     for (const ep of llmEndpoints) {
@@ -326,8 +335,25 @@ export function ParticleFlowCanvas({
     return map;
   }, [llmEndpoints]);
 
+  // Resolve an event's model string to an endpoint ID, handling prefix mismatches
+  const resolveEndpoint = useCallback((eventModel: string): string | undefined => {
+    // Exact match
+    const exact = endpointByModel.get(eventModel);
+    if (exact) return exact;
+    // Prefix match: event model is a prefix of a canonical model_id
+    for (const [modelId, epId] of Array.from(endpointByModel.entries())) {
+      if (modelId.startsWith(eventModel)) return epId;
+    }
+    return undefined;
+  }, [endpointByModel]);
+
   // Spawn bursts from real events only — detect genuinely new events
   useEffect(() => {
+    // Recompute node positions first so refs are fresh for this render cycle.
+    // Without this, burst paths use stale positions from the previous render
+    // because the computeNodes effect runs *after* this one in React's order.
+    computeNodes();
+
     if (userNodesRef.current.length === 0 || endpointNodesRef.current.length === 0) return;
 
     // On first load, seed the seen set without spawning bursts
@@ -350,17 +376,16 @@ export function ParticleFlowCanvas({
       const userNode = userNodesRef.current.find(n => n.id === event.user_id);
       if (!userNode) continue;
 
-      // Find matching endpoint node via model_id
-      const epId = endpointByModel.get(event.model);
+      // Find matching endpoint node via model_id (handles prefix mismatches)
+      const epId = resolveEndpoint(event.model);
       const endpointNode = epId
         ? endpointNodesRef.current.find(n => n.id === epId)
         : null;
 
-      // Fall back to first endpoint if model not in visible nodes
-      const targetNode = endpointNode || endpointNodesRef.current[0];
-      if (!targetNode) continue;
+      // Skip burst if endpoint isn't in visible nodes — never send to wrong endpoint
+      if (!endpointNode) continue;
 
-      const splinePath = buildSplinePath(userNode.x, userNode.y, checkpointX, cpTop, cpBottom, targetNode.x, targetNode.y);
+      const splinePath = buildSplinePath(userNode.x, userNode.y, checkpointX, cpTop, cpBottom, endpointNode.x, endpointNode.y);
       if (splinePath.totalLength === 0) continue;
 
       burstsRef.current.push({
@@ -368,11 +393,11 @@ export function ParticleFlowCanvas({
         elementDistances: MORSE_PATTERN.map(p => p.offset),
         path: splinePath,
         userId: userNode.id,
-        endpointId: targetNode.id,
+        endpointId: endpointNode.id,
         userX: userNode.x,
         userY: userNode.y,
-        endpointX: targetNode.x,
-        endpointY: targetNode.y,
+        endpointX: endpointNode.x,
+        endpointY: endpointNode.y,
         isFlagged: event.is_flagged || false,
         opacity: 0.7 + Math.random() * 0.3,
         size: 2 + Math.random() * 1.5,
@@ -384,7 +409,7 @@ export function ParticleFlowCanvas({
       const arr = Array.from(seenEventIdsRef.current);
       seenEventIdsRef.current = new Set(arr.slice(arr.length - 300));
     }
-  }, [recentEvents, endpointByModel]);
+  }, [recentEvents, endpointByModel, computeNodes]);
 
   // Main render loop
   const render = useCallback(() => {
@@ -691,7 +716,7 @@ export function ParticleFlowCanvas({
       onClick={handleClick}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => { mouseRef.current = null; }}
-      style={{ cursor: 'crosshair' }}
+      style={{ cursor: 'crosshair', width: '100%', height: '100%' }}
     />
   );
 }

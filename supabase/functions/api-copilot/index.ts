@@ -23,7 +23,7 @@ import {
   rateLimitMiddleware,
   RATE_LIMIT_CONFIGS
 } from '../_shared/rateLimiter.ts'
-import { logAICostEvent, extractAnthropicUsage, checkCreditBalance } from '../_shared/costTracking.ts'
+import { logAICostEvent, extractAnthropicUsage, checkCreditBalance, extractClientIp } from '../_shared/costTracking.ts'
 import { executeAction } from '../_shared/copilot_adapters/executeAction.ts'
 import type { ExecuteActionName } from '../_shared/copilot_adapters/types.ts'
 import { getOrCompilePersona, type CompiledPersona } from '../_shared/salesCopilotPersona.ts'
@@ -215,6 +215,7 @@ serve(async (req) => {
   const corsPreflightResponse = handleCorsPreflightRequest(req);
   if (corsPreflightResponse) return corsPreflightResponse;
   const corsHeaders = getCorsHeaders(req);
+  const clientIp = extractClientIp(req);
 
   try {
     // Authenticate request using JWT token (not API key)
@@ -795,7 +796,10 @@ async function handleChat(
                 tool_iterations: aiResponse.tool_iterations || 0,
                 tools_used: aiResponse.tools_used || [],
                 conversation_id: conversationId,
-              }
+              },
+              undefined, // logContext
+              undefined, // sourceAgent
+              clientIp,
             )
           }
         } catch (err) {

@@ -2,7 +2,7 @@
 // TypeScript types for subscription management
 
 // Plan tier identifiers
-export type PlanTier = 'basic' | 'pro' | 'trial' | 'cancelled';
+export type PlanTier = 'free' | 'basic' | 'pro' | 'trial' | 'cancelled';
 // Legacy tiers (deprecated): 'starter' | 'growth' | 'team' | 'free'
 
 // Subscription status
@@ -301,20 +301,20 @@ export function getPricingDisplayInfo(plan: SubscriptionPlan): PricingDisplayInf
 // Helper function to get tier from plan slug
 export function getTierFromSlug(slug: string): PlanTier {
   const tierMap: Record<string, PlanTier> = {
+    free: 'free',
     basic: 'basic',
     pro: 'pro',
-    free: 'basic', // Legacy mapping
     starter: 'basic',
     growth: 'pro',
     team: 'pro',
     enterprise: 'pro',
   };
-  return tierMap[slug.toLowerCase()] || 'basic';
+  return tierMap[slug.toLowerCase()] || 'free';
 }
 
 // Helper function to check if plan tier is higher
 export function isTierHigher(current: PlanTier, required: PlanTier): boolean {
-  const tierOrder: PlanTier[] = ['trial', 'cancelled', 'basic', 'pro'];
+  const tierOrder: PlanTier[] = ['trial', 'cancelled', 'free', 'basic', 'pro'];
   return tierOrder.indexOf(current) >= tierOrder.indexOf(required);
 }
 

@@ -28,7 +28,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.32.1';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
-import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts';
+import { checkCreditBalance, logAICostEvent, extractClientIp } from '../_shared/costTracking.ts';
 
 // =============================================================================
 // Configuration
@@ -39,7 +39,7 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const MODEL = 'claude-sonnet-4-6-20250514';
+const MODEL = 'claude-sonnet-4-20250514';
 const MAX_ITERATIONS = 8;
 const MAX_TOKENS = 2048;
 
@@ -454,6 +454,7 @@ serve(async (req: Request) => {
   if (preflightResponse) return preflightResponse;
 
   const corsHeaders = getCorsHeaders(req);
+  const clientIp = extractClientIp(req);
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -557,7 +558,11 @@ serve(async (req: Request) => {
         if (authedUserId && authedOrgId) {
           await logAICostEvent(
             serviceClient, authedUserId, authedOrgId, 'anthropic', MODEL,
-            inputTokens, outputTokens, 'copilot_chat'
+            inputTokens, outputTokens, 'copilot_chat',
+            undefined, // metadata
+            undefined, // logContext
+            undefined, // sourceAgent
+            clientIp,
           );
         }
 

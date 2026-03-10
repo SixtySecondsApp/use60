@@ -22,6 +22,10 @@ export interface ActiveUser {
   last_request_at: string;
   /** True if user had activity in the last 5 minutes */
   is_active: boolean;
+  /** Estimated total cost in GBP (USD × 0.79) */
+  total_cost_gbp: number;
+  /** Total credits purchased on use60 (org-level) */
+  credits_bought: number;
 }
 
 export interface RecentEvent {
@@ -36,6 +40,7 @@ export interface RecentEvent {
   output_tokens: number;
   estimated_cost: number;
   created_at: string;
+  client_ip: string | null;
   is_flagged?: boolean;
   flag_reason?: string;
   flag_severity?: string;
@@ -140,6 +145,7 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
   const isPageVisibleRef = useRef(true);
 
   const fetchFullData = useCallback(async () => {
+    let userMapRef: Map<string, ActiveUser> | null = null;
     try {
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       const userHistoryWindow = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -168,7 +174,7 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
         // Recent events for visualization (last 200 events)
         supabase
           .from('ai_cost_events')
-          .select('id, user_id, provider, model, feature, input_tokens, output_tokens, estimated_cost, created_at')
+          .select('id, user_id, provider, model, feature, input_tokens, output_tokens, estimated_cost, created_at, client_ip')
           .order('created_at', { ascending: false })
           .limit(200),
 
@@ -237,6 +243,8 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
               total_output_tokens: row.output_tokens || 0,
               last_request_at: row.created_at,
               is_active: false, // Set below after aggregation
+              total_cost_gbp: 0, // Computed after model rates are available
+              credits_bought: 0, // Populated from org_credit_balance
             });
           }
         }
@@ -271,23 +279,43 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
           }
 
           if (membershipsResult.data) {
+            // Build org_id map per user for credit lookup
+            const userOrgMap = new Map<string, string>();
             for (const membership of membershipsResult.data) {
               const user = userMap.get(membership.user_id);
               if (user && !user.org_name) {
                 const org = membership.organizations as { name: string } | null;
                 if (org?.name) user.org_name = org.name;
               }
+              if (!userOrgMap.has(membership.user_id)) {
+                userOrgMap.set(membership.user_id, membership.org_id);
+              }
+            }
+
+            // Fetch org credit balances for credits_bought
+            const orgIds = Array.from(new Set(Array.from(userOrgMap.values())));
+            if (orgIds.length > 0) {
+              const { data: creditRows } = await supabase
+                .from('org_credit_balance')
+                .select('org_id, lifetime_purchased')
+                .in('org_id', orgIds);
+
+              if (creditRows) {
+                const creditMap = new Map(creditRows.map(r => [r.org_id, r.lifetime_purchased || 0]));
+                for (const [userId, orgId] of Array.from(userOrgMap.entries())) {
+                  const user = userMap.get(userId);
+                  if (user) {
+                    user.credits_bought = creditMap.get(orgId) || 0;
+                  }
+                }
+              }
             }
           }
         }
 
-        // Sort: active users first, then by most recent activity
-        const sortedUsers = Array.from(userMap.values()).sort((a, b) => {
-          if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
-          return new Date(b.last_request_at).getTime() - new Date(a.last_request_at).getTime();
-        });
-
-        setActiveUsers(sortedUsers);
+        // Defer setting users — cost is computed after model rates are available
+        // (stored in userMapRef for later)
+        userMapRef = userMap;
       }
 
       // Process anomaly rules
@@ -301,6 +329,7 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
           ...e,
           user_email: null,
           user_name: null,
+          client_ip: (e as any).client_ip ?? null,
         }));
 
         // Enrich events with user names
@@ -334,10 +363,22 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
 
       // Process LLM endpoints with active request counts
       if (modelsResult.data) {
+        // Build a map from event model strings → canonical model_id
+        // Events may log short names (e.g. "claude-haiku-4-5") while ai_models
+        // stores full IDs (e.g. "claude-haiku-4-5-20251001"). Match by prefix.
+        const canonicalIds = (modelsResult.data as AIModel[]).map(m => m.model_id);
+        const resolveModelId = (eventModel: string): string => {
+          // Exact match first
+          if (canonicalIds.includes(eventModel)) return eventModel;
+          // Prefix match: event model is a prefix of the canonical ID
+          const match = canonicalIds.find(c => c.startsWith(eventModel));
+          return match || eventModel;
+        };
+
         const recentByModel = new Map<string, number>();
         if (recentEventsResult.data) {
           for (const event of recentEventsResult.data) {
-            const key = event.model;
+            const key = resolveModelId(event.model);
             recentByModel.set(key, (recentByModel.get(key) || 0) + 1);
           }
         }
@@ -365,6 +406,16 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
         }
       }
 
+      // Resolve event model string to canonical model_id (handles prefix mismatches)
+      const resolveRate = (eventModel: string) => {
+        const exact = modelRates.get(eventModel);
+        if (exact) return exact;
+        for (const [key, val] of Array.from(modelRates.entries())) {
+          if (key.startsWith(eventModel)) return val;
+        }
+        return undefined;
+      };
+
       // Process usage totals — cost derived from tokens × model rates (USD)
       const sumTokensAndCost = (data: Array<{ model: string; input_tokens: number; output_tokens: number }> | null): UsageBucket => {
         if (!data) return { tokensIn: 0, tokensOut: 0, cost: 0 };
@@ -372,7 +423,7 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
           (acc, row) => {
             const inT = row.input_tokens || 0;
             const outT = row.output_tokens || 0;
-            const rates = modelRates.get(row.model);
+            const rates = resolveRate(row.model);
             const usd = rates
               ? (inT * rates.inputRate + outT * rates.outputRate) / 1_000_000
               : 0;
@@ -386,12 +437,36 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
         );
       };
 
+      const allTimeBucket = sumTokensAndCost(totalsAllTime.data);
       setUsageTotals({
-        all_time: sumTokensAndCost(totalsAllTime.data),
+        all_time: allTimeBucket,
         last_30d: sumTokensAndCost(totals30d.data),
         last_7d: sumTokensAndCost(totals7d.data),
         last_24h: sumTokensAndCost(totals24h.data),
       });
+
+      // Compute per-user GBP cost using blended rate from all-time totals
+      const USD_TO_GBP = 0.79;
+      if (userMapRef) {
+        const totalTokensAllTime = allTimeBucket.tokensIn + allTimeBucket.tokensOut;
+        // Blended rate: USD per token across all models
+        const blendedRatePerToken = totalTokensAllTime > 0
+          ? allTimeBucket.cost / totalTokensAllTime
+          : 0;
+
+        for (const user of userMapRef.values()) {
+          const userTotalTokens = user.total_input_tokens + user.total_output_tokens;
+          user.total_cost_gbp = Math.round(userTotalTokens * blendedRatePerToken * USD_TO_GBP * 100) / 100;
+        }
+
+        // Sort: active users first, then by most recent activity
+        const sortedUsers = Array.from(userMapRef.values()).sort((a, b) => {
+          if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+          return new Date(b.last_request_at).getTime() - new Date(a.last_request_at).getTime();
+        });
+
+        setActiveUsers(sortedUsers);
+      }
 
       setError(null);
       setLastUpdated(new Date());
@@ -410,7 +485,7 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
     try {
       const { data: newRows } = await supabase
         .from('ai_cost_events')
-        .select('id, user_id, provider, model, feature, input_tokens, output_tokens, estimated_cost, created_at')
+        .select('id, user_id, provider, model, feature, input_tokens, output_tokens, estimated_cost, created_at, client_ip')
         .gt('created_at', latestEventTimeRef.current)
         .order('created_at', { ascending: false })
         .limit(50);

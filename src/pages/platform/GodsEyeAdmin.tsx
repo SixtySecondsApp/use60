@@ -11,7 +11,7 @@
  * - Seed data toggle for demo/testing
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -28,6 +28,8 @@ import {
   Play,
   FlaskConical,
   Zap,
+  Trophy,
+  Globe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -73,7 +75,7 @@ export default function GodsEyeAdmin() {
   const seedCleanupRef = useRef<(() => void) | null>(null);
 
   // Live data from hook
-  const liveData = useGodsEyeData(isPaused || useSeedData ? 0 : 5_000); // 5s event poll, 30s full refresh
+  const liveData = useGodsEyeData(isPaused || useSeedData ? 0 : 3_000); // 3s event poll, 18s full refresh
 
   // Initialize seed data
   useEffect(() => {
@@ -131,6 +133,7 @@ export default function GodsEyeAdmin() {
       output_tokens: Math.floor(Math.random() * 2000) + 200,
       estimated_cost: 0,
       created_at: new Date().toISOString(),
+      client_ip: null,
     };
 
     setTestEvents(prev => [testEvent, ...prev].slice(0, 10));
@@ -139,10 +142,44 @@ export default function GodsEyeAdmin() {
   // Merged data: seed or live
   const activeUsers = useSeedData ? seedUsers : liveData.activeUsers;
   const baseEvents = useSeedData ? seedEvents : liveData.recentEvents;
-  const recentEvents = testEvents.length > 0 ? [...testEvents, ...baseEvents].slice(0, 200) : baseEvents;
-  const llmEndpoints = useSeedData && seedData ? seedData.llmEndpoints : liveData.llmEndpoints;
+  const recentEvents = useMemo(() => {
+    if (testEvents.length === 0) return baseEvents;
+    // Merge test events into base events sorted by timestamp (newest first)
+    return [...testEvents, ...baseEvents]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 200);
+  }, [testEvents, baseEvents]);
+  const llmEndpointsRaw = useSeedData && seedData ? seedData.llmEndpoints : liveData.llmEndpoints;
   const anomalyRules = useSeedData && seedData ? seedData.anomalyRules : liveData.anomalyRules;
   const usageTotals = useSeedData && seedData ? seedData.usageTotals : liveData.usageTotals;
+  // Recompute active_request_count from merged recentEvents (includes test events)
+  // so the canvas shows the correct endpoints as visible nodes
+  const llmEndpoints = useMemo(() => {
+    if (recentEvents.length === 0) return llmEndpointsRaw;
+    const countByModel = new Map<string, number>();
+    for (const e of recentEvents) {
+      countByModel.set(e.model, (countByModel.get(e.model) || 0) + 1);
+    }
+    return llmEndpointsRaw.map(ep => ({
+      ...ep,
+      active_request_count: countByModel.get(ep.model_id) ?? ep.active_request_count,
+    }));
+  }, [llmEndpointsRaw, recentEvents]);
+
+  // IP log: recent events with IP addresses (seed data always has IPs)
+  const ipLogEvents = useMemo(() => {
+    return recentEvents
+      .filter(e => e.client_ip)
+      .slice(0, 50);
+  }, [recentEvents]);
+
+  // Leaderboard: top 15 users sorted by total tokens (in + out) all time
+  const leaderboardUsers = useMemo(() => {
+    return [...activeUsers]
+      .sort((a, b) => (b.total_input_tokens + b.total_output_tokens) - (a.total_input_tokens + a.total_output_tokens))
+      .slice(0, 15);
+  }, [activeUsers]);
+
   const isLoading = !useSeedData && liveData.isLoading;
   const error = !useSeedData ? liveData.error : null;
   const lastUpdated = useSeedData ? new Date() : liveData.lastUpdated;
@@ -360,9 +397,106 @@ export default function GodsEyeAdmin() {
       )}
 
       {/* Main visualization + activity log side by side */}
-      <div className="flex-1 flex min-h-0">
-        {/* Canvas area */}
-        <div ref={containerRef} className="flex-1 relative min-h-0">
+      <div className="flex-1 flex min-h-0 min-w-0">
+        {/* Left panels — Leaderboard + IP Map */}
+        <div className="w-[440px] shrink-0 flex flex-col gap-2 p-2">
+          {/* Leaderboard */}
+          <div className="flex-[3] rounded-lg border border-slate-700/50 bg-slate-900/60 flex flex-col overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/50">
+              <Trophy className="h-3.5 w-3.5 text-amber-400" />
+              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Leaderboard — Top 15 All Time</span>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-[10px]">
+                <thead className="sticky top-0 bg-slate-900/90 backdrop-blur">
+                  <tr className="text-slate-500 border-b border-slate-700/50">
+                    <th className="text-left px-2 py-1.5 font-medium">#</th>
+                    <th className="text-left px-2 py-1.5 font-medium">User</th>
+                    <th className="text-right px-2 py-1.5 font-medium">In</th>
+                    <th className="text-right px-2 py-1.5 font-medium">Out</th>
+                    <th className="text-right px-2 py-1.5 font-medium">GBP</th>
+                    <th className="text-right px-2 py-1.5 font-medium">Credits</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaderboardUsers.map((user, i) => (
+                    <tr
+                      key={user.user_id}
+                      className="border-b border-slate-800/30 hover:bg-slate-800/40 cursor-pointer transition-colors"
+                      onClick={() => handleUserClick(user)}
+                    >
+                      <td className="px-2 py-1.5 text-slate-600 font-mono">{i + 1}</td>
+                      <td className="px-2 py-1.5">
+                        <div className="truncate max-w-[110px]">
+                          <span className={`font-medium ${user.is_active ? 'text-emerald-300' : 'text-slate-300'}`}>
+                            {user.user_name || user.user_email || 'Unknown'}
+                          </span>
+                        </div>
+                        {user.org_name && (
+                          <div className="text-[9px] text-slate-600 truncate max-w-[110px]">{user.org_name}</div>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-right text-indigo-300 font-mono">{formatTokens(user.total_input_tokens)}</td>
+                      <td className="px-2 py-1.5 text-right text-emerald-300 font-mono">{formatTokens(user.total_output_tokens)}</td>
+                      <td className="px-2 py-1.5 text-right text-amber-300 font-mono">£{user.total_cost_gbp.toFixed(2)}</td>
+                      <td className="px-2 py-1.5 text-right text-cyan-300 font-mono">{user.credits_bought}</td>
+                    </tr>
+                  ))}
+                  {leaderboardUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-6 text-center text-slate-600">No usage data</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* IP Log */}
+          <div className="flex-[2] rounded-lg border border-slate-700/50 bg-slate-900/60 flex flex-col overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/50">
+              <Globe className="h-3.5 w-3.5 text-cyan-400" />
+              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">IP Log</span>
+              <span className="text-[9px] text-slate-600 ml-auto">{ipLogEvents.length} entries</span>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-[10px]">
+                <thead className="sticky top-0 bg-slate-900/90 backdrop-blur">
+                  <tr className="text-slate-500 border-b border-slate-700/50">
+                    <th className="text-left px-2 py-1.5 font-medium">User</th>
+                    <th className="text-left px-2 py-1.5 font-medium">Timestamp</th>
+                    <th className="text-left px-2 py-1.5 font-medium">IP Address</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ipLogEvents.map((event) => (
+                    <tr key={event.id} className="border-b border-slate-800/30">
+                      <td className="px-2 py-1 text-slate-300 truncate max-w-[120px]">
+                        {event.user_name || event.user_email || event.user_id.slice(0, 8)}
+                      </td>
+                      <td className="px-2 py-1 text-slate-500 font-mono">
+                        {new Date(event.created_at).toLocaleTimeString()}
+                      </td>
+                      <td className="px-2 py-1 text-cyan-400 font-mono">
+                        {event.client_ip || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  {ipLogEvents.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-6 text-center text-slate-600">
+                        No IP data yet
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Canvas area — constrained to prevent pushing siblings off-screen */}
+        <div ref={containerRef} className="flex-1 min-w-0 relative min-h-0 overflow-hidden">
           {isLoading && recentEvents.length === 0 && !useSeedData ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
@@ -390,7 +524,7 @@ export default function GodsEyeAdmin() {
         </div>
 
         {/* Activity log terminal — right side */}
-        <div className="w-[400px] shrink-0">
+        <div className="w-[340px] shrink-0">
           <ActivityLogTerminal
             events={recentEvents}
             llmEndpoints={llmEndpoints}

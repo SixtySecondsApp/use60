@@ -21,6 +21,43 @@ export interface CreditLogContext {
 }
 
 // ---------------------------------------------------------------------------
+// Client IP extraction helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract client IP from the incoming request headers.
+ * Prefers x-forwarded-for (first entry), falls back to x-real-ip.
+ * Returns null if no IP can be determined.
+ */
+/**
+ * Extract client IP from request headers.
+ * Tries all known proxy/CDN headers used by Supabase, Cloudflare, Fly.io etc.
+ */
+export function extractClientIp(req: Request): string | null {
+  const candidates = [
+    'x-forwarded-for',
+    'cf-connecting-ip',
+    'x-envoy-external-address',
+    'x-real-ip',
+    'fly-client-ip',
+    'true-client-ip',
+    'x-client-ip',
+    'x-original-forwarded-for',
+    'forwarded',
+  ];
+
+  for (const header of candidates) {
+    const val = req.headers.get(header);
+    if (val) {
+      const ip = val.split(',')[0]?.trim();
+      if (ip) return ip;
+    }
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Intelligence tier lookup
 // ---------------------------------------------------------------------------
 
@@ -434,7 +471,8 @@ export async function logAICostEvent(
   feature?: string,
   metadata?: Record<string, unknown>,
   logContext?: CreditLogContext,
-  sourceAgent?: string
+  sourceAgent?: string,
+  clientIp?: string | null
 ): Promise<void> {
   try {
     // If no orgId provided, try to get it from user
@@ -484,6 +522,7 @@ export async function logAICostEvent(
         credits_charged: creditCost,
         metadata: metadata || null,
         source_agent: sourceAgent || null,
+        client_ip: clientIp || null,
       })
       .select('id')
       .single();
@@ -552,7 +591,8 @@ export async function logFlatRateCostEvent(
   feature?: string,
   metadata?: Record<string, unknown>,
   logContext?: CreditLogContext,
-  sourceAgent?: string
+  sourceAgent?: string,
+  clientIp?: string | null
 ): Promise<void> {
   try {
     // Log to ai_cost_events for usage analytics (estimated_cost = credit units)
@@ -571,6 +611,7 @@ export async function logFlatRateCostEvent(
         credits_charged: creditAmount,
         metadata: metadata || null,
         source_agent: sourceAgent || null,
+        client_ip: clientIp || null,
       })
       .select('id')
       .single();

@@ -88,6 +88,10 @@ function hoursAgo(hours: number): string {
   return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 }
 
+function randomIp(): string {
+  return `${randomInt(10, 223)}.${randomInt(0, 255)}.${randomInt(0, 255)}.${randomInt(1, 254)}`;
+}
+
 // ─── Generators ─────────────────────────────────────────────────────────
 
 export function generateSeedActiveUsers(count: number = 12): ActiveUser[] {
@@ -96,18 +100,25 @@ export function generateSeedActiveUsers(count: number = 12): ActiveUser[] {
   const activeCount = Math.ceil(count * 0.4);
   return users.map((u, i) => {
     const isActive = i < activeCount;
+    const totalIn = randomInt(50000, 2000000);
+    const totalOut = randomInt(20000, 800000);
+    // Approximate cost: blended rate ~$3/M in, ~$8/M out → convert to GBP
+    const costUsd = (totalIn * 3 + totalOut * 8) / 1_000_000;
+    const costGbp = costUsd * 0.79;
     return {
       user_id: `seed-user-${i}`,
       user_email: u.email,
       user_name: u.name,
       org_name: u.org,
-      request_count: randomInt(1, 25),
-      total_input_tokens: randomInt(5000, 200000),
-      total_output_tokens: randomInt(2000, 80000),
+      request_count: randomInt(5, 250),
+      total_input_tokens: totalIn,
+      total_output_tokens: totalOut,
       last_request_at: isActive
         ? minutesAgo(randomInt(0, 4))
         : hoursAgo(randomInt(1, 168)), // 1 hour to 7 days ago
       is_active: isActive,
+      total_cost_gbp: Math.round(costGbp * 100) / 100,
+      credits_bought: randomInt(10, 500),
     };
   });
 }
@@ -140,6 +151,7 @@ export function generateSeedRecentEvents(
       output_tokens: outputTokens,
       estimated_cost: cost,
       created_at: minutesAgo(randomInt(0, 30)),
+      client_ip: randomIp(),
       is_flagged: isFlagged,
       flag_reason: isFlagged ? 'High token request' : undefined,
       flag_severity: isFlagged ? (inputTokens > 120000 ? 'critical' : 'warning') : undefined,
@@ -227,7 +239,7 @@ export interface SeedDataSet {
 }
 
 export function generateFullSeedData(): SeedDataSet {
-  const activeUsers = generateSeedActiveUsers(14);
+  const activeUsers = generateSeedActiveUsers(15);
   const recentEvents = generateSeedRecentEvents(activeUsers, 200);
   const llmEndpoints = generateSeedEndpoints();
   const anomalyRules = generateSeedRules();
@@ -264,6 +276,8 @@ export function startSeedEventStream(
           total_output_tokens: randomInt(500, 5000),
           last_request_at: new Date().toISOString(),
           is_active: true,
+          total_cost_gbp: randomInt(1, 20),
+          credits_bought: randomInt(10, 100),
         });
       }
     }

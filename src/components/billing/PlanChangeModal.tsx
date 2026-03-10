@@ -32,7 +32,7 @@ import {
 // Types
 // ============================================================================
 
-export type PlanSlug = 'basic' | 'pro';
+export type PlanSlug = 'free' | 'basic' | 'pro';
 export type BillingCycle = 'monthly' | 'annual';
 
 export interface PlanChangeModalProps {
@@ -59,11 +59,12 @@ export interface PlanChangeModalProps {
 // ============================================================================
 
 const PLAN_PRICES: Record<PlanSlug, { monthly: number; annual: number; name: string; currency: string; bundledCredits: number }> = {
-  basic: { monthly: 29, annual: 290, name: 'Basic', currency: '£', bundledCredits: 50 },
-  pro:   { monthly: 99, annual: 990, name: 'Pro',   currency: '£', bundledCredits: 250 },
+  free:  { monthly: 0,  annual: 0,   name: 'Free',  currency: '£', bundledCredits: 10 },
+  basic: { monthly: 29, annual: 290, name: 'Basic', currency: '£', bundledCredits: 30 },
+  pro:   { monthly: 99, annual: 990, name: 'Pro',   currency: '£', bundledCredits: 120 },
 };
 
-const TIER_ORDER: Record<PlanSlug, number> = { basic: 0, pro: 1 };
+const TIER_ORDER: Record<PlanSlug, number> = { free: 0, basic: 1, pro: 2 };
 
 function formatPrice(slug: PlanSlug, cycle: BillingCycle, currencySymbol?: string): string {
   const p = PLAN_PRICES[slug];
