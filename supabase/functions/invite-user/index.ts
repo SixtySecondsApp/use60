@@ -98,20 +98,22 @@ serve(async (req) => {
     const userId = createData.user.id
     console.log('[invite-user] User created:', userId)
 
-    // Create profile
-    console.log('[invite-user] Creating profile for user:', userId)
+    // Create or update profile (upsert to handle race with auth trigger)
+    console.log('[invite-user] Upserting profile for user:', userId)
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .insert({
+      .upsert({
         id: userId,
         email: email.toLowerCase().trim(),
         first_name: first_name || null,
         last_name: last_name || null,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'id',
       })
 
     if (profileError) {
-      console.warn('[invite-user] Profile creation warning:', profileError)
-      // Don't throw - profile might have been created by trigger
+      console.warn('[invite-user] Profile upsert warning:', profileError)
     }
 
     // Generate magic link for password setup

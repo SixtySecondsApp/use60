@@ -102,6 +102,7 @@ interface OpsTableProps {
   columnScheduleLabels?: Record<string, string>;
   groupConfig?: GroupConfig | null;
   summaryConfig?: Record<string, AggregateType> | null;
+  onRowExpand?: (rowId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +132,8 @@ const columnTypeIcons: Record<string, React.FC<React.SVGProps<SVGSVGElement>>> =
 // Constants
 // ---------------------------------------------------------------------------
 
-const CHECKBOX_COL_WIDTH = 44;
+const CHECKBOX_COL_WIDTH_BASE = 44;
+const CHECKBOX_COL_WIDTH_EXPAND = 64;
 const ADD_COL_WIDTH = 44;
 const ROW_HEIGHT = 36;
 const HEADER_HEIGHT = 34;
@@ -313,7 +315,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   columnScheduleLabels,
   groupConfig,
   summaryConfig,
+  onRowExpand,
 }) => {
+  const CHECKBOX_COL_WIDTH = onRowExpand ? CHECKBOX_COL_WIDTH_EXPAND : CHECKBOX_COL_WIDTH_BASE;
   const parentRef = useRef<HTMLDivElement>(null);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
   const [horizontalScrollLeft, setHorizontalScrollLeft] = useState(0);
@@ -857,6 +861,15 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                       onChange={() => onSelectRow(row.id)}
                       className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
                     />
+                    {onRowExpand && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onRowExpand(row.id); }}
+                        className="ml-0.5 p-0.5 rounded text-gray-500 hover:text-white hover:bg-gray-700/50 transition-colors"
+                        title="Expand row"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Data cells */}

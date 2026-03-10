@@ -166,6 +166,7 @@ export const OutreachAnalyticsPage = lazyWithRetry(() => import('@/pages/Outreac
 export const WinLossPage = lazyWithRetry(() => import('@/pages/WinLossPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
+export const PipelineGalleryPage = lazyWithRetry(() => import('@/pages/PipelineGalleryPage'));
 export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));
 export const ProspectingPage = lazyWithRetry(() => import('@/pages/ProspectingPage'));
 export const FactProfilesPage = lazyWithRetry(() => import('@/pages/FactProfilesPage'));

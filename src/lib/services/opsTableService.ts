@@ -1409,20 +1409,31 @@ export class OpsTableService {
   static generateCSVExport(
     rows: OpsTableRow[],
     columns: OpsTableColumn[],
-    filename: string = 'export'
+    filename: string = 'export',
+    extraColumns?: Array<{ label: string; value: string | ((row: OpsTableRow) => string) }>
   ): void {
-    const visibleCols = columns.filter((c) => c.is_visible);
+    // Export ALL passed columns (caller decides which to include)
+    const exportCols = columns;
 
     // Header row
-    const headers = visibleCols.map((c) => `"${c.label.replace(/"/g, '""')}"`);
+    const headers = exportCols.map((c) => `"${c.label.replace(/"/g, '""')}"`);
+    if (extraColumns) {
+      for (const ec of extraColumns) headers.push(`"${ec.label.replace(/"/g, '""')}"`);
+    }
     const csvLines = [headers.join(',')];
 
     // Data rows
     for (const row of rows) {
-      const values = visibleCols.map((col) => {
+      const values = exportCols.map((col) => {
         const val = row.cells[col.key]?.value ?? '';
         return `"${val.replace(/"/g, '""')}"`;
       });
+      if (extraColumns) {
+        for (const ec of extraColumns) {
+          const val = typeof ec.value === 'function' ? ec.value(row) : ec.value;
+          values.push(`"${val.replace(/"/g, '""')}"`);
+        }
+      }
       csvLines.push(values.join(','));
     }
 

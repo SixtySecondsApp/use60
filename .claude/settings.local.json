@@ -63,10 +63,10 @@
     "deny": [],
     "ask": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "ai-dev-hub",
     "playwriter",
     "rive"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

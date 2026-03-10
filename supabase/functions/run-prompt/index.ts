@@ -111,12 +111,22 @@ serve(async (req: Request) => {
       if (key) cellValues[key] = cell.value ?? ''
     }
 
+    // Built-in: current date for prompt context
+    cellValues['today_date'] = new Date().toISOString().split('T')[0]
+
     // 3. Resolve {{column_key}} mustache vars in prompts
     const resolveVars = (template: string) =>
       template.replace(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g, (_, key) => cellValues[key] ?? '')
 
     const resolvedSystem = system_prompt ? resolveVars(system_prompt) : ''
     const resolvedUser = user_message_template ? resolveVars(user_message_template) : ''
+
+    // Always prepend today's date and formatting rules to every prompt
+    const todayStr = new Date().toISOString().split('T')[0]
+    const datePrefix = `[SYSTEM CONTEXT] Today's date is ${todayStr}. Use this for time calculations only. STRICT FORMATTING RULES that override everything else: Never use em dashes. Never use Oxford commas. Write "A, B and C" not "A, B, and C".\n\n`
+    const finalSystem = datePrefix + resolvedSystem
+    const finalUser = resolvedUser
+
 
     // 4. Call AI provider
     let resultText: string
@@ -138,8 +148,8 @@ serve(async (req: Request) => {
           model,
           max_tokens,
           temperature,
-          ...(resolvedSystem ? { system: resolvedSystem } : {}),
-          messages: [{ role: 'user', content: resolvedUser || 'Analyse the provided data.' }],
+          ...(finalSystem ? { system: finalSystem } : {}),
+          messages: [{ role: 'user', content: finalUser || 'Analyse the provided data.' }],
         }),
       })
 
@@ -159,8 +169,8 @@ serve(async (req: Request) => {
       }
 
       const messages = []
-      if (resolvedSystem) messages.push({ role: 'system', content: resolvedSystem })
-      messages.push({ role: 'user', content: resolvedUser || 'Analyse the provided data.' })
+      if (finalSystem) messages.push({ role: 'system', content: finalSystem })
+      messages.push({ role: 'user', content: finalUser || 'Analyse the provided data.' })
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -191,6 +201,39 @@ serve(async (req: Request) => {
     resultText = resultText.trim()
     if (resultText.startsWith('```')) {
       resultText = resultText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim()
+    }
+
+    // Post-process: clean up formatting issues models refuse to follow
+    resultText = resultText.replace(/\u2014/g, ',').replace(/\u2013/g, ',')
+    resultText = resultText.replace(/, and /g, ' and ')
+
+    // Scrub month names from JSON string values (replace with "a while")
+    // Only applies inside JSON strings to avoid breaking non-JSON output
+    try {
+      const parsed = JSON.parse(resultText)
+      if (typeof parsed === 'object' && parsed !== null) {
+        const months = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/gi
+        const pctPattern = /\b\d+[-–]?\d*%/g
+        for (const [key, val] of Object.entries(parsed)) {
+          if (typeof val === 'string') {
+            let cleaned = val
+            // Replace "back in November" -> "a little while back", "in November" -> "a while back"
+            cleaned = cleaned.replace(/back in\s+\w*\s*(?:January|February|March|April|May|June|July|August|September|October|November|December)\/?(?:January|February|March|April|May|June|July|August|September|October|November|December)?/gi, 'a little while back')
+            cleaned = cleaned.replace(/in\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\/?(?:January|February|March|April|May|June|July|August|September|October|November|December)?/gi, 'a while back')
+            cleaned = cleaned.replace(months, '')
+            // Replace exact percentages like "30-40%" or "25%" with vague references
+            cleaned = cleaned.replace(/\b\d+[-–]\d+%\s*of\b/g, 'a chunk of')
+            cleaned = cleaned.replace(/\b\d+%\s*of\b/g, 'a portion of')
+            cleaned = cleaned.replace(pctPattern, 'a significant number')
+            // Clean up double spaces
+            cleaned = cleaned.replace(/\s{2,}/g, ' ').trim()
+            parsed[key] = cleaned
+          }
+        }
+        resultText = JSON.stringify(parsed, null, 2)
+      }
+    } catch {
+      // Not JSON — skip scrubbing
     }
 
     // 5. Write result to output column cell
