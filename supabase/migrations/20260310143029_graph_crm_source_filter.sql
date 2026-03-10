@@ -120,12 +120,6 @@ BEGIN
         (v_include_hubspot AND ci.crm_source = 'hubspot')
         OR (v_include_attio AND ci.crm_source = 'attio')
       )
-      -- Only include CRM contacts with relevance signals
-      AND (
-        ci.has_active_deal = true
-        OR ci.crm_updated_at >= NOW() - INTERVAL '90 days'
-        OR ci.lifecycle_stage IN ('opportunity', 'customer', 'evangelist')
-      )
       -- Deduplicate: skip CRM contacts whose email already exists in app contacts
       AND NOT EXISTS (
         SELECT 1
