@@ -9,6 +9,7 @@ import {
   Activity, Brain, Calendar, Mail, FileText, BarChart3,
   GraduationCap, Send, MessageSquare, Zap, Users, Clock,
   Bell, CheckSquare, ShieldAlert, Sparkles, TrendingUp,
+  AlertTriangle, Ghost,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -270,6 +271,47 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     requiredIntegrations: [
       { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
       { integrationId: 'fathom', name: 'Meeting Recording', reason: 'Recording access for transcription', connectUrl: '/settings/integrations' },
+    ],
+  },
+
+  {
+    id: 'overdue-deal-surfacing',
+    name: 'Overdue Deal Surfacing',
+    description: 'Scans pipeline for deals past their close date, ranks by value and days overdue, and delivers a daily digest with recommended actions — extend date, escalate, or close as lost.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: AlertTriangle,
+    gradient: 'from-orange-500 to-red-600',
+    eventType: 'overdue_deal_scan',
+    triggerType: 'cron',
+    backendType: 'v1-simulate',
+    stepCount: 1,
+    hasApproval: false,
+    status: 'active',
+    skillKey: 'deal-slippage-diagnosis',
+    defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'ghost-deal-alerting',
+    name: 'Ghost Deal Alert',
+    description: 'Monitors deals with high ghost probability (70%+) — no replies, missed meetings, or fading engagement. Surfaces ghosted deals with re-engagement strategies before they go cold.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: Ghost,
+    gradient: 'from-violet-500 to-purple-600',
+    eventType: 'ghost_deal_scan',
+    triggerType: 'cron',
+    backendType: 'v1-simulate',
+    stepCount: 1,
+    hasApproval: false,
+    status: 'active',
+    skillKey: 'deal-reengagement-intervention',
+    defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
     ],
   },
 
@@ -728,7 +770,7 @@ export function getSequenceTypeForEventType(eventType: string): string | undefin
  */
 export function getRequiredEntityType(eventType: string): 'meeting' | 'deal' | null {
   const meetingTypes = new Set(['pre_meeting_90min', 'meeting_ended']);
-  const dealTypes = new Set(['deal_risk_scan', 'stale_deal_revival', 'proposal_generation']);
+  const dealTypes = new Set(['deal_risk_scan', 'stale_deal_revival', 'proposal_generation', 'overdue_deal_scan', 'ghost_deal_scan']);
   if (meetingTypes.has(eventType)) return 'meeting';
   if (dealTypes.has(eventType)) return 'deal';
   return null;

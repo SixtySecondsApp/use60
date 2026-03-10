@@ -2218,7 +2218,6 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         return;
       }
 
-
       if (enrichDomain) {
         const enrichmentResult = await get().startEnrichment(org.id, enrichDomain, false);
 

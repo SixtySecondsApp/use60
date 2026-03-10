@@ -158,9 +158,7 @@ export default function TestGoogleTasks() {
       }, 'info');
 
       // Test the Edge Function - try both URL param and body
-      const { data, error } = await supabase.functions.invoke('google-tasks', {
-        body: { 
-          action: 'list-tasklists',
+      const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'list-tasklists',
           maxResults: 20
         }
       });
@@ -183,9 +181,7 @@ export default function TestGoogleTasks() {
       addResult('Task Lists from Google', data || 'No data returned', data ? 'success' : 'error');
 
       // Try to list tasks
-      const { data: tasksData, error: tasksError } = await supabase.functions.invoke('google-tasks', {
-        body: { 
-          action: 'list-tasks',
+      const { data: tasksData, error: tasksError } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'list-tasks',
           taskListId: '@default',
           maxResults: 10
         }

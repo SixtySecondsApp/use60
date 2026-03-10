@@ -28,6 +28,7 @@ import { BulkActionBar } from './BulkActionBar';
 import { usePipelineColumns } from './hooks/usePipelineColumns';
 import { exportDealsToCSV } from './pipelineUtils';
 import type { PipelineSavedView } from './hooks/usePipelineSavedViews';
+import { useOrgMembers } from '@/lib/hooks/useOrgMembers';
 import { ForecastSummaryCards } from '@/components/forecast/ForecastSummaryCards';
 import { ForecastVsActualChart } from '@/components/forecast/ForecastVsActualChart';
 import { RepCalibrationCards } from '@/components/forecast/RepCalibrationCards';
@@ -92,6 +93,11 @@ export function PipelineView() {
     return org?.currency_code || 'USD';
   });
   const filterState = usePipelineFilters();
+  const { data: orgMembers = [] } = useOrgMembers();
+  const ownerOptions = useMemo(() =>
+    orgMembers.map((m) => ({ id: m.user_id, name: m.name || m.email })),
+    [orgMembers]
+  );
   const isTableView = filterState.viewMode === 'table';
   const isForecastView = filterState.viewMode === 'forecast';
 
@@ -118,8 +124,18 @@ export function PipelineView() {
     enabled: !!forecastOrgId && isForecastView,
     staleTime: 5 * 60 * 1000,
   });
+  // Strip 'dormant' from health_status filter before sending to RPC (it's a client-side filter)
+  const isDormantFilterActive = filterState.filters.health_status?.includes('dormant') ?? false;
+  const rpcFilters = useMemo(() => {
+    if (!isDormantFilterActive) return filterState.filters;
+    return {
+      ...filterState.filters,
+      health_status: filterState.filters.health_status?.filter((s: string) => s !== 'dormant'),
+    };
+  }, [filterState.filters, isDormantFilterActive]);
+
   const pipelineData = usePipelineData({
-    filters: filterState.filters,
+    filters: rpcFilters,
     sortBy: filterState.sortBy as any,
     sortDir: filterState.sortDir,
     // Table: paginated 25 at a time. Kanban: load all deals, lazy-render per column.
@@ -155,8 +171,8 @@ export function PipelineView() {
     if (!activeOrgId) return;
     async function checkCRMs() {
       const [{ data: hs }, { data: at }] = await Promise.all([
-        supabase.from('hubspot_org_integrations').select('id').eq('clerk_org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
-        supabase.from('attio_org_integrations').select('id').eq('clerk_org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
+        supabase.from('hubspot_org_integrations').select('id').eq('org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
+        supabase.from('attio_org_integrations').select('id').eq('org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
       ]);
       setConnectedCRMs({ hubspot: !!hs, attio: !!at });
     }
@@ -166,19 +182,39 @@ export function PipelineView() {
   // Get selected deal from dealMap
   const selectedDeal = selectedDealId ? pipelineData.data.dealMap[selectedDealId] || null : null;
 
-  // Group deals by stage for kanban view
+  // Group deals by stage for kanban view, with dormant deals sorted to bottom
   const dealsByStage = useMemo(() => {
     const grouped: Record<string, any[]> = {};
     pipelineData.data.stageMetrics.forEach((stage) => {
       grouped[stage.stage_id] = [];
     });
-    pipelineData.data.deals.forEach((deal) => {
+
+    // Dormancy: Signed (probability=100%) → never dormant; Lost (probability=0%) → always dormant
+    const isDealDormant = (d: any) =>
+      d.probability === 0 ? true : d.probability === 100 ? false : (d.days_since_last_activity ?? 0) >= 30;
+
+    // Apply dormant filter client-side if active
+    const deals = isDormantFilterActive
+      ? pipelineData.data.deals.filter((d: any) => isDealDormant(d))
+      : pipelineData.data.deals;
+
+    deals.forEach((deal: any) => {
       if (deal.stage_id && grouped[deal.stage_id]) {
         grouped[deal.stage_id].push(deal);
       }
     });
+    // Sort dormant deals to bottom of each column
+    if (!isDormantFilterActive) {
+      Object.keys(grouped).forEach((stageId) => {
+        grouped[stageId].sort((a: any, b: any) => {
+          const aDormant = isDealDormant(a) ? 1 : 0;
+          const bDormant = isDealDormant(b) ? 1 : 0;
+          return aDormant - bDormant;
+        });
+      });
+    }
     return grouped;
-  }, [pipelineData.data.deals, pipelineData.data.stageMetrics]);
+  }, [pipelineData.data.deals, pipelineData.data.stageMetrics, isDormantFilterActive]);
 
   // Apply a saved view (PIPE-ADV-001)
   const handleApplySavedView = useCallback((view: PipelineSavedView) => {
@@ -329,6 +365,9 @@ export function PipelineView() {
         onHealthStatusChange={filterState.setHealthStatus}
         selectedRiskLevel={filterState.filters.risk_level || []}
         onRiskLevelChange={filterState.setRiskLevel}
+        selectedOwners={filterState.filters.owner_ids || []}
+        onOwnersChange={filterState.setOwnerIds}
+        ownerOptions={ownerOptions}
         onClearFilters={filterState.clearFilters}
         hasActiveFilters={filterState.hasActiveFilters}
         onAddDeal={() => handleAddDealClick(null)}
@@ -479,16 +518,6 @@ export function PipelineView() {
           stageMetrics={pipelineData.data.stageMetrics}
           onClear={() => setSelectedDealIds(new Set())}
           onRefresh={() => pipelineData.refetch().catch((err) => logger.warn('Refetch after bulk action failed:', err))}
-        />
-      )}
-
-      {isTableView && totalPages > 1 && (
-        <PipelinePagination
-          currentPage={filterState.page}
-          totalPages={totalPages}
-          totalCount={pipelineData.data.totalCount}
-          pageSize={PIPELINE_PAGE_SIZE}
-          onPageChange={filterState.setPage}
         />
       )}
 

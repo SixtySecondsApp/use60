@@ -175,7 +175,7 @@ export class GlobalTopicsService {
     }
 
     this.aggregateTopicsUrl = `${supabaseUrl}/functions/v1/aggregate-global-topics`;
-    this.getTopicsUrl = `${supabaseUrl}/functions/v1/get-aggregated-topics`;
+    this.getTopicsUrl = `${supabaseUrl}/functions/v1/get-router`;
   }
 
   // ==========================================================================
@@ -313,6 +313,7 @@ export class GlobalTopicsService {
             'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
+            action: 'aggregated_topics',
             filters: params.filters,
             sort_by: params.sort_by || 'relevance',
             page: params.page || 1,

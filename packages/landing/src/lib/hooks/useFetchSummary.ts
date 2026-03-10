@@ -29,8 +29,8 @@ export function useFetchSummary() {
         throw new Error('No active session')
       }
 
-      const response = await supabase.functions.invoke('fetch-summary', {
-        body: { meetingId },
+      const response = await supabase.functions.invoke('fetch-router', {
+        body: { action: 'summary', meetingId },
       })
 
       if (response.error) {

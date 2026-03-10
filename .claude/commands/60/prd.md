@@ -1,8 +1,33 @@
+---
+name: 60-prd
+invoke: /60/prd
+description: Generate a Product Requirements Document with user stories, acceptance criteria, and prd.json
+---
+
 # /60/prd — Generate a Product Requirements Document
+
+**Phase 2 of `/60/ship` pipeline. Also works standalone.**
 
 I want to create a PRD for: $ARGUMENTS
 
-Act as an expert product consultant. Ask me meaningful questions, one by one, until you have enough information to create a complete, actionable PRD. Then generate the PRD and prd.json.
+---
+
+## PIPELINE INTEGRATION
+
+When called from `/60/ship`:
+1. Read `.sixty/pipeline.json` for DISCOVER phase findings (research agents, gap answers, team composition)
+2. Ground the PRD in actual codebase analysis — reference specific files, existing components, patterns found by scouts
+3. Write stories to `pipeline.json.stories[]` instead of (or in addition to) legacy `prd.json`
+4. Set `pipeline.json.phaseGates.define.status = "complete"` when done
+
+When called standalone:
+1. Falls back to legacy behavior — creates `prd.json` at repo root
+2. If `.sixty/pipeline.json` exists, also update it
+3. If no pipeline.json, works exactly as before
+
+---
+
+Act as an expert product consultant. Ask me meaningful questions, one by one, until you have enough information to create a complete, actionable PRD. Then generate the PRD.
 
 ---
 
@@ -113,8 +138,15 @@ Brief description of the feature and the problem it solves.
 - Any remaining questions or areas needing clarification
 ```
 
-### Step 3: Generate prd.json
+### Step 3: Generate prd.json / Update pipeline.json
 
+**If `.sixty/pipeline.json` exists** (called from /60/ship):
+- Write stories to `pipeline.json.stories[]` using the pipeline schema (see /60/ship)
+- Each story gets: `id`, `title`, `type`, `status`, `priority`, `dependencies`, `acceptance`, `visibility`, `testFiles`
+- Set `pipeline.json.prdFile` to the PRD markdown path
+- Also write legacy `prd.json` for backwards compatibility
+
+**If no pipeline.json** (standalone):
 Write to repo-root `prd.json`:
 
 ```json
@@ -154,31 +186,18 @@ Write to repo-root `prd.json`:
 }
 ```
 
-### Step 3.5: Select Dev Hub Project
+### Step 3.5: Sync to AI Dev Hub
 
-1. Check if AI Dev Hub MCP tools are available (call `search_projects` with keyword from feature name or "use60")
-2. If MCP unavailable, log `⚠️ AI Dev Hub MCP unavailable — skipping Dev Hub sync.` and continue to Step 4
-3. Present discovered projects to user as numbered list using `AskUserQuestion`:
-   - `1. <Project Name> (id: <id>)`
-   - `2. <Project Name> (id: <id>)`
-   - `[Skip] No Dev Hub sync`
-4. Store selected project ID in `prd.json.aiDevHubProjectId` (or leave `null` if skipped)
+Run `/60/sync` to create ONE parent ticket with subtasks in Dev Hub.
+Handles project selection, duplicate checking, and human-readable ticket creation.
 
-### Step 3.6: Create Dev Hub Tasks
+See `.claude/commands/60/sync.md` for the full protocol.
 
-**Skip entirely if `aiDevHubProjectId` is `null`.**
-
-For each story in `prd.json.userStories`:
-1. Call `create_task` with:
-   - `projectId`: from `prd.json.aiDevHubProjectId`
-   - `title`: `[<runSlug>] <storyId>: <Story Title>`
-   - `description`: Story description + acceptance criteria formatted as checklist
-   - `type`: `"feature"`
-   - `status`: `"todo"`
-   - `priority`: mapped from story priority (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
-2. Store returned task ID in `prd.json.userStories[i].aiDevHubTaskId`
-3. If individual task creation fails, set `aiDevHubTaskId: null`, log warning, and continue (never block)
-4. Write updated `prd.json` back to disk after all tasks processed
+**Key rules (enforced by /60/sync):**
+- ONE parent ticket per PRD, stories become subtasks
+- Always deduplicate against existing project tasks first
+- Write titles a PM would write, not robotic prefixes
+- Link to existing tickets instead of creating duplicates
 
 ### Step 4: Initialize progress.txt (if missing)
 
@@ -209,9 +228,9 @@ Stories created:
 - US-002: <title>
 - ...
 
-🚀 Next steps:
-1. Run /60/run to start implementing stories
-2. Or run /continue-feature 10 for legacy loop execution
+Next steps:
+1. Run `/60/ship --resume` to continue the pipeline
+2. Or run `/60/run --all` to start implementing stories directly
 ```
 
 ---

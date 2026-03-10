@@ -29,6 +29,7 @@ import {
   useUpdateTicketStatus,
 } from '@/lib/hooks/useSupportTickets';
 import { TicketDetail } from '@/components/support/TicketDetail';
+import { SupportAppDownload } from '@/components/support/SupportAppDownload';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -329,6 +330,9 @@ export default function SupportTicketsPage() {
           Manage customer support tickets across all organizations
         </p>
       </div>
+
+      {/* Support app download (admin only) */}
+      <SupportAppDownload isAdmin />
 
       {/* Summary stats */}
       <div className="grid grid-cols-4 gap-3">

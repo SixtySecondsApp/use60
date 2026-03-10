@@ -211,8 +211,7 @@ export const GoogleIntegrationTestSuite: React.FC<GoogleIntegrationTestSuiteProp
       if (serviceStatus?.gmail) {
         await runTest('Gmail Labels', 'Gmail', 'Fetch all email labels', async () => {
           const headers = await getAuthHeaders();
-          const response = await supabase.functions.invoke('google-gmail?action=list-labels', {
-            body: {},
+          const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'list-labels',},
             headers
           });
           
@@ -227,8 +226,7 @@ export const GoogleIntegrationTestSuite: React.FC<GoogleIntegrationTestSuiteProp
 
         await runTest('Gmail Emails', 'Gmail', 'Fetch recent emails', async () => {
           const headers = await getAuthHeaders();
-          const response = await supabase.functions.invoke('google-gmail?action=list', {
-            body: { maxResults: 10 },
+          const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'list', maxResults: 10 },
             headers
           });
           
@@ -451,9 +449,10 @@ export const GoogleIntegrationTestSuite: React.FC<GoogleIntegrationTestSuiteProp
       if (serviceStatus?.drive) {
         await runTest('Drive Files', 'Drive', 'List Drive files', async () => {
           const headers = await getAuthHeaders();
-          const response = await supabase.functions.invoke('google-drive', {
+          const response = await supabase.functions.invoke('google-services-router', {
             body: {
-              action: 'list-files',
+              action: 'drive',
+              handlerAction: 'list-files',
               maxResults: 20
             },
             headers
@@ -473,9 +472,10 @@ export const GoogleIntegrationTestSuite: React.FC<GoogleIntegrationTestSuiteProp
           const headers = await getAuthHeaders();
 
           // Create folder
-          const createResponse = await supabase.functions.invoke('google-drive', {
+          const createResponse = await supabase.functions.invoke('google-services-router', {
             body: {
-              action: 'create-folder',
+              action: 'drive',
+              handlerAction: 'create-folder',
               name: testFolderName
             },
             headers

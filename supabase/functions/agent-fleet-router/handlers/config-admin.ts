@@ -1,0 +1,307 @@
+/**
+ * Handler: config_admin
+ * Extracted from supabase/functions/agent-config-admin/index.ts
+ * NOTE: This function imports from its own handlers/ subdirectory.
+ * Paths adjusted to reference the original agent-config-admin directory.
+ */
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import {
+  getCorsHeaders,
+  handleCorsPreflightRequest,
+  jsonResponse,
+  errorResponse,
+} from '../../_shared/corsHelper.ts';
+import { getAuthContext, requireOrgRole } from '../../_shared/edgeAuth.ts';
+import { getAgentConfig, invalidateConfigCache } from '../../_shared/config/agentConfigEngine.ts';
+import type { AgentType } from '../../_shared/config/types.ts';
+import { handleConfirmBootstrapConfig } from '../../agent-config-admin/handlers/bootstrapConfig.ts';
+import {
+  handleGetAutonomyCeilings,
+  handleSetAutonomyCeiling,
+  handleGetRepAutonomy,
+  handleSetRepAutonomyOverride,
+  handleGetTeamAutonomyAnalytics,
+} from '../../agent-config-admin/handlers/managerControls.ts';
+
+export async function handleConfigAdmin(req: Request): Promise<Response> {
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) return preflightResponse;
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: { headers: { Authorization: req.headers.get('Authorization')! } },
+    });
+
+    const serviceClient = createClient(supabaseUrl, serviceRoleKey);
+
+    const authContext = await getAuthContext(req, supabase, serviceRoleKey);
+    if (!authContext.userId) {
+      return errorResponse('Unauthorized', req, 401);
+    }
+
+    const body = await req.json();
+    // When routed through fleet-router, the top-level 'action' is 'config_admin'.
+    // The internal sub-action comes via 'sub_action' or falls back to 'action'.
+    const internalAction = body.sub_action || body.action;
+    const { action: _routerAction, sub_action: _subAction, ...params } = body;
+    const action = internalAction;
+
+    if (action === 'get_config') {
+      const { org_id, agent_type, user_id } = params;
+      if (!org_id || !agent_type) {
+        return errorResponse('org_id and agent_type are required', req, 400);
+      }
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin', 'member', 'readonly']);
+      const config = await getAgentConfig(serviceClient, org_id, user_id ?? null, agent_type as AgentType);
+      return jsonResponse({ config }, req);
+    }
+
+    if (action === 'list_agent_types') {
+      const { data, error } = await serviceClient
+        .from('agent_config_defaults')
+        .select('agent_type')
+        .order('agent_type');
+      if (error) {
+        console.error('[agent-config-admin] list_agent_types error:', error);
+        return errorResponse('Failed to list agent types', req, 500);
+      }
+      const agent_types = [...new Set((data ?? []).map((r: { agent_type: string }) => r.agent_type))];
+      return jsonResponse({ agent_types }, req);
+    }
+
+    if (action === 'set_org_override') {
+      const { org_id, agent_type, config_key, config_value } = params;
+      if (!org_id || !agent_type || !config_key || config_value === undefined) {
+        return errorResponse('org_id, agent_type, config_key, and config_value are required', req, 400);
+      }
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const { data: defaultRow } = await serviceClient
+        .from('agent_config_defaults')
+        .select('config_key')
+        .eq('agent_type', agent_type)
+        .eq('config_key', config_key)
+        .maybeSingle();
+      if (!defaultRow) {
+        return errorResponse(`Config key '${config_key}' not found for agent_type '${agent_type}'`, req, 400);
+      }
+      const { error } = await serviceClient
+        .from('agent_config_org_overrides')
+        .upsert(
+          { org_id, agent_type, config_key, config_value, updated_at: new Date().toISOString() },
+          { onConflict: 'org_id,agent_type,config_key' },
+        );
+      if (error) {
+        console.error('[agent-config-admin] set_org_override error:', error);
+        return errorResponse('Failed to set org override', req, 500);
+      }
+      invalidateConfigCache(org_id);
+      return jsonResponse({ success: true, config_key, agent_type }, req);
+    }
+
+    if (action === 'remove_org_override') {
+      const { org_id, agent_type, config_key } = params;
+      if (!org_id || !agent_type || !config_key) {
+        return errorResponse('org_id, agent_type, and config_key are required', req, 400);
+      }
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const { data, error } = await serviceClient
+        .from('agent_config_org_overrides')
+        .delete()
+        .eq('org_id', org_id)
+        .eq('agent_type', agent_type)
+        .eq('config_key', config_key)
+        .select('config_key');
+      if (error) {
+        console.error('[agent-config-admin] remove_org_override error:', error);
+        return errorResponse('Failed to remove org override', req, 500);
+      }
+      invalidateConfigCache(org_id);
+      return jsonResponse({ success: true, removed: (data ?? []).length > 0 }, req);
+    }
+
+    if (action === 'set_user_override') {
+      const { org_id, agent_type, config_key, config_value } = params;
+      if (!org_id || !agent_type || !config_key || config_value === undefined) {
+        return errorResponse('org_id, agent_type, config_key, and config_value are required', req, 400);
+      }
+      const { data: overridableRow } = await serviceClient
+        .from('agent_config_user_overridable')
+        .select('is_overridable')
+        .eq('org_id', org_id)
+        .eq('agent_type', agent_type)
+        .eq('config_key', config_key)
+        .maybeSingle();
+      if (!overridableRow || !overridableRow.is_overridable) {
+        return errorResponse('Config key is not user-overridable', req, 403);
+      }
+      const { error } = await serviceClient
+        .from('agent_config_user_overrides')
+        .upsert(
+          { org_id, agent_type, config_key, config_value, user_id: authContext.userId, updated_at: new Date().toISOString() },
+          { onConflict: 'org_id,agent_type,config_key,user_id' },
+        );
+      if (error) {
+        console.error('[agent-config-admin] set_user_override error:', error);
+        return errorResponse('Failed to set user override', req, 500);
+      }
+      invalidateConfigCache(org_id, authContext.userId);
+      return jsonResponse({ success: true, config_key, agent_type }, req);
+    }
+
+    if (action === 'remove_user_override') {
+      const { org_id, agent_type, config_key } = params;
+      if (!org_id || !agent_type || !config_key) {
+        return errorResponse('org_id, agent_type, and config_key are required', req, 400);
+      }
+      const { data, error } = await serviceClient
+        .from('agent_config_user_overrides')
+        .delete()
+        .eq('org_id', org_id)
+        .eq('agent_type', agent_type)
+        .eq('config_key', config_key)
+        .eq('user_id', authContext.userId)
+        .select('config_key');
+      if (error) {
+        console.error('[agent-config-admin] remove_user_override error:', error);
+        return errorResponse('Failed to remove user override', req, 500);
+      }
+      invalidateConfigCache(org_id, authContext.userId);
+      return jsonResponse({ success: true, removed: (data ?? []).length > 0 }, req);
+    }
+
+    if (action === 'set_overridable') {
+      const { org_id, agent_type, config_key, is_overridable } = params;
+      if (!org_id || !agent_type || !config_key || typeof is_overridable !== 'boolean') {
+        return errorResponse('org_id, agent_type, config_key, and is_overridable (boolean) are required', req, 400);
+      }
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const { error } = await serviceClient
+        .from('agent_config_user_overridable')
+        .upsert(
+          { org_id, agent_type, config_key, is_overridable, updated_at: new Date().toISOString() },
+          { onConflict: 'org_id,agent_type,config_key' },
+        );
+      if (error) {
+        console.error('[agent-config-admin] set_overridable error:', error);
+        return errorResponse('Failed to set overridable flag', req, 500);
+      }
+      return jsonResponse({ success: true, config_key, is_overridable }, req);
+    }
+
+    if (action === 'get_overridable_keys') {
+      const { org_id, agent_type } = params;
+      if (!org_id) {
+        return errorResponse('org_id is required', req, 400);
+      }
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin', 'member', 'readonly']);
+      let query = serviceClient
+        .from('agent_config_user_overridable')
+        .select('agent_type, config_key, is_overridable')
+        .eq('org_id', org_id);
+      if (agent_type) {
+        query = query.eq('agent_type', agent_type);
+      }
+      const { data, error } = await query;
+      if (error) {
+        console.error('[agent-config-admin] get_overridable_keys error:', error);
+        return errorResponse('Failed to get overridable keys', req, 500);
+      }
+      return jsonResponse({ keys: data ?? [] }, req);
+    }
+
+    if (action === 'get_methodologies') {
+      const { data, error } = await serviceClient
+        .from('agent_methodology_templates')
+        .select('id, methodology_key, name, description, qualification_criteria, stage_rules, coaching_focus')
+        .eq('is_active', true);
+      if (error) {
+        console.error('[agent-config-admin] get_methodologies error:', error);
+        return errorResponse('Failed to get methodologies', req, 500);
+      }
+      return jsonResponse({ methodologies: data ?? [] }, req);
+    }
+
+    if (action === 'apply_methodology') {
+      const { org_id, methodology_key } = params;
+      if (!org_id || !methodology_key) {
+        return errorResponse('org_id and methodology_key are required', req, 400);
+      }
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const { data, error } = await serviceClient.rpc('apply_methodology', {
+        p_org_id: org_id,
+        p_methodology_key: methodology_key,
+        p_applied_by: authContext.userId,
+      });
+      if (error) {
+        console.error('[agent-config-admin] apply_methodology RPC error:', error);
+        return errorResponse('Failed to apply methodology', req, 500);
+      }
+      invalidateConfigCache(org_id);
+      return jsonResponse({ success: true, methodology_key, keys_written: data ?? 0 }, req);
+    }
+
+    if (action === 'confirm_bootstrap_config') {
+      const { org_id, items } = params;
+      if (!org_id) {
+        return errorResponse('org_id is required', req, 400);
+      }
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const result = await handleConfirmBootstrapConfig(serviceClient, org_id, authContext.userId, { items });
+      invalidateConfigCache(org_id);
+      return jsonResponse({ success: true, ...result }, req);
+    }
+
+    if (action === 'get_autonomy_ceilings') {
+      const { org_id } = params;
+      if (!org_id) return errorResponse('org_id is required', req, 400);
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const result = await handleGetAutonomyCeilings(serviceClient, org_id);
+      return jsonResponse(result, req);
+    }
+
+    if (action === 'set_autonomy_ceiling') {
+      const { org_id, action_type, max_ceiling, auto_promotion_eligible } = params;
+      if (!org_id) return errorResponse('org_id is required', req, 400);
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const result = await handleSetAutonomyCeiling(serviceClient, org_id, authContext.userId, { action_type, max_ceiling, auto_promotion_eligible });
+      invalidateConfigCache(org_id);
+      return jsonResponse(result, req);
+    }
+
+    if (action === 'get_rep_autonomy') {
+      const { org_id } = params;
+      if (!org_id) return errorResponse('org_id is required', req, 400);
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const result = await handleGetRepAutonomy(serviceClient, org_id);
+      return jsonResponse(result, req);
+    }
+
+    if (action === 'set_rep_autonomy_override') {
+      const { org_id, user_id, action_type: rep_action_type, policy } = params;
+      if (!org_id) return errorResponse('org_id is required', req, 400);
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const result = await handleSetRepAutonomyOverride(serviceClient, org_id, authContext.userId, { user_id, action_type: rep_action_type, policy });
+      invalidateConfigCache(org_id, user_id);
+      return jsonResponse(result, req);
+    }
+
+    if (action === 'get_team_autonomy_analytics') {
+      const { org_id, window_days } = params;
+      if (!org_id) return errorResponse('org_id is required', req, 400);
+      await requireOrgRole(supabase, org_id, authContext.userId, ['owner', 'admin']);
+      const result = await handleGetTeamAutonomyAnalytics(serviceClient, org_id, window_days ?? 30);
+      return jsonResponse(result, req);
+    }
+
+    return errorResponse(`Unknown action: ${action}`, req, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Internal error';
+    const status = message.includes('Unauthorized') ? 401 : 500;
+    return errorResponse(message, req, status);
+  }
+}

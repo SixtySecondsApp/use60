@@ -203,10 +203,10 @@ export function TestSetupStep() {
       const base = import.meta.env.VITE_SUPABASE_URL;
 
       // Step 1: Search Apollo to get apollo_ids + partial data
-      const searchRes = await fetch(`${base}/functions/v1/apollo-search`, {
+      const searchRes = await fetch(`${base}/functions/v1/enrichment-apollo`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(params),
+        body: JSON.stringify({ action: 'search', ...params }),
       });
       if (!searchRes.ok) return;
 
@@ -219,10 +219,10 @@ export function TestSetupStep() {
 
       // Step 2: Reveal real names + emails via bulk_match using apollo_ids
       const apolloIds = contacts.map(c => c.apollo_id as string);
-      const revealRes = await fetch(`${base}/functions/v1/apollo-reveal`, {
+      const revealRes = await fetch(`${base}/functions/v1/enrichment-apollo`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ apollo_ids: apolloIds }),
+        body: JSON.stringify({ action: 'reveal', apollo_ids: apolloIds }),
       });
 
       if (!revealRes.ok) {

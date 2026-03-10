@@ -274,7 +274,7 @@ async function processRetryJob(
         console.log(`🖼️  Generating thumbnail for meeting ${job.meeting_id}`)
 
         const thumbResponse = await fetch(
-          `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-video-thumbnail-v2`,
+          `${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-router`,
           {
             method: 'POST',
             headers: {
@@ -283,6 +283,7 @@ async function processRetryJob(
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+              action: 'video_thumbnail_v2',
               recording_id: String(meetingForThumb.fathom_recording_id),
               share_url: meetingForThumb.share_url || '',
               fathom_embed_url: embedUrl,
@@ -332,22 +333,13 @@ async function processRetryJob(
   }
 }
 
-serve(async (req) => {
+export async function handleTranscriptRetry(req: Request): Promise<Response> {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Authorization: This function is deployed with --no-verify-jwt so it's accessible
-    // without JWT verification. We rely on the function URL being non-public
-    // (only called by cron jobs and internal fire-and-forget triggers).
-    // The service role key is used internally to create the Supabase admin client.
-    //
-    // Previous auth check was removed because Supabase gateway modifies the
-    // Authorization header during JWT validation, making it impossible to compare
-    // the raw service role key against the received header.
-
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -455,5 +447,7 @@ serve(async (req) => {
       }
     )
   }
-})
+}
+
+serve((req) => handleTranscriptRetry(req))
 

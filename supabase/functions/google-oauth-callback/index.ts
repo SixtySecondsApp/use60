@@ -66,7 +66,7 @@ serve(async (req) => {
     // Retrieve the state and PKCE verifier from database
     const { data: oauthState, error: stateError } = await supabase
       .from('google_oauth_states')
-      .select('user_id, code_verifier, redirect_uri, created_at')
+      .select('user_id, code_verifier, redirect_uri, scope_tier, created_at')
       .eq('state', state)
       .single();
 
@@ -169,6 +169,7 @@ serve(async (req) => {
         refresh_token: tokenData.refresh_token,
         expires_at: expiresAt.toISOString(),
         scopes: tokenData.scope,
+        scope_tier: oauthState.scope_tier || 'free',
         is_active: true,
       }, {
         onConflict: 'user_id',

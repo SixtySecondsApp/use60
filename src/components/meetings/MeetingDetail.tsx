@@ -240,7 +240,15 @@ const MeetingDetail: React.FC = () => {
         .eq('meeting_id', id)
 
       if (attendeesError) throw attendeesError
-      setAttendees(attendeesData || [])
+      // Deduplicate attendees by email (some sync sources insert duplicates)
+      const seen = new Set<string>()
+      const uniqueAttendees = (attendeesData || []).filter(a => {
+        const key = a.email?.toLowerCase()
+        if (!key || seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      setAttendees(uniqueAttendees)
 
       // Fetch action items
       const { data: actionItemsData, error: actionItemsError } = await supabase
@@ -292,8 +300,9 @@ const MeetingDetail: React.FC = () => {
         if (embedUrl) {
           // Choose a representative timestamp: midpoint, clamped to >=5s
           const midpointSeconds = Math.max(5, Math.floor((meeting.duration_minutes || 0) * 60 / 2))
-          const { data, error } = await supabase.functions.invoke('generate-video-thumbnail-v2', {
+          const { data, error } = await supabase.functions.invoke('generate-router', {
             body: {
+              action: 'video_thumbnail_v2',
               recording_id: meeting.fathom_recording_id,
               share_url: meeting.share_url,
               fathom_embed_url: embedUrl,
@@ -369,8 +378,8 @@ const MeetingDetail: React.FC = () => {
     if (!meeting) return
     setIsExtracting(true)
     try {
-      const { data, error } = await supabase.functions.invoke('extract-action-items', {
-        body: { meetingId: meeting.id }
+      const { data, error } = await supabase.functions.invoke('extract-router', {
+        body: { action: 'action_items', meetingId: meeting.id }
       })
       if (error) throw error
 

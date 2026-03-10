@@ -62,12 +62,12 @@ export function useAttioIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('attio-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'status', org_id: activeOrgId }),
+        body: JSON.stringify({ action: 'attio_admin', sub_action: 'status', org_id: activeOrgId }),
       });
 
       if (resp.error) {
@@ -131,12 +131,12 @@ export function useAttioIntegration(enabled: boolean = true) {
 
     setDisconnecting(true);
     try {
-      const resp = await supabase.functions.invoke('attio-disconnect', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ org_id: activeOrgId }),
+        body: JSON.stringify({ action: 'attio_disconnect', org_id: activeOrgId }),
       });
       if (resp.error) {
         throw new Error(resp.error.message || 'Failed to disconnect Attio');
@@ -163,12 +163,12 @@ export function useAttioIntegration(enabled: boolean = true) {
 
       setSaving(true);
       try {
-        const resp = await supabase.functions.invoke('attio-admin', {
+        const resp = await supabase.functions.invoke('crm-admin-router', {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ action: 'save_settings', org_id: activeOrgId, settings }),
+          body: JSON.stringify({ action: 'attio_admin', sub_action: 'save_settings', org_id: activeOrgId, settings }),
         });
         if (resp.error) throw new Error(resp.error.message || 'Failed to save settings');
       } finally {
@@ -185,12 +185,12 @@ export function useAttioIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('attio-admin', {
+    const resp = await supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action: 'get_objects', org_id: activeOrgId }),
+      body: JSON.stringify({ action: 'attio_admin', sub_action: 'get_objects', org_id: activeOrgId }),
     });
     if (resp.error) throw new Error(resp.error.message || 'Failed to fetch objects');
     if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch objects');
@@ -210,12 +210,12 @@ export function useAttioIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('attio-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'get_attributes', org_id: activeOrgId, object }),
+        body: JSON.stringify({ action: 'attio_admin', sub_action: 'get_attributes', org_id: activeOrgId, object }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to fetch attributes');
       if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch attributes');
@@ -238,12 +238,12 @@ export function useAttioIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('attio-admin', {
+    const resp = await supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action: 'get_lists', org_id: activeOrgId }),
+      body: JSON.stringify({ action: 'attio_admin', sub_action: 'get_lists', org_id: activeOrgId }),
     });
     if (resp.error) throw new Error(resp.error.message || 'Failed to fetch lists');
     if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch lists');
@@ -265,12 +265,12 @@ export function useAttioIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('attio-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'get_records', org_id: activeOrgId, object, ...opts }),
+        body: JSON.stringify({ action: 'attio_admin', sub_action: 'get_records', org_id: activeOrgId, object, ...opts }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to fetch records');
       if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch records');
@@ -286,12 +286,12 @@ export function useAttioIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('attio-admin', {
+    const resp = await supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action: 'get_settings', org_id: activeOrgId }),
+      body: JSON.stringify({ action: 'attio_admin', sub_action: 'get_settings', org_id: activeOrgId }),
     });
     if (resp.error) throw new Error(resp.error.message || 'Failed to fetch settings');
     if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch settings');
@@ -307,12 +307,12 @@ export function useAttioIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('attio-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'trigger_sync', org_id: activeOrgId, table_id: tableId }),
+        body: JSON.stringify({ action: 'attio_admin', sub_action: 'trigger_sync', org_id: activeOrgId, table_id: tableId }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to trigger sync');
       if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to trigger sync');

@@ -91,13 +91,14 @@ export async function enrichFirefliesMeeting(
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     if (supabaseUrl && serviceRoleKey) {
-      fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+      fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${serviceRoleKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'orchestrator',
           type: 'meeting_ended',
           source: 'edge:fireflies-sync',
           org_id: orgId,

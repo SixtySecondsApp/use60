@@ -278,13 +278,14 @@ async function processAIAnalysis(
 
     if (supabaseUrl && serviceRoleKey) {
       try {
-        await fetch(`${supabaseUrl}/functions/v1/send-recording-notification`, {
+        await fetch(`${supabaseUrl}/functions/v1/send-router`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${serviceRoleKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            action: 'recording_notification',
             recording_id: recordingId,
             notification_type: 'recording_ready',
           }),

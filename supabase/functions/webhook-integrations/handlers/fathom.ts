@@ -96,7 +96,7 @@ export async function handleWebhook(req: Request): Promise<Response> {
     }
     // Preferred org-scoped sync: if org_id is provided, route directly to that org.
     if (orgId) {
-      const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-sync`
+      const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-ops-router`
       const syncStartTime = Date.now()
 
       const syncResponse = await fetch(syncUrl, {
@@ -106,6 +106,7 @@ export async function handleWebhook(req: Request): Promise<Response> {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'sync',
           sync_type: 'webhook',
           org_id: orgId,
           webhook_payload: payload,
@@ -186,8 +187,8 @@ export async function handleWebhook(req: Request): Promise<Response> {
       )
     }
 
-    // Call the main fathom-sync function with webhook mode
-    const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-sync`
+    // Call the main fathom-ops-router with sync action
+    const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-ops-router`
     const syncStartTime = Date.now()
 
     const syncResponse = await fetch(syncUrl, {
@@ -197,6 +198,7 @@ export async function handleWebhook(req: Request): Promise<Response> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'sync',
         sync_type: 'webhook',
         user_id: userId,
         // Preserve org_id if it was provided so fathom-sync can use it for limits/ownership

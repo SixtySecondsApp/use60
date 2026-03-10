@@ -1,0 +1,8 @@
+# Progress Log
+Run: nylas-integration-verification
+Started: 2026-03-07T18:00:00Z
+
+## Codebase Patterns
+(Add reusable patterns/gotchas discovered during implementation)
+
+---

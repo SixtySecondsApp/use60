@@ -78,9 +78,9 @@ export function useDealRiskSignals(dealId: string | null) {
       setError(null);
 
       const { data, error: funcError } = await supabase.functions.invoke(
-        'deal-analyze-risk-signals',
+        'deal-router',
         {
-          body: { dealId },
+          body: { action: 'analyze_risk_signals', dealId },
         }
       );
 

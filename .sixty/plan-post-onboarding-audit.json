@@ -1,0 +1,66 @@
+{
+  "project": {
+    "name": "Post-Onboarding Audit - Application Flow Bug Fixes",
+    "createdAt": "2026-02-24T01:00:00Z",
+    "branch": "fix/production-bugs"
+  },
+  "features": [
+    {
+      "id": "crash-fixes",
+      "name": "Runtime Crash Fixes",
+      "status": "pending"
+    },
+    {
+      "id": "ux-fixes",
+      "name": "UX & Error Handling Fixes",
+      "status": "pending"
+    }
+  ],
+  "stories": [
+    {
+      "id": "CRASH-001",
+      "feature": "crash-fixes",
+      "title": "Fix undefined syncMutation in OrgProfileSettings",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "description": "OrgProfileSettings.tsx references syncMutation.isPending on lines 291 and 296, but syncMutation is never defined. This crashes the Sync to Skills button. Fix: replace syncMutation references with a local loading state since handleSyncToSkills is a plain async function, not a mutation.",
+      "files": ["src/components/settings/OrgProfileSettings.tsx"]
+    },
+    {
+      "id": "UX-001",
+      "feature": "ux-fixes",
+      "title": "Add skip/cancel button to RecordingSetupWizard",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "description": "RecordingSetupWizard was changed from Dialog to Card, removing the ability to dismiss. Users are now stuck in the wizard. Add a Skip/Cancel button that calls handleSkipToEnd().",
+      "files": ["src/components/recording/RecordingSetupWizard.tsx"]
+    },
+    {
+      "id": "UX-002",
+      "feature": "ux-fixes",
+      "title": "Add image onError fallback in NotetakerSettingsTab",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "description": "NotetakerSettingsTab line 572 renders an img tag with no onError handler. If the image fails, user sees broken image. Add onError fallback to show icon instead.",
+      "files": ["src/components/settings/NotetakerSettingsTab.tsx"]
+    },
+    {
+      "id": "UX-003",
+      "feature": "ux-fixes",
+      "title": "Fix waitlistService .single() calls that can error",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "description": "waitlistService.ts uses .single() on lines 209 and 231 which throws PGRST116 when no record is found. Line 209 already handles this error but line 231 (validateReferralCode) should use .maybeSingle() instead since a missing referral code is a valid case.",
+      "files": ["src/lib/services/waitlistService.ts"]
+    }
+  ],
+  "execution": {
+    "totalStories": 4,
+    "completedStories": 0,
+    "lastUpdated": "2026-02-24T01:00:00Z"
+  }
+}

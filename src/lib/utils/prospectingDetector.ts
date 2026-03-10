@@ -11,9 +11,10 @@
 // ---------------------------------------------------------------------------
 
 export interface ClarifyingQuestion {
-  type: 'select' | 'text';
+  type: 'select' | 'text' | 'select_or_text';
   question: string;
   options?: string[];
+  placeholder?: string;
   key: string;
 }
 
@@ -101,7 +102,9 @@ export function enrichPromptWithAnswers(prompt: string, answers: Record<string, 
     }
   }
   if (answers.email_steps) {
-    if (answers.email_steps === 'Yes (3 steps)') {
+    if (answers.email_steps === 'Yes (1 step)') {
+      additions.push('generate a 1-step email sequence');
+    } else if (answers.email_steps === 'Yes (3 steps)') {
       additions.push('generate a 3-step email sequence');
     } else if (answers.email_steps === 'Yes (5 steps)') {
       additions.push('generate a 5-step email sequence');
@@ -243,12 +246,13 @@ export function detectCampaignMissingInfo(prompt: string): ClarifyingQuestion[] 
   // ── Phase 1: Intent & Audience (high-level) ──
 
   // 1. Campaign goal — always ask unless prompt clearly states intent
-  const mentionsGoal = /book meeting|generate lead|brand awareness|promote|nurture|re-?engage|upsell|cross-?sell/i.test(lower);
+  const mentionsGoal = /book meeting|generate lead|brand awareness|promote|nurture|re-?engage|upsell|cross-?sell|invite.*event|event invitation/i.test(lower);
   if (!mentionsGoal) {
     questions.push({
-      type: 'select',
+      type: 'select_or_text',
       question: 'What do you want to achieve from this campaign?',
       options: ['Book meetings', 'Generate leads', 'Promote content/offer', 'Re-engage cold leads'],
+      placeholder: 'Or type your own, e.g. "Invite people to an event"',
       key: 'campaign_goal',
     });
   }
@@ -313,7 +317,7 @@ export function detectCampaignMissingInfo(prompt: string): ClarifyingQuestion[] 
     questions.push({
       type: 'select',
       question: 'Generate email sequence?',
-      options: ['Yes (3 steps)', 'Yes (5 steps)', 'No, just push contacts'],
+      options: ['Yes (1 step)', 'Yes (3 steps)', 'Yes (5 steps)', 'No, just push contacts'],
       key: 'email_steps',
     });
   }

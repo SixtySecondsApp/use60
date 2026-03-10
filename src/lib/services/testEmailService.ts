@@ -106,9 +106,9 @@ export const testEmailService = {
    */
   async testEdgeFunctions(): Promise<{ function: string; status: 'ok' | 'error' }[]> {
     const functions = [
-      'send-organization-invitation',
+      'send-router',
       'encharge-send-email',
-      'send-password-reset-email',
+      'send-router',
     ];
 
     const results = await Promise.all(

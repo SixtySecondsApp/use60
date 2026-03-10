@@ -808,8 +808,8 @@ async function processCallReadyWebhook(supabase: any, payload: any, callId: stri
   if (tokenError || !tokenData) {
   }
 
-  // Call the fathom-sync Edge Function to pull this specific call
-  const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-sync`
+  // Call the fathom-ops-router Edge Function to pull this specific call
+  const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-ops-router`
 
   try {
     // Create a service role supabase client for the sync call
@@ -838,6 +838,7 @@ async function processCallReadyWebhook(supabase: any, payload: any, callId: stri
         'X-User-Id': userId, // Pass user ID for the sync function
       },
       body: JSON.stringify({
+        action: 'sync',
         sync_type: 'webhook',
         call_id: callId,
         user_id: userId, // Explicitly pass user ID

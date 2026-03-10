@@ -213,7 +213,7 @@ export default function Users() {
       const redirectUrl = baseUrl;
       logger.log('Password reset redirect URL:', redirectUrl, 'VITE_PUBLIC_URL:', import.meta.env.VITE_PUBLIC_URL);
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-password-reset-email`, {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -221,6 +221,7 @@ export default function Users() {
           'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({
+          action: 'password_reset_email',
           email: email.toLowerCase().trim(),
           redirectTo: redirectUrl,
         }),

@@ -53,8 +53,9 @@ export async function enrichContact(
   contact: Contact
 ): Promise<EnrichmentResult<EnrichedContactData>> {
   try {
-    const { data, error } = await supabase.functions.invoke('enrich-crm-record', {
+    const { data, error } = await supabase.functions.invoke('enrich-router', {
       body: {
+        action: 'crm_record',
         type: 'contact',
         id: contact.id,
         contact_data: {
@@ -108,8 +109,9 @@ export async function enrichCompany(
   company: Company
 ): Promise<EnrichmentResult<EnrichedCompanyData>> {
   try {
-    const { data, error } = await supabase.functions.invoke('enrich-crm-record', {
+    const { data, error } = await supabase.functions.invoke('enrich-router', {
       body: {
+        action: 'crm_record',
         type: 'company',
         id: company.id,
         company_data: {

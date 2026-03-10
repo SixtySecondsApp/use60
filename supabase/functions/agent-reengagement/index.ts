@@ -34,7 +34,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 // Fleet orchestrator endpoint (internal call)
-const FLEET_ORCHESTRATOR_URL = `${SUPABASE_URL}/functions/v1/agent-orchestrator`;
+const FLEET_ORCHESTRATOR_URL = `${SUPABASE_URL}/functions/v1/agent-fleet-router`;
 
 // =============================================================================
 // Types
@@ -188,6 +188,7 @@ async function getEnabledOrgIds(
 async function dispatchReengagementScan(orgId: string): Promise<OrgResult> {
   try {
     const payload = {
+      action: 'orchestrator',
       event_type: 'cron.reengagement_scan',
       org_id: orgId,
       context: {

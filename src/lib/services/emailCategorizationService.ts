@@ -166,8 +166,7 @@ export function getCategoryDefinition(key: EmailCategory): CategoryDefinition | 
  */
 export async function fetchGmailLabels(): Promise<GmailLabel[]> {
   const headers = await getAuthHeaders();
-  const { data, error } = await supabase.functions.invoke('google-gmail', {
-    body: { action: 'list-labels' },
+  const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'list-labels' },
     headers
   });
 
@@ -184,8 +183,7 @@ export async function fetchGmailLabels(): Promise<GmailLabel[]> {
  */
 export async function findGmailLabelByName(name: string): Promise<GmailLabel | null> {
   const headers = await getAuthHeaders();
-  const { data, error } = await supabase.functions.invoke('google-gmail', {
-    body: { action: 'find-label', name },
+  const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'find-label', name },
     headers
   });
 
@@ -209,9 +207,7 @@ export async function getOrCreateGmailLabel(
   }
 ): Promise<{ label: GmailLabel; created: boolean; isSixtyManaged: boolean }> {
   const headers = await getAuthHeaders();
-  const { data, error } = await supabase.functions.invoke('google-gmail', {
-    body: {
-      action: 'get-or-create-label',
+  const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'get-or-create-label',
       name,
       backgroundColor: options?.backgroundColor,
       textColor: options?.textColor,

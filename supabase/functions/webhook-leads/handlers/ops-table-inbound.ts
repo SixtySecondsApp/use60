@@ -17,7 +17,7 @@ import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.27.0'
 import {
   getCorsHeaders,
   handleCorsPreflightRequest,
-} from '../../../_shared/corsHelper.ts'
+} from '../../_shared/corsHelper.ts'
 
 // ---------------------------------------------------------------------------
 // Simple in-memory rate limiter: 60 requests per minute per table_id
@@ -112,7 +112,7 @@ Rules:
 // ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
-serve(async (req: Request) => {
+export async function handleWebhook(req: Request): Promise<Response> {
   // 1. CORS preflight
   const preflightResponse = handleCorsPreflightRequest(req)
   if (preflightResponse) return preflightResponse

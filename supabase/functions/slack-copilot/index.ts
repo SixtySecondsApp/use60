@@ -205,8 +205,9 @@ serve(async (req) => {
 
       const effectiveThreadTs = threadTs || messageTs;
 
-      supabase.functions.invoke('proposal-pipeline-v2', {
+      supabase.functions.invoke('proposal-router', {
         body: {
+          action: 'pipeline_v2',
           deal_id: pipelineData.deal_id,
           contact_id: pipelineData.contact_id ?? undefined,
           trigger_type: 'slack',

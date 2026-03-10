@@ -137,8 +137,8 @@ export function ActivityProcessingPage() {
     const toastId = toast.loading(`Processing activity ${activityId}...`);
 
     try {
-      const { data, error: functionError } = await supabase.functions.invoke('process-single-activity', {
-        body: { activityId },
+      const { data, error: functionError } = await supabase.functions.invoke('process-jobs-router', {
+        body: { action: 'single_activity', activityId },
       });
 
       if (functionError) {

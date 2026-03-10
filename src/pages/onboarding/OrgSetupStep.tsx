@@ -205,8 +205,9 @@ export function OrgSetupStep({ onNext, onBack }: OrgSetupStepProps) {
 
     // Fire-and-forget: enrich org profile from domain (don’t block onboarding UX)
     supabase.functions
-      .invoke('enrich-organization', {
+      .invoke('enrich-router', {
         body: {
+          action: 'organization',
           orgId: activeOrg.id,
           domain: userDomain,
           orgName: activeOrg.name,

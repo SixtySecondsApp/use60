@@ -153,6 +153,7 @@ serve(async (req) => {
           if (org) {
             enrichmentData = {
               ...enrichmentData,
+              company_name: enrichmentData.company_name || org.name,
               description: enrichmentData.description || org.short_description || org.description,
               industry: enrichmentData.industry || org.industry,
               size: enrichmentData.size || org.estimated_num_employees,
@@ -173,6 +174,7 @@ serve(async (req) => {
         updated_at: new Date().toISOString(),
       };
 
+      if (enrichmentData.company_name) updateData.name = enrichmentData.company_name;
       if (enrichmentData.description) updateData.description = enrichmentData.description;
       if (enrichmentData.industry) updateData.industry = enrichmentData.industry;
       if (enrichmentData.size) updateData.size = enrichmentData.size;
@@ -180,6 +182,7 @@ serve(async (req) => {
       if (enrichmentData.phone) updateData.phone = enrichmentData.phone;
       if (enrichmentData.address) updateData.address = enrichmentData.address;
       if (enrichmentData.linkedin_url) updateData.linkedin_url = enrichmentData.linkedin_url;
+      updateData.enrichment_data = enrichmentData;
 
       const { error: updateError } = await supabase
         .from("companies")

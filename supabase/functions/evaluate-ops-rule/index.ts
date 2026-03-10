@@ -254,8 +254,8 @@ serve(async (req: Request) => {
           const enrichColId = actionConfig.enrichment_column_id
           if (!enrichColId) throw new Error('Enrichment column not specified')
 
-          const { error: enrichErr } = await supabase.functions.invoke('enrich-dynamic-table', {
-            body: { table_id: rule.table_id, column_id: enrichColId, row_ids: [row_id] },
+          const { error: enrichErr } = await supabase.functions.invoke('enrich-router', {
+            body: { action: 'dynamic_table', table_id: rule.table_id, column_id: enrichColId, row_ids: [row_id] },
           })
           if (enrichErr) throw enrichErr
 

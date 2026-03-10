@@ -111,9 +111,10 @@ export default function CRMFieldMappingSettings() {
     setDetecting(true);
     setTestResults(null);
     try {
-      const { data, error } = await supabase.functions.invoke('hubspot-admin', {
+      const { data, error } = await supabase.functions.invoke('crm-admin-router', {
         body: {
-          action: 'detect_fields',
+          action: 'hubspot_admin',
+          sub_action: 'detect_fields',
           org_id: orgId,
           object_type: HUBSPOT_OBJECT_MAP[selectedObject],
         },
@@ -165,9 +166,10 @@ export default function CRMFieldMappingSettings() {
     setTesting(true);
     try {
       const mappedFields = fieldRows.filter((r) => !r.is_excluded && r.sixty_field_name);
-      const { data, error } = await supabase.functions.invoke('hubspot-admin', {
+      const { data, error } = await supabase.functions.invoke('crm-admin-router', {
         body: {
-          action: 'test_mapping',
+          action: 'hubspot_admin',
+          sub_action: 'test_mapping',
           org_id: orgId,
           object_type: HUBSPOT_OBJECT_MAP[selectedObject],
           mappings: mappedFields.map((r) => ({

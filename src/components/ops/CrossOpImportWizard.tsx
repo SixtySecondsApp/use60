@@ -177,8 +177,9 @@ export function CrossOpImportWizard({ open, onOpenChange, onComplete }: CrossOpI
     setImportError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('import-from-ops-table', {
+      const { data, error } = await supabase.functions.invoke('import-router', {
         body: {
+          action: 'from_ops_table',
           org_id: activeOrg.id,
           user_id: user.id,
           source_table_id: selectedTableId,

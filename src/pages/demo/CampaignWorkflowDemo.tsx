@@ -73,12 +73,12 @@ const MOCK_OPS_TABLE_WITH_ENRICHMENT: OpsTableResponseData = {
 const MOCK_CAMPAIGN_BARE: CampaignWorkflowData = {
   original_prompt: 'Start a campaign',
   questions: [
-    { type: 'select', question: 'What do you want to achieve from this campaign?', options: ['Book meetings', 'Generate leads', 'Promote content/offer', 'Re-engage cold leads'], key: 'campaign_goal' },
+    { type: 'select_or_text', question: 'What do you want to achieve from this campaign?', options: ['Book meetings', 'Generate leads', 'Promote content/offer', 'Re-engage cold leads'], placeholder: 'Or type your own, e.g. "Invite people to an event"', key: 'campaign_goal' },
     { type: 'text', question: 'Who are you targeting? (e.g. "SaaS CTOs in London" or "marketing agencies in Bristol")', key: 'target_audience' },
     { type: 'select', question: 'What size companies are you targeting?', options: ['Small (1-50)', 'Medium (51-500)', 'Large (500+)', 'Any size'], key: 'company_size' },
     { type: 'select', question: 'How many results would you like?', options: ['10', '25', '50', '100'], key: 'result_count' },
     { type: 'select', question: 'What should we enrich?', options: ['Email only', 'Email + Phone', 'Skip enrichment'], key: 'enrichment_scope' },
-    { type: 'select', question: 'Generate email sequence?', options: ['Yes (3 steps)', 'Yes (5 steps)', 'No, just push contacts'], key: 'email_steps' },
+    { type: 'select', question: 'Generate email sequence?', options: ['Yes (1 step)', 'Yes (3 steps)', 'Yes (5 steps)', 'No, just push contacts'], key: 'email_steps' },
   ],
   suggested_campaign_name: 'Campaign Feb 2026',
 };
@@ -87,12 +87,12 @@ const MOCK_CAMPAIGN_BARE: CampaignWorkflowData = {
 const MOCK_CAMPAIGN_WITH_TARGET: CampaignWorkflowData = {
   original_prompt: 'Start a campaign targeting marketing agencies in Bristol',
   questions: [
-    { type: 'select', question: 'What do you want to achieve from this campaign?', options: ['Book meetings', 'Generate leads', 'Promote content/offer', 'Re-engage cold leads'], key: 'campaign_goal' },
+    { type: 'select_or_text', question: 'What do you want to achieve from this campaign?', options: ['Book meetings', 'Generate leads', 'Promote content/offer', 'Re-engage cold leads'], placeholder: 'Or type your own, e.g. "Invite people to an event"', key: 'campaign_goal' },
     { type: 'select', question: 'Are you looking for companies or contacts?', options: ['Companies', 'Contacts (people)', 'Both'], key: 'search_type' },
     { type: 'select', question: 'What size companies are you targeting?', options: ['Small (1-50)', 'Medium (51-500)', 'Large (500+)', 'Any size'], key: 'company_size' },
     { type: 'select', question: 'How many results would you like?', options: ['10', '25', '50', '100'], key: 'result_count' },
     { type: 'select', question: 'What should we enrich?', options: ['Email only', 'Email + Phone', 'Skip enrichment'], key: 'enrichment_scope' },
-    { type: 'select', question: 'Generate email sequence?', options: ['Yes (3 steps)', 'Yes (5 steps)', 'No, just push contacts'], key: 'email_steps' },
+    { type: 'select', question: 'Generate email sequence?', options: ['Yes (1 step)', 'Yes (3 steps)', 'Yes (5 steps)', 'No, just push contacts'], key: 'email_steps' },
   ],
   suggested_campaign_name: 'Bristol Marketing Feb 2026',
 };

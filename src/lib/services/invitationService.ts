@@ -77,9 +77,10 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
 
     const name = inviterName || 'A team member';
 
-    // Call send-organization-invitation edge function with dark-themed template
-    const { error } = await supabase.functions.invoke('send-organization-invitation', {
+    // Call send-router edge function with dark-themed template
+    const { error } = await supabase.functions.invoke('send-router', {
       body: {
+        action: 'organization_invitation',
         to_email: invitation.email,
         to_name: inviteeName,
         organization_name: organizationName,
@@ -393,13 +394,13 @@ export async function getInvitationByToken(
 
     if (supabaseUrl && supabaseAnonKey) {
       try {
-        const edgeRes = await fetch(`${supabaseUrl}/functions/v1/get-invitation-by-token`, {
+        const edgeRes = await fetch(`${supabaseUrl}/functions/v1/get-router`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${supabaseAnonKey}`,
           },
-          body: JSON.stringify({ token }),
+          body: JSON.stringify({ action: 'invitation_by_token', token }),
         });
 
         if (edgeRes.ok) {

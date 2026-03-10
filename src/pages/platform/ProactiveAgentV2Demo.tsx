@@ -940,8 +940,9 @@ export default function ProactiveAgentV2Demo() {
     setJobId(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('agent-orchestrator', {
+      const { data, error } = await supabase.functions.invoke('agent-fleet-router', {
         body: {
+          action: 'orchestrator',
           type: scenario.eventType,
           source: scenario.eventSource || 'manual',
           org_id: meeting.org_id,

@@ -853,13 +853,14 @@ async function processRecording(
 
     if (supabaseUrl && serviceRoleKey) {
       try {
-        const crmSyncResponse = await fetch(`${supabaseUrl}/functions/v1/sync-recording-to-crm`, {
+        const crmSyncResponse = await fetch(`${supabaseUrl}/functions/v1/sync-jobs-router`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${serviceRoleKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            action: 'recording_to_crm',
             recording_id: recordingId,
           }),
         });
@@ -886,13 +887,14 @@ async function processRecording(
     // Step 11: Send recording ready notification
     if (supabaseUrl && serviceRoleKey) {
       try {
-        await fetch(`${supabaseUrl}/functions/v1/send-recording-notification`, {
+        await fetch(`${supabaseUrl}/functions/v1/send-router`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${serviceRoleKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            action: 'recording_notification',
             recording_id: recordingId,
             notification_type: 'recording_ready',
           }),
@@ -915,13 +917,14 @@ async function processRecording(
 
       // Only trigger for real meetings (2+ attendees)
       if (meeting && (meeting.attendees_count || 0) > 1) {
-        fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+        fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${serviceRoleKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            action: 'orchestrator',
             type: 'meeting_ended',
             source: 'edge:process-recording',
             org_id: meeting.org_id || recording.org_id,

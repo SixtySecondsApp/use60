@@ -3,7 +3,7 @@
  *
  * Wraps the AI Ark search and Ops creation flow.
  * Calls the copilot-dynamic-table edge function with source='ai_ark' to search
- * and persist results as an Op, or calls `ai-ark-search` directly for
+ * and persist results as an Op, or calls `enrichment-ai-ark` directly for
  * standalone searches without table creation.
  */
 
@@ -172,7 +172,7 @@ export const aiArkSearchService = {
   /**
    * Standalone AI Ark company search (no table creation).
    *
-   * Calls the `ai-ark-search` edge function directly and returns
+   * Calls the `enrichment-ai-ark` edge function directly and returns
    * normalized companies with pagination metadata.
    */
   async searchCompanies(params: AiArkCompanySearchParams): Promise<AiArkCompanySearchResult> {
@@ -181,7 +181,7 @@ export const aiArkSearchService = {
 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY
-    const url = `${supabaseUrl}/functions/v1/ai-ark-search`
+    const url = `${supabaseUrl}/functions/v1/enrichment-ai-ark`
 
     const response = await fetch(url, {
       method: 'POST',
@@ -213,7 +213,7 @@ export const aiArkSearchService = {
   /**
    * Standalone AI Ark people search (no table creation).
    *
-   * Calls the `ai-ark-search` edge function directly and returns
+   * Calls the `enrichment-ai-ark` edge function directly and returns
    * normalized contacts with pagination metadata.
    */
   async searchPeople(params: AiArkPeopleSearchParams): Promise<AiArkPeopleSearchResult> {
@@ -222,7 +222,7 @@ export const aiArkSearchService = {
 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY
-    const url = `${supabaseUrl}/functions/v1/ai-ark-search`
+    const url = `${supabaseUrl}/functions/v1/enrichment-ai-ark`
 
     const response = await fetch(url, {
       method: 'POST',

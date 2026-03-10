@@ -343,8 +343,8 @@ export function AttioPushModal({
         body.list_id = selectedListId;
       }
 
-      const { data, error } = await supabase.functions.invoke('push-to-attio', {
-        body,
+      const { data, error } = await supabase.functions.invoke('crm-push', {
+        body: { action: 'to_attio', ...body },
       });
 
       if (error) {

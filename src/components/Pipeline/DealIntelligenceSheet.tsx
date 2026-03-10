@@ -261,16 +261,16 @@ export function DealIntelligenceSheet({
         // Check for HubSpot integration
         const { data: hubspot } = await supabase
           .from('hubspot_org_integrations')
-          .select('id, clerk_org_id')
-          .eq('clerk_org_id', activeOrgId)
+          .select('id')
+          .eq('org_id', activeOrgId)
           .eq('is_active', true)
           .maybeSingle();
 
         // Check for Attio integration
         const { data: attio } = await supabase
           .from('attio_org_integrations')
-          .select('id, clerk_org_id')
-          .eq('clerk_org_id', activeOrgId)
+          .select('id')
+          .eq('org_id', activeOrgId)
           .eq('is_active', true)
           .maybeSingle();
 

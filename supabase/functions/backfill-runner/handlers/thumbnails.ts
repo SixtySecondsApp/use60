@@ -19,7 +19,7 @@ export async function handleBackfill(req: Request): Promise<Response> {
   }
 
   try {
-    const { batchSize = 10, dryRun = false, includePending = false, org_id: requestedOrgId } = await req.json().catch(() => ({}))
+    const { batchSize = 10, dryRun = false, includePending = false, days = 30, org_id: requestedOrgId } = await req.json().catch(() => ({}))
 
     // Initialize Supabase clients
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -80,9 +80,10 @@ export async function handleBackfill(req: Request): Promise<Response> {
     // If includePending is true, also include meetings with pending status or placeholder URLs
     let query = supabase
       .from('meetings')
-      .select('id, fathom_recording_id, share_url, title, duration_minutes, thumbnail_url, thumbnail_status')
+      .select('id, fathom_recording_id, share_url, title, duration_minutes, thumbnail_url, thumbnail_status, meeting_start')
       .eq('org_id', orgId)
       .not('fathom_recording_id', 'is', null)
+      .gte('meeting_start', new Date(Date.now() - Math.max(1, Number(days) || 30) * 24 * 60 * 60 * 1000).toISOString())
       .limit(batchSize)
 
     if (includePending) {
@@ -128,16 +129,16 @@ export async function handleBackfill(req: Request): Promise<Response> {
     // Helper: Build embed URL from share_url or recording_id
     function buildEmbedUrl(shareUrl?: string | null, recordingId?: string | null): string | null {
       try {
-        if (recordingId) {
-          return `https://app.fathom.video/recording/${recordingId}`
+        if (shareUrl) {
+          const u = new URL(shareUrl)
+          const parts = u.pathname.split('/').filter(Boolean)
+          const token = parts.pop()
+          if (token) return `https://fathom.video/embed/${token}`
         }
-        if (!shareUrl) return null
-        const u = new URL(shareUrl)
-        const parts = u.pathname.split('/').filter(Boolean)
-        const token = parts.pop()
-        if (!token) return null
-        return `https://fathom.video/embed/${token}`
+        if (recordingId) return `https://fathom.video/embed/${recordingId}`
+        return null
       } catch {
+        if (recordingId) return `https://fathom.video/embed/${recordingId}`
         return null
       }
     }
@@ -146,7 +147,8 @@ export async function handleBackfill(req: Request): Promise<Response> {
     // Process each meeting
     for (const meeting of meetings) {
       try {
-        const embedUrl = buildEmbedUrl(meeting.share_url, meeting.fathom_recording_id)
+        const resolvedShareUrl = meeting.share_url || `https://fathom.video/recording/${meeting.fathom_recording_id}`
+        const embedUrl = buildEmbedUrl(resolvedShareUrl, meeting.fathom_recording_id)
         if (!embedUrl) {
         }
 
@@ -164,7 +166,7 @@ export async function handleBackfill(req: Request): Promise<Response> {
           // Choose a representative timestamp: midpoint, clamped to >=5s
           const midpointSeconds = Math.max(5, Math.floor(((meeting as any).duration_minutes || 0) * 60 / 2))
           const thumbnailResponse = await fetch(
-            `${supabaseUrl}/functions/v1/generate-video-thumbnail-v2`,
+            `${supabaseUrl}/functions/v1/generate-router`,
             {
               method: 'POST',
               headers: {
@@ -172,8 +174,9 @@ export async function handleBackfill(req: Request): Promise<Response> {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
+                action: 'video_thumbnail_v2',
                 recording_id: meeting.fathom_recording_id,
-                share_url: meeting.share_url,
+                share_url: resolvedShareUrl,
                 fathom_embed_url: embedUrl,
                 timestamp_seconds: midpointSeconds,
               }),
@@ -196,9 +199,10 @@ export async function handleBackfill(req: Request): Promise<Response> {
         }
 
         // Update meeting with thumbnail URL and status
+        const isPlaceholder = thumbnailUrl.includes('dummyimage.com')
         const { error: updateError } = await supabase
           .from('meetings')
-          .update({ thumbnail_url: thumbnailUrl, thumbnail_status: 'complete' })
+          .update({ thumbnail_url: thumbnailUrl, thumbnail_status: isPlaceholder ? 'pending' : 'complete' })
           .eq('id', meeting.id)
 
         if (updateError) {

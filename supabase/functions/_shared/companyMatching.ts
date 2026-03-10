@@ -233,7 +233,9 @@ export async function createCompanyFromDomain(
     return null
   }
 
-  const companyName = suggestedName || generateCompanyNameFromDomain(domain)
+  // Prefer domain-derived name (e.g. "Fathom" from fathom.video) over suggestedName
+  // which may be a person's name forwarded from the attendee/contact field.
+  const companyName = generateCompanyNameFromDomain(domain) || suggestedName || domain
 
   // Check if name already exists (fuzzy match)
   const existingCompany = await findCompanyByFuzzyName(supabase, companyName, userId)
@@ -281,6 +283,12 @@ export async function createCompanyFromDomain(
     }
     return null
   }
+
+  // Fire-and-forget: enrich company name from Apollo
+  if (data?.id) {
+    enrichCompanyNameFromApollo(supabase, data.id, domain).catch(() => {})
+  }
+
   return data
 }
 
@@ -331,7 +339,58 @@ export async function matchOrCreateCompany(
     return { company, isNew: false }
   }
 
-  // Create new company
-  const newCompany = await createCompanyFromDomain(supabase, domain, userId, contactName, source)
+  // Create new company — don't pass contactName as suggestedName since it's a person's name
+  const newCompany = await createCompanyFromDomain(supabase, domain, userId, undefined, source)
   return { company: newCompany, isNew: !!newCompany }
+}
+
+/**
+ * Fire-and-forget: enrich a company's name from Apollo org enrichment.
+ * Updates the company name, enrichment_data, and cascades to activities/deals.
+ */
+async function enrichCompanyNameFromApollo(
+  supabase: SupabaseClient,
+  companyId: string,
+  domain: string
+): Promise<void> {
+  const APOLLO_API_KEY = Deno.env.get('APOLLO_API_KEY')
+  if (!APOLLO_API_KEY) return
+
+  try {
+    const resp = await fetch('https://api.apollo.io/api/v1/organizations/enrich', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_API_KEY },
+      body: JSON.stringify({ domain }),
+    })
+
+    if (!resp.ok) return
+
+    const data = await resp.json()
+    const org = data.organization
+    if (!org?.name) return
+
+    const updatePayload: Record<string, unknown> = {
+      name: org.name,
+      updated_at: new Date().toISOString(),
+      enrichment_data: {
+        company_name: org.name,
+        description: org.short_description || org.description || null,
+        industry: org.industry || null,
+        size: org.estimated_num_employees || null,
+        linkedin_url: org.linkedin_url || null,
+        logo_url: org.logo_url || null,
+      },
+    }
+    if (org.short_description || org.description) updatePayload.description = org.short_description || org.description
+    if (org.industry) updatePayload.industry = org.industry
+    if (org.linkedin_url) updatePayload.linkedin_url = org.linkedin_url
+
+    await supabase.from('companies').update(updatePayload).eq('id', companyId)
+
+    // Cascade name to linked activities and deals
+    await supabase.from('activities').update({ client_name: org.name }).eq('company_id', companyId)
+    await supabase.from('deals').update({ company: org.name, updated_at: new Date().toISOString() }).eq('company_id', companyId)
+  } catch (err) {
+    console.warn('[companyMatching] Apollo enrichment failed (non-fatal):', err instanceof Error ? err.message : err)
+  }
 }

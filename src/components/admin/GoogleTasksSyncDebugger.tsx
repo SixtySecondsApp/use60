@@ -157,8 +157,7 @@ export function GoogleTasksSyncDebugger() {
         message: 'Fetching Google Task lists...'
       });
 
-      const { data: listsData, error: listsError } = await supabase.functions.invoke('google-tasks', {
-        body: { action: 'list-tasklists' }
+      const { data: listsData, error: listsError } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'list-tasklists' }
       });
 
       if (listsError) {
@@ -186,9 +185,7 @@ export function GoogleTasksSyncDebugger() {
             message: `Fetching tasks from ${list.title}...`
           });
 
-          const { data: tasksData, error: tasksError } = await supabase.functions.invoke('google-tasks', {
-            body: { 
-              action: 'list-tasks',
+          const { data: tasksData, error: tasksError } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'list-tasks',
               taskListId: list.id,
               showCompleted: true,
               showHidden: true,

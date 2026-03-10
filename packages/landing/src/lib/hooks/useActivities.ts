@@ -160,8 +160,8 @@ async function fetchActivities(dateRange?: { start: Date; end: Date }, viewedUse
 async function processActivityIfReady(activityId: string, contactIdentifier?: string) {
   if (!contactIdentifier) return;
   try {
-    const { error } = await supabase.functions.invoke('process-single-activity', {
-      body: { activityId },
+    const { error } = await supabase.functions.invoke('process-jobs-router', {
+      body: { action: 'single_activity', activityId },
     });
     if (error) {
       toast.error('Failed to auto-process activity: ' + (error.message || 'Unknown error'));

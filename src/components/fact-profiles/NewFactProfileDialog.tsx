@@ -141,8 +141,8 @@ export function NewFactProfileDialog({
       if (triggerResearch) {
         // Trigger research in the background so progress animation starts right away.
         void supabase.functions
-          .invoke('research-fact-profile', {
-            body: { action: 'research', profileId: profile.id },
+          .invoke('research-router-v2', {
+            body: { action: 'fact_profile', sub_action: 'research', profileId: profile.id },
           })
           .then(({ error }) => {
             if (error) {
