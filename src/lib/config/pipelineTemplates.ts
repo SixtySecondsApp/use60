@@ -263,7 +263,9 @@ Return ONLY this JSON. Nothing else.
   "pain_short": "",
   "hook_line": "",
   "blocker_ref": "",
+  "curiosity_line": "",
   "use60_intro": "",
+  "use60_bridge": "",
   "pain_reframe": ""
 }
 
@@ -294,8 +296,10 @@ time_ref (max 5 words)
   12+: "a while back" or "a good while ago"
 
 pain_ref (max 15 words)
-  What they were trying to solve. Completes: "about [pain_ref]".
-  Must flow grammatically after the word "about".
+  What they were trying to solve. Goes into two slots:
+  - Variant A: "We spoke [time_ref] about [pain_ref]."
+  - Variant B: "you were trying to figure out [pain_ref]."
+  Must flow grammatically after both "about" and "trying to sort".
   Write it as a natural phrase, not a label.
 
   CRITICAL NAME RULE: You are writing an email TO the prospect. NEVER
@@ -376,12 +380,32 @@ blocker_ref (max 15 words)
   GOOD: "you had a ton on your plate at the time"
   BAD: "due to budgetary constraints the full managed service did not align with your current financial planning" (corporate, way too long)
 
+curiosity_line (max 15 words)
+  Variant B only. A casual curiosity hook that sits after the pain
+  reference and transitions into the use60 pitch. The template reads:
+  "you were trying to sort [pain_ref]. [curiosity_line]"
+
+  MUST be personalised to the prospect's specific pain or situation.
+  Reference their industry, their challenge, or what they told you
+  in the meeting. Do NOT use generic filler.
+
+  EVERY curiosity_line must be UNIQUE to this contact. Never reuse
+  the same phrase across different contacts.
+
+  GOOD (outbound pain): "Just seen something that would sort the follow-up side for you."
+  GOOD (scaling pain): "Found something that might crack the scaling thing without hiring."
+  GOOD (budget blocker): "There's a cheaper way to do it now that didn't exist back then."
+  GOOD (SDR pain): "Something just launched that basically replaces the SDR you were looking for."
+  BAD: "Saw something the other day that made me think of you." (generic, not tailored)
+  BAD: "Something came across my desk." (vague, says nothing about their situation)
+  BAD: "I wanted to reach out to discuss potential synergies" (corporate)
+
 use60_intro (pick one of two fixed options)
   How to introduce use60. Depends on how recent the meeting was.
 
-  The template reads:
-  "[use60_intro] It's called use60. Basically the same toolkit but
-  you run it yourself, way cheaper."
+  Variant A uses: "[use60_intro] It's called use60..."
+  Variant B uses: "we've [use60_bridge] that's designed for..."
+  Both variables are generated — different templates use different ones.
 
   If months_ago is 0-1 (very recent meeting):
     USE EXACTLY: "Anyway, we've actually got a self-serve version that might be a better fit."
@@ -391,6 +415,23 @@ use60_intro (pick one of two fixed options)
   Return the EXACT phrase from the two options above. Do not rewrite
   it. Do not rephrase it. Pick the one that matches months_ago and
   copy it word for word.
+
+use60_bridge (max 6 words)
+  Short phrase that completes: "Asking because we've [use60_bridge]
+  that's basically designed for that exact situation. It's called
+  use60."
+  Must work grammatically after "we've" and before "that's".
+
+  Tailor to the prospect's blocker or pain. Pick the phrasing that
+  best connects to WHY this is relevant to them now.
+
+  GOOD (budget blocker): "put together a much cheaper version"
+  GOOD (scaling pain): "built something that handles the scaling side"
+  GOOD (admin pain): "launched a tool that automates the admin"
+  GOOD (SDR pain): "built a self-serve version"
+  GOOD (general): "put together a lighter option"
+  BAD: "built a self-serve version" for every contact (no variation)
+  BAD: "built a comprehensive self-serve AI-powered platform" (too long, too corporate)
 
 pain_reframe (max 18 words)
   Email 2 variable. Their pain restated from a DIFFERENT ANGLE
@@ -441,7 +482,9 @@ OUTPUT:
   "pain_short": "the outbound thing",
   "hook_line": "I know you'd been doing the LinkedIn stuff yourself and getting traction but",
   "blocker_ref": "the managed service wasn't the right fit budget-wise",
+  "curiosity_line": "There's a cheaper way to do it now that didn't exist back then.",
   "use60_intro": "Anyway, we've actually got a self-serve version that might be a better fit.",
+  "use60_bridge": "put together a much cheaper version",
   "pain_reframe": "the LinkedIn outreach working but being impossible to scale alongside everything else you've got on"
 }
 
@@ -467,7 +510,9 @@ OUTPUT:
   "pain_short": "the outbound setup",
   "hook_line": "I know you'd tried outsourcing the SDR side and it hadn't really worked out.",
   "blocker_ref": "I think you just had too much on at the time",
+  "curiosity_line": "Something just launched that basically replaces the SDR you were looking for.",
   "use60_intro": "Anyway, we've actually built a self-serve version since then.",
+  "use60_bridge": "built something that handles the follow-up side",
   "pain_reframe": "the outbound not being systemised and leads slipping through the cracks because nobody's owning the follow-up"
 }
 
@@ -487,13 +532,17 @@ FINAL CHECK
 3. Read "[hook_line] [blocker_ref], which totally made sense." Does
    the full sentence flow?
 4. Does blocker_ref match the blocker_type from the input?
-5. Is pain_reframe a genuinely different angle from pain_ref?
-6. Is use60_intro the correct version for this months_ago?
+5. Does curiosity_line work as a standalone sentence after
+   "[pain_ref]."? Is it casual and intriguing, not salesy?
+6. Is pain_reframe a genuinely different angle from pain_ref?
+7. Is use60_intro the correct version for this months_ago?
    (0-1 = "got", 2+ = "built since then")
-7. Any em dashes? Remove.
-8. Any Oxford commas? Fix.
-9. All within max word counts?
-10. Return ONLY valid JSON.`;
+8. Does use60_bridge work in "we've [use60_bridge] that's designed
+   for..."? Max 6 words, grammatical after "we've"?
+9. Any em dashes? Remove.
+10. Any Oxford commas? Fix.
+11. All within max word counts?
+12. Return ONLY valid JSON.`;
 
 const REENGAGEMENT_PROMPT_2_USER = `Today's date: {{today_date}}
 Contact: {{first_name}} at {{company}}
@@ -509,9 +558,14 @@ const REENGAGEMENT_PROMPT_3_SYSTEM = `You are a sales rep writing a short, warm 
 
 Output the email body as plain text — no JSON, no markdown, no formatting.
 
-IMPORTANT — Date context: Today's date is {{today_date}}. The meeting was on {{meeting_date}}. Ensure any time references in the email are accurate based on these exact dates.`;
+IMPORTANT — Date context: Today's date is {{today_date}}. The meeting was on {{meeting_date}}. Ensure any time references in the email are accurate based on these exact dates.
 
-const REENGAGEMENT_PROMPT_3_USER = `Write a re-engagement email to {{first_name}} at {{company}}.
+IMPORTANT — use60 bridge: The "60 bridge" variable is a short phrase that completes "we've [bridge] that's designed for this kind of thing. It's called use60." Use it naturally when introducing use60 in the email. Never omit it.
+
+IMPORTANT — Company name: If the company name is blank or missing, simply address the contact by first name and do not mention a company. Never write "at" followed by nothing.`;
+
+const REENGAGEMENT_PROMPT_3_USER = `Write a re-engagement email to {{first_name}}.
+Company (if available): {{company}}
 
 Today's date: {{today_date}}
 Meeting date: {{meeting_date}}
@@ -521,7 +575,9 @@ Variables:
 - Pain reference: {{pain_ref}}
 - Time reference: {{time_ref}}
 - Blocker reference: {{blocker_ref}}
+- Curiosity line: {{curiosity_line}}
 - 60 intro: {{use60_intro}}
+- 60 bridge (short phrase, use in "we've [bridge] that's designed for..."): {{use60_bridge}}
 - Pain reframe: {{pain_reframe}}`;
 
 const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
@@ -622,11 +678,13 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
     { key: 'pain_short', label: 'Pain Short', column_type: 'formula', position: 24, formula_expression: 'JSON_GET(@email_variables, "pain_short")', is_visible: false },
     { key: 'time_ref', label: 'Time Ref', column_type: 'formula', position: 25, formula_expression: 'JSON_GET(@email_variables, "time_ref")', is_visible: false },
     { key: 'blocker_ref', label: 'Blocker Ref', column_type: 'formula', position: 26, formula_expression: 'JSON_GET(@email_variables, "blocker_ref")', is_visible: false },
-    { key: 'use60_intro', label: '60 Intro', column_type: 'formula', position: 27, formula_expression: 'JSON_GET(@email_variables, "use60_intro")', is_visible: false },
-    { key: 'pain_reframe', label: 'Pain Reframe', column_type: 'formula', position: 28, formula_expression: 'JSON_GET(@email_variables, "pain_reframe")', is_visible: false },
+    { key: 'curiosity_line', label: 'Curiosity Line', column_type: 'formula', position: 27, formula_expression: 'JSON_GET(@email_variables, "curiosity_line")', is_visible: false },
+    { key: 'use60_intro', label: '60 Intro', column_type: 'formula', position: 28, formula_expression: 'JSON_GET(@email_variables, "use60_intro")', is_visible: false },
+    { key: 'use60_bridge', label: '60 Bridge', column_type: 'formula', position: 29, formula_expression: 'JSON_GET(@email_variables, "use60_bridge")', is_visible: false },
+    { key: 'pain_reframe', label: 'Pain Reframe', column_type: 'formula', position: 30, formula_expression: 'JSON_GET(@email_variables, "pain_reframe")', is_visible: false },
     // Step 3: Write Email button
     {
-      key: 'write_email_btn', label: 'Write Email', column_type: 'action', position: 29,
+      key: 'write_email_btn', label: 'Write Email', column_type: 'action', position: 31,
       action_config: {
         label: 'Write Email',
         color: '#f59e0b',
@@ -645,7 +703,7 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
         condition: { column_key: 'email_variables', operator: 'is_not_empty' },
       },
     },
-    { key: 'email_draft', label: 'Email Draft', column_type: 'text', position: 30 },
+    { key: 'email_draft', label: 'Email Draft', column_type: 'text', position: 32 },
   ],
   dataSource: {
     type: 'meetings',
