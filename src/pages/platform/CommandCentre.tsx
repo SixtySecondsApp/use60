@@ -34,6 +34,7 @@ import {
 import { useCommandCentreDeepLinks } from '@/lib/hooks/useCommandCentreDeepLinks';
 import { useCommandCentreKeyboard } from '@/lib/hooks/useCommandCentreKeyboard';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
+import { CCAgentLearning } from '@/components/commandCentre/CCAgentLearning';
 import { CCDetailPanel } from '@/components/commandCentre/CCDetailPanel';
 import { CCEmptyState } from '@/components/commandCentre/CCEmptyState';
 import { CCFilterBar, type CCFilter } from '@/components/commandCentre/CCFilterBar';
@@ -468,6 +469,11 @@ export default function CommandCentre() {
 
           {/* Unified feed */}
           <div className="flex-1 overflow-y-auto p-6">
+            {/* Agent Learning section — PST-015 */}
+            <div className="mb-4">
+              <CCAgentLearning />
+            </div>
+
             {allItemsQuery.isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
