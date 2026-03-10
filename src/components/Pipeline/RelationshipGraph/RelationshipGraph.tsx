@@ -117,7 +117,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
 
   const cx = 0;
   const cy = 0;
-  const maxR = Math.min(dimensions.width, dimensions.height) * 0.42;
+  const maxR = Math.min(dimensions.width, dimensions.height) * 0.63;
 
   // All nodes — tier-based orbital layout with 2 rows per tier, full-circle distribution
   const allNodes: GraphNode[] = useMemo(() => {
