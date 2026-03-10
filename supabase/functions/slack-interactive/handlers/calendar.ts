@@ -68,13 +68,14 @@ export async function handleCalendarAction(ctx: CalendarActionContext): Promise<
       return;
     }
 
-    const response = await fetch(`${supabaseUrl}/functions/v1/create-calendar-event`, {
+    const response = await fetch(`${supabaseUrl}/functions/v1/create-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'calendar_event',
         user_id: ctx.userId,
         org_id: ctx.orgId,
         slot: selectedSlot,
@@ -112,13 +113,14 @@ export async function handleCalendarAction(ctx: CalendarActionContext): Promise<
     }
 
     // Resume orchestrator with email_times action
-    await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+    await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         resume_job_id: jobId,
         approval_data: {
           action: 'send_times_email',
@@ -141,13 +143,14 @@ export async function handleCalendarAction(ctx: CalendarActionContext): Promise<
     const jobId = parts.slice(2).join('_');
 
     // Re-invoke find-available-slots with extended range
-    await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+    await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         resume_job_id: jobId,
         approval_data: {
           action: 'show_more_options',

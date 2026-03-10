@@ -136,13 +136,14 @@ serve(async (req) => {
         try {
           // Re-fire through agent-orchestrator with an idempotency key so
           // duplicate deliveries are safe.
-          const response = await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+          const response = await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${serviceKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+              action: 'orchestrator',
               type: row.trigger_type,
               source: 'cron:agent-dead-letter-retry',
               org_id: (row.trigger_payload as Record<string, unknown>).org_id ?? 'system',

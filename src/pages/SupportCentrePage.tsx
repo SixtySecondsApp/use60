@@ -7,6 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SupportAIChat } from '@/components/support/SupportAIChat';
 import { TicketList } from '@/components/support/TicketList';
 import { CreateTicketForm } from '@/components/support/CreateTicketForm';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useUserProfileById } from '@/lib/hooks/useUserProfile';
+
 
 const SUGGESTED_QUESTIONS = [
   'How do I connect my calendar?',
@@ -23,6 +26,9 @@ export default function SupportCentrePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [aiChatQuery, setAiChatQuery] = useState('');
   const [showCreateTicket, setShowCreateTicket] = useState(false);
+
+  const { user } = useAuth();
+  const { data: profile } = useUserProfileById(user?.id);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 

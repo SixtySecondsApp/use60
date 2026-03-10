@@ -179,10 +179,11 @@ export function useFathomIntegration() {
         throw new Error('No active session');
       }
 
-      const response = await supabase.functions.invoke('fathom-oauth-initiate', {
+      const response = await supabase.functions.invoke('fathom-ops-router', {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
+        body: { action: 'oauth_initiate' },
       });
 
       if (response.error) {
@@ -294,11 +295,12 @@ export function useFathomIntegration() {
       }
       console.log('[useFathomIntegration] Session valid, invoking fathom-sync...');
 
-      const response = await supabase.functions.invoke('fathom-sync', {
+      const response = await supabase.functions.invoke('fathom-ops-router', {
         headers: {
           Authorization: `Bearer ${sessionData.session.access_token}`,
         },
         body: {
+          action: 'sync',
           sync_type: params?.sync_type || 'manual',
           start_date: params?.start_date,
           end_date: params?.end_date,

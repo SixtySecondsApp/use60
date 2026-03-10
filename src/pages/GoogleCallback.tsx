@@ -90,8 +90,8 @@ export default function GoogleCallback() {
         const requestBody = { code, state };
         logger.log('[GoogleCallback] Request body size:', JSON.stringify(requestBody).length, 'bytes');
 
-        const { data, error: exchangeError } = await supabase.functions.invoke('google-oauth-exchange', {
-          body: requestBody
+        const { data, error: exchangeError } = await supabase.functions.invoke('google-services-router', {
+          body: { action: 'oauth_exchange', ...requestBody }
         });
 
         if (exchangeError) {

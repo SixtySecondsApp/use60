@@ -345,15 +345,15 @@ export default function TasksDemo() {
     setExtracting(true);
     try {
       if (activityType === 'meeting') {
-        const res = await sb.functions.invoke('extract-action-items', {
-          body: { meetingId: activityId },
+        const res = await sb.functions.invoke('extract-router', {
+          body: { action: 'action_items', meetingId: activityId },
         });
         if (res.error) throw res.error;
         const created = Number((res.data as any)?.itemsCreated || 0);
         toast.success(created > 0 ? `Extracted ${created} meeting action item(s)` : 'No action items extracted');
       } else {
-        const res = await sb.functions.invoke('extract-call-action-items', {
-          body: { callId: activityId },
+        const res = await sb.functions.invoke('extract-router', {
+          body: { action: 'call_action_items', callId: activityId },
         });
         if (res.error) throw res.error;
         const created = Number((res.data as any)?.itemsCreated || 0);

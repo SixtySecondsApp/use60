@@ -145,6 +145,44 @@ Click into any meeting to see:
 - **Analytics** — Talk-time balance, question count, and coaching insights
 - **Transcript** — Full text with speaker attribution`,
   },
+  'scheduling-overview': {
+    title: 'Agent Scheduling',
+    content: `# Agent Scheduling
+
+Set up recurring AI agent jobs that run on autopilot — pipeline briefs every morning, follow-up checks every afternoon, weekly reviews on Monday. You focus on selling; 60 handles the admin.
+
+## Quick Start
+
+1. Go to **Platform → Agent Team Settings → Schedules** tab.
+2. Click one of the **Quick Add** templates (Morning Pipeline Brief, Afternoon Follow-up Check, or Weekly Pipeline Review).
+3. Toggle the schedule **Active** — it starts running automatically.
+
+:::tip
+Start with the Morning Pipeline Brief. It gives you a 2-minute summary of your top deals, at-risk opportunities, and follow-ups due today — delivered before your first coffee.
+:::
+
+## Autonomy Levels
+
+| Mode | What happens |
+|------|-------------|
+| **Suggest** | Results are held for your review — not auto-delivered. |
+| **Approve** | Results are delivered, but external actions need your approval. |
+| **Auto** | Full autonomous execution and delivery. |
+
+## Frequency Presets
+
+Choose from Manual, Hourly, Daily, Weekdays, Weekly, or Custom cron. The picker shows a plain-English summary (e.g., "Weekdays at 9:00 AM EST").
+
+## Run History
+
+The **Run History** tab shows every execution with status, duration, delivery outcome, and expandable responses. Filter by schedule to focus on a specific agent.
+
+## Troubleshooting
+
+- **Schedule isn't running?** Check the Active toggle and that the agent is enabled in Configuration.
+- **Results not delivered?** If autonomy is **Suggest**, results are held for review in notifications.
+- **Slack not working?** Verify your Slack integration is connected.`,
+  },
   'insights-overview': {
     title: 'Insights',
     content: `# Insights

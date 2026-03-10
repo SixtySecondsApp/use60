@@ -331,7 +331,7 @@ export default function SupportTicketsPage() {
         </p>
       </div>
 
-      {/* Desktop app download */}
+      {/* Support app download (admin only) */}
       <SupportAppDownload isAdmin />
 
       {/* Summary stats */}

@@ -26,16 +26,16 @@ export interface SlackMessage {
  * - button text: 75 chars
  * - button value: 2000 chars
  */
-const truncate = (value: string, max: number): string => {
+export const truncate = (value: string, max: number): string => {
   const v = String(value ?? '');
   if (v.length <= max) return v;
   if (max <= 1) return v.slice(0, max);
   return `${v.slice(0, max - 1)}…`;
 };
 
-const safeHeaderText = (text: string): string => truncate(text, 150);
+export const safeHeaderText = (text: string): string => truncate(text, 150);
 const safeButtonText = (text: string): string => truncate(text, 75);
-const safeMrkdwn = (text: string): string => truncate(text, 2800);
+export const safeMrkdwn = (text: string): string => truncate(text, 2800);
 const safeFieldText = (text: string): string => truncate(text, 1900);
 const safeContextMrkdwn = (text: string): string => truncate(text, 1900);
 const safeButtonValue = (value: string): string => truncate(value, 1900);
@@ -6117,5 +6117,135 @@ export function buildEnhancedCoachingDigestBlocks(data: EnhancedCoachingDigestDa
   return {
     blocks,
     text: `Weekly Coaching Digest for ${data.repName} — ${data.weekOf}`,
+  };
+}
+
+// =============================================================================
+// Pipeline Hygiene Digest
+// =============================================================================
+
+export interface HygieneDigestDeal {
+  id: string;
+  name: string;
+  company: string | null;
+  value: number | null;
+  stage_name: string | null;
+  days_since_last_activity: number;
+  expected_close_date: string | null;
+  ghost_probability: number;
+  stale_reason: 'no_activity_14d' | 'past_close_date' | 'ghost_risk';
+}
+
+export interface PipelineHygieneDigestData {
+  repName: string;
+  deals: HygieneDigestDeal[];
+  date: string; // e.g. "Mon 8 Mar 2026"
+}
+
+export function buildPipelineHygieneDigest(data: PipelineHygieneDigestData): SlackMessage {
+  const blocks: SlackBlock[] = [];
+  const maxDeals = 15;
+
+  blocks.push({
+    type: 'header',
+    text: { type: 'plain_text', text: safeHeaderText(`Pipeline Hygiene — ${data.deals.length} deals need attention`), emoji: true },
+  });
+
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: safeContextMrkdwn(`${data.date} · Hey ${data.repName}, these deals need a nudge or a close.`) }],
+  });
+
+  blocks.push({ type: 'divider' });
+
+  // Group by stale reason
+  const noActivity = data.deals.filter(d => d.stale_reason === 'no_activity_14d');
+  const pastClose = data.deals.filter(d => d.stale_reason === 'past_close_date');
+  const ghostRisk = data.deals.filter(d => d.stale_reason === 'ghost_risk');
+
+  let dealCount = 0;
+
+  const renderGroup = (title: string, emoji: string, deals: HygieneDigestDeal[]) => {
+    if (deals.length === 0 || dealCount >= maxDeals) return;
+
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`${emoji} *${title}* (${deals.length})`) },
+    });
+
+    for (const deal of deals) {
+      if (dealCount >= maxDeals) break;
+      dealCount++;
+
+      const value = deal.value ? `$${Math.round(deal.value).toLocaleString()}` : '$0';
+      const stage = deal.stage_name || 'Unknown';
+      const days = deal.days_since_last_activity;
+
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeMrkdwn(`*${deal.company || deal.name}* · ${value} · ${stage}\n_${days}d since last activity_`),
+        },
+      });
+
+      blocks.push({
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: safeButtonText('Snooze 7d'), emoji: true },
+            action_id: 'hygiene_snooze_7d',
+            value: JSON.stringify({ deal_id: deal.id }).substring(0, 2000),
+            style: undefined,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: safeButtonText('Draft Follow-up'), emoji: true },
+            action_id: 'hygiene_draft_followup',
+            value: JSON.stringify({ deal_id: deal.id }).substring(0, 2000),
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: safeButtonText('Close as Lost'), emoji: true },
+            action_id: 'hygiene_close_lost',
+            value: JSON.stringify({ deal_id: deal.id }).substring(0, 2000),
+            style: 'danger' as any,
+          },
+        ],
+      });
+    }
+  };
+
+  renderGroup('No Activity (14+ days)', ':hourglass:', noActivity);
+  renderGroup('Past Close Date', ':calendar:', pastClose);
+  renderGroup('Ghost Risk', ':ghost:', ghostRisk);
+
+  if (data.deals.length > maxDeals) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: safeContextMrkdwn(`_...and ${data.deals.length - maxDeals} more. Check your pipeline for the full list._`) }],
+    });
+  }
+
+  // Snooze All button when 3+ deals
+  if (data.deals.length >= 3) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: safeButtonText('Snooze All (7 days)'), emoji: true },
+          action_id: 'hygiene_snooze_all',
+          value: JSON.stringify({ deal_ids: data.deals.map(d => d.id).slice(0, 50) }).substring(0, 2000),
+        },
+      ],
+    });
+  }
+
+  return {
+    blocks,
+    text: `Pipeline Hygiene: ${data.deals.length} deals need attention`,
   };
 }

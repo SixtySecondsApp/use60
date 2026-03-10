@@ -152,8 +152,8 @@ export function CustomMethodologyWizard({ orgId, onClose }: Props) {
       });
 
       // Save as org override: custom_methodologies is a JSONB array of custom templates
-      const { data: currentConfig } = await supabase.functions.invoke('agent-config-admin', {
-        body: { action: 'get_config', org_id: orgId, agent_type: 'global' },
+      const { data: currentConfig } = await supabase.functions.invoke('agent-fleet-router', {
+        body: { action: 'config_admin', sub_action: 'get_config', org_id: orgId, agent_type: 'global' },
       });
       const existingCustom =
         (currentConfig?.config?.entries?.['custom_methodologies']?.config_value as MethodologyTemplate[]) ?? [];

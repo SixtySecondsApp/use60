@@ -268,7 +268,7 @@ export function MeetingDetail() {
 
   const handleQuickAdd = async (type: 'meeting' | 'outbound' | 'proposal' | 'sale') => {
     if (!meeting) return;
-    const clientName = primaryExternal?.name || attendees[0]?.name || meeting.title || 'Prospect';
+    const clientName = companyName || primaryExternal?.name || attendees[0]?.name || meeting.title || 'Prospect';
     // Derive website from primary external attendee email domain when available
     let websiteFromEmail: string | undefined;
     const email = primaryExternal?.email || undefined;
@@ -345,8 +345,15 @@ export function MeetingDetail() {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.access_token && supabaseUrl) {
               const res = await fetch(
-                `${supabaseUrl}/functions/v1/get-recording-url?recording_id=${meetingData.recording_id}`,
-                { headers: { Authorization: `Bearer ${session.access_token}` } }
+                `${supabaseUrl}/functions/v1/get-router`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ action: 'recording_url', recording_id: meetingData.recording_id }),
+                }
               );
               if (res.ok) {
                 const urlResult = await res.json();
@@ -404,8 +411,8 @@ export function MeetingDetail() {
 
         if (externalError) throw externalError;
 
-        // Combine both internal and external attendees
-        const combinedAttendees: MeetingAttendee[] = [
+        // Combine both internal and external attendees, deduplicating by email
+        const allAttendees: MeetingAttendee[] = [
           ...((internalAttendeesData || []) as any[]).map((a: any) => ({
             id: a.id,
             name: a.name,
@@ -426,6 +433,13 @@ export function MeetingDetail() {
               };
             })
         ];
+        const seen = new Set<string>();
+        const combinedAttendees = allAttendees.filter(a => {
+          const key = a.email?.toLowerCase();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
 
         setAttendees(combinedAttendees);
 
@@ -606,8 +620,9 @@ export function MeetingDetail() {
 
         if (embedUrl) {
           // Try generation service first
-          const { data, error } = await supabase.functions.invoke('generate-video-thumbnail-v2', {
+          const { data, error } = await supabase.functions.invoke('generate-router', {
             body: {
+              action: 'video_thumbnail_v2',
               recording_id: meeting.fathom_recording_id,
               share_url: meeting.share_url,
               fathom_embed_url: embedUrl,

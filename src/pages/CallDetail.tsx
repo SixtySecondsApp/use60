@@ -159,8 +159,8 @@ export default function CallDetail() {
     if (!id) return;
     setExtracting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('extract-call-action-items', {
-        body: { callId: id },
+      const { data, error } = await supabase.functions.invoke('extract-router', {
+        body: { action: 'call_action_items', callId: id },
       });
       if (error) throw error;
 

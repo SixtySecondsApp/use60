@@ -570,7 +570,8 @@ export default function SlackDemo() {
     setLoadingState('meetingDebrief', true);
     try {
       const result = sendToSlack
-        ? await invokeFunction('slack-post-meeting', {
+        ? await invokeFunction('slack-ops-router', {
+            action: 'post_meeting',
             meetingId: meetingDebriefData.meetingId || null,
             orgId: activeOrgId,
             isTest: true,
@@ -622,7 +623,8 @@ export default function SlackDemo() {
     setLoadingState('dailyDigest', true);
     try {
       const result = sendToSlack
-        ? await invokeFunction('slack-daily-digest', {
+        ? await invokeFunction('slack-ops-router', {
+            action: 'daily_digest',
             orgId: activeOrgId,
             date: dailyDigestData.date,
             isTest: true,
@@ -715,7 +717,8 @@ export default function SlackDemo() {
     setLoadingState('meetingPrep', true);
     try {
       const result = sendToSlack
-        ? await invokeFunction('slack-meeting-prep', {
+        ? await invokeFunction('slack-ops-router', {
+            action: 'meeting_prep',
             meetingId: meetingPrepData.meetingId || 'test-meeting-id',
             orgId: activeOrgId,
             minutesBefore: parseInt(meetingPrepData.minutesBefore),
@@ -765,7 +768,8 @@ export default function SlackDemo() {
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
-        result = await invokeFunction('slack-deal-room', {
+        result = await invokeFunction('slack-ops-router', {
+          action: 'deal_room',
           dealId: dealRoomData.dealId || 'test-deal-id',
           orgId: activeOrgId,
           isTest: true,
@@ -826,7 +830,7 @@ export default function SlackDemo() {
             break;
         }
 
-        result = await invokeFunction('slack-deal-room-update', updateData);
+        result = await invokeFunction('slack-ops-router', { action: 'deal_room_update', ...updateData });
       }
 
       setResult('dealRoom', {

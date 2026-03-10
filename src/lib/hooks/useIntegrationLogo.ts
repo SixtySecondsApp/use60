@@ -22,6 +22,8 @@ export interface UseIntegrationLogoOptions {
 const HARDCODED_LOGOS: Record<string, string> = {
   teams: 'https://erg-application-logos.s3.eu-west-2.amazonaws.com/logos/microsoft-teams.png',
   'microsoft-teams': 'https://erg-application-logos.s3.eu-west-2.amazonaws.com/logos/microsoft-teams.png',
+  'microsoft-365':
+    'https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg',
 };
 
 // Map integration names to their official domains for logo.dev lookup
@@ -59,6 +61,7 @@ const INTEGRATION_DOMAINS: Record<string, string> = {
   doodle: 'doodle.com',
   outlook: 'outlook.com',
   'microsoft-outlook': 'outlook.com',
+  'microsoft-365': 'microsoft365.com',
 
   // CRMs
   salesforce: 'salesforce.com',
@@ -177,6 +180,10 @@ const INTEGRATION_DOMAINS: Record<string, string> = {
   fullstory: 'fullstory.com',
   looker: 'looker.com',
   metabase: 'metabase.com',
+
+  // AI Video & Audio
+  heygen: 'heygen.com',
+  elevenlabs: 'elevenlabs.io',
 
   // AI & Productivity
   openai: 'openai.com',
@@ -307,9 +314,9 @@ export function useIntegrationLogo(
     const promise =
       existingPromise ||
       supabase.functions
-        .invoke<LogoResponse>('fetch-company-logo', {
+        .invoke<LogoResponse>('fetch-router', {
           method: 'POST',
-          body: { domain: normalizedDomain },
+          body: { action: 'company_logo', domain: normalizedDomain },
         })
         .then(({ data, error: fetchError }) => {
           if (fetchError) throw new Error(fetchError.message);

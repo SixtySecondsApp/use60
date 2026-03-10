@@ -32,15 +32,15 @@ export function useActionExecution(tableId: string | undefined) {
     mutationFn: async ({ columnId, rowId, actionType, actionConfig }: ExecuteSingleActionParams) => {
       switch (actionType) {
         case 'push_to_crm': {
-          const { data, error } = await supabase.functions.invoke('push-to-hubspot', {
-            body: { table_id: tableId, column_id: columnId, row_ids: [rowId], config: actionConfig },
+          const { data, error } = await supabase.functions.invoke('crm-push', {
+            body: { action: 'to_hubspot', table_id: tableId, column_id: columnId, row_ids: [rowId], config: actionConfig },
           });
           if (error) throw error;
           return data;
         }
         case 'push_to_instantly': {
-          const { data, error } = await supabase.functions.invoke('push-to-instantly', {
-            body: { table_id: tableId, row_ids: [rowId], ...(actionConfig ?? {}), _auth_token: await getSupabaseAuthToken() },
+          const { data, error } = await supabase.functions.invoke('crm-push', {
+            body: { action: 'to_instantly', table_id: tableId, row_ids: [rowId], ...(actionConfig ?? {}), _auth_token: await getSupabaseAuthToken() },
           });
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
@@ -50,8 +50,8 @@ export function useActionExecution(tableId: string | undefined) {
           return data;
         }
         case 're_enrich': {
-          const { data, error } = await supabase.functions.invoke('enrich-dynamic-table', {
-            body: { table_id: tableId, row_ids: [rowId], force_rerun: true },
+          const { data, error } = await supabase.functions.invoke('enrich-router', {
+            body: { action: 'dynamic_table', table_id: tableId, row_ids: [rowId], force_rerun: true },
           });
           if (error) throw error;
           return data;
@@ -134,16 +134,17 @@ async function executeSingleButtonAction(
     }
 
     case 'push_to_crm': {
-      const { error } = await supabase.functions.invoke('push-to-hubspot', {
-        body: { table_id: ctx.tableId, column_id: ctx.columnId, row_ids: [ctx.rowId], config: action.config },
+      const { error } = await supabase.functions.invoke('crm-push', {
+        body: { action: 'to_hubspot', table_id: ctx.tableId, column_id: ctx.columnId, row_ids: [ctx.rowId], config: action.config },
       });
       if (error) throw error;
       return;
     }
 
     case 'push_to_instantly': {
-      const { data, error } = await supabase.functions.invoke('push-to-instantly', {
+      const { data, error } = await supabase.functions.invoke('crm-push', {
         body: {
+          action: 'to_instantly',
           table_id: ctx.tableId,
           row_ids: [ctx.rowId],
           campaign_id: action.config.campaign_id as string,
@@ -157,8 +158,8 @@ async function executeSingleButtonAction(
     }
 
     case 're_enrich': {
-      const { error } = await supabase.functions.invoke('enrich-dynamic-table', {
-        body: { table_id: ctx.tableId, row_ids: [ctx.rowId], force_rerun: true },
+      const { error } = await supabase.functions.invoke('enrich-router', {
+        body: { action: 'dynamic_table', table_id: ctx.tableId, row_ids: [ctx.rowId], force_rerun: true },
       });
       if (error) throw error;
       return;

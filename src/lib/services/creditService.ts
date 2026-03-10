@@ -593,9 +593,8 @@ export interface CreditMenu {
  * Optionally pass a tier to get resolved single-cost values instead.
  */
 export async function getCreditMenu(tier?: 'low' | 'medium' | 'high'): Promise<CreditMenu> {
-  const query = tier ? `?tier=${tier}` : '';
-  const { data, error } = await supabase.functions.invoke<CreditMenu>(`get-credit-menu${query}`, {
-    method: 'GET',
+  const { data, error } = await supabase.functions.invoke<CreditMenu>('get-router', {
+    body: { action: 'credit_menu', ...(tier ? { tier } : {}) },
   });
 
   if (error || !data) {

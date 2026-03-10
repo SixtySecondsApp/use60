@@ -514,13 +514,14 @@ export default function FollowUpDemoPage() {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-follow-up`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-router`,
         {
-          method: 'GET',
+          method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ action: 'follow_up', list_meetings: true }),
         }
       );
       const data = await response.json();
@@ -555,7 +556,7 @@ export default function FollowUpDemoPage() {
       const token = session.data.session?.access_token;
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-follow-up`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-router`,
         {
           method: 'POST',
           headers: {
@@ -563,6 +564,7 @@ export default function FollowUpDemoPage() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            action: 'follow_up',
             meeting_id: selectedMeetingId,
             delivery: 'slack',
             cached_rag_context: result.cachedRagContext,
@@ -648,6 +650,7 @@ export default function FollowUpDemoPage() {
       const token = session.data.session?.access_token;
 
       const requestBody: Record<string, unknown> = {
+        action: 'follow_up',
         meeting_id: selectedMeetingId,
         include_comparison: !opts?.guidance, // Skip comparison on regeneration
       };
@@ -659,7 +662,7 @@ export default function FollowUpDemoPage() {
       }
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-follow-up`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-router`,
         {
           method: 'POST',
           headers: {

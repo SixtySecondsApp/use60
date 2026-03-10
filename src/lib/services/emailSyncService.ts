@@ -125,9 +125,7 @@ async function fetchGmailEmails(
 
   // Call Gmail edge function to fetch emails
   const headers = await getAuthHeaders();
-  const { data, error } = await supabase.functions.invoke('google-gmail', {
-    body: {
-      action: 'list',
+  const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'list',
       query,
       maxResults: 500, // Fetch up to 500 emails per sync
     },
@@ -340,9 +338,7 @@ export async function performEmailSync(
         // Fetch full message details
         try {
           const msgHeaders = await getAuthHeaders();
-          const { data: messageData, error: msgError } = await supabase.functions.invoke('google-gmail', {
-            body: {
-              action: 'get',
+          const { data: messageData, error: msgError } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'get',
               messageId: message.id,
             },
             headers: msgHeaders,

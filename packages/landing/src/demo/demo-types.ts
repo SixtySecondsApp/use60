@@ -36,6 +36,36 @@ export interface ResearchData {
       company_size: string;
       industry: string;
     };
+    // v2 enrichment fields (all optional for backward compat)
+    funding_stage?: string | null;
+    funding_total?: string | null;
+    revenue_range?: string | null;
+    tech_stack?: string[];
+    leadership_team?: { name: string; title: string }[];
+    recent_news?: string[];
+    founded_year?: number | null;
+    headquarters?: string | null;
+  };
+  competitive?: {
+    competitors: {
+      name: string;
+      domain: string;
+      differentiators: string[];
+    }[];
+  };
+  prospect?: {
+    first_name?: string | null;
+    last_name?: string | null;
+    full_name?: string | null;
+    title?: string | null;
+    seniority?: string | null;
+    department?: string | null;
+    headline?: string | null;
+    linkedin_url?: string | null;
+    photo_url?: string | null;
+    company_name?: string | null;
+    recent_activity?: string[];
+    interests?: string[];
   };
   demo_actions: {
     cold_outreach: {
@@ -85,6 +115,26 @@ export interface ResearchData {
     desc: string;
     defaultOn: boolean;
   }[];
+}
+
+// ============================================================================
+// Discovered Contact (AI Ark / Apollo people search)
+// ============================================================================
+
+/** Contact discovered via AI Ark / Apollo people search */
+export interface DiscoveredContact {
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  title: string;
+  seniority: string;
+  department?: string;
+  linkedin_url?: string | null;
+  photo_url?: string | null;
+  email?: string | null;
+  company_name: string;
+  location?: string | null;
+  recent_posts?: string[];
 }
 
 // ============================================================================

@@ -510,8 +510,8 @@ export async function syncSkillAfterSave(
   const embeddingText = buildEmbeddingText(skill);
 
   try {
-    const { data, error } = await supabase.functions.invoke('generate-embedding', {
-      body: { text: embeddingText },
+    const { data, error } = await supabase.functions.invoke('generate-router', {
+      body: { action: 'embedding', text: embeddingText },
     });
 
     if (error || !data?.embedding) {

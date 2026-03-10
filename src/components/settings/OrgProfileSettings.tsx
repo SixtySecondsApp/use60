@@ -49,8 +49,8 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
   const handleReResearch = async (profile: FactProfile) => {
     setIsResearching(true);
     try {
-      const { error } = await supabase.functions.invoke('research-fact-profile', {
-        body: { action: 'research', profileId: profile.id },
+      const { error } = await supabase.functions.invoke('research-router-v2', {
+        body: { action: 'fact_profile', sub_action: 'research', profileId: profile.id },
       });
       if (error) throw error;
       toast.success('Research started', {
@@ -71,8 +71,8 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
     setIsSyncing(true);
     try {
       // Use the edge function for comprehensive sync (enrichment + context)
-      const { data, error: syncError } = await supabase.functions.invoke('sync-fact-profile-context', {
-        body: { profileId: profile.id },
+      const { data, error: syncError } = await supabase.functions.invoke('sync-jobs-router', {
+        body: { action: 'fact_profile_context', profileId: profile.id },
       });
       if (syncError) throw syncError;
       if (data?.success) {
@@ -95,7 +95,7 @@ export function OrgProfileSettings({ orgId, canManage }: OrgProfileSettingsProps
 
     if (prev && prev !== 'complete' && curr === 'complete' && orgProfile) {
       supabase.functions
-        .invoke('sync-fact-profile-context', { body: { profileId: orgProfile.id } })
+        .invoke('sync-jobs-router', { body: { action: 'fact_profile_context', profileId: orgProfile.id } })
         .then(({ data, error }) => {
           if (error) {
             console.error('[auto-sync] Failed to sync after re-research:', error);

@@ -24,9 +24,10 @@ export class WritingStyleTrainingService {
     try {
       logger.log(`📧 Fetching ${count} sent emails for training...`);
 
-      const { data, error } = await supabase.functions.invoke('analyze-writing-style', {
+      const { data, error } = await supabase.functions.invoke('analyze-router', {
         body: {
-          action: 'fetch-emails',
+          action: 'writing_style',
+          sub_action: 'fetch-emails',
           count,
         },
       });
@@ -59,9 +60,10 @@ export class WritingStyleTrainingService {
     try {
       logger.log(`🤖 Analyzing ${emails.length} emails for writing style...`);
 
-      const { data, error } = await supabase.functions.invoke('analyze-writing-style', {
+      const { data, error } = await supabase.functions.invoke('analyze-router', {
         body: {
-          action: 'analyze',
+          action: 'writing_style',
+          sub_action: 'analyze',
           emails,
         },
       });
@@ -101,9 +103,10 @@ export class WritingStyleTrainingService {
     try {
       logger.log(`💾 Saving writing style: ${name}`);
 
-      const { data, error } = await supabase.functions.invoke('analyze-writing-style', {
+      const { data, error } = await supabase.functions.invoke('analyze-router', {
         body: {
-          action: 'save',
+          action: 'writing_style',
+          sub_action: 'save',
           name,
           tone_description: toneDescription,
           examples,

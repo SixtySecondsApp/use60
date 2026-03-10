@@ -1,0 +1,413 @@
+{
+  "feature": "supercharge-campaign-creator",
+  "name": "Supercharge /t/{domain} Campaign Creator",
+  "description": "Transform the URL campaign creator from a single-scrape-and-guess flow into a multi-source intelligence powerhouse. Wire EXA, AI Ark, Apollo, Apify, and Perplexity into the enrichment pipeline. Add real prospect intelligence, competitive battlecards, multi-touch sequences, and a live research feed loading experience.",
+  "createdAt": "2026-03-06",
+  "status": "planned",
+  "consultReport": ".sixty/consult/supercharge-campaign-creator.md",
+
+  "stories": [
+    {
+      "id": "SCC-001",
+      "title": "Create demo-research-v2 edge function with multi-source parallel enrichment",
+      "type": "backend",
+      "status": "pending",
+      "priority": 1,
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": [], "files": ["supabase/functions/_shared/exaSearch.ts", "supabase/functions/_shared/providers/perplexityAdapter.ts"], "schema": [] },
+      "blocks": ["SCC-002", "SCC-003", "SCC-005", "SCC-006", "SCC-007", "SCC-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function demo-research-v2 fires 4 parallel enrichment calls: EXA neural search, AI Ark company search, Apollo org enrich, and website scrape",
+        "All 4 calls use Promise.allSettled with individual 10s timeouts - partial data is fine",
+        "Results merged into a single context blob passed to Gemini 2.5 Flash for structured extraction",
+        "Returns the same ResearchData shape as demo-research (backward compatible)",
+        "Falls back gracefully: if EXA/AI Ark/Apollo fail, Gemini still works with whatever data arrived"
+      ],
+      "files": [
+        "supabase/functions/demo-research-v2/index.ts"
+      ],
+      "notes": "Reuse existing adapters: exaSearch.ts for EXA, AI Ark uses direct fetch to api.ai-ark.com/api/developer-portal/v1/companies (X-TOKEN auth, env var AI_ARK_API_KEY). Apollo uses apollo-org-enrich pattern. Website scrape is the existing fetch+clean from demo-research. Gemini synthesis prompt gets ALL source data concatenated with source labels. Use env vars for API keys (already set in staging/prod). Cost per call: ~$0.01 total (EXA $0.005 + AI Ark 2.5 credits + Apollo ~$0.003 + Gemini ~$0.001)."
+    },
+    {
+      "id": "SCC-002",
+      "title": "Extend ResearchData type with firmographic and intelligence fields",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["SCC-001"], "files": ["packages/landing/src/demo/demo-types.ts"], "schema": [] },
+      "blocks": ["SCC-003", "SCC-005", "SCC-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "ResearchData.company gains: funding_stage, funding_total, revenue_range, tech_stack[], leadership_team[], recent_news[], founded_year, headquarters",
+        "New ResearchData.competitive field: competitors[] with {name, domain, differentiators[]}",
+        "New ResearchData.prospect field: {title, seniority, linkedin_url, photo_url, recent_activity[], department}",
+        "All new fields are optional (existing data flows unaffected)",
+        "demo-data.ts mock generator updated to include sample data for new fields"
+      ],
+      "files": [
+        "packages/landing/src/demo/demo-types.ts",
+        "packages/landing/src/demo/demo-data.ts"
+      ],
+      "notes": "Keep backward compatible. Every new field is optional with ?. The mock data should have realistic examples so the loading animation can show them. generateResearchFromUrl needs updating too."
+    },
+    {
+      "id": "SCC-003",
+      "title": "Wire CreatorView to use demo-research-v2 and pass enriched data",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["SCC-001", "SCC-002"], "files": [], "schema": [] },
+      "blocks": ["SCC-005", "SCC-007"],
+      "parallelWith": [],
+      "acceptance": [
+        "useDemoResearch hook calls demo-research-v2 instead of demo-research",
+        "Fallback: if v2 returns error, retry with original demo-research endpoint",
+        "Agent animation findings updated to show real firmographic data (funding, tech stack, news)",
+        "New fields passed through to OutreachComposer and SandboxExperience"
+      ],
+      "files": [
+        "packages/landing/src/demo/useDemoResearch.ts"
+      ],
+      "notes": "Minimal change: swap the endpoint URL in fetchResearch(), update buildRealAgentFindings() to show funding/tech stack/news in agent findings. Everything else flows through the existing ResearchData pipe."
+    },
+    {
+      "id": "SCC-004",
+      "title": "Create prospect-enrich edge function for person-level intelligence",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": [], "files": ["supabase/functions/enrich-cascade/index.ts"], "schema": [] },
+      "blocks": ["SCC-005"],
+      "parallelWith": ["SCC-001"],
+      "acceptance": [
+        "New edge function prospect-enrich accepts {email?, linkedin_url?, first_name?, last_name?, domain?}",
+        "Fires parallel: AI Ark reverse-lookup (email) + Apollo people/match (email+domain) + EXA search (person LinkedIn activity)",
+        "Returns: {title, seniority, department, linkedin_url, photo_url, company_name, recent_activity[], interests[]}",
+        "Auth-gated: requires valid JWT",
+        "Graceful degradation: returns whatever fields were found, nulls for the rest"
+      ],
+      "files": [
+        "supabase/functions/prospect-enrich/index.ts"
+      ],
+      "notes": "Follow enrich-cascade pattern for AI Ark (X-TOKEN auth, /v1/people/reverse-lookup with kind: CONTACT, search: {email}). Apollo uses /v1/people/match with {email, domain}. EXA search: query person name + company for LinkedIn posts/articles (date filter last 6 months). Merge: AI Ark primary, Apollo fills gaps. Cost: ~$0.015 per prospect (AI Ark 1.25 credits + Apollo 1 credit + EXA $0.005)."
+    },
+    {
+      "id": "SCC-005",
+      "title": "Show prospect intelligence card in OutreachComposer",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["SCC-002", "SCC-003", "SCC-004"], "files": [], "schema": [] },
+      "blocks": ["SCC-006"],
+      "parallelWith": [],
+      "acceptance": [
+        "When query params include email or fn+ln+domain, CreatorView calls prospect-enrich in parallel with demo-research-v2",
+        "OutreachComposer prospect card shows: photo (or initials avatar), full name, title, seniority, LinkedIn link",
+        "If recent_activity found, show 1-2 bullet points (e.g. 'Posted about scaling accounting teams 2 weeks ago')",
+        "Prospect data passed to campaign-outreach-draft for hyper-personalized drafts",
+        "Loading skeleton while prospect enrichment runs"
+      ],
+      "files": [
+        "packages/landing/src/pages/CreatorView.tsx",
+        "packages/landing/src/pages/OutreachComposer.tsx"
+      ],
+      "notes": "The prospect card replaces the simple 'Prospect: John Smith john@capium.com' box with a rich intelligence card. Pass prospect data as a new field in the campaign-outreach-draft request body. The draft prompt can reference their actual title, recent posts, and interests."
+    },
+    {
+      "id": "SCC-006",
+      "title": "Upgrade campaign-outreach-draft to use full enrichment context",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["SCC-001", "SCC-005"], "files": [], "schema": [] },
+      "blocks": ["SCC-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "campaign-outreach-draft accepts optional prospect_intel field with title, seniority, recent_activity, interests",
+        "Gemini prompt references prospect's actual role, recent LinkedIn activity, and interests when available",
+        "Company section of prompt includes funding stage, tech stack, recent news from enriched data",
+        "Draft quality measurably better: references specific prospect activity, not just company vertical",
+        "Backward compatible: works fine without prospect_intel (existing behavior unchanged)"
+      ],
+      "files": [
+        "supabase/functions/campaign-outreach-draft/index.ts"
+      ],
+      "notes": "Extend the Gemini prompt ABOUT THE PROSPECT section. Add: 'PROSPECT INTELLIGENCE: Title: {title}, Recent activity: {activity}, Interests: {interests}. Reference their specific role and recent activity in the message.' Also enrich the company section with funding/news. Keep the dead language rules intact."
+    },
+    {
+      "id": "SCC-007",
+      "title": "Add competitive intelligence panel to SandboxExperience",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["SCC-002", "SCC-003"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SCC-008"],
+      "acceptance": [
+        "New CompetitiveIntel card in SandboxApp pipeline/deal view showing real competitors from enrichment",
+        "Each competitor shows: name, logo (via img.logo.dev/{domain}), 2-3 differentiator bullet points",
+        "If competitive data empty, card hidden (not broken placeholder)",
+        "Card styled consistently with existing SandboxApp deal signals cards",
+        "Works in both CreatorView preview (left pane) and ProspectView"
+      ],
+      "files": [
+        "packages/landing/src/sandbox/components/CompetitiveIntel.tsx",
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/data/generatePersonalizedData.ts"
+      ],
+      "notes": "This is the 'holy shit' moment in the demo. Use AI Ark similarity search data (from demo-research-v2 which calls it) for real lookalike companies. Logo URLs: https://img.logo.dev/{domain}?token=... (already used in IntegrationLogo component). generatePersonalizedData needs to pass competitive data through to SandboxData."
+    },
+    {
+      "id": "SCC-008",
+      "title": "Generate multi-touch outreach sequence (3 emails) instead of single draft",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["SCC-006"], "files": ["supabase/functions/generate-email-sequence/index.ts"], "schema": [] },
+      "blocks": ["SCC-009"],
+      "parallelWith": ["SCC-007"],
+      "acceptance": [
+        "campaign-outreach-draft accepts optional mode: 'single' (default, existing) or 'sequence'",
+        "Sequence mode returns 3 touches: {touches: [{day: 0, subject, body}, {day: 3, subject, body}, {day: 7, subject, body}]}",
+        "Touch 1: Personalized intro + demo link (uses prospect intel + company data)",
+        "Touch 2: Value-add follow-up referencing recent news/funding from EXA enrichment",
+        "Touch 3: Break-up email with social proof angle",
+        "Each touch uses different enrichment data so emails don't feel templated"
+      ],
+      "files": [
+        "supabase/functions/campaign-outreach-draft/index.ts"
+      ],
+      "notes": "Follow the generate-email-sequence pattern: single Gemini call with all 3 touches in one prompt (cheaper and more coherent than 3 separate calls). The prompt should specify: Touch 1 references prospect's role/activity, Touch 2 references company news/funding, Touch 3 references competitor landscape. Use Gemini 2.5 Flash for sequence mode (better reasoning for multi-part). Keep temperature at 0.8."
+    },
+    {
+      "id": "SCC-009",
+      "title": "Multi-touch sequence UI in OutreachComposer",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "estimatedMinutes": 20,
+      "dependencies": { "stories": ["SCC-008"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SCC-010"],
+      "acceptance": [
+        "Toggle switch above channel picker: 'Single message' / 'Sequence (3 touches)'",
+        "Sequence mode shows 3 tabs: 'Day 0: Intro' / 'Day 3: Follow-up' / 'Day 7: Break-up'",
+        "Each tab has its own editable subject + body textarea",
+        "Regenerate button regenerates all 3 touches (clears sequence cache)",
+        "Create Link button text changes to 'Create Sequence Link' in sequence mode"
+      ],
+      "files": [
+        "packages/landing/src/pages/OutreachComposer.tsx"
+      ],
+      "notes": "The sequence tabs sit inside the existing channel picker context (Email only for now - LinkedIn/Slack stay single message). Cache the full sequence in draftCacheRef. When switching between single/sequence, keep both cached independently. The [LINK] placeholder appears in all 3 touches."
+    },
+    {
+      "id": "SCC-010",
+      "title": "Live research feed loading experience with SSE streaming",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 10,
+      "estimatedMinutes": 30,
+      "dependencies": { "stories": ["SCC-001"], "files": [], "schema": [] },
+      "blocks": ["SCC-011"],
+      "parallelWith": ["SCC-009"],
+      "acceptance": [
+        "demo-research-v2 supports Accept: text/event-stream header to return SSE stream",
+        "Each provider emits an event when it returns: {provider: 'exa', status: 'complete', summary: 'Found: Capium - Cloud accounting...', data_preview: {...}}",
+        "Frontend receives events and renders each as an animated line in the loading screen",
+        "Each line shows: provider icon + real data summary (not generic 'working...' text)",
+        "If SSE fails or browser doesn't support it, falls back to existing polling behavior"
+      ],
+      "files": [
+        "supabase/functions/demo-research-v2/index.ts",
+        "packages/landing/src/demo/useDemoResearch.ts"
+      ],
+      "notes": "Deno supports SSE natively: return new Response(readableStream, {headers: {'Content-Type': 'text/event-stream'}}). Use a TransformStream. Each provider wraps its call and writes to the stream when done. Final event is 'complete' with full merged ResearchData. Frontend uses EventSource or fetch+reader. The loading UI becomes a real-time intelligence feed - this IS the demo of 60's capabilities."
+    },
+    {
+      "id": "SCC-011",
+      "title": "Research feed loading UI component with real-time line rendering",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "estimatedMinutes": 25,
+      "dependencies": { "stories": ["SCC-010"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New ResearchFeed component replaces the spinner in CreatorView loading state",
+        "Each SSE event renders as an animated line: [icon] [provider label] [real data summary]",
+        "Lines cascade in with framer-motion stagger (100ms between entries)",
+        "Provider icons: Search (EXA), Building (AI Ark), Users (Apollo), Globe (Website), Sparkles (Gemini synthesis)",
+        "After all providers complete, smooth transition to split-screen view (no flash)"
+      ],
+      "files": [
+        "packages/landing/src/components/ResearchFeed.tsx",
+        "packages/landing/src/pages/CreatorView.tsx"
+      ],
+      "notes": "This replaces the current loading state in CreatorView (lines 69-90). The component receives events from useDemoResearch and renders them. Each line shows REAL data: 'EXA: Found Capium - Cloud accounting platform, Series B funded' not 'Researching capium.com...'. Use existing motion.div patterns from the codebase. The feed should feel like watching a terminal with intelligence streaming in."
+    },
+    {
+      "id": "SCC-012",
+      "title": "Deploy all new edge functions to staging and verify end-to-end",
+      "type": "verification",
+      "status": "pending",
+      "priority": 12,
+      "estimatedMinutes": 15,
+      "dependencies": { "stories": ["SCC-001", "SCC-004", "SCC-006", "SCC-008", "SCC-010"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "demo-research-v2 deployed to staging with --no-verify-jwt",
+        "prospect-enrich deployed to staging with --no-verify-jwt",
+        "campaign-outreach-draft redeployed to staging with --no-verify-jwt",
+        "Visit /t/capium.com on staging - live research feed shows real EXA/AI Ark/Apollo data",
+        "Outreach draft references real prospect data and company intelligence",
+        "Full flow: research feed -> split screen -> draft -> create link -> preview works"
+      ],
+      "files": [],
+      "notes": "Deploy command: npx supabase functions deploy {name} --project-ref caerqjzvuerejfrdtygb --no-verify-jwt. Verify API keys are set: EXA_API_KEY, AI_ARK_API_KEY, APOLLO_API_KEY, GEMINI_API_KEY. Test with 3 different domains to verify robustness."
+    }
+  ],
+
+  "execution": {
+    "totalStories": 12,
+    "estimatedMinutes": 265,
+    "estimatedHours": "4-5 hours",
+    "parallelOpportunities": [
+      {
+        "group": ["SCC-001", "SCC-004"],
+        "reason": "Independent edge functions with no file overlap",
+        "timeSaved": "25 min"
+      },
+      {
+        "group": ["SCC-007", "SCC-008"],
+        "reason": "Competitive intel panel and sequence generation are independent features",
+        "timeSaved": "25 min"
+      },
+      {
+        "group": ["SCC-009", "SCC-010"],
+        "reason": "Sequence UI and SSE streaming are independent frontend/backend work",
+        "timeSaved": "20 min"
+      }
+    ],
+    "criticalPath": "SCC-001 -> SCC-003 -> SCC-005 -> SCC-006 -> SCC-008 -> SCC-009",
+    "mvp": {
+      "stories": ["SCC-001", "SCC-002", "SCC-003", "SCC-004", "SCC-005", "SCC-006"],
+      "estimatedMinutes": 125,
+      "estimatedHours": "~2 hours",
+      "delivers": "Multi-source enrichment + prospect intelligence + hyper-personalized drafts (the core value)"
+    }
+  },
+
+  "improvements": {
+    "1_multi_source_research": {
+      "stories": ["SCC-001", "SCC-002", "SCC-003"],
+      "description": "Replace single scrape+Gemini with EXA + AI Ark + Apollo + scrape -> Gemini synthesis",
+      "impact": "10x richer company data feeding everything downstream"
+    },
+    "2_prospect_intelligence": {
+      "stories": ["SCC-004", "SCC-005", "SCC-006"],
+      "description": "Enrich the actual prospect via AI Ark + Apollo + EXA for person-level intelligence",
+      "impact": "Outreach references real title, activity, interests instead of generic greeting"
+    },
+    "3_competitive_battlecard": {
+      "stories": ["SCC-007"],
+      "description": "Show real competitive landscape in the demo using AI Ark similarity + EXA",
+      "impact": "Demo feels like a live intelligence briefing, not a template"
+    },
+    "4_multi_touch_sequence": {
+      "stories": ["SCC-008", "SCC-009"],
+      "description": "Generate 3-email sequence with escalating personalization instead of single message",
+      "impact": "Full outreach play: intro + value-add follow-up + break-up"
+    },
+    "5_live_research_feed": {
+      "stories": ["SCC-010", "SCC-011"],
+      "description": "Replace loading spinner with SSE-streamed real-time intelligence feed",
+      "impact": "Loading screen becomes the demo - users watch AI pull real intel in real-time"
+    }
+  },
+
+  "risks": [
+    {
+      "severity": "medium",
+      "area": "api-keys",
+      "issue": "AI Ark and Apollo API keys may not be set as Supabase secrets for the demo-research context",
+      "mitigation": "demo-research-v2 uses Promise.allSettled - missing providers are silently skipped. Verify keys exist before deploying."
+    },
+    {
+      "severity": "medium",
+      "area": "latency",
+      "issue": "Adding 3 more API calls could increase total enrichment time",
+      "mitigation": "All calls are parallel with 10s individual timeouts. EXA returns in 200ms, AI Ark in 500ms, Apollo in 800ms. Worst case adds ~1s to current 4-6s. SSE streaming (SCC-010) makes this invisible."
+    },
+    {
+      "severity": "medium",
+      "area": "cost",
+      "issue": "Each /t/{domain} visit now costs ~$0.025 instead of ~$0.001",
+      "mitigation": "Still very cheap. Cache research_data in campaign_links table so repeat visits don't re-enrich. Add rate limit (already exists: 10 req/min per IP)."
+    },
+    {
+      "severity": "low",
+      "area": "sse-compatibility",
+      "issue": "SSE may not work in all browsers or with certain Supabase gateway configs",
+      "mitigation": "SCC-010 has explicit fallback to existing non-streaming behavior. SSE is progressive enhancement."
+    },
+    {
+      "severity": "low",
+      "area": "backward-compat",
+      "issue": "New ResearchData fields could break existing ProspectView if not optional",
+      "mitigation": "SCC-002 makes all new fields optional with ?. Existing flows see undefined and ignore them."
+    }
+  ],
+
+  "existingAssets": {
+    "reuse": [
+      { "path": "supabase/functions/_shared/exaSearch.ts", "for": "EXA neural search in demo-research-v2" },
+      { "path": "supabase/functions/_shared/providers/exaAdapter.ts", "for": "Normalized EXA adapter" },
+      { "path": "supabase/functions/_shared/providers/perplexityAdapter.ts", "for": "Fallback research if EXA fails" },
+      { "path": "supabase/functions/enrich-cascade/index.ts", "for": "AI Ark + Apollo cascade pattern for prospect-enrich" },
+      { "path": "supabase/functions/ai-ark-search/index.ts", "for": "AI Ark company search pattern" },
+      { "path": "supabase/functions/ai-ark-enrich/index.ts", "for": "AI Ark reverse-lookup pattern" },
+      { "path": "supabase/functions/apollo-org-enrich/index.ts", "for": "Apollo org enrichment pattern" },
+      { "path": "supabase/functions/apollo-enrich/index.ts", "for": "Apollo people/match pattern" },
+      { "path": "supabase/functions/generate-email-sequence/index.ts", "for": "Multi-step sequence generation pattern" },
+      { "path": "supabase/functions/ai-ark-similarity/index.ts", "for": "Lookalike company search for competitive intel" }
+    ],
+    "noChanges": [
+      { "path": "supabase/functions/demo-research/index.ts", "reason": "Keep as fallback - v2 calls this internally if all providers fail" },
+      { "path": "supabase/functions/campaign-enrich/index.ts", "reason": "Link creation logic unchanged" },
+      { "path": "packages/landing/src/sandbox/SandboxExperience.tsx", "reason": "Orchestrator unchanged - just receives richer data" },
+      { "path": "supabase/migrations/20260305000001_campaign_links.sql", "reason": "Schema already has JSONB fields for all new data" }
+    ]
+  },
+
+  "apiCosts": {
+    "perResearch": {
+      "exa": "$0.005 (1 search)",
+      "aiArk": "2.5 credits (~$0.005)",
+      "apollo": "~$0.003 (1 org lookup)",
+      "gemini": "~$0.002 (2.5 Flash synthesis)",
+      "total": "~$0.015 per domain research"
+    },
+    "perProspect": {
+      "aiArk": "1.25 credits (~$0.003)",
+      "apollo": "1 credit (~$0.003)",
+      "exa": "$0.005 (1 search)",
+      "total": "~$0.011 per prospect enrichment"
+    },
+    "perSequence": {
+      "gemini": "~$0.003 (2.5 Flash, 3 emails in 1 call)",
+      "total": "~$0.003 per sequence"
+    },
+    "fullFlowTotal": "~$0.03 per /t/{domain} visit with prospect enrichment + sequence"
+  }
+}

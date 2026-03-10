@@ -210,7 +210,7 @@ function stripSkillTestPreamble(content: string): string {
   return lines.slice(contentStartIndex).join('\n').trim()
 }
 
-serve(async (req) => {
+export async function handleCopilotRequest(req: Request): Promise<Response> {
   // Handle CORS preflight
   const corsPreflightResponse = handleCorsPreflightRequest(req);
   if (corsPreflightResponse) return corsPreflightResponse;
@@ -350,7 +350,10 @@ serve(async (req) => {
       'INTERNAL_ERROR'
     )
   }
-})
+}
+
+// Standalone serve wrapper
+serve(handleCopilotRequest)
 
 /**
  * Handle chat requests

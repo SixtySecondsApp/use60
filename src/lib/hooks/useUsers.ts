@@ -563,8 +563,9 @@ export function useUsers() {
 
       // 3. Generate waitlist-style token via edge function (same as waitlist flow)
       const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
-      const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-waitlist-token', {
+      const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-router', {
         body: {
+          action: 'waitlist_token',
           email: normalizedEmail,
           user_id: newUserId, // Pass user_id instead of waitlist_entry_id
         },

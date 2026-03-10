@@ -222,8 +222,8 @@ export function useJoinSlackChannel() {
     mutationFn: async ({ channelId }: { channelId: string }) => {
       if (!orgId) throw new Error('No org selected');
 
-      const { data, error } = await supabase.functions.invoke('slack-join-channel', {
-        body: { orgId, channelId },
+      const { data, error } = await supabase.functions.invoke('slack-ops-router', {
+        body: { action: 'join_channel', orgId, channelId },
       });
 
       if (error) throw error;
@@ -249,8 +249,8 @@ export function useSlackChannels() {
     queryFn: async () => {
       if (!orgId) return [];
 
-      const { data, error } = await supabase.functions.invoke('slack-list-channels', {
-        body: { orgId },
+      const { data, error } = await supabase.functions.invoke('slack-ops-router', {
+        body: { action: 'list_channels', orgId },
       });
 
       if (error) throw error;
@@ -345,13 +345,13 @@ export function useSendTestNotification() {
       // External release: keep "test" safe + low-friction.
       // Some feature endpoints require real entity IDs (meetingId/dealId). For settings UX,
       // a simple bot-post verification is sufficient.
-      const functionName = 'slack-daily-digest';
+      const functionName = 'slack-ops-router';
 
       const { data, error } = await supabase.functions.invoke(functionName, {
         // For daily digests, ensure a "safe" test mode (e.g. avoid DMing the whole org).
         body: feature === 'daily_digest'
-          ? { orgId, isTest: true, channelId, dmAudience, stakeholderSlackIds }
-          : { orgId, channelId, dmAudience, stakeholderSlackIds },
+          ? { action: 'daily_digest', orgId, isTest: true, channelId, dmAudience, stakeholderSlackIds }
+          : { action: 'daily_digest', orgId, channelId, dmAudience, stakeholderSlackIds },
       });
 
       if (error) throw error;
@@ -408,8 +408,8 @@ export function useSlackSelfMap() {
     mutationFn: async ({ slackUserId }: { slackUserId?: string }) => {
       if (!orgId) throw new Error('No org selected');
 
-      const { data, error } = await supabase.functions.invoke('slack-self-map', {
-        body: { orgId, slackUserId: slackUserId || undefined },
+      const { data, error } = await supabase.functions.invoke('slack-ops-router', {
+        body: { action: 'self_map', orgId, slackUserId: slackUserId || undefined },
       });
 
       if (error) throw error;

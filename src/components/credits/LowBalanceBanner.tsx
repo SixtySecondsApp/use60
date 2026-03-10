@@ -48,8 +48,8 @@ export function LowBalanceBanner() {
     staleTime: 60_000,
   });
 
-  // Don't render on full-height pages (copilot, ops) — banner steals viewport space
-  const isFullHeightPage = location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/');
+  // Don't render on full-height pages like Copilot — the banner steals viewport space.
+  const isFullHeightPage = location.pathname.startsWith('/copilot');
   if (!orgId || isLoading || costEventsLoading || !data || dismissed || isFullHeightPage) return null;
 
   const { balance, projectedDaysRemaining, autoTopUp } = data;

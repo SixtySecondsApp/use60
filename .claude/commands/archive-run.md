@@ -4,6 +4,8 @@ requires-profile: true
 
 # /archive-run — Archive the current PRD run
 
+> **DEPRECATED**: Use `/60/housekeeping` instead. It archives orphaned files, audits documentation, proposes maintenance tickets, and feeds the Dev Bot queue. This command still works but will be removed in a future update.
+
 ---
 
 ## STEP 0: Select Model Profile

@@ -28,13 +28,13 @@ export async function createStripeProduct(planId: string): Promise<StripeSyncRes
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(`${EDGE_FUNCTION_BASE}/stripe-create-product`, {
+    const response = await fetch(`${EDGE_FUNCTION_BASE}/stripe-router`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.session.access_token}`,
       },
-      body: JSON.stringify({ plan_id: planId }),
+      body: JSON.stringify({ action: 'create_product', plan_id: planId }),
     });
 
     const result = await response.json();
@@ -92,13 +92,13 @@ export async function updateStripeProduct(planId: string): Promise<StripeSyncRes
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(`${EDGE_FUNCTION_BASE}/stripe-update-product`, {
+    const response = await fetch(`${EDGE_FUNCTION_BASE}/stripe-router`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.session.access_token}`,
       },
-      body: JSON.stringify({ plan_id: planId }),
+      body: JSON.stringify({ action: 'update_product', plan_id: planId }),
     });
 
     const result = await response.json();
@@ -150,13 +150,13 @@ export async function syncFromStripe(planId: string): Promise<StripeSyncResponse
       throw new Error('Not authenticated');
     }
 
-    const response = await fetch(`${EDGE_FUNCTION_BASE}/stripe-sync-product`, {
+    const response = await fetch(`${EDGE_FUNCTION_BASE}/stripe-router`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.session.access_token}`,
       },
-      body: JSON.stringify({ plan_id: planId }),
+      body: JSON.stringify({ action: 'sync_product', plan_id: planId }),
     });
 
     const result = await response.json();

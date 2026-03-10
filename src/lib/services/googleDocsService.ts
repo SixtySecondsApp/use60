@@ -33,8 +33,9 @@ export class GoogleDocsService {
       }
 
       // Call Edge Function using direct fetch for better header control
-      const functionUrl = `${supabase.supabaseUrl}/functions/v1/google-docs-create`;
+      const functionUrl = `${supabase.supabaseUrl}/functions/v1/google-services-router`;
       const requestBody = {
+        action: 'docs_create',
         title: docContent.title,
         content: docContent.content,
         metadata: docContent.metadata

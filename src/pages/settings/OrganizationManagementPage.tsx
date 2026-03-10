@@ -662,13 +662,14 @@ export default function OrganizationManagementPage() {
         .eq('id', activeOrgId)
         .single();
 
-      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-removal-email`, {
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
         body: JSON.stringify({
+          action: 'removal_email',
           user_id: userId,
           org_id: activeOrgId,
           org_name: orgData?.name || 'the organization',
@@ -790,13 +791,14 @@ export default function OrganizationManagementPage() {
         .eq('id', activeOrgId)
         .single();
 
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-rejoin-invitation`, {
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
         body: JSON.stringify({
+          action: 'rejoin_invitation',
           user_id: userId,
           user_email: member.user?.email,
           user_name: member.user?.full_name,

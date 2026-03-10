@@ -125,8 +125,8 @@ export function ResearchProgress({
   const handleRetry = useCallback(async () => {
     setIsRetrying(true);
     try {
-      const { error } = await supabase.functions.invoke('research-fact-profile', {
-        body: { action: 'retry', profileId },
+      const { error } = await supabase.functions.invoke('research-router-v2', {
+        body: { action: 'fact_profile', sub_action: 'retry', profileId },
       });
       if (error) {
         toast.error('Failed to retry research: ' + error.message);

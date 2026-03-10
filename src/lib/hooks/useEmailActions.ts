@@ -501,9 +501,7 @@ export function useApproveEmailAction() {
         // For notification-based actions, use Gmail send via edge function
         const content = editedContent || emailAction.emailContent;
         
-        const { data, error } = await supabase.functions.invoke('google-gmail', {
-          body: {
-            action: 'send',
+        const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'send',
             userId: user?.id,
             to: content.to,
             subject: content.subject,

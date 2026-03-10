@@ -4,6 +4,8 @@ requires-profile: true
 
 # /continue-feature — Execute stories from prd.json (Ralph-style loop)
 
+> **DEPRECATED**: Use `/60/run --all` or `/60/ship --resume` instead. `/60/run` integrates with pipeline.json, heartbeat, TDD, and background agents. This command still works but will be removed in a future update.
+
 **Iterations requested:** $ARGUMENTS (default: 10)
 
 ---
@@ -89,24 +91,18 @@ Stop the loop.
 
 If the story looks too big to complete in one iteration, **split it**:
 1. Break it into 2–3 smaller stories in `prd.json`
-2. Create AI Dev Hub tasks for the new stories
+2. Run `/dev-hub-sync` to add new subtasks to the parent ticket
 3. Re-run this command
 
-### Step 4: Update AI Dev Hub task → in_progress
+### Step 4: Update AI Dev Hub status → in_progress
 
 **Skip entirely if `prd.json.aiDevHubProjectId` is `null` or Dev Hub MCP is unavailable.**
 
-If `aiDevHubTaskId` is null but `aiDevHubProjectId` exists, lazy-create the task:
-- Project ID: from `prd.json.aiDevHubProjectId`
-- Title: `[<runSlug>] <storyId>: <title>`
-- Type: `"feature"`
-- Status: `"in_progress"`
-- Priority: mapped from story priority (1-3 → `"high"`, 4-7 → `"medium"`, 8+ → `"low"`)
-- Store the returned taskId in `prd.json`
+Stories are tracked as **subtasks** of the parent PRD ticket (see `/dev-hub-sync`).
+- If the story has `aiDevHubSubtaskId`, the subtask is already created — no action needed here (subtasks don't have independent status)
+- If the parent ticket (`prd.json.aiDevHubTaskId`) exists, update its status to `"in_progress"` (if not already)
 
-If `aiDevHubTaskId` exists, update status to `"in_progress"`.
-
-If create/update fails, log warning and continue (never block execution).
+If update fails, log warning and continue (never block execution).
 
 ### Step 5: Implement the story
 
@@ -206,11 +202,9 @@ If hooks are unavailable, use default behavior: stop on first failure.
    ---
    ```
 4. If a reusable pattern was discovered, add it to the `## Codebase Patterns` section at the TOP of `progress.txt`
-5. Update AI Dev Hub task (if `aiDevHubTaskId` exists and Dev Hub is available):
-   - Try `update_task` with status `"in review"`
-   - If API error (known bug), keep status as `"in progress"` and add comment via `create_comment`: `"[STATUS] Story completed — ready for review"`
-   - Add completion comment via `create_comment`: Summary of implementation + files changed + gates passed
-   - Log: `Dev Hub: task updated` or `Dev Hub: status update failed (known API bug) — added comment instead`
+5. Update Dev Hub (if `prd.json.aiDevHubTaskId` exists and Dev Hub is available):
+   - Mark the story's subtask as done (if `aiDevHubSubtaskId` exists)
+   - Add completion comment on the parent ticket via `create_comment`: Summary of implementation + files changed + gates passed
    - **Dev Hub failures are non-blocking** — log and continue
 6. **Commit** per the commit policy (see COMMIT FORMAT & POLICY section):
    - Unattended: auto-commit with message `feat: <storyId> - <Story Title>`
@@ -220,10 +214,8 @@ If hooks are unavailable, use default behavior: stop on first failure.
 **If gates FAIL:**
 
 1. Keep `passes: false`
-2. Update AI Dev Hub task (if `aiDevHubTaskId` exists and Dev Hub is available):
-   - Try `update_task` with status `"blocked"`
-   - If API error, keep status and add comment via `create_comment`: `"[STATUS] Blocked — <error summary>"`
-   - Add comment with error details + what needs to be fixed
+2. Update Dev Hub (if `prd.json.aiDevHubTaskId` exists and Dev Hub is available):
+   - Add comment on parent ticket via `create_comment` with error details + what needs fixing
    - **Dev Hub failures are non-blocking** — log and continue
 3. Append failure note to `progress.txt`
 4. Stop the loop and report:
@@ -261,7 +253,7 @@ Remaining: Z
 Commits made: N
 🔗 Hooks: <executed | unavailable>
 
-🎫 AI Dev Hub tasks updated
+🎫 Dev Hub: parent ticket + subtasks updated
 
 Next steps:
 - Run `/continue-feature <N>` to continue
@@ -299,7 +291,7 @@ Examples:
 
 **If AI Dev Hub MCP fails:**
 - Log warning but continue with local implementation
-- Mark aiDevHubTaskId as `"sync_failed"` in notes
+- Log warning in notes, continue without sync
 
 **If git commit fails:**
 - Log error and continue (don't block on commit failures)
@@ -341,7 +333,7 @@ npm run test:e2e
 
 ## FILES MODIFIED EACH ITERATION
 
-- `prd.json` — update story status + notes + aiDevHubTaskId
+- `prd.json` — update story status + notes + aiDevHubSubtaskId
 - `progress.txt` — append completion log + update patterns
 - Source files — the actual implementation
 - Git — auto-commit on success

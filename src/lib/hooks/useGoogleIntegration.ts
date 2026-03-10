@@ -130,8 +130,7 @@ export function useGmailLabels(enabled = true) {
     queryFn: async () => {
       const headers = await getAuthHeaders();
       // The Edge Function expects action as a query parameter
-      const response = await supabase.functions.invoke('google-gmail?action=list-labels', {
-        body: {},
+      const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'list-labels',},
         headers
       });
 
@@ -150,9 +149,7 @@ export function useGmailEmails(query?: string, enabled = true) {
     queryFn: async () => {
       const headers = await getAuthHeaders();
       // Use supabase.functions.invoke which handles CORS automatically
-      const response = await supabase.functions.invoke('google-gmail', {
-        body: {
-          action: 'list',
+      const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'list',
           query,
           maxResults: 200 // Increased to show more emails
         },
@@ -181,9 +178,7 @@ export function useGmailGetMessage(messageId: string | null, enabled = true) {
       if (!messageId) throw new Error('Message ID is required');
 
       const headers = await getAuthHeaders();
-      const response = await supabase.functions.invoke('google-gmail', {
-        body: {
-          action: 'get',
+      const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'get',
           messageId
         },
         headers
@@ -209,8 +204,8 @@ export function useGmailSend() {
   return useMutation({
     mutationFn: async (emailData: { to: string; subject: string; body: string; isHtml?: boolean; cc?: string; bcc?: string; attachments?: any[] }) => {
       const headers = await getAuthHeaders();
-      const response = await supabase.functions.invoke('google-gmail?action=send', {
-        body: emailData,
+      const response = await supabase.functions.invoke('google-services-router', {
+        body: { action: 'gmail', handlerAction: 'send', ...emailData },
         headers
       });
 
@@ -379,9 +374,10 @@ export function useDriveFiles(folderId?: string, enabled = true) {
   return useQuery({
     queryKey: GOOGLE_QUERY_KEYS.drive.files(folderId),
     queryFn: async () => {
-      const response = await supabase.functions.invoke('google-drive', {
+      const response = await supabase.functions.invoke('google-services-router', {
         body: {
-          action: 'list-files',
+          action: 'drive',
+          handlerAction: 'list-files',
           folderId,
           maxResults: 100
         }
@@ -401,9 +397,10 @@ export function useCreateDriveFolder() {
   
   return useMutation({
     mutationFn: async (folderData: { name: string; parentId?: string }) => {
-      const response = await supabase.functions.invoke('google-drive', {
+      const response = await supabase.functions.invoke('google-services-router', {
         body: {
-          action: 'create-folder',
+          action: 'drive',
+          handlerAction: 'create-folder',
           ...folderData
         }
       });
@@ -430,9 +427,10 @@ export function useUploadDriveFile() {
       mimeType: string;
       parentId?: string;
     }) => {
-      const response = await supabase.functions.invoke('google-drive', {
+      const response = await supabase.functions.invoke('google-services-router', {
         body: {
-          action: 'upload-file',
+          action: 'drive',
+          handlerAction: 'upload-file',
           ...fileData
         }
       });
@@ -483,8 +481,7 @@ export function useGmailMarkAsRead() {
       }
 
       const headers = await getAuthHeaders();
-      const response = await supabase.functions.invoke('google-gmail?action=mark-as-read', {
-        body: { messageId: messageId.trim(), read },
+      const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'mark-as-read', messageId: messageId.trim(), read },
         headers
       });
 
@@ -514,8 +511,7 @@ export function useGmailStar() {
   return useMutation({
     mutationFn: async ({ messageId, starred }: { messageId: string; starred: boolean }) => {
       const headers = await getAuthHeaders();
-      const response = await supabase.functions.invoke('google-gmail?action=star', {
-        body: { messageId, starred },
+      const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'star', messageId, starred },
         headers
       });
 
@@ -535,8 +531,7 @@ export function useGmailArchive() {
   return useMutation({
     mutationFn: async (messageId: string) => {
       const headers = await getAuthHeaders();
-      const response = await supabase.functions.invoke('google-gmail?action=archive', {
-        body: { messageId },
+      const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'archive', messageId },
         headers
       });
 
@@ -556,8 +551,7 @@ export function useGmailTrash() {
   return useMutation({
     mutationFn: async (messageId: string) => {
       const headers = await getAuthHeaders();
-      const response = await supabase.functions.invoke('google-gmail?action=delete', {
-        body: { messageId },
+      const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'delete', messageId },
         headers
       });
 
@@ -608,8 +602,7 @@ export function useGmailGetAttachment() {
   return useMutation({
     mutationFn: async ({ messageId, attachmentId }: { messageId: string; attachmentId: string }) => {
       const headers = await getAuthHeaders();
-      const response = await supabase.functions.invoke('google-gmail?action=get-attachment', {
-        body: { messageId, attachmentId },
+      const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'get-attachment', messageId, attachmentId },
         headers
       });
 

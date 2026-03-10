@@ -30,8 +30,9 @@ export function getApiPath(url: string): string {
   try {
     const pathname = new URL(url).pathname;
     const match = pathname.match(/\/meeting-analytics\/?(.*)$/);
-    const suffix = match ? match[1] || '' : pathname.replace(/^\/+/, '');
-    return suffix.startsWith('api') ? suffix : pathname.replace(/^\/+/, '');
+    const suffix = match ? (match[1] || '') : pathname.replace(/^\/+/, '');
+    // Use suffix for both 'health' and 'api/*' routes
+    return suffix || pathname.replace(/^\/+/, '');
   } catch {
     return url;
   }

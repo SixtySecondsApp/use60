@@ -123,13 +123,14 @@ export async function runFullMeetingAnalysisPipeline(
     } else {
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      const resp = await fetch(`${supabaseUrl}/functions/v1/meeting-process-structured-summary`, {
+      const resp = await fetch(`${supabaseUrl}/functions/v1/meeting-router`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${serviceKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'process_structured_summary',
           meetingId,
           forceReprocess: options?.force ?? false,
         }),
@@ -159,13 +160,13 @@ export async function runFullMeetingAnalysisPipeline(
     } else {
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      const resp = await fetch(`${supabaseUrl}/functions/v1/meeting-generate-scorecard`, {
+      const resp = await fetch(`${supabaseUrl}/functions/v1/meeting-router`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${serviceKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ meetingId }),
+        body: JSON.stringify({ action: 'generate_scorecard', meetingId }),
       })
       result.scorecard = resp.ok
       if (!resp.ok) {

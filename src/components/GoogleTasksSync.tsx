@@ -80,8 +80,7 @@ const GoogleTasksSync: React.FC = () => {
       setIsLoading(true);
       
       // Get available task lists
-      const { data, error } = await supabase.functions.invoke('google-tasks', {
-        body: { action: 'list-tasklists' }
+      const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'list-tasklists' }
       });
       
       if (error) throw error;
@@ -124,9 +123,7 @@ const GoogleTasksSync: React.FC = () => {
       
       if (createNewList) {
         // Create a new list
-        const { data, error } = await supabase.functions.invoke('google-tasks', {
-          body: { 
-            action: 'create-tasklist',
+        const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'tasks', handlerAction: 'create-tasklist',
             title: newListName 
           }
         });
