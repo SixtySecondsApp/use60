@@ -218,7 +218,7 @@ serve(async (req: Request) => {
         // Get deal details
         const { data: deal } = await serviceClient
           .from('deals')
-          .select('id, clerk_org_id, amount, currency')
+          .select('id, clerk_org_id, value, currency')
           .eq('id', body.deal_id)
           .maybeSingle()
 
@@ -232,11 +232,11 @@ serve(async (req: Request) => {
         })
 
         // If deal has an amount, update the event value
-        if (eventId && deal.amount) {
+        if (eventId && deal.value) {
           await serviceClient
             .from('linkedin_conversion_events')
             .update({
-              value_amount: deal.amount,
+              value_amount: deal.value,
               value_currency: deal.currency || 'USD',
             })
             .eq('id', eventId)
@@ -245,7 +245,7 @@ serve(async (req: Request) => {
         return jsonResponse({
           queued: !!eventId,
           event_id: eventId,
-          deal_amount: deal.amount,
+          deal_amount: deal.value,
         }, req)
       }
 

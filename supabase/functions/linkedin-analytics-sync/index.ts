@@ -24,6 +24,7 @@ const DATE_CHUNK_DAYS = 30 // chunk date ranges to stay under LinkedIn's 15k ele
 const LINKEDIN_API_VERSION = '202405'
 const LINKEDIN_ANALYTICS_BASE = 'https://api.linkedin.com/rest/adAnalytics'
 const LINKEDIN_CAMPAIGNS_BASE = 'https://api.linkedin.com/rest/adCampaigns'
+const LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
 
 const ANALYTICS_FIELDS = [
   'impressions', 'clicks', 'costInLocalCurrency',
@@ -54,9 +55,12 @@ interface DateRange {
 }
 
 interface LinkedInIntegration {
+  id: string
   org_id: string
-  ad_account_id: string
+  linkedin_ad_account_id: string
   access_token_encrypted: string
+  refresh_token_encrypted?: string
+  token_expires_at?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +249,105 @@ function extractCampaignId(pivotValue: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Token refresh (inline, before sync)
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if access token is expired/expiring and refresh it.
+ * Returns a valid access token or throws.
+ */
+async function ensureFreshToken(
+  serviceClient: SupabaseClient,
+  integration: LinkedInIntegration,
+): Promise<string> {
+  const accessToken = integration.access_token_encrypted
+
+  // If we have token_expires_at, check if it's still valid (10 min buffer)
+  if (integration.token_expires_at) {
+    const expiresAt = new Date(integration.token_expires_at)
+    const bufferMs = 10 * 60 * 1000
+    if (expiresAt.getTime() > Date.now() + bufferMs) {
+      return accessToken // still valid
+    }
+  }
+
+  // Token expired or expiring — try to refresh
+  const refreshToken = integration.refresh_token_encrypted
+  if (!refreshToken) {
+    throw new Error('LINKEDIN_TOKEN_EXPIRED') // no refresh token, caller handles
+  }
+
+  const clientId = Deno.env.get('LINKEDIN_CLIENT_ID') || ''
+  const clientSecret = Deno.env.get('LINKEDIN_CLIENT_SECRET') || ''
+
+  if (!clientId || !clientSecret) {
+    console.warn(`${LOG_PREFIX} Missing LINKEDIN_CLIENT_ID/SECRET, cannot refresh token`)
+    throw new Error('LINKEDIN_TOKEN_EXPIRED')
+  }
+
+  console.log(`${LOG_PREFIX} Token expired for org ${integration.org_id}, refreshing...`)
+
+  const tokenParams = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: clientId,
+    client_secret: clientSecret,
+  })
+
+  const tokenResp = await fetch(LINKEDIN_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: tokenParams.toString(),
+  })
+
+  if (!tokenResp.ok) {
+    const errorText = await tokenResp.text()
+    console.error(`${LOG_PREFIX} Token refresh failed (${tokenResp.status}): ${errorText.slice(0, 200)}`)
+
+    if (tokenResp.status === 400 || tokenResp.status === 401) {
+      // Permanent failure — mark disconnected
+      if (integration.id) {
+        await serviceClient
+          .from('linkedin_org_integrations')
+          .update({ is_connected: false, updated_at: new Date().toISOString() })
+          .eq('id', integration.id)
+      }
+    }
+    throw new Error('LINKEDIN_TOKEN_EXPIRED')
+  }
+
+  const tokenData = await tokenResp.json()
+  const newAccessToken = String(tokenData.access_token || '')
+  const newRefreshToken = tokenData.refresh_token ? String(tokenData.refresh_token) : refreshToken
+  const expiresIn = Number(tokenData.expires_in || 5184000)
+  const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
+
+  // Update the integration row
+  const updateData: Record<string, unknown> = {
+    access_token_encrypted: newAccessToken,
+    refresh_token_encrypted: newRefreshToken,
+    token_expires_at: tokenExpiresAt,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (integration.id) {
+    await serviceClient
+      .from('linkedin_org_integrations')
+      .update(updateData)
+      .eq('id', integration.id)
+  } else {
+    await serviceClient
+      .from('linkedin_org_integrations')
+      .update(updateData)
+      .eq('org_id', integration.org_id)
+      .eq('is_connected', true)
+  }
+
+  console.log(`${LOG_PREFIX} Token refreshed for org ${integration.org_id}, expires ${tokenExpiresAt}`)
+  return newAccessToken
+}
+
+// ---------------------------------------------------------------------------
 // Sync orchestration
 // ---------------------------------------------------------------------------
 
@@ -254,7 +357,10 @@ async function syncOrgMetrics(
   startDate: string,
   endDate: string,
 ): Promise<{ campaigns_synced: number; metrics_upserted: number; demographics_upserted: number; error?: string }> {
-  const { org_id, ad_account_id, access_token_encrypted } = integration
+  const { org_id, linkedin_ad_account_id: ad_account_id } = integration
+
+  // Ensure we have a fresh access token before calling LinkedIn API
+  const access_token_encrypted = await ensureFreshToken(serviceClient, integration)
 
   try {
     // 1. Fetch campaign list
@@ -438,17 +544,17 @@ async function handleSync(
   serviceClient: SupabaseClient,
   body: RequestBody,
 ): Promise<Record<string, unknown>> {
-  if (!body.org_id) throw new Error('org_id is required')
+  if (!body.org_id) return { error: 'org_id is required' }
 
   const { data: integration } = await serviceClient
     .from('linkedin_org_integrations')
-    .select('org_id, ad_account_id, access_token_encrypted')
+    .select('id, org_id, linkedin_ad_account_id, access_token_encrypted, refresh_token_encrypted, token_expires_at')
     .eq('org_id', body.org_id)
     .eq('is_connected', true)
     .maybeSingle()
 
   if (!integration) {
-    throw new Error('No active LinkedIn integration found for this org')
+    return { error: 'No active LinkedIn integration found for this org', status: 'not_configured' }
   }
 
   const { startDate, endDate } = body.start_date && body.end_date
@@ -461,7 +567,7 @@ async function handleSync(
   const runStatus = result.error ? 'error' : 'complete'
   await recordSyncRun(serviceClient, body.org_id, runStatus, {
     ...result,
-    ad_account_id: integration.ad_account_id,
+    ad_account_id: integration.linkedin_ad_account_id,
     sync_type: 'manual',
     date_range_start: startDate,
     date_range_end: endDate,
@@ -481,7 +587,7 @@ async function handleSyncAll(
 ): Promise<Record<string, unknown>> {
   const { data: integrations } = await serviceClient
     .from('linkedin_org_integrations')
-    .select('org_id, ad_account_id, access_token_encrypted')
+    .select('id, org_id, linkedin_ad_account_id, access_token_encrypted, refresh_token_encrypted, token_expires_at')
     .eq('is_connected', true)
 
   if (!integrations || integrations.length === 0) {
@@ -504,7 +610,7 @@ async function handleSyncAll(
       const runStatus = result.error ? 'error' : 'complete'
       await recordSyncRun(serviceClient, integration.org_id, runStatus, {
         ...result,
-        ad_account_id: integration.ad_account_id,
+        ad_account_id: integration.linkedin_ad_account_id,
         sync_type: 'scheduled',
         date_range_start: startDate,
         date_range_end: endDate,
@@ -525,7 +631,7 @@ async function handleSyncAll(
         campaigns_synced: 0,
         metrics_upserted: 0,
         demographics_upserted: 0,
-        ad_account_id: integration.ad_account_id,
+        ad_account_id: integration.linkedin_ad_account_id,
         sync_type: 'scheduled',
         date_range_start: startDate,
         date_range_end: endDate,
@@ -555,17 +661,17 @@ async function handleBackfill(
   serviceClient: SupabaseClient,
   body: RequestBody,
 ): Promise<Record<string, unknown>> {
-  if (!body.org_id) throw new Error('org_id is required')
+  if (!body.org_id) return { error: 'org_id is required' }
 
   const { data: integration } = await serviceClient
     .from('linkedin_org_integrations')
-    .select('org_id, ad_account_id, access_token_encrypted')
+    .select('id, org_id, linkedin_ad_account_id, access_token_encrypted, refresh_token_encrypted, token_expires_at')
     .eq('org_id', body.org_id)
     .eq('is_connected', true)
     .maybeSingle()
 
   if (!integration) {
-    throw new Error('No active LinkedIn integration found for this org')
+    return { error: 'No active LinkedIn integration found for this org', status: 'not_configured' }
   }
 
   const lookbackDays = body.lookback_days ?? 90
@@ -584,7 +690,7 @@ async function handleBackfill(
   const runStatus = result.error ? 'error' : 'complete'
   await recordSyncRun(serviceClient, body.org_id, runStatus, {
     ...result,
-    ad_account_id: integration.ad_account_id,
+    ad_account_id: integration.linkedin_ad_account_id,
     sync_type: 'backfill',
     date_range_start: startDate,
     date_range_end: endDate,
@@ -604,7 +710,7 @@ async function handleStatus(
   serviceClient: SupabaseClient,
   body: RequestBody,
 ): Promise<Record<string, unknown>> {
-  if (!body.org_id) throw new Error('org_id is required')
+  if (!body.org_id) return { error: 'org_id is required' }
 
   const { data: runs, error } = await serviceClient
     .from('linkedin_analytics_sync_runs')
@@ -614,7 +720,7 @@ async function handleStatus(
     .limit(20)
 
   if (error) {
-    throw new Error(`Failed to fetch sync runs: ${error.message}`)
+    return { error: `Failed to fetch sync runs: ${error.message}` }
   }
 
   // Get latest metric date
