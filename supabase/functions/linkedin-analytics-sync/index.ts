@@ -294,9 +294,9 @@ async function syncOrgMetrics(
           date: metricDate,
           impressions: el.impressions ?? 0,
           clicks: el.clicks ?? 0,
-          cost: parseFloat(el.costInLocalCurrency ?? '0'),
-          conversions: (el.externalWebsiteConversions ?? 0) + (el.oneClickLeads ?? 0),
-          one_click_leads: el.oneClickLeads ?? 0,
+          spend: parseFloat(el.costInLocalCurrency ?? '0'),
+          leads: el.oneClickLeads ?? 0,
+          conversions: el.externalWebsiteConversions ?? 0,
           video_views: el.videoViews ?? 0,
           video_completions: el.videoCompletions ?? 0,
           likes: el.likes ?? 0,
@@ -343,21 +343,24 @@ async function syncOrgMetrics(
 
         if (elements.length === 0) continue
 
-        const demoRows = elements.map((el: any) => ({
-          org_id,
-          ad_account_id,
-          pivot_type: pivot,
-          pivot_value: el.pivotValue ?? el.pivot ?? 'Unknown',
-          impressions: el.impressions ?? 0,
-          clicks: el.clicks ?? 0,
-          cost: parseFloat(el.costInLocalCurrency ?? '0'),
-          date_range_start: startDate,
-          date_range_end: endDate,
-        }))
+        const demoRows = elements.map((el: any) => {
+          const campaignId = extractCampaignId(el.pivotValues?.[0] ?? '')
+          return {
+            org_id,
+            ad_account_id,
+            campaign_id: campaignId || campaignIds[0] || '',
+            date: startDate,
+            pivot_type: pivot.replace('MEMBER_', ''),
+            pivot_value: el.pivotValue ?? el.pivot ?? 'Unknown',
+            impressions: el.impressions ?? 0,
+            clicks: el.clicks ?? 0,
+            spend: parseFloat(el.costInLocalCurrency ?? '0'),
+          }
+        })
 
         const { error: demoError } = await serviceClient
           .from('linkedin_demographic_metrics')
-          .upsert(demoRows, { onConflict: 'org_id,pivot_type,pivot_value,date_range_start' })
+          .upsert(demoRows, { onConflict: 'org_id,campaign_id,date,pivot_type,pivot_value' })
 
         if (demoError) {
           console.warn(`${LOG_PREFIX} Demo upsert error (${pivot}): ${demoError.message}`)
@@ -391,13 +394,17 @@ async function syncOrgMetrics(
 async function recordSyncRun(
   serviceClient: SupabaseClient,
   orgId: string,
-  status: 'success' | 'partial' | 'error',
+  status: 'complete' | 'error',
   details: Record<string, unknown>,
 ): Promise<void> {
   const { error } = await serviceClient
     .from('linkedin_analytics_sync_runs')
     .insert({
       org_id: orgId,
+      ad_account_id: (details.ad_account_id as string) ?? 'unknown',
+      sync_type: (details.sync_type as string) ?? 'manual',
+      date_range_start: (details.date_range_start as string) ?? new Date().toISOString().split('T')[0],
+      date_range_end: (details.date_range_end as string) ?? new Date().toISOString().split('T')[0],
       status,
       campaigns_synced: details.campaigns_synced ?? 0,
       metrics_upserted: details.metrics_upserted ?? 0,
@@ -451,12 +458,19 @@ async function handleSync(
   const startedAt = new Date().toISOString()
   const result = await syncOrgMetrics(serviceClient, integration as LinkedInIntegration, startDate, endDate)
 
-  const status = result.error ? 'partial' : 'success'
-  await recordSyncRun(serviceClient, body.org_id, status, { ...result, started_at: startedAt })
+  const runStatus = result.error ? 'error' : 'complete'
+  await recordSyncRun(serviceClient, body.org_id, runStatus, {
+    ...result,
+    ad_account_id: integration.ad_account_id,
+    sync_type: 'manual',
+    date_range_start: startDate,
+    date_range_end: endDate,
+    started_at: startedAt,
+  })
 
   return {
     org_id: body.org_id,
-    status,
+    status: runStatus,
     date_range: { start: startDate, end: endDate },
     ...result,
   }
@@ -487,12 +501,19 @@ async function handleSyncAll(
         endDate,
       )
 
-      const status = result.error ? 'partial' : 'success'
-      await recordSyncRun(serviceClient, integration.org_id, status, { ...result, started_at: startedAt })
+      const runStatus = result.error ? 'error' : 'complete'
+      await recordSyncRun(serviceClient, integration.org_id, runStatus, {
+        ...result,
+        ad_account_id: integration.ad_account_id,
+        sync_type: 'scheduled',
+        date_range_start: startDate,
+        date_range_end: endDate,
+        started_at: startedAt,
+      })
 
       results.push({
         org_id: integration.org_id,
-        status,
+        status: runStatus,
         campaigns_synced: result.campaigns_synced,
         error: result.error,
       })
@@ -504,6 +525,10 @@ async function handleSyncAll(
         campaigns_synced: 0,
         metrics_upserted: 0,
         demographics_upserted: 0,
+        ad_account_id: integration.ad_account_id,
+        sync_type: 'scheduled',
+        date_range_start: startDate,
+        date_range_end: endDate,
         error: message,
         started_at: startedAt,
       })
@@ -556,12 +581,19 @@ async function handleBackfill(
   const startedAt = new Date().toISOString()
   const result = await syncOrgMetrics(serviceClient, integration as LinkedInIntegration, startDate, endDate)
 
-  const status = result.error ? 'partial' : 'success'
-  await recordSyncRun(serviceClient, body.org_id, status, { ...result, started_at: startedAt })
+  const runStatus = result.error ? 'error' : 'complete'
+  await recordSyncRun(serviceClient, body.org_id, runStatus, {
+    ...result,
+    ad_account_id: integration.ad_account_id,
+    sync_type: 'backfill',
+    date_range_start: startDate,
+    date_range_end: endDate,
+    started_at: startedAt,
+  })
 
   return {
     org_id: body.org_id,
-    status,
+    status: runStatus,
     lookback_days: lookbackDays,
     date_range: { start: startDate, end: endDate },
     ...result,
