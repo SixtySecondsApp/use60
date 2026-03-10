@@ -1,7 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Search, Building2, EyeOff, Eye, RotateCcw, ChevronDown, Users, MousePointerSquareDashed } from 'lucide-react';
+import { Search, Building2, EyeOff, Eye, RotateCcw, ChevronDown, Users, MousePointerSquareDashed, Database } from 'lucide-react';
 import { TIER_COLORS } from './constants';
-import type { GraphNode, WarmthTier, ContactCategory } from './types';
+import type { GraphNode, WarmthTier, ContactCategory, ContactSource } from './types';
+
+const SOURCES: { value: ContactSource; label: string; color: string }[] = [
+  { value: 'app', label: '60', color: '#6366f1' },
+  { value: 'hubspot', label: 'HubSpot', color: '#ff7a59' },
+  { value: 'attio', label: 'Attio', color: '#6c5ce7' },
+];
 
 const CATEGORIES: { value: ContactCategory; label: string; color: string }[] = [
   { value: 'prospect', label: 'Prospects', color: '#6366f1' },
@@ -31,11 +37,13 @@ interface GraphToolbarProps {
   multiSelectMode: boolean;
   onToggleMultiSelect: () => void;
   selectedCount: number;
+  activeSources: Set<ContactSource>;
+  onToggleSource: (source: ContactSource) => void;
 }
 
 const TIERS: WarmthTier[] = ['hot', 'warm', 'cool', 'cold'];
 
-export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, nodes, allContactCount, clustered, onClusteredChange, hideNoInteraction, onHideNoInteractionChange, excludedCount, onClearExcluded, excludedCategories, onToggleCategory, multiSelectMode, onToggleMultiSelect, selectedCount }: GraphToolbarProps) {
+export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, nodes, allContactCount, clustered, onClusteredChange, hideNoInteraction, onHideNoInteractionChange, excludedCount, onClearExcluded, excludedCategories, onToggleCategory, multiSelectMode, onToggleMultiSelect, selectedCount, activeSources, onToggleSource }: GraphToolbarProps) {
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
 
   const tierCounts = useMemo(() => {
@@ -92,6 +100,28 @@ export function GraphToolbar({ filter, onFilterChange, search, onSearchChange, n
             />
             {t}
             <span className="text-gray-500 text-[11px]">{tierCounts[t]}</span>
+          </button>
+        );
+      })}
+
+      <div className="w-px h-5 bg-white/[0.08] mx-1" />
+
+      {/* Source filter buttons */}
+      {SOURCES.map((s) => {
+        const active = activeSources.has(s.value);
+        return (
+          <button
+            key={s.value}
+            onClick={() => onToggleSource(s.value)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-all"
+            style={{
+              borderColor: active ? s.color : 'rgba(100,116,139,0.2)',
+              background: active ? `${s.color}22` : 'rgba(30,30,46,0.5)',
+              color: active ? s.color : '#94a3b8',
+            }}
+          >
+            <Database className="w-3 h-3" />
+            {s.label}
           </button>
         );
       })}
