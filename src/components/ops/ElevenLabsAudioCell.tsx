@@ -11,6 +11,8 @@ interface ElevenLabsAudioCellProps {
   audioUrl: string | null;
   errorMessage: string | null;
   onGenerateAudio?: () => void;
+  /** Variable names missing from this row's data */
+  missingVariables?: string[];
   rowId?: string;
   onCellUpdate?: (value: string) => void;
 }
@@ -27,6 +29,7 @@ export const ElevenLabsAudioCell: React.FC<ElevenLabsAudioCellProps> = ({
   audioUrl,
   errorMessage,
   onGenerateAudio,
+  missingVariables,
   rowId,
   onCellUpdate,
 }) => {
@@ -134,14 +137,24 @@ export const ElevenLabsAudioCell: React.FC<ElevenLabsAudioCellProps> = ({
     return (
       <div className="w-full h-full flex items-center justify-center">
         {onGenerateAudio ? (
-          <button
-            type="button"
-            onClick={onGenerateAudio}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20"
-          >
-            <Mic className="w-3 h-3" />
-            Generate
-          </button>
+          missingVariables?.length ? (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium border border-gray-700 bg-gray-800/50 text-gray-500 cursor-not-allowed"
+              title={`Missing: ${missingVariables.join(', ')}`}
+            >
+              <AlertCircle className="w-3 h-3" />
+              Missing data
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onGenerateAudio}
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20"
+            >
+              <Mic className="w-3 h-3" />
+              Generate
+            </button>
+          )
         ) : (
           <span className="text-gray-600 text-xs italic">--</span>
         )}

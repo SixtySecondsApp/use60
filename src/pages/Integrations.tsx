@@ -18,6 +18,8 @@ import {
   ChevronUp,
   ChevronDown,
   Mic,
+  Lock,
+  ArrowRight,
 } from 'lucide-react';
 import { HelpPanel } from '@/components/docs/HelpPanel';
 import { motion } from 'framer-motion';
@@ -49,7 +51,7 @@ import { HeyGenConfigModal } from '@/components/integrations/HeyGenConfigModal';
 import { ElevenLabsConfigModal } from '@/components/integrations/ElevenLabsConfigModal';
 
 // Hooks and stores
-import { useGoogleIntegration } from '@/lib/stores/integrationStore';
+import { useGoogleIntegration, useMicrosoftIntegration, useIntegrationStore } from '@/lib/stores/integrationStore';
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
 import { useSlackIntegration } from '@/lib/hooks/useSlackIntegration';
 import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
@@ -100,20 +102,24 @@ function IntegrationCardWithLogo({
   config,
   isBuilt,
   status,
+  statusText,
   onAction,
   actionLoading,
   vote,
   onToggleUpvote,
   sixtyLogoUrl,
+  customFooter,
 }: {
   config: IntegrationConfig;
   isBuilt: boolean;
   status: IntegrationStatus;
+  statusText?: string;
   onAction?: () => void;
   actionLoading?: boolean;
   vote?: IntegrationVoteState | null;
   onToggleUpvote?: (args: { integrationId: string; integrationName: string; description?: string }) => Promise<void>;
   sixtyLogoUrl?: string | null;
+  customFooter?: React.ReactNode;
 }) {
   // Skip S3 fetch for 60-notetaker since it's our own product
   const is60Notetaker = config.id === '60-notetaker';
@@ -123,6 +129,40 @@ function IntegrationCardWithLogo({
   // Use DEFAULT_SIXTY_ICON_URL directly for 60 Notetaker
   const finalLogoUrl = is60Notetaker ? DEFAULT_SIXTY_ICON_URL : logoUrl;
 
+  const voteFooter = !isBuilt && vote && onToggleUpvote ? (
+    <div className="flex items-center justify-between">
+      <div className="text-xs text-gray-500 dark:text-gray-400">Vote to prioritize</div>
+      <button
+        type="button"
+        onClick={async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            await onToggleUpvote({
+              integrationId: config.id,
+              integrationName: config.name,
+              description: config.description,
+            });
+          } catch (err: any) {
+            toast.error(err?.message || 'Failed to upvote');
+          }
+        }}
+        disabled={vote?.isLoading}
+        className={[
+          'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors',
+          vote?.hasVoted
+            ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700',
+          vote?.isLoading ? 'opacity-60 cursor-not-allowed' : '',
+        ].join(' ')}
+        aria-label={`${vote?.hasVoted ? 'Remove upvote' : 'Upvote'} ${config.name} integration`}
+      >
+        <ChevronUp className="w-4 h-4" />
+        <span>{(vote?.votesCount ?? 0).toLocaleString()}</span>
+      </button>
+    </div>
+  ) : undefined;
+
   return (
     <IntegrationCard
       name={config.name}
@@ -130,47 +170,43 @@ function IntegrationCardWithLogo({
       logoUrl={finalLogoUrl}
       fallbackIcon={config.fallbackIcon}
       status={status}
+      statusText={statusText}
       onAction={onAction}
       actionLoading={actionLoading}
       iconBgColor={config.iconBgColor}
       iconBorderColor={config.iconBorderColor}
       sixtyLogoUrl={sixtyLogoUrl}
-      footer={
-        !isBuilt && vote && onToggleUpvote ? (
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Vote to prioritize</div>
-            <button
-              type="button"
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                try {
-                  await onToggleUpvote({
-                    integrationId: config.id,
-                    integrationName: config.name,
-                    description: config.description,
-                  });
-                } catch (err: any) {
-                  toast.error(err?.message || 'Failed to upvote');
-                }
-              }}
-              disabled={vote?.isLoading}
-              className={[
-                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors',
-                vote?.hasVoted
-                  ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700',
-                vote?.isLoading ? 'opacity-60 cursor-not-allowed' : '',
-              ].join(' ')}
-              aria-label={`${vote?.hasVoted ? 'Remove upvote' : 'Upvote'} ${config.name} integration`}
-            >
-              <ChevronUp className="w-4 h-4" />
-              <span>{(vote?.votesCount ?? 0).toLocaleString()}</span>
-            </button>
-          </div>
-        ) : undefined
-      }
+      footer={customFooter || voteFooter}
     />
+  );
+}
+
+function GoogleLimitedFooter({ onUpgrade }: { onUpgrade: () => void }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
+        <span>Gmail send + Calendar</span>
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <Lock className="w-3.5 h-3.5 text-amber-500" />
+          <span>Gmail read + drafts</span>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onUpgrade();
+          }}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20"
+        >
+          Upgrade
+          <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -313,10 +349,10 @@ const builtIntegrations: IntegrationConfig[] = [
     name: 'Google Workspace',
     description: 'Gmail, Calendar, Drive & Tasks.',
     permissions: [
-      { title: 'View and send email', description: 'Send emails from contact pages.' },
-      { title: 'Access calendar', description: 'Schedule meetings and sync events.' },
-      { title: 'Access files', description: 'Share and attach files from Drive.' },
-      { title: 'Manage tasks', description: 'Sync tasks bidirectionally.' },
+      { title: 'View and send email', description: 'Send emails from contact pages.', paid: true },
+      { title: 'Access calendar', description: 'Schedule meetings and sync events.', paid: false },
+      { title: 'Access files', description: 'Share and attach files from Drive.', paid: true },
+      { title: 'Manage tasks', description: 'Sync tasks bidirectionally.', paid: true },
     ],
     brandColor: 'blue',
     iconBgColor: 'bg-gray-50 dark:bg-gray-800',
@@ -327,6 +363,29 @@ const builtIntegrations: IntegrationConfig[] = [
         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+      </svg>
+    ),
+    isBuilt: true,
+  },
+  {
+    id: 'microsoft-365',
+    name: 'Microsoft 365',
+    description: 'Outlook, Calendar & OneDrive.',
+    permissions: [
+      { title: 'View and send email', description: 'Send emails via Outlook.' },
+      { title: 'Access calendar', description: 'Schedule meetings and sync events.' },
+      { title: 'Access files', description: 'Share and attach files from OneDrive.' },
+      { title: 'Read contacts', description: 'Import contacts from Outlook.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-gray-50 dark:bg-gray-800',
+    iconBorderColor: 'border-gray-200 dark:border-gray-700',
+    fallbackIcon: (
+      <svg className="w-6 h-6" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#F25022" d="M1 1h10v10H1z" />
+        <path fill="#7FBA00" d="M12 1h10v10H12z" />
+        <path fill="#00A4EF" d="M1 12h10v10H1z" />
+        <path fill="#FFB900" d="M12 12h10v10H12z" />
       </svg>
     ),
     isBuilt: true,
@@ -714,6 +773,19 @@ export default function Integrations() {
     connect: connectGoogle,
   } = useGoogleIntegration();
 
+  // Nylas calendar connection status
+  const nylasCalendarConnected = useIntegrationStore(state => state.google.nylasCalendarConnected);
+
+  // Microsoft 365
+  const {
+    isConnected: microsoftConnected,
+    status: microsoftStatus,
+    isLoading: microsoftLoading,
+    checkConnection: checkMicrosoftConnection,
+    connect: connectMicrosoft,
+    disconnect: disconnectMicrosoft,
+  } = useMicrosoftIntegration();
+
   const {
     isConnected: fathomConnected,
     loading: fathomLoading,
@@ -815,6 +887,18 @@ export default function Integrations() {
       const attioErr = searchParams.get('attio_error');
       toast.error(`Failed to connect Attio: ${attioErr}`);
       window.history.replaceState({}, '', '/integrations');
+    } else if (searchParams.get('provider') === 'microsoft' && searchParams.get('status') === 'connected') {
+      toast.success('Microsoft 365 connected successfully!', {
+        description: `Connected as ${searchParams.get('email') || 'your Microsoft account'}.`,
+      });
+      checkMicrosoftConnection();
+      window.history.replaceState({}, '', '/integrations');
+    } else if (searchParams.get('nylas_status') === 'connected') {
+      toast.success('Calendar connected!', {
+        description: 'Nylas Calendar is now synced with your Google account.',
+      });
+      checkGoogleConnection();
+      window.history.replaceState({}, '', '/integrations');
     } else if (fathomStatus === 'connected') {
       toast.success('Fathom connected successfully!', {
         description: 'Your Fathom account has been connected. Starting initial sync...',
@@ -824,11 +908,13 @@ export default function Integrations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]); // Only depend on searchParams, not checkGoogleConnection
 
-  // Check integration status on mount
+  // Check Google integration status on mount
   useEffect(() => {
     checkGoogleConnection();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount to avoid infinite loop
+
+  // Lazy-load Microsoft check: only when user interacts with Microsoft card or returns from Microsoft OAuth
 
   // Get integration status
   const getIntegrationStatus = (integrationId: string): IntegrationStatus => {
@@ -836,7 +922,12 @@ export default function Integrations() {
       case 'google-workspace':
         if (googleStatus === 'error') return 'error';
         if (googleStatus === 'refreshing') return 'syncing';
+        if (googleConnected && !nylasCalendarConnected) return 'limited';
         return googleConnected ? 'active' : 'inactive';
+      case 'microsoft-365':
+        if (microsoftStatus === 'error') return 'error';
+        if (microsoftStatus === 'refreshing') return 'syncing';
+        return microsoftConnected ? 'active' : 'inactive';
       case 'fathom':
         // If we're connected, always show Active even if there was a non-fatal error
         // (e.g. user clicked Connect again and the Edge Function returned 400 "already connected").
@@ -883,8 +974,13 @@ export default function Integrations() {
   };
 
   // Handle card action
-  const handleCardAction = (integrationId: string, isBuilt: boolean = false) => {
+  const handleCardAction = async (integrationId: string, isBuilt: boolean = false) => {
     if (!isBuilt) return; // Don't handle clicks on coming soon integrations
+
+    // Lazy-load Microsoft status when user clicks the Microsoft card
+    if (integrationId === 'microsoft-365') {
+      await checkMicrosoftConnection();
+    }
 
     const status = getIntegrationStatus(integrationId);
 
@@ -965,7 +1061,7 @@ export default function Integrations() {
     setIsConnecting(true);
     try {
       switch (integrationId) {
-        case 'google-workspace':
+        case 'google-workspace': {
           const authUrl = await connectGoogle();
           if (authUrl) {
             window.location.href = authUrl;
@@ -973,6 +1069,16 @@ export default function Integrations() {
             toast.error('Failed to get authentication URL');
           }
           break;
+        }
+        case 'microsoft-365': {
+          const msAuthUrl = await connectMicrosoft();
+          if (msAuthUrl) {
+            window.location.href = msAuthUrl;
+          } else {
+            toast.error('Failed to get Microsoft authentication URL');
+          }
+          break;
+        }
         case 'fathom':
           // connectFathom returns whether initiation succeeded (popup opened)
           if (await connectFathom()) {
@@ -1023,6 +1129,7 @@ export default function Integrations() {
   const builtActionLoadingById: Record<string, boolean> = useMemo(
     () => ({
       'google-workspace': googleLoading,
+      'microsoft-365': microsoftLoading,
       fathom: fathomLoading,
       slack: slackLoading,
       justcall: justcallLoading,
@@ -1099,17 +1206,30 @@ export default function Integrations() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {builtIntegrations
               .filter((integration) => (integration.id === 'hubspot' ? hubspotEnabled : true))
-              .map((integration) => (
-                <IntegrationCardWithLogo
-                  key={integration.id}
-                  config={integration}
-                  isBuilt={true}
-                  status={getIntegrationStatus(integration.id)}
-                  onAction={() => handleCardAction(integration.id, true)}
-                  actionLoading={builtActionLoadingById[integration.id]}
-                  sixtyLogoUrl={sixtyLogoUrl}
-                />
-              ))}
+              .map((integration) => {
+                const isGoogleLimited = integration.id === 'google-workspace' && googleConnected && !nylasCalendarConnected;
+                return (
+                  <IntegrationCardWithLogo
+                    config={integration}
+                    isBuilt={true}
+                    status={getIntegrationStatus(integration.id)}
+                    onAction={() => handleCardAction(integration.id, true)}
+                    actionLoading={builtActionLoadingById[integration.id]}
+                    sixtyLogoUrl={sixtyLogoUrl}
+                    customFooter={isGoogleLimited ? (
+                      <GoogleLimitedFooter onUpgrade={async () => {
+                        try {
+                          const { connectNylas } = useIntegrationStore.getState();
+                          const authUrl = await connectNylas();
+                          window.location.href = authUrl;
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Failed to start Gmail upgrade');
+                        }
+                      }} />
+                    ) : undefined}
+                  />
+                );
+              })}
           </div>
         </div>
 

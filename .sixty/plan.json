@@ -101,11 +101,74 @@
       "createdAt": "2026-03-03"
     },
     {
-      "id": "reengagement-fix",
-      "name": "Fix Re-engagement Pipeline Data Bugs",
+      "id": "edge-fn-consolidation",
+      "name": "Edge Function Consolidation \u2014 500 \u2192 ~420 Functions",
       "status": "complete",
-      "consultReport": "inline \u2014 consult session 2026-03-06",
+      "prd": null,
+      "createdAt": "2026-03-04"
+    },
+    {
+      "id": "sandbox-v2",
+      "name": "Sandbox v2 \u2014 Pixel-Perfect App Replica for Landing Page Demo",
+      "status": "complete",
+      "consultReport": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "sandbox-v3",
+      "name": "Sandbox v3 \u2014 Focused, Pixel-Perfect, Deeply Personalized",
+      "status": "complete",
+      "consultReport": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "sandbox-funnel",
+      "name": "Sandbox Funnel \u2014 Guided Tour, Interactive Copilot, Contextual CTAs",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "campaign-links",
+      "name": "Campaign Links \u2014 /t/ Personalised Links Pipeline + Batch Enrichment",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "lead-intelligence",
+      "name": "Lead Intelligence \u2014 Engagement Scoring, Slack Alerts, Analytics",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "signup-seeding",
+      "name": "Signup Data Seeding \u2014 Demo Context Flows into Real Account",
+      "status": "complete",
+      "prd": null,
+      "createdAt": "2026-03-05"
+    },
+    {
+      "id": "support-electron-readiness",
+      "name": "Support System \u2014 Electron App Readiness",
+      "status": "complete",
+      "consultReport": ".sixty/consult/support-electron-readiness.md",
       "createdAt": "2026-03-06"
+    },
+    {
+      "id": "google-scope-nylas",
+      "name": "Google Scope Slimming + Nylas Integration + Upgrade Gate",
+      "status": "complete",
+      "consultReport": null,
+      "createdAt": "2026-03-07"
+    },
+    {
+      "id": "workspace-integration-v2",
+      "name": "Google & Microsoft Integration V2 \u2014 Agent-Grade Workspace Intelligence",
+      "status": "complete",
+      "prd": "tasks/prd-google-integration-v2.md",
+      "createdAt": "2026-03-07"
     }
   ],
   "stories": [
@@ -4289,105 +4352,182 @@
       "completedAt": "2026-03-03T23:05:00Z"
     },
     {
-      "id": "REFIX-001",
-      "feature": "reengagement-fix",
-      "title": "Populate rep_name from profiles table in setup-pipeline-template",
-      "type": "backend",
+      "id": "EFC-001",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete orphaned deployed functions from all environments (25 functions)",
+      "type": "ops",
       "status": "complete",
-      "priority": 118,
-      "description": "The setup-pipeline-template edge function fetches meetings with owner_user_id but never resolves it to a human-readable rep name. The mapping loop (lines 90-96) handles contact_first_name, contact_last_name, contact_company, meeting_date, transcript_text but has no branch for rep_name. Add profiles lookup and handle the rep_name mapping.",
+      "priority": 1,
       "acceptance": [
-        "setup-pipeline-template fetches profiles by owner_user_id for all meetings in the batch",
-        "The mapping loop handles sourceCol === rep_name by looking up profiles.first_name + profiles.last_name",
-        "rep_name cell is populated with the correct rep name for each row",
-        "If profile not found, fallback to meetings.owner_email or Unknown Rep"
+        "All 25 orphaned functions deleted from prod/staging/dev via Supabase CLI or dashboard",
+        "Verified no local source code exists for any of them",
+        "supabase functions list shows reduced count on each environment",
+        "No errors in Supabase logs after deletion"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFC-002",
+        "EFC-003"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-002",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete 9 local demo/test function directories and deployed instances",
+      "type": "ops",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Directories removed: demo-enrichment-comparison, demo-prep-briefing, demo-recent-meetings, demo-research, demo-convert-account, exa-abilities-demo, meetingbaas-webhook-simulate, proactive-simulate, slack-test-message",
+        "Deployed instances deleted from staging/prod/dev",
+        "No remaining references in src/ (grep verified)",
+        "config.toml updated if any entries existed"
       ],
       "estimatedMinutes": 15,
       "actualMinutes": null,
       "files": [
-        "supabase/functions/setup-pipeline-template/index.ts"
+        "supabase/functions/demo-enrichment-comparison/",
+        "supabase/functions/demo-prep-briefing/",
+        "supabase/functions/demo-recent-meetings/",
+        "supabase/functions/demo-research/",
+        "supabase/functions/demo-convert-account/",
+        "supabase/functions/exa-abilities-demo/",
+        "supabase/functions/meetingbaas-webhook-simulate/",
+        "supabase/functions/proactive-simulate/",
+        "supabase/functions/slack-test-message/"
       ],
       "dependencies": {
         "stories": [],
         "files": [],
-        "schema": [
-          "profiles",
-          "meetings"
-        ]
+        "schema": []
       },
-      "blocks": [
-        "REFIX-003"
-      ],
+      "blocks": [],
       "parallelWith": [
-        "REFIX-002"
+        "EFC-001",
+        "EFC-003"
       ],
       "designRef": null,
       "ticketId": null,
-      "startedAt": "2026-03-06T15:35:00Z",
-      "completedAt": "2026-03-06T15:45:00Z"
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
     },
     {
-      "id": "REFIX-002",
-      "feature": "reengagement-fix",
-      "title": "Fix company fallback and populate rep_name in setup-reengagement-demo",
-      "type": "backend",
+      "id": "EFC-003",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete 3 deprecated function directories (justcall-oauth-*, google-oauth-callback-public)",
+      "type": "ops",
       "status": "complete",
-      "priority": 119,
-      "description": "The setup-reengagement-demo edge function has two issues: (1) rep_name is never added to cellData (line 714-720) despite being used in PROMPT_1_USER as {{rep_name}}, and (2) company falls back to meeting.title when contacts.company is empty, producing values like meeting titles as company names. Fix both: add profiles lookup for rep_name, and improve company resolution.",
+      "priority": 3,
       "acceptance": [
-        "setup-reengagement-demo fetches profiles by owner_user_id and adds rep_name to cellData",
-        "Company resolution tries: contacts.company then companies.name via contacts.company_id then meeting.title",
-        "No more meeting titles appearing as company names",
-        "rep_name cell is populated correctly for each row"
-      ],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "files": [
-        "supabase/functions/setup-reengagement-demo/index.ts"
-      ],
-      "dependencies": {
-        "stories": [],
-        "files": [],
-        "schema": [
-          "profiles",
-          "meetings",
-          "contacts"
-        ]
-      },
-      "blocks": [
-        "REFIX-003"
-      ],
-      "parallelWith": [
-        "REFIX-001"
-      ],
-      "designRef": null,
-      "ticketId": null,
-      "startedAt": "2026-03-06T15:35:00Z",
-      "completedAt": "2026-03-06T15:45:00Z"
-    },
-    {
-      "id": "REFIX-003",
-      "feature": "reengagement-fix",
-      "title": "Align Prompt 3 in pipelineTemplates with demo version (add date context)",
-      "type": "backend",
-      "status": "complete",
-      "priority": 120,
-      "description": "Prompt 3 in pipelineTemplates.ts is a stripped-down version missing today_date and meeting_date context that the setup-reengagement-demo version has. Update to match the more complete version with date context and CTA instruction.",
-      "acceptance": [
-        "REENGAGEMENT_PROMPT_3_SYSTEM includes date context instruction matching the demo version",
-        "REENGAGEMENT_PROMPT_3_USER includes {{today_date}} and {{meeting_date}} variables",
-        "Prompt includes CTA instruction (end with a soft CTA)",
-        "Template still works with run-prompt (today_date is auto-injected server-side)"
+        "Directories removed: justcall-oauth-initiate, justcall-oauth-callback, google-oauth-callback-public",
+        "Deployed instances deleted from all environments",
+        "No remaining references in src/ or config.toml"
       ],
       "estimatedMinutes": 10,
       "actualMinutes": null,
       "files": [
-        "src/lib/config/pipelineTemplates.ts"
+        "supabase/functions/justcall-oauth-initiate/",
+        "supabase/functions/justcall-oauth-callback/",
+        "supabase/functions/google-oauth-callback-public/"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFC-001",
+        "EFC-002"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-004",
+      "feature": "edge-fn-consolidation",
+      "title": "Create shared api-v1 router with entity handler files",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "api-v1/index.ts created with path-based entity routing",
+        "Handler files created for activities, companies, contacts, deals, meetings, tasks",
+        "All handlers import from _shared/api-utils.ts (authenticateRequest, parseQueryParams, etc.)",
+        "Each handler preserves exact existing query/filter/response behavior"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/api-v1/index.ts",
+        "supabase/functions/api-v1/handlers/activities.ts",
+        "supabase/functions/api-v1/handlers/companies.ts",
+        "supabase/functions/api-v1/handlers/contacts.ts",
+        "supabase/functions/api-v1/handlers/deals.ts",
+        "supabase/functions/api-v1/handlers/meetings.ts",
+        "supabase/functions/api-v1/handlers/tasks.ts"
       ],
       "dependencies": {
         "stories": [
-          "REFIX-001",
-          "REFIX-002"
+          "EFC-001",
+          "EFC-002",
+          "EFC-003"
+        ],
+        "files": [
+          "supabase/functions/_shared/api-utils.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "EFC-005"
+      ],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-005",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete 6 old api-v1-* function directories and update config.toml",
+      "type": "ops",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "6 old directories deleted: api-v1-activities, api-v1-companies, api-v1-contacts, api-v1-deals, api-v1-meetings, api-v1-tasks",
+        "config.toml updated: 6 entries removed, 1 api-v1 entry added",
+        "Frontend API references updated to use new path format",
+        "Deployed and tested on staging"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/api-v1-activities/",
+        "supabase/functions/api-v1-companies/",
+        "supabase/functions/api-v1-contacts/",
+        "supabase/functions/api-v1-deals/",
+        "supabase/functions/api-v1-meetings/",
+        "supabase/functions/api-v1-tasks/",
+        "supabase/config.toml"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-004"
         ],
         "files": [],
         "schema": []
@@ -4396,15 +4536,3263 @@
       "parallelWith": [],
       "designRef": null,
       "ticketId": null,
-      "startedAt": "2026-03-06T15:35:00Z",
-      "completedAt": "2026-03-06T15:45:00Z"
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-006",
+      "feature": "edge-fn-consolidation",
+      "title": "Create oauth-token-refresh router with provider configs",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "acceptance": [
+        "oauth-token-refresh/index.ts created with provider parameter routing",
+        "Provider configs for google, hubspot, fathom, attio, bullhorn",
+        "Each config specifies: token endpoint URL, client ID env var, credentials table/columns",
+        "Shared logic: fetch integrations \u2192 check expiry \u2192 POST token endpoint \u2192 update credentials"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/oauth-token-refresh/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EFC-007"
+      ],
+      "parallelWith": [
+        "EFC-008"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-007",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete 5 old *-token-refresh function directories",
+      "type": "ops",
+      "status": "complete",
+      "priority": 7,
+      "acceptance": [
+        "Directories removed: google-token-refresh, hubspot-token-refresh, fathom-token-refresh, attio-token-refresh, bullhorn-token-refresh",
+        "config.toml and cron schedules updated to call oauth-token-refresh with provider param",
+        "Deployed and verified on staging for all 5 providers"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/google-token-refresh/",
+        "supabase/functions/hubspot-token-refresh/",
+        "supabase/functions/fathom-token-refresh/",
+        "supabase/functions/attio-token-refresh/",
+        "supabase/functions/bullhorn-token-refresh/"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFC-009"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-008",
+      "feature": "edge-fn-consolidation",
+      "title": "Create oauth-initiate router with provider configs",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "acceptance": [
+        "oauth-initiate/index.ts created with provider parameter routing",
+        "Provider configs for google, hubspot, fathom, attio, bullhorn",
+        "Shared logic: validate session \u2192 generate state \u2192 store state \u2192 build auth URL \u2192 return",
+        "Frontend OAuth trigger code updated to call unified endpoint"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/oauth-initiate/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EFC-009"
+      ],
+      "parallelWith": [
+        "EFC-006"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-009",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete 5 old *-oauth-initiate function directories",
+      "type": "ops",
+      "status": "complete",
+      "priority": 9,
+      "acceptance": [
+        "Directories removed: google-oauth-initiate, hubspot-oauth-initiate, fathom-oauth-initiate, attio-oauth-initiate, bullhorn-oauth-initiate",
+        "config.toml updated",
+        "Frontend integration settings updated to use new oauth-initiate endpoint",
+        "Deployed and tested on staging for all 5 providers"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/google-oauth-initiate/",
+        "supabase/functions/hubspot-oauth-initiate/",
+        "supabase/functions/fathom-oauth-initiate/",
+        "supabase/functions/attio-oauth-initiate/",
+        "supabase/functions/bullhorn-oauth-initiate/"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-008"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFC-007"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-010",
+      "feature": "edge-fn-consolidation",
+      "title": "Create poll-scheduler router with config-driven pollers",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "acceptance": [
+        "poll-scheduler/index.ts created with poll_configs array",
+        "Each config maps: poll type \u2192 table, status column, timeout threshold, fallback action",
+        "Covers: stuck-bots, transcription-queue, gladia-jobs, s3-upload-queue, voice-transcribe, slack-snooze",
+        "Poll type selected via query param or request body"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/poll-scheduler/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EFC-011"
+      ],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-011",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete 6 old poll-* and voice-transcribe-poll directories",
+      "type": "ops",
+      "status": "complete",
+      "priority": 11,
+      "acceptance": [
+        "Directories removed: poll-stuck-bots, poll-transcription-queue, poll-gladia-jobs, poll-s3-upload-queue, voice-transcribe-poll, slack-snooze-check",
+        "Cron schedules updated to call poll-scheduler with type param",
+        "config.toml updated",
+        "Deployed and verified on staging"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/poll-stuck-bots/",
+        "supabase/functions/poll-transcription-queue/",
+        "supabase/functions/poll-gladia-jobs/",
+        "supabase/functions/poll-s3-upload-queue/",
+        "supabase/functions/voice-transcribe-poll/",
+        "supabase/functions/slack-snooze-check/"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-010"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-012",
+      "feature": "edge-fn-consolidation",
+      "title": "Create cleanup-scheduler that runs all cleanup tasks in sequence",
+      "type": "backend",
+      "status": "complete",
+      "priority": 12,
+      "acceptance": [
+        "cleanup-scheduler/index.ts created running all cleanup tasks sequentially",
+        "Covers: logs cleanup, cc daily cleanup, expired invitations, incomplete onboarding",
+        "Each cleanup task logs its result independently",
+        "Accepts optional task param to run specific cleanup only"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/cleanup-scheduler/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EFC-013"
+      ],
+      "parallelWith": [
+        "EFC-014"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-013",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete 4 old cleanup function directories",
+      "type": "ops",
+      "status": "complete",
+      "priority": 13,
+      "acceptance": [
+        "Directories removed: logs-cleanup, cc-daily-cleanup, cleanup-expired-invitations, cleanup-incomplete-onboarding",
+        "Cron schedules updated to call cleanup-scheduler",
+        "config.toml updated",
+        "Deployed and verified on staging"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/logs-cleanup/",
+        "supabase/functions/cc-daily-cleanup/",
+        "supabase/functions/cleanup-expired-invitations/",
+        "supabase/functions/cleanup-incomplete-onboarding/"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-012"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFC-015"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-014",
+      "feature": "edge-fn-consolidation",
+      "title": "Create backfill-runner router with type-based handler dispatch",
+      "type": "backend",
+      "status": "complete",
+      "priority": 14,
+      "acceptance": [
+        "backfill-runner/index.ts created with backfill type parameter routing",
+        "Handler functions for: transcripts, thumbnails, standard-ops-tables, notetaker-transcripts, lead-sources, memory, autopilot, fathom-companies, warmth",
+        "Each handler preserves exact existing backfill logic",
+        "Accepts backfill_type in request body or query param"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/backfill-runner/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EFC-015"
+      ],
+      "parallelWith": [
+        "EFC-012"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-015",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete 9 old backfill-* function directories",
+      "type": "ops",
+      "status": "complete",
+      "priority": 15,
+      "acceptance": [
+        "Directories removed: backfill-transcripts, backfill-thumbnails, backfill-standard-ops-tables, backfill-notetaker-transcripts, backfill-lead-sources, memory-backfill, autopilot-backfill, fathom-backfill-companies, warmth-backfill",
+        "Any references in cron schedules or frontend updated",
+        "config.toml updated",
+        "Deployed and verified on staging"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/backfill-transcripts/",
+        "supabase/functions/backfill-thumbnails/",
+        "supabase/functions/backfill-standard-ops-tables/",
+        "supabase/functions/backfill-notetaker-transcripts/",
+        "supabase/functions/backfill-lead-sources/",
+        "supabase/functions/memory-backfill/",
+        "supabase/functions/autopilot-backfill/",
+        "supabase/functions/fathom-backfill-companies/",
+        "supabase/functions/warmth-backfill/"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-014"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "EFC-013"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-016",
+      "feature": "edge-fn-consolidation",
+      "title": "Create webhook-crm router for HubSpot, Attio, Bullhorn webhooks",
+      "type": "backend",
+      "status": "complete",
+      "priority": 16,
+      "acceptance": [
+        "webhook-crm/index.ts created with provider routing via path or header",
+        "Handles HubSpot, Attio, Bullhorn webhook payloads",
+        "Shared queue + index sync pattern extracted",
+        "Each provider's signature verification preserved"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/webhook-crm/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EFC-019"
+      ],
+      "parallelWith": [
+        "EFC-017",
+        "EFC-018"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-017",
+      "feature": "edge-fn-consolidation",
+      "title": "Create webhook-integrations router for Apify, Fathom, Stripe, Sentry",
+      "type": "backend",
+      "status": "complete",
+      "priority": 17,
+      "acceptance": [
+        "webhook-integrations/index.ts created with provider routing",
+        "Handles Apify, Fathom, Stripe, Sentry webhook payloads",
+        "Stripe signature verification preserved",
+        "Each provider's specific post-processing logic preserved"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/webhook-integrations/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EFC-019"
+      ],
+      "parallelWith": [
+        "EFC-016",
+        "EFC-018"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-018",
+      "feature": "edge-fn-consolidation",
+      "title": "Create webhook-leads router for Facebook, SavvyCal, ops-table-inbound",
+      "type": "backend",
+      "status": "complete",
+      "priority": 18,
+      "acceptance": [
+        "webhook-leads/index.ts created with provider routing",
+        "Handles Facebook leads, SavvyCal leads, ops-table-inbound webhooks",
+        "Each provider's lead creation logic preserved",
+        "Verification tokens and signatures handled per provider"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/webhook-leads/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "EFC-019"
+      ],
+      "parallelWith": [
+        "EFC-016",
+        "EFC-017"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-019",
+      "feature": "edge-fn-consolidation",
+      "title": "Delete old webhook directories and update provider webhook URLs",
+      "type": "ops",
+      "status": "complete",
+      "priority": 19,
+      "acceptance": [
+        "Directories removed: hubspot-webhook, attio-webhook, bullhorn-webhook, apify-run-webhook, fathom-webhook, stripe-webhook, sentry-webhook, justcall-webhook, facebook-leads-webhook, savvycal-leads-webhook, ops-table-inbound-webhook",
+        "Provider dashboard webhook URLs updated to new consolidated endpoints",
+        "meetings-webhook and workflow-webhook evaluated and consolidated if applicable",
+        "config.toml updated, deployed and verified on staging"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/hubspot-webhook/",
+        "supabase/functions/attio-webhook/",
+        "supabase/functions/bullhorn-webhook/",
+        "supabase/functions/apify-run-webhook/",
+        "supabase/functions/fathom-webhook/",
+        "supabase/functions/stripe-webhook/",
+        "supabase/functions/sentry-webhook/",
+        "supabase/functions/justcall-webhook/",
+        "supabase/functions/facebook-leads-webhook/",
+        "supabase/functions/savvycal-leads-webhook/",
+        "supabase/functions/ops-table-inbound-webhook/"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-016",
+          "EFC-017",
+          "EFC-018"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "EFC-020",
+      "feature": "edge-fn-consolidation",
+      "title": "Extract shared oauthCallback.ts helper for state validation and token exchange",
+      "type": "backend",
+      "status": "complete",
+      "priority": 20,
+      "acceptance": [
+        "_shared/oauthCallback.ts created with validateState() and exchangeToken() helpers",
+        "All OAuth callback functions refactored to use shared helpers",
+        "Provider-specific post-processing remains in individual callback functions",
+        "No behavior changes \u2014 all OAuth flows work identically"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/oauthCallback.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "EFC-009"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": "2026-03-04T12:00:00Z",
+      "completedAt": "2026-03-04T20:52:04.673552Z"
+    },
+    {
+      "id": "SBX2-001",
+      "feature": "sandbox-v2",
+      "title": "Update design tokens & shared styles to match real app dark mode",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "All sandbox components use real app dark mode tokens: bg-gray-950/bg-gray-900/50, border-gray-800/50, text-white/text-gray-400",
+        "Cards use rounded-3xl, backdrop-blur-xl, bg-white/[0.03], border-white/[0.06]",
+        "Green accent #37bd7e used for active nav items and CTAs instead of violet",
+        "Inter font loaded and applied",
+        "Signup modal component created for locked pages"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/components/SignupModal.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SBX2-002",
+        "SBX2-003",
+        "SBX2-004",
+        "SBX2-005",
+        "SBX2-006",
+        "SBX2-007",
+        "SBX2-008"
+      ],
+      "parallelWith": [],
+      "actualMinutes": null,
+      "startedAt": "2026-03-05T12:00:00Z",
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-002",
+      "feature": "sandbox-v2",
+      "title": "Rebuild SandboxSidebar to match real AppLayout sidebar",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "256px width, collapsible to 96px with chevron toggle button",
+        "Logo area at top with 60 branding",
+        "14 nav items matching real app: Dashboard, Meetings, Intelligence, Leads, Pipeline, Integrations (group 1), AI Copilot, Command Centre, Ops, Outreach, Win/Loss, Follow-Up Drafts, Competitive Intel, Coaching (group 2)",
+        "Correct Lucide icons for each item (LayoutDashboard, Video, Sparkles, Inbox, Kanban, Plug, Bot, Inbox, Table2, BarChart3, Trophy, Mail, Swords, Trophy)",
+        "Footer with Settings, Support, Logout",
+        "Active state: bg-[#37bd7e]/10 text-white border-[#37bd7e]/20",
+        "Inactive: text-gray-400/80 hover:bg-gray-800/20",
+        "Locked items (Integrations, Settings, Outreach, Analytics, Coaching) trigger signup modal on click",
+        "Dividers between nav groups"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/SandboxSidebar.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX2-003"
+      ],
+      "actualMinutes": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-003",
+      "feature": "sandbox-v2",
+      "title": "Rebuild SandboxTopbar to match real AppLayout topbar",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Fixed h-16, bg-gray-950/50 backdrop-blur-sm, border-b border-gray-800/50",
+        "Left offset matches sidebar width (256px expanded, 96px collapsed)",
+        "Right-aligned items: notification bell with dot, agent activity bell, credit widget (mock), user avatar dropdown",
+        "User avatar: w-8 h-8 rounded-lg with initials in #37bd7e",
+        "Personalized greeting when visitor name available",
+        "Mobile topbar with hamburger menu"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/SandboxTopbar.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX2-002"
+      ],
+      "actualMinutes": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-004",
+      "feature": "sandbox-v2",
+      "title": "Rebuild SandboxDashboard to match real Dashboard page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Header: 'Welcome back, {Name}' (text-3xl font-bold) + subtitle + DateRangeFilter mock",
+        "Tab bar: Overview / AI Agent / Activity tabs with real styling (bg-gray-900/50 backdrop-blur-xl)",
+        "4 MetricCards matching real app: New Business (PoundSterling, emerald), Outbound (Phone, blue), Meetings (Users, violet), Proposals (FileText, orange)",
+        "Each MetricCard: icon box, title, large value vs target, progress bar (h-2.5 rounded-full), two trend badges with TrendingUp/TrendingDown icons",
+        "Cards use rounded-3xl p-6 border bg-gradient-to-br from-gray-900/80 to-gray-900/40 backdrop-blur-xl border-gray-800/50",
+        "Grid: grid-cols-1 sm:grid-cols-2 gap-6",
+        "Mock data personalized: visitor's company appears in recent activity"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxDashboard.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX2-005",
+        "SBX2-006",
+        "SBX2-007",
+        "SBX2-008"
+      ],
+      "actualMinutes": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-005",
+      "feature": "sandbox-v2",
+      "title": "Rebuild SandboxPipeline to match real Pipeline kanban",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "PipelineHeader: title + 'Sales Pipeline' pill badge, view toggle (Board/Table/Graph/Forecast icons), filter popovers, New Deal button (#37bd7e)",
+        "Summary metrics strip: total value, weighted value, deal count, health counts",
+        "Kanban columns: min-w-[300px], rounded-2xl, bg-white/[0.03] backdrop-blur-xl border-white/[0.06]",
+        "Column headers: colored gradient stripe h-[2.5px], stage name + count badge, total value + probability",
+        "DealCards: rounded-xl, company avatar/logo (w-[34px] rounded-lg), company name + deal name, value, health progress bar (h-[2.5px] emerald/amber/red), risk tags, days-in-stage with Clock icon, owner avatar",
+        "Visitor's company deal highlighted with glow effect",
+        "5 stages: Lead, Qualified, Proposal, Negotiation, Closed Won"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxPipeline.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX2-004",
+        "SBX2-006",
+        "SBX2-007",
+        "SBX2-008"
+      ],
+      "actualMinutes": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-006",
+      "feature": "sandbox-v2",
+      "title": "Rebuild SandboxMeetings to match real UnifiedMeetingsList",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Stats bar: grid-cols-2 sm:grid-cols-4 with stat cards (rounded-2xl p-4 bg-gray-900/40 backdrop-blur-xl border-gray-700/30)",
+        "Grid/list view toggle",
+        "Filter bar with search, date range, source filter mocks",
+        "Grid view: grid-cols-1 md:grid-cols-2 xl:grid-cols-3, cards with aspect-video thumbnail placeholder, title, metadata badges",
+        "Meeting cards show: title, company, date, duration, sentiment badge (positive/neutral/challenging), source badge",
+        "Clicking a meeting shows prep brief: company overview, talking points, risk signals, questions to ask",
+        "Mock meetings personalized to visitor's company"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxMeetings.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX2-004",
+        "SBX2-005",
+        "SBX2-007",
+        "SBX2-008"
+      ],
+      "actualMinutes": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-007",
+      "feature": "sandbox-v2",
+      "title": "Rebuild SandboxContacts to match real ContactsView",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Search bar + company filter + sort controls",
+        "Table with columns: Name (with avatar), Email, Phone, Title, Company, Owner",
+        "Company avatar: w-8 h-8 rounded-lg with gradient initials",
+        "Row hover: bg-white/[0.05]",
+        "Clicking contact opens detail panel with full info, activity timeline, deal associations",
+        "Visitor's own contact highlighted",
+        "Bulk action bar (decorative) at top when contacts selected"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxContacts.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX2-004",
+        "SBX2-005",
+        "SBX2-006",
+        "SBX2-008"
+      ],
+      "actualMinutes": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-008",
+      "feature": "sandbox-v2",
+      "title": "Rebuild SandboxCopilot to match real CopilotLayout",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Two-panel layout: left chat area + right sidebar panel (320px)",
+        "Right panel sections: Progress (tool execution stepper), Action Items, Context sources, Connected integrations",
+        "Chat area: welcome state with suggested prompts, then auto-playing conversation",
+        "Message bubbles match real app styling",
+        "ChatInput at bottom (decorative but styled correctly)",
+        "Suggested prompts personalized with visitor's company/contacts",
+        "Tool call indicators during auto-play (loading state machine look)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxCopilot.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX2-004",
+        "SBX2-005",
+        "SBX2-006",
+        "SBX2-007"
+      ],
+      "actualMinutes": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-009",
+      "feature": "sandbox-v2",
+      "title": "Rebuild SandboxEmailDraft to match real follow-up UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Email composer matching real app email UI: To/Subject/Body fields",
+        "AI reasoning panel on right showing why this email was drafted",
+        "Tone/length controls (decorative)",
+        "Send button with #37bd7e accent",
+        "Personalized draft from research data"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxEmailDraft.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX2-004",
+        "SBX2-005"
+      ],
+      "actualMinutes": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-010",
+      "feature": "sandbox-v2",
+      "title": "Update sandbox data types and mock data for richer views",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "SandboxKPIs expanded: revenue with target/trend/previousTotal, outbound with target/trend, meetings with target/trend, proposals with target/trend",
+        "SandboxDeal expanded: stage_color, health_status (healthy/warning/critical/stalled), risk_factors array, days_in_current_stage, relationship_health_status, next_actions",
+        "SandboxMeeting expanded: duration_minutes, sentiment_score, sentiment_label, coach_rating, source (fathom/zoom/teams), video_thumbnail placeholder, talk_time_percentage",
+        "SandboxContact expanded: avatar_gradient, linkedin_url, is_primary, engagement_level",
+        "Default mock data updated with richer fields",
+        "generatePersonalizedData updated to populate new fields from research"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/data/sandboxTypes.ts",
+        "packages/landing/src/sandbox/data/defaultMockData.ts",
+        "packages/landing/src/sandbox/data/generatePersonalizedData.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SBX2-004",
+        "SBX2-005",
+        "SBX2-006",
+        "SBX2-007",
+        "SBX2-008",
+        "SBX2-009"
+      ],
+      "parallelWith": [
+        "SBX2-002",
+        "SBX2-003"
+      ],
+      "actualMinutes": null,
+      "startedAt": "2026-03-05T12:00:00Z",
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-011",
+      "feature": "sandbox-v2",
+      "title": "Wire up SandboxApp with sidebar collapse, locked pages, and view routing",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "SandboxApp supports all new views including meetings (separate from meeting prep)",
+        "Sidebar collapse state persisted in SandboxDataProvider",
+        "Main content area left offset adjusts with sidebar (256px expanded, 96px collapsed)",
+        "Locked nav items trigger SignupModal instead of view change",
+        "Mobile bottom tab bar updated with correct items",
+        "View transitions use AnimatePresence with framer-motion"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/data/SandboxDataProvider.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-002",
+          "SBX2-003",
+          "SBX2-004",
+          "SBX2-005",
+          "SBX2-006",
+          "SBX2-007",
+          "SBX2-008",
+          "SBX2-009",
+          "SBX2-010"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SBX2-012"
+      ],
+      "parallelWith": [],
+      "actualMinutes": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX2-012",
+      "feature": "sandbox-v2",
+      "title": "Final polish \u2014 responsive, entrance animation, CTA placement",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "SandboxEntrance animation updated with new visual style",
+        "Floating signup CTA button positioned correctly",
+        "Mobile responsive: sidebar hidden, bottom tab bar, full-width content",
+        "All views scroll correctly within the sandbox container",
+        "Lint passes on all sandbox files"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "packages/landing/src/sandbox/SandboxEntrance.tsx",
+        "packages/landing/src/sandbox/SandboxApp.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX2-011"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "actualMinutes": 10,
+      "startedAt": "2026-03-05T12:00:00Z",
+      "completedAt": "2026-03-05T12:10:00Z"
+    },
+    {
+      "id": "SBX3-001",
+      "feature": "sandbox-v3",
+      "title": "Strip nav to 5 core screens, hide all locked items",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Sidebar shows only: Dashboard, Pipeline, Meetings, Email, Copilot",
+        "All locked/greyed-out items removed entirely (not hidden, deleted from nav)",
+        "Group dividers removed \u2014 single clean nav list",
+        "Mobile bottom tabs updated to match (5 tabs max)",
+        "No SignupModal trigger from nav \u2014 only from CTA button"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "packages/landing/src/sandbox/SandboxSidebar.tsx",
+        "packages/landing/src/sandbox/SandboxApp.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SBX3-007"
+      ],
+      "parallelWith": [
+        "SBX3-002"
+      ],
+      "actualMinutes": 10,
+      "startedAt": "2026-03-05T13:00:00Z",
+      "completedAt": "2026-03-05T13:10:00Z"
+    },
+    {
+      "id": "SBX3-002",
+      "feature": "sandbox-v3",
+      "title": "Wire company logos via logo.dev throughout sandbox",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "getLogoDevUrl utility created using public token pk_X-1ZO13GSgeOoUrIuJ6GMQ",
+        "Company logos rendered on pipeline deal cards (34x34 rounded-lg, fallback to gradient initial)",
+        "Company logos on meeting cards and contact rows",
+        "Visitor company logo in topbar (replacing plain 60 logo or alongside)",
+        "SandboxCompany type gets domain field for logo lookup"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/data/sandboxTypes.ts",
+        "packages/landing/src/sandbox/data/generatePersonalizedData.ts",
+        "packages/landing/src/sandbox/views/SandboxPipeline.tsx",
+        "packages/landing/src/sandbox/views/SandboxContacts.tsx",
+        "packages/landing/src/sandbox/SandboxTopbar.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SBX3-003",
+        "SBX3-005"
+      ],
+      "parallelWith": [
+        "SBX3-001"
+      ],
+      "actualMinutes": 15,
+      "startedAt": "2026-03-05T10:00:00Z",
+      "completedAt": "2026-03-05T10:15:00Z"
+    },
+    {
+      "id": "SBX3-003",
+      "feature": "sandbox-v3",
+      "title": "Pixel-perfect meeting library grid matching real RecordingCard",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Meeting cards use aspect-video thumbnail area (gradient placeholder + centered Video icon + play overlay on hover)",
+        "SourceBadge top-left (emerald '60 Notetaker'), duration badge top-right (black/60 backdrop-blur)",
+        "Below thumbnail: title (2-line clamp), meta row (date + company logo + name), badge row (SentimentBadge + CoachRatingBadge + TalkTimeBadge)",
+        "Grid layout with responsive columns matching real UnifiedMeetingsList",
+        "Clicking a meeting card transitions to detail view (SBX3-004)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxMeetings.tsx",
+        "packages/landing/src/sandbox/data/sandboxTypes.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX3-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SBX3-004"
+      ],
+      "parallelWith": [],
+      "actualMinutes": 20,
+      "startedAt": "2026-03-05T10:15:00Z",
+      "completedAt": "2026-03-05T10:35:00Z"
+    },
+    {
+      "id": "SBX3-004",
+      "feature": "sandbox-v3",
+      "title": "Meeting detail analysis view matching real MeetingDetail",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "12-col grid: 8 main + 4 sidebar, matching real MeetingDetail layout",
+        "Main: Recording card (emerald Video icon, 'Open Recording' button), AI Summary card (Sparkles icon, formatted text), Meeting Analytics card (sentiment progress bar -1 to 1, coach score bar 0-10 with italic summary, talk time dual bars rep/customer with ideal range hint)",
+        "Sidebar: Action items list (amber CheckSquare), Attendees with avatar initials + role badges, CRM context links",
+        "Back button returns to meeting library grid",
+        "Meeting data enriched with sentiment_score, coach_rating, coach_summary, talk_time_rep_pct, talk_time_customer_pct fields"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxMeetings.tsx",
+        "packages/landing/src/sandbox/data/sandboxTypes.ts",
+        "packages/landing/src/sandbox/data/generatePersonalizedData.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX3-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "actualMinutes": 0,
+      "startedAt": "2026-03-05T10:15:00Z",
+      "completedAt": "2026-03-05T10:35:00Z"
+    },
+    {
+      "id": "SBX3-005",
+      "feature": "sandbox-v3",
+      "title": "Pixel-perfect DealCard + MetricCard matching real app code",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "DealCard matches real DealCard.tsx: company logo 34x34 rounded-lg (logo.dev), company name, deal name, value, health bar h-[2.5px] gradient, risk/high-value/action tags, days-in-stage + stakeholder count + owner avatar footer",
+        "MetricCard matches real Dashboard.tsx: rounded-3xl p-6 sm:p-7, icon pill, value vs target with goal progress, trend arrows with period-over-period comparison",
+        "Both use exact Tailwind classes from real components (bg-white/[0.03], backdrop-blur-xl, etc.)",
+        "Visitor deal highlighted with green glow border matching real 'selected' state"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxPipeline.tsx",
+        "packages/landing/src/sandbox/views/SandboxDashboard.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX3-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX3-003"
+      ],
+      "actualMinutes": 15,
+      "startedAt": "2026-03-05T10:35:00Z",
+      "completedAt": "2026-03-05T10:50:00Z"
+    },
+    {
+      "id": "SBX3-006",
+      "feature": "sandbox-v3",
+      "title": "Deep personalization \u2014 logos, research signals, industry context",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Visitor company logo displayed prominently in topbar alongside 60 logo",
+        "Research-derived competitor names appear as competing deals in pipeline",
+        "Research-derived value props embedded in meeting prep talking points and email draft",
+        "Deal values scaled to visitor company's employee_range (realistic for their size)",
+        "Activity feed includes industry-specific actions (e.g. 'Reviewed {industry} case study')"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/data/generatePersonalizedData.ts",
+        "packages/landing/src/sandbox/SandboxTopbar.tsx",
+        "packages/landing/src/sandbox/views/SandboxDashboard.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX3-001",
+          "SBX3-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBX3-004"
+      ],
+      "actualMinutes": 12,
+      "startedAt": "2026-03-05T10:50:00Z",
+      "completedAt": "2026-03-05T11:02:00Z"
+    },
+    {
+      "id": "SBX3-007",
+      "feature": "sandbox-v3",
+      "title": "Guided narrative flow \u2014 progressive reveal, not free-roam",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "Sandbox starts on Dashboard with a subtle pulse/glow on 'Meetings' nav item after 3s",
+        "After visiting Meetings, gentle hint toward Email view ('AI drafted a follow-up')",
+        "Optional tour dots (not modal overlays) that highlight key personalization points",
+        "Welcome banner on dashboard: 'Here is what 60 would do for {Company}' with company logo",
+        "CTA button text adapts to current view (e.g. 'Start closing deals like this' on Pipeline)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/SandboxSidebar.tsx",
+        "packages/landing/src/sandbox/views/SandboxDashboard.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX3-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SBX3-008"
+      ],
+      "parallelWith": [
+        "SBX3-006"
+      ],
+      "actualMinutes": 15,
+      "startedAt": "2026-03-05T11:02:00Z",
+      "completedAt": "2026-03-05T11:17:00Z"
+    },
+    {
+      "id": "SBX3-008",
+      "feature": "sandbox-v3",
+      "title": "Live AI moments \u2014 typing email, assembling meeting brief",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "Email draft view shows typewriter effect on first visit (characters appear at ~30ms intervals)",
+        "Meeting analysis view shows brief 'Analyzing transcript...' animation before revealing metrics",
+        "Copilot auto-play conversation uses research-derived company context (not generic)",
+        "At least one 'AI in action' moment visible within first 10s of sandbox interaction"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxEmailDraft.tsx",
+        "packages/landing/src/sandbox/views/SandboxMeetings.tsx",
+        "packages/landing/src/sandbox/views/SandboxCopilot.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SBX3-007"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "actualMinutes": 15,
+      "startedAt": "2026-03-05T01:00:00Z",
+      "completedAt": "2026-03-05T01:15:00Z"
+    },
+    {
+      "id": "FNL-001",
+      "feature": "sandbox-funnel",
+      "title": "Add progress indicator bar to sandbox topbar",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Progress bar shows '3/5 features explored' in SandboxTopbar, using visitedViews from SandboxDataProvider",
+        "Progress updates live as user navigates to new views",
+        "At 5/5 the bar turns green with completion checkmark animation",
+        "Bar is subtle (height 3px) below topbar, not intrusive"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/SandboxTopbar.tsx",
+        "packages/landing/src/sandbox/data/SandboxDataProvider.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FNL-002"
+      ],
+      "parallelWith": [
+        "FNL-003"
+      ],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "FNL-002",
+      "feature": "sandbox-funnel",
+      "title": "Wire guided tour with suggestedNextView nudge",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "SandboxTour auto-starts on first sandbox load (localStorage check for dismissal)",
+        "'Next: Pipeline' nudge chip appears in topbar when suggestedNextView is non-null",
+        "Clicking the nudge navigates to that view and advances the tour",
+        "Tour dismisses permanently when user clicks X or completes all 5 steps",
+        "Nudge disappears at 5/5 completion"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/SandboxTour.tsx",
+        "packages/landing/src/sandbox/SandboxTopbar.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "FNL-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "FNL-003",
+      "feature": "sandbox-funnel",
+      "title": "Make Copilot input interactive with fuzzy-matched mock responses",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Input field accepts typed text and submits on Enter or Send click",
+        "5 pre-mapped prompt patterns fuzzy-matched: meeting prep, follow-up email, deal health, find leads, help",
+        "Each match returns a realistic typed-out response using existing addMessageTyped flow",
+        "Unmatched input returns a friendly 'Sign up to unlock full copilot' message with CTA",
+        "Suggested prompts below input update after each response (remove used ones)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxCopilot.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FNL-004"
+      ],
+      "parallelWith": [
+        "FNL-001"
+      ],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "FNL-004",
+      "feature": "sandbox-funnel",
+      "title": "Copilot mock responses use personalized visitor data",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Deal health response shows visitorDeal value, stage, and health_score from SandboxDataProvider",
+        "Follow-up email response renders the actual emailDraft content from sandbox data",
+        "Meeting prep response uses meetings[0] prep data (talking points, risk signals)",
+        "Lead search response references visitor company industry and competitors",
+        "All responses include tool call indicators matching real copilot UX"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxCopilot.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "FNL-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "FNL-005",
+      "feature": "sandbox-funnel",
+      "title": "Replace generic CTAs with view-specific personalized CTAs",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Dashboard CTA: 'Get these numbers for {company}' instead of generic",
+        "Pipeline CTA: 'Track your {company} deal for real'",
+        "Email CTA: 'Send this email to {contact_name} for real'",
+        "Copilot CTA: 'Ask 60 anything about your pipeline'",
+        "All CTAs pull from SandboxDataProvider context (companyName, contactName, dealValue)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxDashboard.tsx",
+        "packages/landing/src/sandbox/views/SandboxPipeline.tsx",
+        "packages/landing/src/sandbox/views/SandboxEmailDraft.tsx",
+        "packages/landing/src/sandbox/views/SandboxCopilot.tsx",
+        "packages/landing/src/sandbox/views/SandboxMeetings.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FNL-001",
+        "FNL-003"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "FNL-006",
+      "feature": "sandbox-funnel",
+      "title": "Mid-funnel email capture modal triggered by engagement score",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "EmailCaptureModal appears when engagement score > 40 AND 3+ views visited AND 60+ seconds elapsed",
+        "Copy: 'Save your demo - enter your email to pick up where you left off'",
+        "Email stored via campaign_visitors.signup_email upsert (existing tracking session)",
+        "Modal only shows once per session (localStorage flag)",
+        "Dismiss button closes without blocking - this is NOT a gate"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/components/EmailCaptureModal.tsx",
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/hooks/useSandboxTracking.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "FNL-007"
+      ],
+      "parallelWith": [
+        "FNL-005"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "FNL-007",
+      "feature": "sandbox-funnel",
+      "title": "Social proof sticky bar after 90 seconds",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 5,
+      "acceptance": [
+        "Sticky bar slides up from bottom after 90s in sandbox",
+        "Shows: 'Teams using 60 save 15h/week on sales admin' with subtle gradient border",
+        "Bar has close button, once dismissed stays hidden for session",
+        "Bar does not overlap with main CTA button",
+        "Bar only shows if email capture modal has been dismissed or not triggered"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "packages/landing/src/sandbox/components/SocialProofBar.tsx",
+        "packages/landing/src/sandbox/SandboxApp.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "FNL-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 15
+    },
+    {
+      "id": "FNL-008",
+      "feature": "sandbox-funnel",
+      "title": "View-level analytics events in useSandboxTracking",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "trackViewChange emits sandbox_view_enter event with view name, timeInPreviousView, viewsVisitedSoFar, engagementScore",
+        "CTA click tracked as sandbox_cta_click with view, engagementScore, timeInSandbox",
+        "Events dispatched via window.dispatchEvent for pageViewTracker to pick up",
+        "Events also included in the campaign_visitors flush payload as event_log JSONB array",
+        "No external analytics SDK dependency - uses existing CustomEvent pattern"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/hooks/useSandboxTracking.ts",
+        "packages/landing/src/sandbox/data/SandboxDataProvider.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "FNL-001",
+        "FNL-003",
+        "FNL-005"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "CMP-001",
+      "feature": "campaign-links",
+      "title": "Apply campaign_links migration and verify /t/ code resolution",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Migration 20260305000001_campaign_links.sql applied to staging (campaign_links + campaign_visitors tables)",
+        "RLS policies verified: public SELECT on active links, authenticated INSERT/UPDATE",
+        "CampaignLanding.tsx resolves code via REST API and renders SandboxExperience with pre-enriched data",
+        "Invalid codes redirect to homepage gracefully",
+        "view_count incremented on each code resolution"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260305000001_campaign_links.sql",
+        "packages/landing/src/pages/CampaignLanding.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "CMP-002",
+        "CMP-003",
+        "CMP-004"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "CMP-002",
+      "feature": "campaign-links",
+      "title": "Campaign enrichment edge function - batch prospect processing",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "POST /campaign-enrich accepts { campaign_name, campaign_source, prospects[] }",
+        "Generates unique 6-char base62 codes for each prospect",
+        "Calls sandbox-personalize for each prospect's domain to pre-generate research_data",
+        "Stores enriched campaign_links rows with research_data + ai_content JSONB",
+        "Returns array of { code, url, visitor_company } for the created links"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/campaign-enrich/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "CMP-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_links"
+        ]
+      },
+      "blocks": [
+        "CMP-005"
+      ],
+      "parallelWith": [
+        "CMP-003"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "CMP-003",
+      "feature": "campaign-links",
+      "title": "Campaign Manager UI - create campaigns and generate links",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "CampaignManager.tsx in sandbox/ provides form: campaign name, source, prospect list (CSV paste or manual)",
+        "Submit calls campaign-enrich edge function with auth token",
+        "Results displayed as copyable link table: prospect name, company, short URL",
+        "Bulk copy all links button for pasting into outreach tools",
+        "Campaign list view showing existing campaigns with link counts"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "packages/landing/src/sandbox/CampaignManager.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "CMP-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_links"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CMP-002"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 30
+    },
+    {
+      "id": "CMP-004",
+      "feature": "campaign-links",
+      "title": "CampaignLanding - instant load from pre-enriched data + tracking init",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Code resolution loads research_data directly from campaign_links (no re-enrichment needed)",
+        "Visitor info (name, title, company) passed to SandboxExperience for personalized greeting",
+        "useSandboxTracking initialized with campaignLinkId for visitor attribution",
+        "Loading state shows branded spinner with 'Preparing your demo...'",
+        "Fallback to live enrichment if research_data is null (edge case for old links)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/pages/CampaignLanding.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "CMP-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_links"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "CMP-002",
+        "CMP-003"
+      ],
+      "startedAt": "2026-03-05T15:00:00Z",
+      "completedAt": "2026-03-05T15:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "CMP-005",
+      "feature": "campaign-links",
+      "title": "Batch CSV upload with domain extraction for 10K+ prospect lists",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "CampaignManager accepts CSV file upload (columns: email, first_name, last_name, company, title)",
+        "Frontend parses CSV, extracts domains from email addresses",
+        "Deduplicates by domain, shows preview with prospect count",
+        "Submits in batches of 50 to campaign-enrich to avoid timeout",
+        "Progress bar shows enrichment progress (X/Y prospects enriched)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "packages/landing/src/sandbox/CampaignManager.tsx",
+        "supabase/functions/campaign-enrich/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "CMP-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "LDI-001",
+      "feature": "lead-intelligence",
+      "title": "Weighted engagement scoring model in useSandboxTracking",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Scoring weights match strategy: page_visit=1, scroll_50+=2, demo_step=5, url_input=10, panel_view=3, signup_start=15, signup_complete=25, return_visit=10",
+        "Score persisted in localStorage for multi-session return visit detection",
+        "Engagement tier computed: Low (1-10), Medium (11-30), High (31-50), Hot (51+)",
+        "Tier exposed via getEngagementTier() from the hook",
+        "Backward-compatible with existing getEngagementScore() API"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/hooks/useSandboxTracking.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LDI-002",
+        "LDI-004"
+      ],
+      "parallelWith": [
+        "LDI-003"
+      ],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "LDI-002",
+      "feature": "lead-intelligence",
+      "title": "Rich Slack Block Kit alerts in sandbox-lead-alert",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Slack message uses Block Kit layout: header with lead name + company, score badge, source tag",
+        "Fields: Score (with tier color), Source (campaign_source), Time on site, Demo panels viewed, Top interests (from views_navigated)",
+        "Action buttons: View in 60 (deep link), Send follow-up (copilot link), Assign to rep",
+        "Alert fires when engagement_score crosses 40 (High) threshold, not just 60",
+        "Includes campaign_name context if from /t/ link"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/sandbox-lead-alert/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "LDI-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_visitors"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "LDI-003",
+      "feature": "lead-intelligence",
+      "title": "Feature interest tracking - which panels drive conversion",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "Each sandbox view tracks time_spent per panel (not just visited/not visited)",
+        "Top 2 most-viewed panels included in tracking flush payload as feature_interests array",
+        "campaign_visitors table gets feature_interests TEXT[] column (migration update)",
+        "Interest data flows through to Slack alert (LDI-002 consumes it)",
+        "Feature mapping: dashboard='KPI Dashboard', pipeline='Deal Pipeline', meetings='Meeting Prep', email='Email Drafts', copilot='AI Copilot'"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "packages/landing/src/sandbox/hooks/useSandboxTracking.ts",
+        "supabase/migrations/20260305000001_campaign_links.sql"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LDI-001"
+      ],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "LDI-004",
+      "feature": "lead-intelligence",
+      "title": "Campaign analytics dashboard view",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "New route /campaigns in landing app showing campaign performance",
+        "Per-campaign table: name, links created, total visitors, avg engagement score, conversions",
+        "Funnel visualization: Link clicks -> Demo viewed -> 3+ panels -> Email captured -> Signed up",
+        "Engagement tier distribution chart (Low/Medium/High/Hot counts)",
+        "Filter by campaign_source and date range"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "packages/landing/src/sandbox/CampaignManager.tsx",
+        "packages/landing/src/App.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "LDI-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_visitors"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 30
+    },
+    {
+      "id": "LDI-005",
+      "feature": "lead-intelligence",
+      "title": "Auto-create lead in 60 app from high-scoring campaign visitor",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "acceptance": [
+        "When visitor score hits Hot tier (51+) AND has signup_email, create contact + deal in 60 app",
+        "Contact: email, first_name, last_name, company from campaign_link data",
+        "Deal: company name, source='campaign', stage='Lead', value estimated from company size",
+        "Deduplication by email - skip if contact already exists",
+        "Log creation in activities table with source='sandbox_campaign'"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/sandbox-lead-alert/index.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "LDI-002"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_visitors",
+          "campaign_links"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "SEED-001",
+      "feature": "signup-seeding",
+      "title": "Capture demo context in signup URL parameters",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "acceptance": [
+        "Signup CTA in sandbox appends query params: ?demo_company={domain}&demo_name={name}&demo_email={email}&campaign_code={code}",
+        "Parameters URL-encoded and passed through to app.use60.com/signup",
+        "If visitor provided email via EmailCaptureModal, pre-fill the signup email field",
+        "Campaign code included for attribution tracking",
+        "Works for both organic sandbox visitors and /t/ campaign visitors"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "packages/landing/src/sandbox/hooks/useSandboxSignup.ts",
+        "packages/landing/src/sandbox/SandboxApp.tsx"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SEED-002"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T14:00:00Z",
+      "completedAt": "2026-03-05T14:00:00Z",
+      "actualMinutes": 15
+    },
+    {
+      "id": "SEED-002",
+      "feature": "signup-seeding",
+      "title": "Onboarding detects demo params and seeds initial data",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 2,
+      "acceptance": [
+        "App signup page reads demo_company, demo_name, demo_email from URL params",
+        "After account creation, if demo params present: create a deal for demo_company, create a contact for demo_name",
+        "Research data from campaign_link (if campaign_code provided) copied to the new deal's context",
+        "User lands on dashboard with pre-populated data instead of empty state",
+        "Skips standard empty-state onboarding tutorial if demo data was seeded"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/pages/onboarding/OnboardingFlow.tsx",
+        "src/lib/hooks/useOnboardingSeeding.ts"
+      ],
+      "dependencies": {
+        "stories": [
+          "SEED-001"
+        ],
+        "files": [],
+        "schema": [
+          "campaign_links"
+        ]
+      },
+      "blocks": [
+        "SEED-003"
+      ],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 25
+    },
+    {
+      "id": "SEED-003",
+      "feature": "signup-seeding",
+      "title": "Welcome experience with seeded data acknowledgment",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "acceptance": [
+        "Dashboard shows 'Welcome, {name}! We set up {company} for you.' banner on first login after seeding",
+        "Banner highlights: 1 deal created, 1 contact added, AI insights ready",
+        "Banner dismisses after click and never shows again (user_preferences flag)",
+        "If no seeding occurred, standard onboarding flow is unchanged",
+        "Attribution logged: source='campaign', campaign_code tracked in user_settings"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/AppLayout.tsx",
+        "src/pages/dashboard/Dashboard.tsx"
+      ],
+      "dependencies": {
+        "stories": [
+          "SEED-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "startedAt": "2026-03-05T16:00:00Z",
+      "completedAt": "2026-03-05T16:00:00Z",
+      "actualMinutes": 20
+    },
+    {
+      "id": "SUP-001",
+      "feature": "support-electron-readiness",
+      "title": "Add support tables to Supabase Realtime publication",
+      "type": "schema",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "support_tickets",
+          "support_messages"
+        ]
+      },
+      "blocks": [
+        "SUP-008"
+      ],
+      "parallelWith": [
+        "SUP-002",
+        "SUP-004",
+        "SUP-007"
+      ],
+      "acceptance": [
+        "support_messages added to supabase_realtime publication",
+        "support_tickets confirmed in supabase_realtime publication",
+        "Realtime events fire on INSERT/UPDATE/DELETE for both tables",
+        "Migration is idempotent (IF NOT EXISTS pattern)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260307000001_support_realtime_publication.sql"
+      ]
+    },
+    {
+      "id": "SUP-002",
+      "feature": "support-electron-readiness",
+      "title": "Auto-create in-app notifications on support events",
+      "type": "schema",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "support_tickets",
+          "support_messages",
+          "notifications"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SUP-001",
+        "SUP-003"
+      ],
+      "acceptance": [
+        "DB trigger on support_messages INSERT creates notification for ticket owner when sender_type='agent'",
+        "DB trigger on support_messages INSERT creates notification for platform admins when sender_type='user'",
+        "DB trigger on support_tickets UPDATE (status change) creates notification for ticket owner",
+        "Notifications have correct category='support', entity_type='support_ticket', entity_id, action_url",
+        "No duplicate notifications for the message sender themselves"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260307000002_support_notification_triggers.sql"
+      ]
+    },
+    {
+      "id": "SUP-003",
+      "feature": "support-electron-readiness",
+      "title": "Auto-trigger email+Slack notifications on new messages and status changes",
+      "type": "schema",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "support_tickets",
+          "support_messages"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SUP-001",
+        "SUP-002"
+      ],
+      "acceptance": [
+        "DB trigger on support_messages INSERT calls support-ticket-notification edge function via pg_net with event='new_reply'",
+        "DB trigger on support_tickets UPDATE (status change) calls edge function via pg_net with event='status_changed'",
+        "pg_net calls use SUPABASE_URL and service_role key from vault or env",
+        "Existing manual call from useSupportTickets (ticket creation) still works alongside trigger"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260307000003_support_auto_notify_edge_fn.sql"
+      ]
+    },
+    {
+      "id": "SUP-004",
+      "feature": "support-electron-readiness",
+      "title": "Add internal notes support to support_messages",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "support_messages"
+        ]
+      },
+      "blocks": [
+        "SUP-004b"
+      ],
+      "parallelWith": [
+        "SUP-001",
+        "SUP-005",
+        "SUP-006"
+      ],
+      "acceptance": [
+        "is_internal BOOLEAN DEFAULT false column added to support_messages",
+        "RLS policy updated: users cannot SELECT messages where is_internal=true",
+        "Platform admin and org admin policies unchanged (can see all)",
+        "Existing data unaffected (all existing messages get is_internal=false)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260307000004_support_internal_notes.sql"
+      ]
+    },
+    {
+      "id": "SUP-004b",
+      "feature": "support-electron-readiness",
+      "title": "Update hooks and UI for internal notes",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "SUP-004"
+        ],
+        "files": [
+          "src/lib/hooks/useSupportMessages.ts"
+        ],
+        "schema": [
+          "support_messages"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "useSupportMessages filters out is_internal=true for non-admin users",
+        "useSendSupportMessage accepts is_internal parameter",
+        "SupportAgentDashboard shows internal notes with visual distinction (yellow/muted badge)",
+        "Internal note toggle in message compose area for admins"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/hooks/useSupportMessages.ts",
+        "src/components/support/SupportAgentDashboard.tsx"
+      ]
+    },
+    {
+      "id": "SUP-005",
+      "feature": "support-electron-readiness",
+      "title": "Create support_canned_responses table and hook",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "SUP-005b"
+      ],
+      "parallelWith": [
+        "SUP-004",
+        "SUP-006"
+      ],
+      "acceptance": [
+        "support_canned_responses table created with id, org_id (nullable), title, content, category, shortcut, created_by, created_at, updated_at",
+        "RLS: platform admins can CRUD all, org admins can CRUD their org's responses",
+        "Indexes on org_id and category",
+        "React hook useCannedResponses with list, create, update, delete mutations"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260307000005_support_canned_responses.sql",
+        "src/lib/hooks/useCannedResponses.ts"
+      ]
+    },
+    {
+      "id": "SUP-005b",
+      "feature": "support-electron-readiness",
+      "title": "Canned responses UI in admin dashboard",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "SUP-005"
+        ],
+        "files": [
+          "src/components/support/SupportAgentDashboard.tsx"
+        ],
+        "schema": [
+          "support_canned_responses"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Canned response picker dropdown in message compose area",
+        "Clicking a canned response inserts its content into the message field",
+        "Manage canned responses panel (create, edit, delete) accessible from settings or support dashboard",
+        "Category filter in picker for quick search"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/support/SupportAgentDashboard.tsx",
+        "src/components/support/CannedResponsePicker.tsx"
+      ]
+    },
+    {
+      "id": "SUP-006",
+      "feature": "support-electron-readiness",
+      "title": "Add SLA tracking columns and auto-calculation",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "support_tickets"
+        ]
+      },
+      "blocks": [
+        "SUP-006b"
+      ],
+      "parallelWith": [
+        "SUP-004",
+        "SUP-005"
+      ],
+      "acceptance": [
+        "first_response_at TIMESTAMPTZ column added (auto-set on first agent reply via trigger)",
+        "sla_response_hours INTEGER column added (default based on priority: urgent=1, high=4, medium=8, low=24)",
+        "sla_breached BOOLEAN DEFAULT false column added (auto-set by trigger when NOW() > created_at + sla_response_hours AND first_response_at IS NULL)",
+        "Trigger recalculates sla_breached on ticket update and periodically"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260307000006_support_sla_tracking.sql"
+      ]
+    },
+    {
+      "id": "SUP-006b",
+      "feature": "support-electron-readiness",
+      "title": "SLA display in admin support UI",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "SUP-006"
+        ],
+        "files": [
+          "src/pages/platform/SupportTicketsPage.tsx"
+        ],
+        "schema": [
+          "support_tickets"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "SLA countdown badge on ticket list (time remaining to first response)",
+        "Visual indicator when SLA is breached (red badge)",
+        "First response time displayed on resolved tickets",
+        "useSupportTickets hook updated to include SLA columns"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/SupportTicketsPage.tsx",
+        "src/lib/hooks/useSupportTickets.ts"
+      ]
+    },
+    {
+      "id": "SUP-007",
+      "feature": "support-electron-readiness",
+      "title": "Fix support RLS policies to use is_admin_optimized()",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "support_tickets",
+          "support_messages"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SUP-001",
+        "SUP-002",
+        "SUP-003"
+      ],
+      "acceptance": [
+        "support_tickets_platform_admin_select uses is_admin_optimized() instead of inline SELECT",
+        "support_tickets_platform_admin_update uses is_admin_optimized()",
+        "support_messages_platform_admin_select uses is_admin_optimized()",
+        "support_messages_platform_admin_insert uses is_admin_optimized()"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260307000007_support_rls_fix.sql"
+      ]
+    },
+    {
+      "id": "SUP-008",
+      "feature": "support-electron-readiness",
+      "title": "Add Realtime subscription to support_messages hook",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "SUP-001"
+        ],
+        "files": [
+          "src/lib/hooks/useSupportMessages.ts"
+        ],
+        "schema": [
+          "support_messages"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "useSupportMessages subscribes to realtime changes on support_messages filtered by ticket_id",
+        "New messages appear instantly without page refresh",
+        "Subscription cleaned up on unmount",
+        "Works for both web dashboard and Electron (same Supabase client)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/hooks/useSupportMessages.ts"
+      ]
+    },
+    {
+      "id": "GSCOPE-001",
+      "feature": "google-scope-nylas",
+      "title": "Remove restricted scopes and add scope_tier to Google OAuth initiate",
+      "type": "backend",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GSCOPE-003"
+      ],
+      "parallelWith": [
+        "GSCOPE-002"
+      ],
+      "acceptance": [
+        "gmail.compose, gmail.readonly, drive.readonly removed from default scopes array",
+        "scope_tier param read from request body ('free' default, 'paid' includes restricted)",
+        "Free tier has 10 scopes (all sensitive/non-sensitive, no CASA required)",
+        "Paid tier adds gmail.readonly, gmail.compose, drive.readonly back"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/oauth-initiate/providers/google.ts"
+      ],
+      "completedAt": "2026-03-07T15:25:00.000Z",
+      "startedAt": "2026-03-07T15:20:00.000Z"
+    },
+    {
+      "id": "GSCOPE-002",
+      "feature": "google-scope-nylas",
+      "title": "Add scope_tier column to google_integrations table",
+      "type": "schema",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "google_integrations"
+        ]
+      },
+      "blocks": [
+        "GSCOPE-003"
+      ],
+      "parallelWith": [
+        "GSCOPE-001"
+      ],
+      "acceptance": [
+        "scope_tier TEXT DEFAULT 'free' column added to google_integrations",
+        "Migration is idempotent (ADD COLUMN IF NOT EXISTS)",
+        "Existing integrations default to 'free'"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260307100001_google_scope_tier.sql"
+      ],
+      "completedAt": "2026-03-07T15:25:00.000Z",
+      "startedAt": "2026-03-07T15:20:00.000Z"
+    },
+    {
+      "id": "GSCOPE-003",
+      "feature": "google-scope-nylas",
+      "title": "Store scope_tier in OAuth callback and gate Gmail read actions",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "GSCOPE-001",
+          "GSCOPE-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "NYLAS-005",
+        "GATE-001"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "OAuth callback stores scope_tier from state record into google_integrations",
+        "OAuth initiate stores scope_tier in google_oauth_states alongside code_verifier",
+        "google-gmail list/get/get-message/draft/sync actions check scope_tier",
+        "Free tier returns {error: 'upgrade_required'} for read actions",
+        "Send/reply/forward/label actions work on both tiers"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/oauth-initiate/providers/google.ts",
+        "supabase/functions/google-oauth-callback/index.ts",
+        "supabase/functions/google-gmail/index.ts"
+      ],
+      "completedAt": "2026-03-07T15:35:00.000Z",
+      "startedAt": "2026-03-07T15:26:00.000Z"
+    },
+    {
+      "id": "NYLAS-001",
+      "feature": "google-scope-nylas",
+      "title": "Create Nylas shared client module and config",
+      "type": "backend",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "NYLAS-003",
+        "NYLAS-004"
+      ],
+      "parallelWith": [
+        "GSCOPE-001",
+        "GSCOPE-002",
+        "NYLAS-002"
+      ],
+      "acceptance": [
+        "nylasClient.ts exports helper for authenticated Nylas API v3 calls",
+        "Reads NYLAS_CLIENT_ID, NYLAS_API_KEY, NYLAS_API_URI from env",
+        "Error handling with typed NylasError responses",
+        "Follows existing _shared module patterns (microsoftOAuth.ts)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/nylasClient.ts"
+      ],
+      "completedAt": "2026-03-07T15:25:00.000Z",
+      "startedAt": "2026-03-07T15:20:00.000Z"
+    },
+    {
+      "id": "NYLAS-002",
+      "feature": "google-scope-nylas",
+      "title": "Create nylas_integrations table with RLS",
+      "type": "schema",
+      "status": "complete",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "NYLAS-003",
+        "NYLAS-004"
+      ],
+      "parallelWith": [
+        "GSCOPE-001",
+        "GSCOPE-002",
+        "NYLAS-001"
+      ],
+      "acceptance": [
+        "nylas_integrations table: id, user_id, grant_id, provider, email, access_token, is_active, created_at, updated_at",
+        "RLS: users can only read/update their own integrations",
+        "DROP POLICY IF EXISTS before CREATE POLICY",
+        "UNIQUE constraint on (user_id, provider)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260307100002_nylas_integrations.sql"
+      ],
+      "completedAt": "2026-03-07T15:25:00.000Z",
+      "startedAt": "2026-03-07T15:20:00.000Z"
+    },
+    {
+      "id": "NYLAS-003",
+      "feature": "google-scope-nylas",
+      "title": "Build Nylas OAuth connect and callback edge functions",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "NYLAS-001",
+          "NYLAS-002"
+        ],
+        "files": [],
+        "schema": [
+          "nylas_integrations"
+        ]
+      },
+      "blocks": [
+        "NYLAS-005",
+        "GATE-004"
+      ],
+      "parallelWith": [
+        "NYLAS-004"
+      ],
+      "acceptance": [
+        "nylas-oauth-initiate starts Nylas hosted auth for Google provider",
+        "nylas-oauth-callback stores grant_id and access token in nylas_integrations",
+        "Links to existing google_integrations user via user_id",
+        "Updates google_integrations.scope_tier to 'paid' on successful Nylas connect",
+        "Callback has verify_jwt=false (redirect from Nylas)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/nylas-oauth-initiate/index.ts",
+        "supabase/functions/nylas-oauth-callback/index.ts",
+        "supabase/functions/nylas-oauth-callback/config.toml"
+      ],
+      "completedAt": "2026-03-07T15:35:00.000Z",
+      "startedAt": "2026-03-07T15:26:00.000Z"
+    },
+    {
+      "id": "NYLAS-004",
+      "feature": "google-scope-nylas",
+      "title": "Build Nylas email read and draft edge function",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "dependencies": {
+        "stories": [
+          "NYLAS-001",
+          "NYLAS-002"
+        ],
+        "files": [],
+        "schema": [
+          "nylas_integrations"
+        ]
+      },
+      "blocks": [
+        "NYLAS-005"
+      ],
+      "parallelWith": [
+        "NYLAS-003"
+      ],
+      "acceptance": [
+        "nylas-email supports list, get, draft actions via Nylas Messages API v3",
+        "Response shape matches google-gmail for frontend compatibility",
+        "Uses nylasClient.ts for authenticated calls",
+        "JWT-protected (user must be authenticated)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/nylas-email/index.ts"
+      ],
+      "completedAt": "2026-03-07T15:35:00.000Z",
+      "startedAt": "2026-03-07T15:26:00.000Z"
+    },
+    {
+      "id": "NYLAS-005",
+      "feature": "google-scope-nylas",
+      "title": "Wire Gmail read actions to Nylas for paid users",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "GSCOPE-003",
+          "NYLAS-003",
+          "NYLAS-004"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "google-gmail list/get/get-message/draft/sync: if user has active nylas_integration, proxy to Nylas",
+        "Falls through to direct Google API if scope_tier='paid' without Nylas",
+        "Returns upgrade_required if neither Nylas nor paid scopes available",
+        "Transparent to frontend (same response shape)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/google-gmail/index.ts"
+      ],
+      "completedAt": "2026-03-07T15:45:00.000Z",
+      "startedAt": "2026-03-07T15:36:00.000Z"
+    },
+    {
+      "id": "GATE-001",
+      "feature": "google-scope-nylas",
+      "title": "Add canReadGmail and Nylas state to integration store and API layer",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "GSCOPE-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GATE-002"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "integrationStore exposes canReadGmail boolean (derived from scope_tier or nylas active)",
+        "integrationStore exposes nylasConnected boolean",
+        "GoogleIntegrationAPI.getIntegrationStatus() includes scope_tier in response",
+        "checkGoogleConnection() populates canReadGmail state"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/stores/integrationStore.ts",
+        "src/lib/api/googleIntegration.ts"
+      ],
+      "completedAt": "2026-03-07T15:45:00.000Z",
+      "startedAt": "2026-03-07T15:36:00.000Z"
+    },
+    {
+      "id": "GATE-002",
+      "feature": "google-scope-nylas",
+      "title": "Build GmailUpgradeGate component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 2,
+      "dependencies": {
+        "stories": [
+          "GATE-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "GATE-003"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "GmailUpgradeGate wraps Gmail-read-dependent UI with upgrade prompt",
+        "Shows teaser with blurred preview when canReadGmail is false",
+        "CTA triggers Nylas OAuth flow via integrationStore",
+        "Uses Lucide icons and existing shadcn Card/Button components"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/integrations/GmailUpgradeGate.tsx"
+      ]
+    },
+    {
+      "id": "GATE-003",
+      "feature": "google-scope-nylas",
+      "title": "Wire upgrade gate into email-dependent UI surfaces",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "GATE-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "GATE-004"
+      ],
+      "acceptance": [
+        "SendEmailButton shows upgrade gate when canReadGmail is false",
+        "Contact email timeline wrapped with GmailUpgradeGate",
+        "Copilot follow-up drafts show draft preview but gate the send for free tier"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/contacts/SendEmailButton.tsx"
+      ]
+    },
+    {
+      "id": "GATE-004",
+      "feature": "google-scope-nylas",
+      "title": "Add upgrade CTA and Limited badge to Integrations page",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 3,
+      "dependencies": {
+        "stories": [
+          "GATE-001",
+          "NYLAS-003"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "GATE-003"
+      ],
+      "acceptance": [
+        "Google card shows 'Limited' badge when scope_tier='free' instead of 'Active'",
+        "Expanded section shows: Gmail send + Calendar (check) | Gmail read + drafts: Upgrade CTA",
+        "CTA opens Nylas OAuth flow for paid users or plan upgrade for free tier",
+        "Microsoft card unchanged (always full access)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/Integrations.tsx"
+      ]
+    },
+    {
+      "id": "WS-001",
+      "title": "Provider-Abstracted Client Interface",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 1,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": []
+      },
+      "files": [
+        "supabase/functions/_shared/workspaceClient.ts",
+        "supabase/functions/_shared/providers/google.ts",
+        "supabase/functions/_shared/providers/microsoft.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-002",
+      "title": "Centralized Token Refresh",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "estimatedMinutes": 60,
+      "dependencies": {
+        "stories": [
+          "WS-001"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/tokenManager.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-003",
+      "title": "Auto-Pagination Helper",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": []
+      },
+      "files": [
+        "supabase/functions/_shared/pagination.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-004",
+      "title": "Typed Error Classification",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 4,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": []
+      },
+      "files": [
+        "supabase/functions/_shared/workspaceErrors.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-005",
+      "title": "Nylas Routing in Centralized Client",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-001"
+        ]
+      },
+      "files": [
+        "supabase/functions/nylas-email/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-006",
+      "title": "Subscription Tier Gating",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 6,
+      "estimatedMinutes": 35,
+      "dependencies": {
+        "stories": []
+      },
+      "files": [
+        "supabase/functions/_shared/tierGating.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-007",
+      "title": "Microsoft OAuth Flow",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 7,
+      "estimatedMinutes": 60,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-002"
+        ]
+      },
+      "files": [
+        "supabase/functions/oauth-initiate/providers/microsoft.ts",
+        "supabase/functions/microsoft-oauth-callback/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-008",
+      "title": "Microsoft Token Refresh",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "WS-002",
+          "WS-007"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/tokenManager.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-009",
+      "title": "Microsoft Email Provider (Outlook / Graph API)",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 9,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-003",
+          "WS-004",
+          "WS-008"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/providers/microsoft.ts",
+        "supabase/functions/microsoft-email/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-010",
+      "title": "Microsoft Calendar Provider",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 10,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-003",
+          "WS-004",
+          "WS-008"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/providers/microsoft.ts",
+        "supabase/functions/microsoft-calendar/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-011",
+      "title": "Microsoft Drive Provider (OneDrive)",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 11,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-003",
+          "WS-004",
+          "WS-008"
+        ]
+      },
+      "files": [
+        "supabase/functions/_shared/providers/microsoft.ts",
+        "supabase/functions/microsoft-drive/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-012",
+      "title": "Microsoft Integration UI",
+      "feature": "workspace-integration-v2",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 12,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": [
+          "WS-007"
+        ]
+      },
+      "files": [
+        "src/lib/stores/integrationStore.ts",
+        "src/components/integrations/MicrosoftConfigModal.tsx",
+        "src/pages/Integrations.tsx"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-013",
+      "title": "Background Job Dispatcher",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 13,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-006"
+        ]
+      },
+      "files": [
+        "supabase/functions/workspace-background-jobs/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-014",
+      "title": "Background Job Scheduling Migration",
+      "feature": "workspace-integration-v2",
+      "type": "schema",
+      "status": "complete",
+      "priority": 14,
+      "estimatedMinutes": 35,
+      "dependencies": {
+        "stories": [
+          "WS-013"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-015",
+      "title": "Proactive Token Refresh Job",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 15,
+      "estimatedMinutes": 25,
+      "dependencies": {
+        "stories": [
+          "WS-002",
+          "WS-013"
+        ]
+      },
+      "files": [
+        "supabase/functions/workspace-background-jobs/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-016",
+      "title": "Calendar Watch Auto-Renewal",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 16,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "WS-013"
+        ]
+      },
+      "files": [
+        "supabase/functions/workspace-background-jobs/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-017",
+      "title": "Email Sync V2 (Full Paginated)",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 17,
+      "estimatedMinutes": 55,
+      "dependencies": {
+        "stories": [
+          "WS-001",
+          "WS-003",
+          "WS-013"
+        ]
+      },
+      "files": [
+        "supabase/functions/workspace-background-jobs/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-018",
+      "title": "Email Classification Pipeline",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 18,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-017"
+        ]
+      },
+      "files": [
+        "supabase/functions/email-classify/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-019",
+      "title": "Reply Gap Detection",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 19,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-017"
+        ]
+      },
+      "files": [
+        "supabase/functions/reply-gap-detect/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-020",
+      "title": "Sent-vs-Received Ratio Tracking",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 20,
+      "estimatedMinutes": 35,
+      "dependencies": {
+        "stories": [
+          "WS-017"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-021",
+      "title": "Calendar Attendee Enrichment",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 21,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-013"
+        ]
+      },
+      "files": [
+        "supabase/functions/attendee-enrich/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-022",
+      "title": "Pre-Meeting Research & Slack Alert",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 22,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": [
+          "WS-021"
+        ]
+      },
+      "files": [
+        "supabase/functions/attendee-enrich/index.ts"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-023",
+      "title": "Proposal Storage to Users Drive",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 23,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-001"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-024",
+      "title": "Drive Document Linking",
+      "feature": "workspace-integration-v2",
+      "type": "schema+backend",
+      "status": "complete",
+      "priority": 24,
+      "estimatedMinutes": 45,
+      "dependencies": {
+        "stories": [
+          "WS-013",
+          "WS-023"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-025",
+      "title": "Integration Dashboard Updates",
+      "feature": "workspace-integration-v2",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 25,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-012"
+        ]
+      },
+      "files": [
+        "src/pages/Integrations.tsx"
+      ],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-026",
+      "title": "Email Intelligence UI",
+      "feature": "workspace-integration-v2",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 26,
+      "estimatedMinutes": 50,
+      "dependencies": {
+        "stories": [
+          "WS-018",
+          "WS-019",
+          "WS-020"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-027",
+      "title": "Deprecate Legacy Google Functions",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 27,
+      "estimatedMinutes": 40,
+      "dependencies": {
+        "stories": [
+          "WS-002",
+          "WS-003",
+          "WS-004"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
+    },
+    {
+      "id": "WS-028",
+      "title": "Deprecate S3-Only Proposal Storage",
+      "feature": "workspace-integration-v2",
+      "type": "backend",
+      "status": "complete",
+      "priority": 28,
+      "estimatedMinutes": 30,
+      "dependencies": {
+        "stories": [
+          "WS-023"
+        ]
+      },
+      "files": [],
+      "completedAt": "2026-03-07T17:40:00Z"
     }
   ],
   "execution": {
-    "totalStories": 120,
-    "completedStories": 120,
-    "currentFeature": "reengagement-fix",
-    "lastUpdated": "2026-03-06T15:45:00Z",
-    "modelProfile": "balanced"
+    "totalStories": 229,
+    "completedStories": 229,
+    "currentFeature": "google-scope-nylas",
+    "lastUpdated": "2026-03-07T17:40:00Z"
   }
 }

@@ -240,7 +240,15 @@ const MeetingDetail: React.FC = () => {
         .eq('meeting_id', id)
 
       if (attendeesError) throw attendeesError
-      setAttendees(attendeesData || [])
+      // Deduplicate attendees by email (some sync sources insert duplicates)
+      const seen = new Set<string>()
+      const uniqueAttendees = (attendeesData || []).filter(a => {
+        const key = a.email?.toLowerCase()
+        if (!key || seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      setAttendees(uniqueAttendees)
 
       // Fetch action items
       const { data: actionItemsData, error: actionItemsError } = await supabase

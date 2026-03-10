@@ -47,7 +47,8 @@ const ContactEditModal: React.FC<ContactEditModalProps> = ({
       title: contact?.title || '',
       linkedin_url: contact?.linkedin_url || '',
       company_id: contact?.company_id || '',
-      is_primary: contact?.is_primary || false
+      is_primary: contact?.is_primary || false,
+      category: (contact as any)?.category || 'prospect',
     }
   });
   
@@ -96,7 +97,8 @@ const ContactEditModal: React.FC<ContactEditModalProps> = ({
         title: formData.title || undefined,
         linkedin_url: formData.linkedin_url || undefined,
         company_id: formData.company_id || undefined,
-        is_primary: formData.is_primary
+        is_primary: formData.is_primary,
+        category: formData.category || 'prospect',
       };
       
       logger.log("Saving contact with data:", dataToSave);
@@ -124,7 +126,8 @@ const ContactEditModal: React.FC<ContactEditModalProps> = ({
         title: contact.title || '',
         linkedin_url: contact.linkedin_url || '',
         company_id: contact.company_id || '',
-        is_primary: contact.is_primary || false
+        is_primary: contact.is_primary || false,
+        category: (contact as any)?.category || 'prospect',
       });
       
       // Focus the first interactive element after opening
@@ -266,6 +269,25 @@ const ContactEditModal: React.FC<ContactEditModalProps> = ({
               </select>
             </div>
             
+            <div>
+              <Label htmlFor="category" className="text-sm font-medium text-gray-300 mb-1">
+                Category
+              </Label>
+              <select
+                {...methods.register('category')}
+                id="category"
+                className="w-full p-2 rounded-lg bg-gray-800 border border-gray-700 text-white focus:border-blue-500 focus:outline-none"
+              >
+                <option value="prospect">Prospect</option>
+                <option value="client">Client</option>
+                <option value="partner">Partner</option>
+                <option value="supplier">Supplier</option>
+                <option value="employee">Employee</option>
+                <option value="investor">Investor</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
             <div>
               <Label htmlFor="linkedin_url" className="text-sm font-medium text-gray-300 mb-1">
                 LinkedIn URL

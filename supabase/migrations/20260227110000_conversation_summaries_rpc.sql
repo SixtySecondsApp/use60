@@ -1,6 +1,8 @@
 -- RPC to fetch conversation summaries with message counts and preview in a single query
 -- Replaces the two-query pattern (conversations + messages) in useConversationHistory
 
+DROP FUNCTION IF EXISTS get_conversation_summaries(UUID, INT);
+
 CREATE OR REPLACE FUNCTION get_conversation_summaries(
   p_user_id UUID,
   p_limit INT DEFAULT 20

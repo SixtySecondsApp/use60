@@ -1651,7 +1651,11 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                 {
                   onSuccess: (data: any) => {
                     const count = data?.pushed_count ?? 0;
-                    cellEditMutation.mutate({ rowId, columnId: col.id, value: count > 0 ? 'complete' : 'skipped', cellId: cell?.id });
+                    const campaignUrl = data?.campaign_url;
+                    const cellValue = count > 0
+                      ? (campaignUrl ? `complete::${campaignUrl}` : 'complete')
+                      : 'skipped';
+                    cellEditMutation.mutate({ rowId, columnId: col.id, value: cellValue, cellId: cell?.id });
                     if (count > 0) {
                       toast.success('Lead pushed to Instantly');
                     }

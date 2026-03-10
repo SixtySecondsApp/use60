@@ -300,7 +300,7 @@ function enforceFreeTierDateLimit(
  */
 async function generateVideoThumbnail(
   recordingId: string | number,
-  shareUrl: string,
+  shareUrl: string | null,
   embedUrl: string,
   meetingId?: string
 ): Promise<string | null> {
@@ -309,7 +309,7 @@ async function generateVideoThumbnail(
     const requestBody: any = {
       action: 'video_thumbnail_v2',
       recording_id: String(recordingId),
-      share_url: shareUrl,
+      share_url: shareUrl || `https://fathom.video/recording/${recordingId}`,
       fathom_embed_url: embedUrl,
     }
     
@@ -1574,7 +1574,8 @@ async function syncSingleCall(
     }
 
     // Compute derived fields prior to DB write
-    const embedUrl = buildEmbedUrl(call.share_url, call.recording_id)
+    const resolvedShareUrl = call.share_url || call.app_url || `https://fathom.video/recording/${recordingIdRaw}`
+    const embedUrl = buildEmbedUrl(resolvedShareUrl, recordingIdRaw)
 
     // Check for existing meeting to preserve completed processing statuses during re-sync
     const recordingIdForLookup = call?.recording_id ?? call?.id ?? call?.recordingId ?? null
@@ -1617,7 +1618,7 @@ async function syncSingleCall(
     if (!thumbnailUrl && !skipThumbnails && embedUrl) {
       try {
         console.log(`🖼️  Generating thumbnail for recording ${call.recording_id}`)
-        thumbnailUrl = await generateVideoThumbnail(call.recording_id, call.share_url, embedUrl)
+        thumbnailUrl = await generateVideoThumbnail(recordingIdRaw, resolvedShareUrl, embedUrl)
         if (thumbnailUrl) {
           console.log(`✅ Thumbnail generated successfully: ${thumbnailUrl.substring(0, 100)}...`)
         } else {
@@ -1677,7 +1678,7 @@ async function syncSingleCall(
       duration_minutes: durationMinutes,
       owner_email: ownerEmailCandidate || call.recorded_by?.email || call.host_email || null,
       team_name: call.recorded_by?.team || null,
-      share_url: call.share_url,
+      share_url: resolvedShareUrl,
       calls_url: call.url,
       transcript_doc_url: call.transcript || null, // If Fathom provided a URL
       sentiment_score: null, // Not available in bulk API response
@@ -1764,8 +1765,8 @@ async function syncSingleCall(
 
       try {
         const retryThumbnail = await generateVideoThumbnail(
-          call.recording_id,
-          call.share_url,
+          recordingIdRaw,
+          resolvedShareUrl,
           embedUrl,
           meeting.id // Pass meeting_id so thumbnail can be persisted to DB
         )

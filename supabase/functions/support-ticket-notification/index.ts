@@ -87,6 +87,34 @@ async function postToSlackChannel(botToken: string, channelId: string, blocks: a
   }
 }
 
+async function createSupportInAppNotification(
+  supabase: ReturnType<typeof createClient>,
+  params: {
+    userId: string;
+    title: string;
+    message: string;
+    ticketId: string;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<void> {
+  const { userId, title, message, ticketId, metadata } = params;
+  const { error } = await supabase.from('notifications').insert({
+    user_id: userId,
+    title,
+    message,
+    type: 'info',
+    category: 'support',
+    entity_type: 'support_ticket',
+    entity_id: ticketId,
+    action_url: `/support?ticket=${ticketId}`,
+    metadata: metadata ?? {},
+  });
+
+  if (error) {
+    console.error('[support-ticket-notification] Failed to create in-app notification:', error);
+  }
+}
+
 function buildEmailHtml(
   title: string,
   body: string,
@@ -240,6 +268,15 @@ serve(async (req: Request) => {
       } else {
         console.log('[support-ticket-notification] Slack env vars not set, skipping Slack notification');
       }
+
+      // In-app notification for ticket owner
+      await createSupportInAppNotification(supabase, {
+        userId: ticket.user_id,
+        title: 'Support ticket received',
+        message: `Your ticket "${ticket.subject}" has been received. We'll respond soon.`,
+        ticketId: ticket.id,
+        metadata: { event: 'ticket_created' },
+      });
     } else if (event === 'new_reply' && message_id) {
       // Fetch message
       const { data: message } = await supabase
@@ -262,6 +299,17 @@ serve(async (req: Request) => {
               ticket.subject
             ),
           });
+
+          // In-app notification for ticket owner (skip if the agent IS the ticket owner)
+          if (message.sender_id !== ticket.user_id) {
+            await createSupportInAppNotification(supabase, {
+              userId: ticket.user_id,
+              title: 'New reply on your ticket',
+              message: `Our support team replied to "${ticket.subject}".`,
+              ticketId: ticket.id,
+              metadata: { event: 'new_reply', sender_type: 'agent', message_id },
+            });
+          }
         } else {
           // Notify support team: user replied
           await sendEmail({
@@ -305,6 +353,38 @@ serve(async (req: Request) => {
           } else {
             console.log('[support-ticket-notification] Slack env vars not set, skipping Slack notification');
           }
+
+          // In-app notifications for platform admins
+          const { data: admins } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('role', 'platform_admin');
+
+          if (admins && admins.length > 0) {
+            const adminNotifications = admins
+              .filter((admin: { id: string }) => admin.id !== ticket.user_id) // skip if updater is ticket owner
+              .map((admin: { id: string }) => ({
+                user_id: admin.id,
+                title: 'Customer replied to support ticket',
+                message: `New reply on "${ticket.subject}".`,
+                type: 'info',
+                category: 'support',
+                entity_type: 'support_ticket',
+                entity_id: ticket.id,
+                action_url: `/support?ticket=${ticket.id}`,
+                metadata: { event: 'new_reply', sender_type: 'user', message_id },
+              }));
+
+            if (adminNotifications.length > 0) {
+              const { error: adminNotifError } = await supabase
+                .from('notifications')
+                .insert(adminNotifications);
+
+              if (adminNotifError) {
+                console.error('[support-ticket-notification] Failed to create admin in-app notifications:', adminNotifError);
+              }
+            }
+          }
         }
       }
     } else if (event === 'status_changed' && new_status) {
@@ -317,19 +397,24 @@ serve(async (req: Request) => {
 
       const label = statusLabel[new_status] ?? `status changed to ${new_status}`;
 
-      await sendEmail({
-        from: FROM_EMAIL,
-        to: userEmail,
-        subject: `[60 Support] Ticket update: ${ticket.subject}`,
-        html: buildEmailHtml(
-          `Your ticket ${label}`,
-          `We wanted to let you know that the status of your support ticket has been updated. Click below to view your ticket.`,
-          ticket.id,
-          ticket.subject
-        ),
-      });
+      // Only email customer for actionable status changes
+      // Skip in_progress (noise) and closed (redundant after resolved)
+      const emailableStatuses = ['waiting_on_customer', 'resolved'];
+      if (emailableStatuses.includes(new_status)) {
+        await sendEmail({
+          from: FROM_EMAIL,
+          to: userEmail,
+          subject: `[60 Support] Ticket update: ${ticket.subject}`,
+          html: buildEmailHtml(
+            `Your ticket ${label}`,
+            `We wanted to let you know that the status of your support ticket has been updated. Click below to view your ticket.`,
+            ticket.id,
+            ticket.subject
+          ),
+        });
+      }
 
-      // Post to Slack
+      // Post to Slack (fires for ALL status changes — internal visibility)
       if (SLACK_BOT_TOKEN && SUPPORT_SLACK_CHANNEL_ID) {
         try {
           const blocks = buildSupportStatusChange({
@@ -346,6 +431,18 @@ serve(async (req: Request) => {
         }
       } else {
         console.log('[support-ticket-notification] Slack env vars not set, skipping Slack notification');
+      }
+
+      // In-app notification for ticket owner (skip in_progress and closed — they're noise)
+      const inAppStatuses = ['waiting_on_customer', 'resolved'];
+      if (inAppStatuses.includes(new_status)) {
+        await createSupportInAppNotification(supabase, {
+          userId: ticket.user_id,
+          title: `Your ticket ${label}`,
+          message: `The status of "${ticket.subject}" has been updated.`,
+          ticketId: ticket.id,
+          metadata: { event: 'status_changed', new_status },
+        });
       }
     }
 

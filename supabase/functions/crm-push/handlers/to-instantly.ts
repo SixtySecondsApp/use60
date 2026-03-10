@@ -294,6 +294,12 @@ export async function handleToInstantly(req: Request): Promise<Response> {
     let pushedTotal = 0
     let errorCount = 0
     const errors: string[] = []
+    const pushedRowIds: string[] = []
+
+    // Find the push_action column so we can store the Instantly lead URL after push
+    const pushActionCol = (columns ?? []).find(
+      (c: any) => (c.integration_config as Record<string, any>)?.instantly_subtype === 'push_action'
+    )
 
     for (const lead of leads) {
       const { _row_id, ...leadData } = lead
@@ -331,7 +337,20 @@ export async function handleToInstantly(req: Request): Promise<Response> {
           }
         }
 
+        // Store the Instantly lead ID in the push_action cell so the UI can link to it
+        if (created?.id && pushActionCol) {
+          const instantlyUrl = `https://app.instantly.ai/app/campaign/${campaign_id}/leads`
+          await svc
+            .from('dynamic_table_cells')
+            .upsert({
+              row_id: _row_id,
+              column_id: pushActionCol.id,
+              value: `complete::${instantlyUrl}`,
+            }, { onConflict: 'row_id,column_id' })
+        }
+
         pushedTotal++
+        pushedRowIds.push(_row_id)
       } catch (e: any) {
         const errMsg = e.message || 'Unknown error'
         console.error(`[push-to-instantly] Lead push failed for ${leadData.email}:`, errMsg)
@@ -358,12 +377,15 @@ export async function handleToInstantly(req: Request): Promise<Response> {
       error_message: errorCount > 0 ? `${errorCount} leads failed to push` : null,
     })
 
+    const campaignUrl = `https://app.instantly.ai/app/campaign/${campaign_id}/leads`
+
     return jsonResponse({
       success: true,
       pushed_count: pushedTotal,
       skipped_count: skipped,
       error_count: errorCount,
       total_rows: rows.length,
+      campaign_url: campaignUrl,
       ...(errors.length > 0 && { errors }),
     })
   } catch (e: any) {

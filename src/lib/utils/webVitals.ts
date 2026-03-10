@@ -135,27 +135,9 @@ class WebVitalsOptimizer {
   }
 
   private preloadCriticalResources(): void {
-    // Dynamically discover and preload critical resources
-    if (import.meta.env.PROD) {
-      // Look for existing CSS and JS resources in the document
-      const existingStylesheets = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
-      const existingScripts = Array.from(document.querySelectorAll('script[src]'));
-      
-      // Preload key stylesheets that aren't already preloaded
-      existingStylesheets.forEach(stylesheet => {
-        const href = stylesheet.getAttribute('href');
-        if (href && !document.querySelector(`link[rel="preload"][href="${href}"]`)) {
-          const preloadLink = document.createElement('link');
-          preloadLink.rel = 'preload';
-          preloadLink.href = href;
-          preloadLink.as = 'style';
-          preloadLink.onload = () => {
-            preloadLink.onload = null;
-          };
-          document.head.appendChild(preloadLink);
-        }
-      });
-    }
+    // Vite already handles CSS splitting and injection — no runtime preloading needed.
+    // Previous dynamic preloading caused "preloaded but not used" warnings because
+    // stylesheets were already loaded as <link rel="stylesheet"> by Vite's build output.
   }
 
   private optimizeImages(): void {

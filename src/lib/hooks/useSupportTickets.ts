@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+
 
 export type TicketCategory = 'bug' | 'feature_request' | 'billing' | 'how_to' | 'other';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -68,6 +69,68 @@ export function useSupportTickets(statusFilter: TicketStatusFilter = 'all', cate
   });
 }
 
+/**
+ * Subscribe to realtime changes on support_tickets for the current user.
+ * Invalidates ticket queries when tickets are inserted or updated.
+ */
+export function useSupportTicketsRealtime() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`support-tickets:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'support_tickets',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['support-tickets'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
+}
+
+/**
+ * Subscribe to realtime changes on ALL support_tickets (for admin views).
+ * Invalidates admin ticket queries on any change.
+ */
+export function useAdminTicketsRealtime() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-support-tickets')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'support_tickets',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['platform-admin-tickets'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+}
+
 export function useCreateSupportTicket() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -100,27 +163,8 @@ export function useCreateSupportTicket() {
         description: data.subject,
       });
 
-      // Fire email notification in background — don't await, don't block UX
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-      if (accessToken && SUPABASE_URL) {
-        fetch(`${SUPABASE_URL}/functions/v1/send-support-ticket-email`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            ticket_id: data.id,
-            subject: data.subject,
-            description: variables.description,
-            category: variables.category,
-            priority: variables.priority,
-            user_email: sessionData?.session?.user?.email || '',
-            user_name: sessionData?.session?.user?.user_metadata?.full_name || '',
-          }),
-        }).catch((err) => console.warn('[useSupportTickets] Email notification failed:', err));
-      }
+      // Email/Slack/in-app notifications are handled by the DB trigger on support_tickets
+      // which fires the support-ticket-notification edge function automatically.
     },
     onError: (error: Error) => {
       toast.error('Failed to create ticket', { description: error.message });

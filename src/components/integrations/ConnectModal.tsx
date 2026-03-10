@@ -7,13 +7,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, ArrowRightLeft, Loader2 } from 'lucide-react';
+import { CheckCircle2, ArrowRightLeft, Loader2, Star } from 'lucide-react';
 import { useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { DEFAULT_SIXTY_ICON_URL } from '@/lib/utils/sixtyBranding';
 
 export interface Permission {
   title: string;
   description: string;
+  /** If true, shows a star to indicate this is part of the paid plan */
+  paid?: boolean;
 }
 
 interface ConnectModalProps {
@@ -100,18 +102,29 @@ export function ConnectModal({
 
         {/* Permissions List */}
         <div className="p-6 space-y-4">
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-            Requested Permissions
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Requested Permissions
+            </p>
+            {permissions.some((p) => p.paid) && (
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <Star className="w-3 h-3 fill-amber-500" />
+                Paid plan
+              </span>
+            )}
+          </div>
 
           {permissions.map((permission, index) => (
             <div key={index} className="flex gap-3">
               <div className="mt-0.5">
                 <CheckCircle2 className="w-5 h-5 text-green-500" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-200">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-200 flex items-center gap-1.5">
                   {permission.title}
+                  {permission.paid && (
+                    <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" aria-label="Paid plan" />
+                  )}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {permission.description}

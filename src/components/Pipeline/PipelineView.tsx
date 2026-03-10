@@ -171,8 +171,8 @@ export function PipelineView() {
     if (!activeOrgId) return;
     async function checkCRMs() {
       const [{ data: hs }, { data: at }] = await Promise.all([
-        supabase.from('hubspot_org_integrations').select('id').eq('clerk_org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
-        supabase.from('attio_org_integrations').select('id').eq('clerk_org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
+        supabase.from('hubspot_org_integrations').select('id').eq('org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
+        supabase.from('attio_org_integrations').select('id').eq('org_id', activeOrgId!).eq('is_active', true).maybeSingle(),
       ]);
       setConnectedCRMs({ hubspot: !!hs, attio: !!at });
     }

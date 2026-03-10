@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import type { PipelineDeal } from './hooks/usePipelineData';
 import type { PipelineColumn } from './hooks/usePipelineColumns';
 import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/clientV2';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface PipelineTableProps {
