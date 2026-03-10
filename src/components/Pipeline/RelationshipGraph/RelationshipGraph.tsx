@@ -229,13 +229,13 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
 
   // Cold contact clustering: group cold contacts into clusters of ~10
   // Spread across multiple concentric rings radiating outward with decreasing opacity
-  const { displayNodes, coldClusters, allColdContacts } = useMemo(() => {
+  const { displayNodes, coldClusters, allColdContacts, clusterOuterOrbit } = useMemo(() => {
     const coldNodes = nodes.filter((n) => (n.tier ?? 'cold') === 'cold');
     const nonColdNodes = nodes.filter((n) => (n.tier ?? 'cold') !== 'cold');
 
     // If few enough cold contacts, show them all individually
     if (coldNodes.length <= COLD_CLUSTER_SIZE) {
-      return { displayNodes: nodes, coldClusters: [] as ColdCluster[], allColdContacts: coldNodes };
+      return { displayNodes: nodes, coldClusters: [] as ColdCluster[], allColdContacts: coldNodes, clusterOuterOrbit: CLUSTER_INNER_ORBIT };
     }
 
     // Group ALL cold contacts into clusters (no cap)
