@@ -9,7 +9,7 @@ import { TicketList } from '@/components/support/TicketList';
 import { CreateTicketForm } from '@/components/support/CreateTicketForm';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useUserProfileById } from '@/lib/hooks/useUserProfile';
-import { SupportAppDownload } from '@/components/support/SupportAppDownload';
+
 
 const SUGGESTED_QUESTIONS = [
   'How do I connect my calendar?',
@@ -131,9 +131,6 @@ export default function SupportCentrePage() {
             </div>
             <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-orange-500 dark:group-hover:text-orange-400 mt-0.5 shrink-0 transition-colors" />
           </div>
-        </div>
-        <div className="mt-3">
-          <SupportAppDownload isAdmin={profile?.is_admin ?? false} />
         </div>
       </div>
 
