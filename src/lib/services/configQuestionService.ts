@@ -1,8 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 
+export type QuestionCategory =
+  | 'revenue_pipeline'
+  | 'daily_rhythm'
+  | 'agent_behaviour'
+  | 'methodology'
+  | 'signals';
+
 export interface ConfigQuestion {
   id: string;
-  category: string;
+  category: QuestionCategory;
   question: string;
   answer?: string;
   [key: string]: unknown;
