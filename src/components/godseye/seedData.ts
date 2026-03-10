@@ -16,26 +16,26 @@ import type {
 // ─── Realistic names and emails ─────────────────────────────────────────
 
 const SEED_USERS = [
-  { name: 'Andrew Bryce', email: 'andrew@sixtyseconds.com' },
-  { name: 'Sarah Mitchell', email: 'sarah@acmecorp.com' },
-  { name: 'James Chen', email: 'james@techstart.io' },
-  { name: 'Emma Wilson', email: 'emma@growthco.com' },
-  { name: 'Marcus Johnson', email: 'marcus@velocityai.com' },
-  { name: 'Lisa Thompson', email: 'lisa@brightpath.co' },
-  { name: 'David Park', email: 'david@novatech.com' },
-  { name: 'Rachel Adams', email: 'rachel@salesforce.com' },
-  { name: 'Tom Hartley', email: 'tom@streamline.io' },
-  { name: 'Amy Foster', email: 'amy@hubspot.com' },
-  { name: 'Chris Lee', email: 'chris@datacore.ai' },
-  { name: 'Nina Patel', email: 'nina@cloudnine.co' },
-  { name: 'Jake Morrison', email: 'jake@pipeline.dev' },
-  { name: 'Sophie Turner', email: 'sophie@revenuelab.com' },
-  { name: 'Alex Rivera', email: 'alex@closedeal.io' },
-  { name: 'Kate O\'Brien', email: 'kate@signalstack.com' },
-  { name: 'Ryan Walsh', email: 'ryan@momentum.ai' },
-  { name: 'Mia Cooper', email: 'mia@outreach.io' },
-  { name: 'Ben Taylor', email: 'ben@leadgen.co' },
-  { name: 'Olivia Reed', email: 'olivia@engagehq.com' },
+  { name: 'Andrew Bryce', email: 'andrew@sixtyseconds.com', org: 'Sixty Seconds' },
+  { name: 'Sarah Mitchell', email: 'sarah@acmecorp.com', org: 'Acme Corp' },
+  { name: 'James Chen', email: 'james@techstart.io', org: 'TechStart' },
+  { name: 'Emma Wilson', email: 'emma@growthco.com', org: 'GrowthCo' },
+  { name: 'Marcus Johnson', email: 'marcus@velocityai.com', org: 'Velocity AI' },
+  { name: 'Lisa Thompson', email: 'lisa@brightpath.co', org: 'BrightPath' },
+  { name: 'David Park', email: 'david@novatech.com', org: 'NovaTech' },
+  { name: 'Rachel Adams', email: 'rachel@salesforce.com', org: 'Salesforce' },
+  { name: 'Tom Hartley', email: 'tom@streamline.io', org: 'Streamline' },
+  { name: 'Amy Foster', email: 'amy@hubspot.com', org: 'HubSpot' },
+  { name: 'Chris Lee', email: 'chris@datacore.ai', org: 'DataCore AI' },
+  { name: 'Nina Patel', email: 'nina@cloudnine.co', org: 'CloudNine' },
+  { name: 'Jake Morrison', email: 'jake@pipeline.dev', org: 'Pipeline Dev' },
+  { name: 'Sophie Turner', email: 'sophie@revenuelab.com', org: 'RevenueLab' },
+  { name: 'Alex Rivera', email: 'alex@closedeal.io', org: 'CloseDeal' },
+  { name: 'Kate O\'Brien', email: 'kate@signalstack.com', org: 'SignalStack' },
+  { name: 'Ryan Walsh', email: 'ryan@momentum.ai', org: 'Momentum AI' },
+  { name: 'Mia Cooper', email: 'mia@outreach.io', org: 'Outreach' },
+  { name: 'Ben Taylor', email: 'ben@leadgen.co', org: 'LeadGen' },
+  { name: 'Olivia Reed', email: 'olivia@engagehq.com', org: 'EngageHQ' },
 ];
 
 const SEED_MODELS: Array<{
@@ -84,19 +84,32 @@ function minutesAgo(mins: number): string {
   return new Date(Date.now() - mins * 60 * 1000).toISOString();
 }
 
+function hoursAgo(hours: number): string {
+  return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+}
+
 // ─── Generators ─────────────────────────────────────────────────────────
 
 export function generateSeedActiveUsers(count: number = 12): ActiveUser[] {
   const users = SEED_USERS.slice(0, count);
-  return users.map((u, i) => ({
-    user_id: `seed-user-${i}`,
-    user_email: u.email,
-    user_name: u.name,
-    request_count: randomInt(1, 25),
-    total_input_tokens: randomInt(5000, 200000),
-    total_output_tokens: randomInt(2000, 80000),
-    last_request_at: minutesAgo(randomInt(0, 4)),
-  }));
+  // First ~40% are currently active (last 5 min), rest are historical (hours/days ago)
+  const activeCount = Math.ceil(count * 0.4);
+  return users.map((u, i) => {
+    const isActive = i < activeCount;
+    return {
+      user_id: `seed-user-${i}`,
+      user_email: u.email,
+      user_name: u.name,
+      org_name: u.org,
+      request_count: randomInt(1, 25),
+      total_input_tokens: randomInt(5000, 200000),
+      total_output_tokens: randomInt(2000, 80000),
+      last_request_at: isActive
+        ? minutesAgo(randomInt(0, 4))
+        : hoursAgo(randomInt(1, 168)), // 1 hour to 7 days ago
+      is_active: isActive,
+    };
+  });
 }
 
 export function generateSeedRecentEvents(
@@ -215,7 +228,7 @@ export interface SeedDataSet {
 
 export function generateFullSeedData(): SeedDataSet {
   const activeUsers = generateSeedActiveUsers(14);
-  const recentEvents = generateSeedRecentEvents(activeUsers, 80);
+  const recentEvents = generateSeedRecentEvents(activeUsers, 200);
   const llmEndpoints = generateSeedEndpoints();
   const anomalyRules = generateSeedRules();
   const usageTotals = generateSeedUsageTotals();
@@ -245,10 +258,12 @@ export function startSeedEventStream(
           user_id: `seed-user-${users.length}`,
           user_email: newUser.email,
           user_name: newUser.name,
+          org_name: newUser.org,
           request_count: 1,
           total_input_tokens: randomInt(1000, 10000),
           total_output_tokens: randomInt(500, 5000),
           last_request_at: new Date().toISOString(),
+          is_active: true,
         });
       }
     }

@@ -45,6 +45,7 @@ import { ParticleFlowCanvas } from '@/components/godseye/ParticleFlowCanvas';
 import { FlaggingRulesPanel } from '@/components/godseye/FlaggingRulesPanel';
 import { ModelRoutingPanel } from '@/components/godseye/ModelRoutingPanel';
 import { UsageTotalsBar } from '@/components/godseye/UsageTotalsBar';
+import { ActivityLogTerminal } from '@/components/godseye/ActivityLogTerminal';
 import {
   generateFullSeedData,
   startSeedEventStream,
@@ -63,6 +64,7 @@ export default function GodsEyeAdmin() {
   const [selectedUser, setSelectedUser] = useState<ActiveUser | null>(null);
 
   // Seed data state
+  const [flowSpeed, setFlowSpeed] = useState(1.5);
   const [useSeedData, setUseSeedData] = useState(false);
   const [seedData, setSeedData] = useState<SeedDataSet | null>(null);
   const [seedEvents, setSeedEvents] = useState<RecentEvent[]>([]);
@@ -70,7 +72,7 @@ export default function GodsEyeAdmin() {
   const seedCleanupRef = useRef<(() => void) | null>(null);
 
   // Live data from hook
-  const liveData = useGodsEyeData(isPaused || useSeedData ? 0 : 10_000);
+  const liveData = useGodsEyeData(isPaused || useSeedData ? 0 : 900_000); // 15 minutes
 
   // Initialize seed data
   useEffect(() => {
@@ -83,7 +85,7 @@ export default function GodsEyeAdmin() {
       // Start streaming new seed events
       if (!isPaused) {
         seedCleanupRef.current = startSeedEventStream((newEvents, users) => {
-          setSeedEvents(prev => [...newEvents, ...prev].slice(0, 100));
+          setSeedEvents(prev => [...newEvents, ...prev].slice(0, 200));
           setSeedUsers(users);
         }, 2500);
       }
@@ -165,12 +167,12 @@ export default function GodsEyeAdmin() {
   }
 
   const flaggedCount = recentEvents.filter(e => e.is_flagged).length;
+  const activeNowCount = activeUsers.filter(u => u.is_active).length;
   const hasLiveData = liveData.activeUsers.length > 0 || liveData.recentEvents.length > 0;
 
   return (
     <div
-      className="bg-[#0f172a] text-slate-200 flex flex-col overflow-hidden w-full"
-      style={{ height: 'calc(100dvh - var(--app-top-offset, 64px))' }}
+      className="bg-[#0f172a] text-slate-200 flex flex-col overflow-hidden w-full h-full"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-[#0f172a]/80 backdrop-blur border-b border-slate-800/50 z-10 shrink-0 min-w-0 gap-2">
@@ -192,13 +194,25 @@ export default function GodsEyeAdmin() {
             <Activity className="h-3 w-3 mr-1" />
             {isPaused ? 'Paused' : useSeedData ? 'Demo' : 'Live'}
           </Badge>
+          <div className="flex items-center gap-1.5 ml-1">
+            <span className="text-[10px] text-slate-500">Speed</span>
+            <input
+              type="range"
+              min="0.2"
+              max="10"
+              step="0.1"
+              value={flowSpeed}
+              onChange={(e) => setFlowSpeed(parseFloat(e.target.value))}
+              className="w-16 h-1 accent-indigo-500 cursor-pointer"
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-2 min-w-0 flex-wrap justify-end">
           {/* Stats badges */}
           <Badge variant="outline" className="border-indigo-500/30 text-indigo-300 text-xs">
             <Users className="h-3 w-3 mr-1" />
-            {activeUsers.length} active
+            {activeNowCount} active / {activeUsers.length} users
           </Badge>
           <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 text-xs">
             <Cpu className="h-3 w-3 mr-1" />
@@ -306,31 +320,45 @@ export default function GodsEyeAdmin() {
         </div>
       )}
 
-      {/* Main visualization area */}
-      <div ref={containerRef} className="flex-1 relative min-h-0">
-        {isLoading && recentEvents.length === 0 && !useSeedData ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
-          </div>
-        ) : error && !useSeedData ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2">
-            <AlertTriangle className="h-8 w-8 text-orange-400" />
-            <p className="text-slate-400 text-sm">{error}</p>
-            <Button variant="ghost" size="sm" onClick={handleRefetch} className="text-slate-400">
-              Retry
-            </Button>
-          </div>
-        ) : (
-          <ParticleFlowCanvas
-            activeUsers={activeUsers}
-            recentEvents={isPaused ? [] : recentEvents}
+      {/* Main visualization + activity log side by side */}
+      <div className="flex-1 flex min-h-0">
+        {/* Canvas area */}
+        <div ref={containerRef} className="flex-1 relative min-h-0">
+          {isLoading && recentEvents.length === 0 && !useSeedData ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
+            </div>
+          ) : error && !useSeedData ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2">
+              <AlertTriangle className="h-8 w-8 text-orange-400" />
+              <p className="text-slate-400 text-sm">{error}</p>
+              <Button variant="ghost" size="sm" onClick={handleRefetch} className="text-slate-400">
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <ParticleFlowCanvas
+              activeUsers={activeUsers}
+              recentEvents={isPaused ? [] : recentEvents}
+              llmEndpoints={llmEndpoints}
+              width={canvasSize.width}
+              height={canvasSize.height}
+              flowSpeed={flowSpeed}
+              onUserClick={handleUserClick}
+              onEndpointClick={handleEndpointClick}
+            />
+          )}
+        </div>
+
+        {/* Activity log terminal — right side */}
+        <div className="w-[400px] shrink-0">
+          <ActivityLogTerminal
+            events={recentEvents}
             llmEndpoints={llmEndpoints}
-            width={canvasSize.width}
-            height={canvasSize.height}
-            onUserClick={handleUserClick}
-            onEndpointClick={handleEndpointClick}
+            isPaused={isPaused}
+            onOpenModelSettings={() => setShowModelPanel(true)}
           />
-        )}
+        </div>
       </div>
 
       {/* Bottom usage totals bar */}
@@ -370,7 +398,7 @@ export default function GodsEyeAdmin() {
               {selectedUser?.user_name || selectedUser?.user_email || 'User Detail'}
             </SheetTitle>
             <SheetDescription className="text-slate-400">
-              Activity in the last 5 minutes
+              {selectedUser?.is_active ? 'Active now' : `Last seen ${new Date(selectedUser?.last_request_at || '').toLocaleDateString()}`}
             </SheetDescription>
           </SheetHeader>
           {selectedUser && (
@@ -391,7 +419,9 @@ export default function GodsEyeAdmin() {
                 <div className="bg-slate-800/50 rounded-lg p-3">
                   <p className="text-xs text-slate-500">Last Request</p>
                   <p className="text-sm font-medium text-slate-300">
-                    {new Date(selectedUser.last_request_at).toLocaleTimeString()}
+                    {selectedUser.is_active
+                      ? new Date(selectedUser.last_request_at).toLocaleTimeString()
+                      : new Date(selectedUser.last_request_at).toLocaleString()}
                   </p>
                 </div>
               </div>

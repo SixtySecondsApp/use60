@@ -2,15 +2,21 @@
  * UsageTotalsBar — Bottom bar showing token usage totals across time windows
  *
  * Displays: All Time | Last 30 Days | Last 7 Days | Last 24 Hours
- * Each shows total tokens + estimated cost from pricing matrix.
+ * Each shows total tokens (full number, comma-formatted) + estimated cost.
+ * Token counts update live every 3 seconds.
  */
 
-import { Clock, Coins, Hash } from 'lucide-react';
-import { formatTokens, formatCost } from '@/lib/types/aiModels';
+import { useState, useEffect, useRef } from 'react';
+import { formatCost } from '@/lib/types/aiModels';
 import type { UsageTotals } from '@/lib/hooks/useGodsEyeData';
 
 interface UsageTotalsBarProps {
   usageTotals: UsageTotals;
+}
+
+/** Format a number with commas: 4930000 → "4,930,000" */
+function formatFullNumber(n: number): string {
+  return Math.round(n).toLocaleString('en-US');
 }
 
 interface TotalCardProps {
@@ -21,30 +27,51 @@ interface TotalCardProps {
 }
 
 function TotalCard({ label, tokens, cost, accent }: TotalCardProps) {
+  // Animate toward target value for smooth live updates
+  const [displayTokens, setDisplayTokens] = useState(tokens);
+  const targetRef = useRef(tokens);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    targetRef.current = tokens;
+  }, [tokens]);
+
+  // Smoothly interpolate toward the target every frame
+  useEffect(() => {
+    let running = true;
+    const step = () => {
+      if (!running) return;
+      setDisplayTokens(prev => {
+        const diff = targetRef.current - prev;
+        if (Math.abs(diff) < 1) return targetRef.current;
+        // Move ~10% of the remaining distance each frame for smooth easing
+        return prev + diff * 0.1;
+      });
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => { running = false; cancelAnimationFrame(rafRef.current); };
+  }, []);
+
   return (
-    <div className="flex-1 px-4 py-2 flex items-center justify-between min-w-[180px]">
-      <div>
-        <p className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</p>
-        <div className="flex items-baseline gap-2 mt-0.5">
-          <span className={`text-lg font-semibold font-mono ${accent}`}>
-            {formatTokens(tokens)}
-          </span>
-          <span className="text-[10px] text-slate-500">tokens</span>
-        </div>
+    <div className="flex-1 px-4 py-3 min-w-[220px]">
+      <p className="text-[32px] text-slate-500 uppercase tracking-wider font-semibold leading-tight">{label}</p>
+      <div className="flex items-baseline gap-2 mt-1">
+        <span className={`text-xl font-semibold font-mono ${accent}`}>
+          {formatFullNumber(displayTokens)}
+        </span>
+        <span className="text-xs text-slate-500">tokens</span>
       </div>
-      <div className="text-right">
-        <p className="text-sm font-semibold text-slate-200 font-mono">
-          {formatCost(cost)}
-        </p>
-        <p className="text-[10px] text-slate-500">est. cost</p>
-      </div>
+      <p className="text-[16px] font-semibold text-slate-300 font-mono mt-0.5">
+        {formatCost(cost, 'GBP')}
+      </p>
     </div>
   );
 }
 
 export function UsageTotalsBar({ usageTotals }: UsageTotalsBarProps) {
   return (
-    <div className="shrink-0 bg-[#0f172a] border-t border-slate-800/50">
+    <div className="shrink-0 bg-[#0f172a] border-t border-slate-800/50 pb-[100px]">
       <div className="flex items-center divide-x divide-slate-800/50">
         <TotalCard
           label="All Time"

@@ -15,10 +15,13 @@ export interface ActiveUser {
   user_id: string;
   user_email: string | null;
   user_name: string | null;
+  org_name: string | null;
   request_count: number;
   total_input_tokens: number;
   total_output_tokens: number;
   last_request_at: string;
+  /** True if user had activity in the last 5 minutes */
+  is_active: boolean;
 }
 
 export interface RecentEvent {
@@ -123,6 +126,7 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
   const fetchData = useCallback(async () => {
     try {
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const userHistoryWindow = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -138,11 +142,11 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
         totals7d,
         totals24h,
       ] = await Promise.all([
-        // Active users: distinct users with AI requests in last 5 minutes
+        // Users with AI requests in last 7 days (history log)
         supabase
           .from('ai_cost_events')
           .select('user_id, created_at, input_tokens, output_tokens')
-          .gte('created_at', fiveMinAgo)
+          .gte('created_at', userHistoryWindow)
           .order('created_at', { ascending: false }),
 
         // Recent events for visualization (last 100 events)
@@ -150,7 +154,7 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
           .from('ai_cost_events')
           .select('id, user_id, provider, model, feature, input_tokens, output_tokens, estimated_cost, created_at')
           .order('created_at', { ascending: false })
-          .limit(100),
+          .limit(200),
 
         // Available LLM models
         supabase
@@ -166,31 +170,35 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
           .select('id, rule_name, rule_type, description, threshold_value, time_window_minutes, severity, is_enabled')
           .order('severity'),
 
-        // Usage totals: all time
+        // Usage totals: all time (raise limit beyond default 1000)
         supabase
           .from('ai_cost_events')
-          .select('input_tokens, output_tokens, estimated_cost'),
+          .select('input_tokens, output_tokens, estimated_cost')
+          .limit(100000),
 
         // Usage totals: last 30 days
         supabase
           .from('ai_cost_events')
           .select('input_tokens, output_tokens, estimated_cost')
-          .gte('created_at', thirtyDaysAgo),
+          .gte('created_at', thirtyDaysAgo)
+          .limit(100000),
 
         // Usage totals: last 7 days
         supabase
           .from('ai_cost_events')
           .select('input_tokens, output_tokens, estimated_cost')
-          .gte('created_at', sevenDaysAgo),
+          .gte('created_at', sevenDaysAgo)
+          .limit(100000),
 
         // Usage totals: last 24 hours
         supabase
           .from('ai_cost_events')
           .select('input_tokens, output_tokens, estimated_cost')
-          .gte('created_at', twentyFourHoursAgo),
+          .gte('created_at', twentyFourHoursAgo)
+          .limit(100000),
       ]);
 
-      // Process active users — aggregate by user_id
+      // Process users — aggregate by user_id, mark active (last 5 min) vs historical
       if (activeUsersResult.data) {
         const userMap = new Map<string, ActiveUser>();
         for (const row of activeUsersResult.data) {
@@ -207,34 +215,63 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
               user_id: row.user_id,
               user_email: null,
               user_name: null,
+              org_name: null,
               request_count: 1,
               total_input_tokens: row.input_tokens || 0,
               total_output_tokens: row.output_tokens || 0,
               last_request_at: row.created_at,
+              is_active: false, // Set below after aggregation
             });
           }
         }
 
-        // Enrich with profile data
+        // Mark users active if their last request was within 5 minutes
+        for (const user of userMap.values()) {
+          user.is_active = user.last_request_at >= fiveMinAgo;
+        }
+
+        // Enrich with profile data + org name
         const userIds = Array.from(userMap.keys());
         if (userIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, email, full_name')
-            .in('id', userIds);
+          const [profilesResult, membershipsResult] = await Promise.all([
+            supabase
+              .from('profiles')
+              .select('id, email, first_name, last_name')
+              .in('id', userIds),
+            supabase
+              .from('organization_memberships')
+              .select('user_id, org_id, organizations(name)')
+              .in('user_id', userIds),
+          ]);
 
-          if (profiles) {
-            for (const profile of profiles) {
+          if (profilesResult.data) {
+            for (const profile of profilesResult.data) {
               const user = userMap.get(profile.id);
               if (user) {
                 user.user_email = profile.email;
-                user.user_name = profile.full_name;
+                user.user_name = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || null;
+              }
+            }
+          }
+
+          if (membershipsResult.data) {
+            for (const membership of membershipsResult.data) {
+              const user = userMap.get(membership.user_id);
+              if (user && !user.org_name) {
+                const org = membership.organizations as { name: string } | null;
+                if (org?.name) user.org_name = org.name;
               }
             }
           }
         }
 
-        setActiveUsers(Array.from(userMap.values()));
+        // Sort: active users first, then by most recent activity
+        const sortedUsers = Array.from(userMap.values()).sort((a, b) => {
+          if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+          return new Date(b.last_request_at).getTime() - new Date(a.last_request_at).getTime();
+        });
+
+        setActiveUsers(sortedUsers);
       }
 
       // Process anomaly rules
@@ -254,7 +291,7 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
         if (eventUserIds.length > 0) {
           const { data: profiles } = await supabase
             .from('profiles')
-            .select('id, email, full_name')
+            .select('id, email, first_name, last_name')
             .in('id', eventUserIds);
 
           if (profiles) {
@@ -263,7 +300,7 @@ export function useGodsEyeData(pollIntervalMs = 10_000): GodsEyeData {
               const profile = profileMap.get(event.user_id);
               if (profile) {
                 event.user_email = profile.email;
-                event.user_name = profile.full_name;
+                event.user_name = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || null;
               }
             }
           }
