@@ -34,6 +34,6 @@ export const CLUSTER_NODE_RADIUS = 22; // visual size of cluster nodes
 
 // Multi-ring cluster layout
 export const CLUSTER_INNER_ORBIT = 0.82;  // first ring (just outside cold tier)
-export const CLUSTER_RING_GAP = 0.14;     // radial gap between rings (prevents overlap)
+export const CLUSTER_RING_GAP = 0.105;    // radial gap between rings (prevents overlap)
 export const CLUSTER_RING_CAPACITY = 12;  // max clusters per ring before wrapping to next
 export const CLUSTER_OPACITY_DROP = 0.20; // opacity reduction per ring outward
