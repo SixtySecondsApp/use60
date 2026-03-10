@@ -1,9 +1,11 @@
 import { Download, Monitor } from 'lucide-react';
 
-const WINDOWS_URL =
-  'https://github.com/SixtySecondsApp/sixty-support-app/releases/latest/download/sixty-support-setup.exe';
-const MACOS_URL =
-  'https://github.com/SixtySecondsApp/sixty-support-app/releases/latest/download/sixty-support.dmg';
+const RELEASE_BASE =
+  'https://github.com/SixtySecondsApp/sixty-support-app/releases/latest/download';
+
+const WINDOWS_URL = `${RELEASE_BASE}/sixty-support-setup.exe`;
+const MACOS_ARM64_URL = `${RELEASE_BASE}/sixty-support-arm64.dmg`;
+const MACOS_X64_URL = `${RELEASE_BASE}/sixty-support-x64.dmg`;
 
 function detectOS(): 'mac' | 'windows' | 'unknown' {
   const platform = navigator.platform ?? '';
@@ -46,12 +48,22 @@ export function SupportAppDownload({ isAdmin }: SupportAppDownloadProps) {
           )}
           {(os === 'mac' || os === 'unknown') && (
             <a
-              href={MACOS_URL}
+              href={MACOS_ARM64_URL}
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
-              macOS
+              macOS (Apple Silicon)
+            </a>
+          )}
+          {(os === 'mac' || os === 'unknown') && (
+            <a
+              href={MACOS_X64_URL}
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              macOS (Intel)
             </a>
           )}
         </div>
