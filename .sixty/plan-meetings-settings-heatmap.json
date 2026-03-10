@@ -1,0 +1,199 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth"
+    }
+  },
+  "features": [
+    {
+      "id": "meet-settings",
+      "name": "Meeting Settings Hub + Transcript Fix + Heatmap Skeleton",
+      "status": "pending",
+      "consultReport": ".sixty/consult/meetings-settings-analysis-heatmap.md",
+      "createdAt": "2026-02-27T00:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "MEET-001",
+      "feature": "meet-settings",
+      "title": "Create Meeting Settings Hub page with recorder cards",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/pages/MeetingsPage.tsx",
+          "src/components/meetings/UnifiedMeetingsList.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["MEET-002", "MEET-005"],
+      "parallelWith": ["MEET-003", "MEET-004"],
+      "acceptance": [
+        "New page at /meetings/settings shows only connected recorders as cards/tiles",
+        "Each card shows recorder icon, name, and connection status badge",
+        "Cards are clickable and navigate to /meetings/settings/:recorder",
+        "Back button at top navigates to /meetings",
+        "Empty state shown when no recorders connected with link to /integrations"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/meetings/MeetingSettingsHub.tsx",
+        "src/pages/MeetingsPage.tsx",
+        "src/components/meetings/UnifiedMeetingsList.tsx"
+      ],
+      "description": "Create a new MeetingSettingsHub page component that:\n1. Uses useFathomIntegration(), useFirefliesIntegration(), useNotetakerIntegration() hooks to check isConnected\n2. Renders a card/tile for each connected recorder with: icon (Video/Mic lucide icons), name, status badge\n3. Cards navigate to /meetings/settings/:recorder on click\n4. Has a back button (ArrowLeft icon + 'Back to Meetings') linking to /meetings\n5. Shows empty state with message 'No meeting recorders configured' and Button linking to /integrations\n6. Add route in MeetingsPage.tsx: <Route path='settings' element={<MeetingSettingsHub />} />\n7. Update UnifiedMeetingsList.tsx Settings button (line 643) to navigate to /meetings/settings instead of /settings/meeting-settings\n\nDesign: Follow the existing SettingsPageWrapper pattern for consistent look. Cards should use the same styling as IntegrationCard in /integrations."
+    },
+    {
+      "id": "MEET-002",
+      "feature": "meet-settings",
+      "title": "Create individual recorder settings detail page",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": ["MEET-001"],
+        "files": [
+          "src/components/settings/NotetakerSettingsTab.tsx",
+          "src/components/settings/FathomSettingsTab.tsx",
+          "src/components/settings/FirefliesSettingsTab.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": ["MEET-005"],
+      "parallelWith": [],
+      "acceptance": [
+        "Route /meetings/settings/:recorder renders the correct settings tab component",
+        "Supports recorder values: notetaker, fathom, fireflies",
+        "Has back button navigating to /meetings/settings hub",
+        "Invalid recorder param shows 404 or redirects to hub",
+        "Existing NotetakerSettingsTab, FathomSettingsTab, FirefliesSettingsTab components render correctly within new wrapper"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/meetings/MeetingRecorderSettingsPage.tsx",
+        "src/pages/MeetingsPage.tsx"
+      ],
+      "description": "Create MeetingRecorderSettingsPage that:\n1. Reads :recorder param from URL\n2. Maps 'notetaker' -> NotetakerSettingsTab, 'fathom' -> FathomSettingsTab, 'fireflies' -> FirefliesSettingsTab\n3. Wraps selected component in a layout with:\n   - Back button (ArrowLeft + 'Back to Meeting Settings') linking to /meetings/settings\n   - Page title based on recorder name (e.g. '60 Notetaker Settings')\n   - The settings tab component\n4. If recorder param is invalid, navigate to /meetings/settings\n5. Add route in MeetingsPage.tsx: <Route path='settings/:recorder' element={<MeetingRecorderSettingsPage />} />\n\nIMPORTANT: Route order matters - 'settings/:recorder' must come after 'settings' index route."
+    },
+    {
+      "id": "MEET-003",
+      "feature": "meet-settings",
+      "title": "Standardize transcript validation across edge functions",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/fetchRecentMeeting.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["MEET-001", "MEET-004"],
+      "acceptance": [
+        "New shared helper validateTranscript() in _shared/transcriptValidation.ts",
+        "All 5 edge functions use the shared helper instead of inline char-length checks",
+        "Minimum threshold is 20 words (not 50/100 chars) for user-initiated analysis",
+        "Error messages distinguish 'no transcript' from 'transcript too short'",
+        "Consistent 422 status code across all functions"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/transcriptValidation.ts",
+        "supabase/functions/extract-content-topics/index.ts",
+        "supabase/functions/meeting-generate-scorecard/index.ts",
+        "supabase/functions/meeting-process-structured-summary/index.ts",
+        "supabase/functions/meeting-intelligence-index/index.ts",
+        "supabase/functions/ask-meeting-ai/index.ts"
+      ],
+      "description": "Create shared transcript validation helper and update all edge functions:\n\n1. Create supabase/functions/_shared/transcriptValidation.ts:\n```typescript\nconst MIN_TRANSCRIPT_WORDS = 20; // Minimum for user-initiated analysis\n\nfunction wordCount(text: string): number {\n  return text.trim().split(/\\s+/).filter(Boolean).length;\n}\n\nexport function validateTranscript(transcriptText: string | null | undefined): \n  { valid: true } | { valid: false; error: string; details: string } {\n  if (!transcriptText || !transcriptText.trim()) {\n    return { valid: false, error: 'This meeting does not have a transcript yet', details: 'Please wait for the transcript to be processed' };\n  }\n  if (wordCount(transcriptText) < MIN_TRANSCRIPT_WORDS) {\n    return { valid: false, error: 'Meeting transcript is too short for analysis', details: `Transcript has ${wordCount(transcriptText)} words. Minimum ${MIN_TRANSCRIPT_WORDS} words required.` };\n  }\n  return { valid: true };\n}\n```\n\n2. Replace inline checks in each edge function:\n- extract-content-topics/index.ts (line ~214): Replace `if (!meeting.transcript_text || meeting.transcript_text.trim().length < 50)` with validateTranscript() call\n- meeting-generate-scorecard/index.ts (line ~712): Replace `.length < 100` check\n- meeting-process-structured-summary/index.ts (line ~687): Replace `.length < 100` check\n- meeting-intelligence-index/index.ts: Replace char-length check\n- ask-meeting-ai/index.ts (line ~89): Replace null-only check with validateTranscript()\n\n3. Use consistent 422 status code and JSON response format across all."
+    },
+    {
+      "id": "MEET-004",
+      "feature": "meet-settings",
+      "title": "Fix Activity Heatmap skeleton to match actual component",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/pages/Heatmap.tsx",
+          "src/pages/Dashboard.tsx",
+          "src/components/ActivityHeatmapCell.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["MEET-001", "MEET-003"],
+      "acceptance": [
+        "Dashboard.tsx heatmap skeleton matches actual Heatmap component grid structure",
+        "Cell rounding uses rounded-lg (matching ActivityHeatmapCell)",
+        "Week label skeleton matches flex items-center justify-end pattern (not h-8 fixed)",
+        "Header row includes empty first cell for grid alignment",
+        "Skeleton legend row matches actual legend structure"
+      ],
+      "estimatedMinutes": 10,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/Dashboard.tsx",
+        "src/pages/Heatmap.tsx"
+      ],
+      "description": "Fix both skeleton locations to match actual Heatmap component:\n\n1. Dashboard.tsx (lines 950-972) — Suspense fallback for heatmap tab:\n   Current problems:\n   - Missing empty first cell in header row (line 955 has <div /> but week row skeletons use h-8 w-full)\n   - Week label skeleton: `h-8 w-full rounded` → should be `h-full w-5 rounded justify-self-end` (matches actual text-xs label)\n   - Cell rounding: `rounded` → `rounded-lg` (matching ActivityHeatmapCell line 37)\n   - 5 hardcoded weeks is fine for a skeleton\n   - Missing legend row at bottom\n\n   Fix to:\n   ```tsx\n   <div className=\"pt-4 rounded-xl bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 p-4\">\n     <div className=\"grid grid-cols-[30px_repeat(7,1fr)] gap-1\">\n       <div className=\"py-2\" />\n       {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (\n         <Skeleton key={d} className=\"h-5 w-full rounded\" />\n       ))}\n       {Array.from({ length: 5 }).map((_, w) => (\n         <React.Fragment key={w}>\n           <Skeleton className=\"h-full w-5 rounded justify-self-end\" />\n           {Array.from({ length: 7 }).map((_, d) => (\n             <Skeleton key={d} className=\"aspect-square w-full rounded-lg\" />\n           ))}\n         </React.Fragment>\n       ))}\n     </div>\n     <div className=\"flex items-center gap-2 mt-3 p-2 bg-gray-100 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50\">\n       <Skeleton className=\"h-3 w-6 rounded\" />\n       {[0,1,2,3,4,5,6].map(i => <Skeleton key={i} className=\"w-3 h-3 rounded\" />)}\n       <Skeleton className=\"h-3 w-6 rounded\" />\n       <Skeleton className=\"h-3 w-24 rounded ml-2\" />\n     </div>\n   </div>\n   ```\n\n2. Heatmap.tsx HeatmapSkeleton() (lines 14-80):\n   - Line 61: Cell rounding `rounded` → `rounded-lg` to match ActivityHeatmapCell\n   - Line 58: Week label `h-full w-5 rounded justify-self-end` is correct, keep as-is\n   - Structure is already well-matched, just the cell rounding fix needed"
+    },
+    {
+      "id": "MEET-005",
+      "feature": "meet-settings",
+      "title": "Add route redirects and clean up old meeting settings paths",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": {
+        "stories": ["MEET-001", "MEET-002"],
+        "files": [
+          "src/App.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "/settings/meeting-settings redirects to /meetings/settings",
+        "/settings/integrations/fathom redirects to /meetings/settings/fathom",
+        "/settings/integrations/fireflies redirects to /meetings/settings/fireflies",
+        "/settings/integrations/60-notetaker redirects to /meetings/settings/notetaker",
+        "/meetings/recordings/settings redirects to /meetings/settings/notetaker"
+      ],
+      "estimatedMinutes": 5,
+      "actualMinutes": null,
+      "files": [
+        "src/App.tsx"
+      ],
+      "description": "Update App.tsx routes:\n\n1. Change existing redirects (lines 655-660) to point to new locations:\n   - `/settings/meeting-settings` → `<Navigate to='/meetings/settings' replace />`\n   - `/settings/integrations/fathom` → `<Navigate to='/meetings/settings/fathom' replace />`\n   - `/settings/integrations/fireflies` → `<Navigate to='/meetings/settings/fireflies' replace />`\n   - `/settings/integrations/60-notetaker` → `<Navigate to='/meetings/settings/notetaker' replace />`\n   - `/meetings/recordings/settings` → `<Navigate to='/meetings/settings/notetaker' replace />`\n\n2. Remove the standalone MeetingSettingsPage route (line 655) since it's now inside MeetingsPage routing\n\n3. Keep the MeetingSettingsPage import removal clean — verify no other references exist\n\nNote: The /meetings/* wildcard route already handles /meetings/settings and /meetings/settings/:recorder via MeetingsPage sub-routes."
+    }
+  ],
+  "execution": {
+    "totalStories": 5,
+    "completedStories": 0,
+    "currentFeature": "meet-settings",
+    "lastUpdated": "2026-02-27T00:00:00Z",
+    "parallelGroups": [
+      {
+        "stories": ["MEET-001", "MEET-003", "MEET-004"],
+        "reason": "No file overlap — frontend hub, backend edge functions, and heatmap skeleton are independent"
+      }
+    ],
+    "estimatedTotal": "75 minutes",
+    "estimatedWithParallel": "50 minutes"
+  }
+}

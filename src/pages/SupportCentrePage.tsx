@@ -7,6 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SupportAIChat } from '@/components/support/SupportAIChat';
 import { TicketList } from '@/components/support/TicketList';
 import { CreateTicketForm } from '@/components/support/CreateTicketForm';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useUserProfileById } from '@/lib/hooks/useUserProfile';
+import { SupportAppDownload } from '@/components/support/SupportAppDownload';
+
 
 const SUGGESTED_QUESTIONS = [
   'How do I connect my calendar?',
@@ -23,6 +27,9 @@ export default function SupportCentrePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [aiChatQuery, setAiChatQuery] = useState('');
   const [showCreateTicket, setShowCreateTicket] = useState(false);
+
+  const { user } = useAuth();
+  const { data: profile } = useUserProfileById(user?.id);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -125,6 +132,11 @@ export default function SupportCentrePage() {
             </div>
             <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-orange-500 dark:group-hover:text-orange-400 mt-0.5 shrink-0 transition-colors" />
           </div>
+        </div>
+
+        {/* Admin: Desktop App Download */}
+        <div className="mt-3">
+          <SupportAppDownload isAdmin={profile?.is_admin ?? false} />
         </div>
       </div>
 

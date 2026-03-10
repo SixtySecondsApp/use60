@@ -28,7 +28,7 @@ describe('useActivities', () => {
       insert: () => ({ select: () => ({ single: () => ({ data: { id: 'activity1', contact_identifier: 'test@example.com' } }) }) })
     });
     await createActivity(mockActivity);
-    expect(supabase.functions.invoke).toHaveBeenCalledWith('process-single-activity', expect.objectContaining({ body: { activityId: 'activity1' } }));
+    expect(supabase.functions.invoke).toHaveBeenCalledWith('process-jobs-router', expect.objectContaining({ body: { action: 'single_activity', activityId: 'activity1' } }));
   });
 
   it('should NOT auto-process activity if contactIdentifier is missing', async () => {
@@ -40,6 +40,6 @@ describe('useActivities', () => {
       insert: () => ({ select: () => ({ single: () => ({ data: { id: 'activity2', contact_identifier: null } }) }) })
     });
     await createActivity({ ...mockActivity, contactIdentifier: undefined });
-    expect(supabase.functions.invoke).not.toHaveBeenCalledWith('process-single-activity', expect.objectContaining({ body: { activityId: 'activity2' } }));
+    expect(supabase.functions.invoke).not.toHaveBeenCalledWith('process-jobs-router', expect.objectContaining({ body: { action: 'single_activity', activityId: 'activity2' } }));
   });
 }); 

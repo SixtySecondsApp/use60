@@ -204,9 +204,9 @@ export function useGoogleWorkspaceBatch(
     queryKey: batchQueryKeys.google(operations.map((o) => o.id)),
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke(
-        'google-workspace-batch',
+        'google-services-router',
         {
-          body: { operations },
+          body: { action: 'workspace_batch', operations },
         }
       );
 
@@ -257,9 +257,10 @@ export function useMeetingAnalysisBatch(
       if (!meetingId) throw new Error('meetingId required');
 
       const { data, error } = await supabase.functions.invoke(
-        'meeting-analysis-batch',
+        'meeting-router',
         {
           body: {
+            action: 'analysis_batch',
             meetingId,
             analyses,
             params: options?.searchQuery

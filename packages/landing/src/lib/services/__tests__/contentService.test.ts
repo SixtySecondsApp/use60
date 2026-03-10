@@ -75,7 +75,7 @@ describe('ContentService', () => {
     it('initializes with correct endpoint URLs', () => {
       expect(contentService).toBeDefined();
       expect((contentService as any).extractTopicsUrl).toBe(
-        'https://test.supabase.co/functions/v1/extract-content-topics'
+        'https://test.supabase.co/functions/v1/extract-router'
       );
       expect((contentService as any).generateContentUrl).toBe(
         'https://test.supabase.co/functions/v1/generate-marketing-content'
@@ -182,7 +182,7 @@ describe('ContentService', () => {
 
       // Verify fetch called with correct params
       expect(fetch).toHaveBeenCalledWith(
-        'https://test.supabase.co/functions/v1/extract-content-topics',
+        'https://test.supabase.co/functions/v1/extract-router',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -190,6 +190,7 @@ describe('ContentService', () => {
             Authorization: 'Bearer test-jwt-token',
           }),
           body: JSON.stringify({
+            action: 'content_topics',
             meeting_id: 'meeting-123',
             force_refresh: false,
           }),
@@ -224,6 +225,7 @@ describe('ContentService', () => {
         expect.any(String),
         expect.objectContaining({
           body: JSON.stringify({
+            action: 'content_topics',
             meeting_id: 'meeting-123',
             force_refresh: true,
           }),

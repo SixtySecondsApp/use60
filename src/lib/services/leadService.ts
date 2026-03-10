@@ -59,9 +59,9 @@ export async function fetchLeads(): Promise<LeadWithPrep[]> {
 }
 
 export async function triggerLeadPrep(): Promise<{ processed: number }> {
-  const { data, error } = await supabase.functions.invoke('process-lead-prep', {
+  const { data, error } = await supabase.functions.invoke('process-jobs-router', {
     method: 'POST',
-    body: {},
+    body: { action: 'lead_prep' },
   });
 
   if (error) {

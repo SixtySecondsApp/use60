@@ -157,6 +157,7 @@ watch-*.ts
 envs/
 envs.zip
 docs/*.zip
+.claude/commands/*.zip
 restore-*.mjs
 
 # Data migration scripts

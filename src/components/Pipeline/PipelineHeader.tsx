@@ -40,6 +40,9 @@ interface PipelineHeaderProps {
   onHealthStatusChange: (statuses: string[]) => void;
   selectedRiskLevel: string[];
   onRiskLevelChange: (levels: string[]) => void;
+  selectedOwners: string[];
+  onOwnersChange: (owners: string[]) => void;
+  ownerOptions?: Array<{ id: string; name: string }>;
   onClearFilters: () => void;
   hasActiveFilters: boolean;
   onAddDeal: () => void;
@@ -61,6 +64,9 @@ export function PipelineHeader({
   onHealthStatusChange,
   selectedRiskLevel,
   onRiskLevelChange,
+  selectedOwners,
+  onOwnersChange,
+  ownerOptions = [],
   onClearFilters,
   hasActiveFilters,
   onAddDeal,
@@ -97,19 +103,20 @@ export function PipelineHeader({
     healthy_count: 0,
     warning_count: 0,
     critical_count: 0,
-    stalled_count: 0,
+    dormant_count: 0,
   };
 
   const [stagePopoverOpen, setStagePopoverOpen] = useState(false);
   const [healthPopoverOpen, setHealthPopoverOpen] = useState(false);
   const [riskPopoverOpen, setRiskPopoverOpen] = useState(false);
+  const [ownerPopoverOpen, setOwnerPopoverOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const healthOptions = [
     { value: 'healthy', label: 'Healthy' },
     { value: 'warning', label: 'Warning' },
     { value: 'critical', label: 'Critical' },
-    { value: 'stalled', label: 'Stalled' },
+    { value: 'dormant', label: 'Dormant' },
   ];
 
   const riskOptions = [
@@ -291,7 +298,7 @@ export function PipelineHeader({
           </div>
           <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-gray-500 dark:text-gray-400">
             <span className="w-[7px] h-[7px] rounded-full bg-gray-400 dark:bg-gray-500" />
-            {safeSummary.stalled_count} Stalled
+            {safeSummary.dormant_count} Dormant
           </div>
         </div>
       </div>
@@ -362,7 +369,7 @@ export function PipelineHeader({
                   healthy: 'bg-emerald-500',
                   warning: 'bg-amber-500',
                   critical: 'bg-red-500',
-                  stalled: 'bg-gray-400',
+                  dormant: 'bg-gray-400',
                 };
                 return (
                   <label key={option.value} className="flex items-center gap-2.5 p-2 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg cursor-pointer transition-colors">
@@ -424,11 +431,43 @@ export function PipelineHeader({
           </PopoverContent>
         </Popover>
 
-        {/* Owner filter (placeholder) */}
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-white/60 dark:bg-white/[0.02] border border-gray-200/80 dark:border-white/[0.09] text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/[0.13] hover:text-gray-800 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.04] backdrop-blur-xl transition-all opacity-50 cursor-not-allowed" disabled>
-          <Users className="w-3.5 h-3.5" />
-          Owner
-        </button>
+        {/* Owner filter */}
+        <Popover open={ownerPopoverOpen} onOpenChange={setOwnerPopoverOpen}>
+          <PopoverTrigger asChild>
+            <button className={`
+              flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium backdrop-blur-xl transition-all
+              ${selectedOwners.length > 0
+                ? 'bg-blue-50 dark:bg-blue-500/[0.08] border border-blue-200 dark:border-blue-500/30 text-blue-600 dark:text-blue-400'
+                : 'bg-white/60 dark:bg-white/[0.02] border border-gray-200/80 dark:border-white/[0.09] text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/[0.13] hover:text-gray-800 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.04]'
+              }
+            `}>
+              <Users className="w-3.5 h-3.5" />
+              Owner{selectedOwners.length > 0 ? ` (${selectedOwners.length})` : ''}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl" align="start">
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {ownerOptions.length === 0 ? (
+                <p className="text-xs text-gray-500 p-2">No team members found</p>
+              ) : ownerOptions.map((owner) => (
+                <label key={owner.id} className="flex items-center gap-2.5 p-2 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={selectedOwners.includes(owner.id)}
+                    onChange={(e) => {
+                      const newSelection = e.target.checked
+                        ? [...selectedOwners, owner.id]
+                        : selectedOwners.filter(v => v !== owner.id);
+                      onOwnersChange(newSelection);
+                    }}
+                    className="rounded border-gray-300 text-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
+                  />
+                  <span className="text-[12.5px] font-medium text-gray-700 dark:text-gray-300 truncate">{owner.name || 'Unknown'}</span>
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Search */}
         <div className="ml-auto flex items-center gap-2 px-3.5 py-1.5 rounded-full max-w-[260px] flex-1 bg-white/60 dark:bg-white/[0.025] border border-gray-200/80 dark:border-white/[0.06] backdrop-blur-xl transition-all focus-within:border-blue-400/50 dark:focus-within:border-blue-500/30 focus-within:shadow-[0_0_0_3px_rgba(59,130,246,0.06)]">
@@ -477,7 +516,7 @@ export function PipelineHeader({
           </div>
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
             <span className="w-[6px] h-[6px] rounded-full bg-gray-400" />
-            {safeSummary.stalled_count}
+            {safeSummary.dormant_count}
           </div>
         </div>
 
@@ -555,7 +594,7 @@ export function PipelineHeader({
                       healthy: 'bg-emerald-500',
                       warning: 'bg-amber-500',
                       critical: 'bg-red-500',
-                      stalled: 'bg-gray-400',
+                      dormant: 'bg-gray-400',
                     };
                     return (
                       <label key={option.value} className="flex items-center gap-3 p-2.5 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-xl cursor-pointer transition-colors">

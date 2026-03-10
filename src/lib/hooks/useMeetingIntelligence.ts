@@ -812,8 +812,9 @@ export function useMeetingIntelligence(): UseMeetingIntelligenceReturn {
     }
 
     try {
-      const response = await supabase.functions.invoke('meeting-intelligence-index', {
+      const response = await supabase.functions.invoke('meeting-router', {
         body: {
+          action: 'intelligence_index',
           meetingId,
           forceReindex: true,
         },

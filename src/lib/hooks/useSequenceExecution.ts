@@ -247,9 +247,10 @@ export function useSequenceExecution() {
             throw new Error(`Live execution not supported for action step: ${String(step.action || 'unknown')}. Use useLiveBackend option.`);
           }
 
-          console.log('[executeStep] Calling api-skill-execute:', { skill_key: step.skill_key, orgId });
-          const { data, error } = await supabase.functions.invoke('api-skill-execute', {
+          console.log('[executeStep] Calling api-services-router (skill_execute):', { skill_key: step.skill_key, orgId });
+          const { data, error } = await supabase.functions.invoke('api-services-router', {
             body: {
+              action: 'skill_execute',
               skill_key: step.skill_key,
               context: input,
               organization_id: orgId,
@@ -497,10 +498,11 @@ export function useSequenceExecution() {
 
       // For live mode with useLiveBackend, call api-sequence-execute and let backend handle everything
       if (!options.isSimulation && options.useLiveBackend) {
-        console.log('[useSequenceExecution] Using live backend execution via api-sequence-execute');
+        console.log('[useSequenceExecution] Using live backend execution via api-services-router (sequence_execute)');
         try {
-          const { data, error } = await supabase.functions.invoke('api-sequence-execute', {
+          const { data, error } = await supabase.functions.invoke('api-services-router', {
             body: {
+              action: 'sequence_execute',
               organization_id: orgId,
               sequence_key: sequence.skill_key,
               sequence_context: options.inputContext,

@@ -115,8 +115,9 @@ export function useApolloEnrichment(tableId: string) {
   // --------------------------------------------------------------------------
 
   const invokeApolloEnrich = async (params: ApolloEnrichParams): Promise<ApolloEnrichResult> => {
-    const { data, error } = await supabase.functions.invoke('apollo-enrich', {
+    const { data, error } = await supabase.functions.invoke('enrichment-apollo', {
       body: {
+        action: 'enrich',
         table_id: tableId,
         column_id: params.columnId,
         row_ids: params.rowIds,
@@ -225,8 +226,9 @@ export function useApolloEnrichment(tableId: string) {
     forceRefresh?: boolean;
     skipCompleted?: boolean;
   }): Promise<ApolloEnrichResult> => {
-    const { data, error } = await supabase.functions.invoke('apollo-org-enrich', {
+    const { data, error } = await supabase.functions.invoke('enrichment-apollo', {
       body: {
+        action: 'org_enrich',
         table_id: tableId,
         column_id: params.columnId,
         row_ids: params.rowIds,

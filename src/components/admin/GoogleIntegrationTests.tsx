@@ -273,8 +273,7 @@ export function GoogleIntegrationTests() {
         'Gmail',
         async () => {
           const headers = await getAuthHeaders();
-          const { data, error } = await supabase.functions.invoke('google-gmail?action=labels', {
-            body: {},
+          const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'labels',},
             headers
           });
           
@@ -295,8 +294,7 @@ export function GoogleIntegrationTests() {
         'Gmail',
         async () => {
           const headers = await getAuthHeaders();
-          const { data, error } = await supabase.functions.invoke('google-gmail?action=list', {
-            body: {
+          const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'list',
               maxResults: 5
             },
             headers

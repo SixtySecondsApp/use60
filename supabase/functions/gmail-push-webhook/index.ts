@@ -162,13 +162,14 @@ serve(async (req) => {
     console.log(`[gmail-push-webhook] Firing email_received event for user ${userId}, org ${orgId}`);
 
     // Fire email_received event to orchestrator (fire-and-forget)
-    fetch(`${SUPABASE_URL}/functions/v1/agent-orchestrator`, {
+    fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         type: 'email_received',
         source: 'webhook:gmail-push',
         org_id: orgId,

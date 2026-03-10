@@ -107,8 +107,9 @@ async function testSkillExecution(
   try {
     if (isSequence) {
       // Test sequence execution
-      const { data, error } = await supabase.functions.invoke('api-sequence-execute', {
+      const { data, error } = await supabase.functions.invoke('api-services-router', {
         body: {
+          action: 'sequence_execute',
           sequence_key: skill.skill_key,
           organization_id: organizationId,
           sequence_context: testContext || {},
@@ -143,8 +144,9 @@ async function testSkillExecution(
       };
     } else {
       // Test skill execution
-      const { data, error } = await supabase.functions.invoke('api-skill-execute', {
+      const { data, error } = await supabase.functions.invoke('api-services-router', {
         body: {
+          action: 'skill_execute',
           skill_key: skill.skill_key,
           organization_id: organizationId,
           skill_context: testContext || {},

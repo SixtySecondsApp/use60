@@ -1409,20 +1409,31 @@ export class OpsTableService {
   static generateCSVExport(
     rows: OpsTableRow[],
     columns: OpsTableColumn[],
-    filename: string = 'export'
+    filename: string = 'export',
+    extraColumns?: Array<{ label: string; value: string | ((row: OpsTableRow) => string) }>
   ): void {
-    const visibleCols = columns.filter((c) => c.is_visible);
+    // Export ALL passed columns (caller decides which to include)
+    const exportCols = columns;
 
     // Header row
-    const headers = visibleCols.map((c) => `"${c.label.replace(/"/g, '""')}"`);
+    const headers = exportCols.map((c) => `"${c.label.replace(/"/g, '""')}"`);
+    if (extraColumns) {
+      for (const ec of extraColumns) headers.push(`"${ec.label.replace(/"/g, '""')}"`);
+    }
     const csvLines = [headers.join(',')];
 
     // Data rows
     for (const row of rows) {
-      const values = visibleCols.map((col) => {
+      const values = exportCols.map((col) => {
         const val = row.cells[col.key]?.value ?? '';
         return `"${val.replace(/"/g, '""')}"`;
       });
+      if (extraColumns) {
+        for (const ec of extraColumns) {
+          const val = typeof ec.value === 'function' ? ec.value(row) : ec.value;
+          values.push(`"${val.replace(/"/g, '""')}"`);
+        }
+      }
       csvLines.push(values.join(','));
     }
 
@@ -1595,9 +1606,9 @@ export class OpsTableService {
 
   async getActiveInsights(tableId: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-insights-engine',
+      'ops-table-router',
       {
-        body: { tableId, action: 'get_active' },
+        body: { action: 'insights_engine', handler_action: 'get_active', tableId },
       }
     );
 
@@ -1630,11 +1641,12 @@ export class OpsTableService {
 
   async saveWorkflow(workflow: any) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-workflow-engine',
+      'ops-table-router',
       {
         body: {
+          action: 'workflow_engine',
+          handler_action: 'save',
           tableId: workflow.tableId,
-          action: 'save',
           workflow,
         },
       }
@@ -1646,9 +1658,9 @@ export class OpsTableService {
 
   async executeWorkflow(workflowId: string, tableId: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-workflow-engine',
+      'ops-table-router',
       {
-        body: { tableId, action: 'execute', workflowId },
+        body: { action: 'workflow_engine', handler_action: 'execute', tableId, workflowId },
       }
     );
 
@@ -1702,11 +1714,12 @@ export class OpsTableService {
 
     // Execute via ai-query with saved parsed_config
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-ai-query',
+      'ops-table-router',
       {
         body: {
+          action: 'ai_query',
           tableId: recipe.table_id,
-          action: 'execute_recipe',
+          handler_action: 'execute_recipe',
           recipeId,
         },
       }
@@ -1760,9 +1773,9 @@ export class OpsTableService {
 
   async executeCrossQuery(tableId: string, query: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-cross-query',
+      'ops-table-router',
       {
-        body: { tableId, query },
+        body: { action: 'cross_query', tableId, query },
       }
     );
 
@@ -1985,9 +1998,9 @@ export class OpsTableService {
 
   async getActivePredictions(tableId: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-predictions',
+      'ops-table-router',
       {
-        body: { tableId, action: 'get_active' },
+        body: { action: 'predictions', handler_action: 'get_active', tableId },
       }
     );
 
@@ -2006,9 +2019,9 @@ export class OpsTableService {
 
   async runPredictions(tableId: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-predictions',
+      'ops-table-router',
       {
-        body: { tableId, action: 'analyze' },
+        body: { action: 'predictions', handler_action: 'analyze', tableId },
       }
     );
 

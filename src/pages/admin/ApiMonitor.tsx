@@ -112,8 +112,13 @@ export default function ApiMonitor() {
         from: timeRange.from.toISOString(),
         to: timeRange.to.toISOString(),
       });
-      const { data, error } = await supabase.functions.invoke(`api-monitor?${params}`, {
-        method: 'GET',
+      const { data, error } = await supabase.functions.invoke('api-services-router', {
+        body: {
+          action: 'monitor',
+          method: 'GET',
+          from: timeRange.from.toISOString(),
+          to: timeRange.to.toISOString(),
+        },
       });
 
       if (error) {
@@ -172,8 +177,12 @@ export default function ApiMonitor() {
 
   const fetchImprovements = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('api-monitor/improvements', {
-        method: 'GET',
+      const { data, error } = await supabase.functions.invoke('api-services-router', {
+        body: {
+          action: 'monitor',
+          path: '/improvements',
+          method: 'GET',
+        },
       });
 
       if (error) {
@@ -197,12 +206,14 @@ export default function ApiMonitor() {
 
   const fetchAIReview = useCallback(async () => {
     try {
-      const params = new URLSearchParams({
-        from: timeRange.from.toISOString(),
-        to: timeRange.to.toISOString(),
-      });
-      const { data, error } = await supabase.functions.invoke(`api-monitor/ai-review?${params}`, {
-        method: 'GET',
+      const { data, error } = await supabase.functions.invoke('api-services-router', {
+        body: {
+          action: 'monitor',
+          path: '/ai-review',
+          method: 'GET',
+          from: timeRange.from.toISOString(),
+          to: timeRange.to.toISOString(),
+        },
       });
 
       if (error) {
@@ -259,9 +270,10 @@ export default function ApiMonitor() {
 
   const handleCreateSnapshot = async () => {
     try {
-      const { error } = await supabase.functions.invoke('api-monitor/snapshot', {
-        method: 'POST',
+      const { error } = await supabase.functions.invoke('api-services-router', {
         body: {
+          action: 'monitor',
+          path: '/snapshot',
           from: timeRange.from.toISOString(),
           to: timeRange.to.toISOString(),
         },

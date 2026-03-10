@@ -553,8 +553,10 @@ async function handlePipelineAction(
     if (contactId) sequenceContext.contact_id = contactId;
 
     // Step 1: Run sequence in SIMULATION mode to get preview
-    const { data: previewResult, error: previewError } = await supabase.functions.invoke('api-copilot/chat', {
+    const { data: previewResult, error: previewError } = await supabase.functions.invoke('api-services-router', {
       body: {
+        action: 'copilot',
+        path: '/chat',
         message: `Run ${sequenceKey} in preview mode`,
         context: {
           userId: slackAuth.user_id,
@@ -784,8 +786,10 @@ async function handleHitlConfirm(
 
   try {
     // Execute the sequence for real (is_simulation: false)
-    const { data, error } = await supabase.functions.invoke('api-copilot/chat', {
+    const { data, error } = await supabase.functions.invoke('api-services-router', {
       body: {
+        action: 'copilot',
+        path: '/chat',
         message: `Execute ${pendingAction?.sequence_key || sequenceKey}`,
         context: {
           userId: slackAuth.user_id,
@@ -930,8 +934,10 @@ async function handleSlackEvent(
 
   try {
     // Treat the reply as a copilot prompt
-    const { data, error } = await supabase.functions.invoke('api-copilot/chat', {
+    const { data, error } = await supabase.functions.invoke('api-services-router', {
       body: {
+        action: 'copilot',
+        path: '/chat',
         message: event.text,
         context: {
           userId: slackAuth.user_id,

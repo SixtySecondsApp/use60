@@ -35,11 +35,12 @@ CREATE INDEX IF NOT EXISTS idx_deal_outcomes_deal
 -- RLS
 ALTER TABLE deal_outcomes ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "org members can manage deal outcomes" ON deal_outcomes;
 CREATE POLICY "org members can manage deal outcomes"
   ON deal_outcomes
   USING (
     org_id IN (
-      SELECT organization_id FROM organization_members
+      SELECT org_id FROM organization_memberships
       WHERE user_id = auth.uid()
     )
   );

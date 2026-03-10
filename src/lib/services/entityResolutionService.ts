@@ -165,7 +165,9 @@ export async function resolveOrCreateCompany(
     }
 
     // No existing company found - create new one
-    const suggestedName = companyName || CompanyService.suggestCompanyNameFromDomain(domain);
+    // Prefer domain-derived name (e.g. "Fathom" from fathom.video) over the passed
+    // companyName which may be a person's name forwarded from the attendee field.
+    const suggestedName = CompanyService.suggestCompanyNameFromDomain(domain) || companyName;
 
     logger.log('🏢 Creating new company:', { name: suggestedName, domain });
 

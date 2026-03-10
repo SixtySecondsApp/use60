@@ -164,8 +164,9 @@ export function CampaignApprovalBanner({ tableId, orgId, onCampaignInvalid }: Ca
 
       const rowIds = rows.map(r => r.id);
 
-      const { data, error } = await supabase.functions.invoke('push-to-instantly', {
+      const { data, error } = await supabase.functions.invoke('crm-push', {
         body: {
+          action: 'to_instantly',
           table_id: tableId,
           row_ids: rowIds,
           campaign_id: campaign.campaign_id,

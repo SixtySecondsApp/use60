@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNotifications } from '@/lib/hooks/useNotifications';
 import { cn } from '@/lib/utils';
 import type { Notification, NotificationCategory } from '@/lib/services/notificationService';
+import { HIDDEN_NOTIFICATION_TYPES } from '@/lib/services/notificationService';
 
 interface NotificationCenterProps {
   onClose?: () => void;
@@ -164,6 +165,12 @@ export function NotificationCenter({ onClose, onDeleteAll }: NotificationCenterP
     loadMore
   } = useNotifications({ limit: 50 });
 
+  // Client-side safety filter: remove agent raw dump notifications in case any slip through
+  const visibleNotifications = useMemo(
+    () => notifications.filter(n => !(HIDDEN_NOTIFICATION_TYPES as readonly string[]).includes(n.type)),
+    [notifications]
+  );
+
   // Group notifications by tab
   const groupedNotifications = useMemo(() => {
     const groups: Record<TabId, Notification[]> = {
@@ -174,7 +181,7 @@ export function NotificationCenter({ onClose, onDeleteAll }: NotificationCenterP
       team: [],
     };
 
-    notifications.forEach(notification => {
+    visibleNotifications.forEach(notification => {
       const tab = getNotificationTab(notification);
       groups[tab].push(notification);
       groups.all.push(notification);
@@ -195,13 +202,13 @@ export function NotificationCenter({ onClose, onDeleteAll }: NotificationCenterP
   // Get tab counts
   const tabCounts = useMemo(() => {
     return {
-      all: notifications.length,
+      all: visibleNotifications.length,
       ai: groupedNotifications.ai.length,
       tasks: groupedNotifications.tasks.length,
       content: groupedNotifications.content.length,
       team: groupedNotifications.team.length,
     };
-  }, [notifications.length, groupedNotifications]);
+  }, [visibleNotifications.length, groupedNotifications]);
 
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.read) {
@@ -279,7 +286,7 @@ export function NotificationCenter({ onClose, onDeleteAll }: NotificationCenterP
                 <CheckCheck className="w-5 h-5" />
               </button>
             )}
-            {notifications.length > 0 && (
+            {visibleNotifications.length > 0 && (
               <button
                 onClick={() => onDeleteAll?.()}
                 className="p-2 rounded-lg transition-all duration-200 hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
@@ -359,7 +366,7 @@ export function NotificationCenter({ onClose, onDeleteAll }: NotificationCenterP
             <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center">{error}</p>
           </div>
-        ) : notifications.length === 0 ? (
+        ) : visibleNotifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4">
             <BellOff className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-3" />
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center">

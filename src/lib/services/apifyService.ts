@@ -100,7 +100,7 @@ class ApifyService {
    * Connect an Apify API token (validates with Apify API)
    */
   async connect(token: string): Promise<ApifyConnectResult> {
-    const { data, error } = await supabase.functions.invoke('apify-connect', {
+    const { data, error } = await supabase.functions.invoke('enrichment-apify', {
       body: { action: 'connect', token },
     })
 
@@ -113,7 +113,7 @@ class ApifyService {
    * Disconnect Apify integration
    */
   async disconnect(): Promise<ApifyConnectResult> {
-    const { data, error } = await supabase.functions.invoke('apify-connect', {
+    const { data, error } = await supabase.functions.invoke('enrichment-apify', {
       body: { action: 'disconnect' },
     })
 
@@ -126,7 +126,7 @@ class ApifyService {
    * Revalidate existing Apify connection
    */
   async revalidate(): Promise<ApifyConnectResult> {
-    const { data, error } = await supabase.functions.invoke('apify-connect', {
+    const { data, error } = await supabase.functions.invoke('enrichment-apify', {
       body: { action: 'revalidate' },
     })
 
@@ -139,8 +139,8 @@ class ApifyService {
    * Fetch actor input schema (cached 24h)
    */
   async introspectActor(actorId: string): Promise<ApifyActorSchema> {
-    const { data, error } = await supabase.functions.invoke('apify-actor-introspect', {
-      body: { actor_id: actorId },
+    const { data, error } = await supabase.functions.invoke('enrichment-apify', {
+      body: { action: 'introspect', actor_id: actorId },
     })
 
     if (error) throw new Error(error.message || 'Failed to fetch actor schema')
@@ -157,8 +157,8 @@ class ApifyService {
     mapping_template_id?: string
     confirmed?: boolean
   }): Promise<ApifyRunResult | ApifyRateLimitWarning> {
-    const { data, error } = await supabase.functions.invoke('apify-run-start', {
-      body: params,
+    const { data, error } = await supabase.functions.invoke('enrichment-apify', {
+      body: { action: 'run_start', ...params },
     })
 
     if (error) throw new Error(error.message || 'Failed to start actor run')

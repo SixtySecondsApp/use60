@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Ticket, Clock, AlertCircle, CheckCircle2, XCircle, Loader2, Plus, Filter } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { Ticket, Clock, AlertCircle, CheckCircle2, XCircle, Loader2, Plus, Filter, Circle, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -11,13 +11,35 @@ import {
 } from '@/components/ui/select';
 import {
   useSupportTickets,
+  useSupportTicketsRealtime,
   type SupportTicket,
   type TicketStatus,
   type TicketStatusFilter,
   type TicketCategory,
 } from '@/lib/hooks/useSupportTickets';
 import { TicketDetail } from './TicketDetail';
+import { useUnreadTicketIds } from '@/lib/hooks/useUnreadTicketIds';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
+
+function useAgentName(agentId: string | null) {
+  return useQuery({
+    queryKey: ['agent-name', agentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', agentId!)
+        .single();
+      if (error) throw error;
+      return data.first_name || 'Support Agent';
+    },
+    enabled: !!agentId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 interface TicketListProps {
   onCreateTicket: () => void;
@@ -25,7 +47,7 @@ interface TicketListProps {
 
 const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; icon: React.ElementType }> = {
   open: { label: 'Open', color: 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-blue-200 dark:border-blue-500/30', icon: Clock },
-  in_progress: { label: 'In Progress', color: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border-amber-200 dark:border-amber-500/30', icon: Loader2 },
+  in_progress: { label: 'Waiting on Agent', color: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border-amber-200 dark:border-amber-500/30', icon: Loader2 },
   waiting_on_customer: { label: 'Waiting on You', color: 'bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400 border-purple-200 dark:border-purple-500/30', icon: AlertCircle },
   resolved: { label: 'Resolved', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30', icon: CheckCircle2 },
   closed: { label: 'Closed', color: 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700', icon: XCircle },
@@ -46,19 +68,22 @@ const CATEGORY_LABELS: Record<TicketCategory, string> = {
   other: 'Other',
 };
 
-function TicketRow({ ticket, onClick }: { ticket: SupportTicket; onClick: () => void }) {
+function TicketRow({ ticket, onClick, isUnread }: { ticket: SupportTicket; onClick: () => void; isUnread?: boolean }) {
   const statusConfig = STATUS_CONFIG[ticket.status];
   const StatusIcon = statusConfig.icon;
   const priorityConfig = PRIORITY_CONFIG[ticket.priority];
+  const { data: agentName } = useAgentName(ticket.assigned_to ?? null);
+  const isClosed = ticket.status === 'closed' || ticket.status === 'resolved';
 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0"
+      className={`w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-100 dark:border-gray-800 last:border-0 ${isUnread ? 'bg-blue-50/50 dark:bg-blue-500/5' : ''} ${isClosed ? 'opacity-50' : ''}`}
     >
       <div className="flex items-start gap-3">
-        <div className="pt-0.5">
+        <div className="pt-0.5 relative">
           <Ticket className="w-4 h-4 text-gray-400" />
+          {isUnread && <Circle className="w-2 h-2 fill-blue-500 text-blue-500 absolute -top-0.5 -right-0.5" />}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
@@ -79,6 +104,15 @@ function TicketRow({ ticket, onClick }: { ticket: SupportTicket; onClick: () => 
             <span className="text-xs text-gray-400 dark:text-gray-500">
               {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
             </span>
+            {agentName && (
+              <>
+                <span className="text-gray-300 dark:text-gray-600">·</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-0.5">
+                  <Shield className="w-3 h-3" />
+                  {agentName}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -92,6 +126,43 @@ export function TicketList({ onCreateTicket }: TicketListProps) {
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
 
   const { data: tickets, isLoading, error } = useSupportTickets(statusFilter, categoryFilter);
+  useSupportTicketsRealtime();
+  const { unreadIds } = useUnreadTicketIds();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Sort: active tickets first (by created_at desc), closed/resolved at bottom
+  const sortedTickets = useMemo(() => {
+    if (!tickets) return [];
+    const active: SupportTicket[] = [];
+    const closed: SupportTicket[] = [];
+    for (const t of tickets) {
+      if (t.status === 'closed' || t.status === 'resolved') {
+        closed.push(t);
+      } else {
+        active.push(t);
+      }
+    }
+    return [...active, ...closed];
+  }, [tickets]);
+
+  const handleOpenTicket = useCallback(async (ticket: SupportTicket) => {
+    setSelectedTicket(ticket);
+
+    // Mark support notifications for this ticket as read
+    if (user?.id && unreadIds.has(ticket.id)) {
+      await supabase
+        .from('notifications')
+        .update({ read: true, read_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .eq('category', 'support')
+        .eq('entity_type', 'support_ticket')
+        .eq('entity_id', ticket.id)
+        .eq('read', false);
+
+      queryClient.invalidateQueries({ queryKey: ['unread-ticket-ids'] });
+    }
+  }, [user?.id, unreadIds, queryClient]);
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
@@ -173,11 +244,12 @@ export function TicketList({ onCreateTicket }: TicketListProps) {
         )}
 
         {!isLoading && tickets && tickets.length > 0 &&
-          tickets.map((ticket) => (
+          sortedTickets.map((ticket) => (
             <TicketRow
               key={ticket.id}
               ticket={ticket}
-              onClick={() => setSelectedTicket(ticket)}
+              isUnread={unreadIds.has(ticket.id)}
+              onClick={() => handleOpenTicket(ticket)}
             />
           ))
         }

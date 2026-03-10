@@ -25,8 +25,8 @@ export function useFetchTranscript() {
         throw new Error('No active session')
       }
 
-      const response = await supabase.functions.invoke('fetch-transcript', {
-        body: { meetingId },
+      const response = await supabase.functions.invoke('fetch-router', {
+        body: { action: 'transcript', meetingId },
       })
 
       if (response.error) {

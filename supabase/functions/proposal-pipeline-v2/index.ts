@@ -835,6 +835,7 @@ serve(async (req: Request) => {
           deal_id: resolvedDealId ?? undefined,
           contact_id: contact_id ?? undefined,
           user_id,
+          org_id,
         }),
         2,
         [1000, 3000, 9000],

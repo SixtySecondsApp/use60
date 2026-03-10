@@ -811,8 +811,9 @@ function SkillCard({ skill, index, dealId, contactId, orgId }: {
         }
       }
 
-      const { data, error } = await supabase.functions.invoke('api-skill-execute', {
+      const { data, error } = await supabase.functions.invoke('api-services-router', {
         body: {
+          action: 'skill_execute',
           skill_key: skill.key,
           organization_id: orgId,
           context: skillContext,

@@ -72,11 +72,12 @@ export function useUpdateFathomUserMapping() {
     }) => {
       if (!orgId) throw new Error('No org selected');
 
-      const { data, error } = await supabase.functions.invoke('fathom-update-user-mapping', {
-        body: { 
-          orgId, 
-          fathomUserEmail, 
-          sixtyUserId 
+      const { data, error } = await supabase.functions.invoke('fathom-ops-router', {
+        body: {
+          action: 'update_user_mapping',
+          orgId,
+          fathomUserEmail,
+          sixtyUserId
         },
       });
 
@@ -129,8 +130,8 @@ export function useFathomSelfMap() {
     mutationFn: async ({ fathomUserEmail }: { fathomUserEmail?: string }) => {
       if (!orgId) throw new Error('No org selected');
 
-      const { data, error } = await supabase.functions.invoke('fathom-self-map', {
-        body: { orgId, fathomUserEmail: fathomUserEmail || undefined },
+      const { data, error } = await supabase.functions.invoke('fathom-ops-router', {
+        body: { action: 'self_map', orgId, fathomUserEmail: fathomUserEmail || undefined },
       });
 
       if (error) throw error;

@@ -84,7 +84,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || `API error: ${res.status}`);
+    throw new Error(body.error || body.message || body.details || `API error: ${res.status}`);
   }
 
   const json = await res.json();
@@ -95,6 +95,57 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   return json as T;
+}
+
+function shouldFallbackToLegacySearch(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  return (
+    error.message.includes('Requested function was not found') ||
+    error.message.includes('API error: 404') ||
+    error.message.includes('NOT_FOUND')
+  );
+}
+
+async function askMeetingViaLegacyRouter(params: MaAskRequest): Promise<MaAskResponse> {
+  if (!SUPABASE_URL) {
+    throw new Error('Meeting Analytics is not configured');
+  }
+
+  const headers = await getHeaders();
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/meeting-router`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      action: 'intelligence_search',
+      query: params.question,
+      // Match the newer org-wide ask behavior instead of defaulting to "me".
+      filters: { owner_user_id: null },
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || payload.message || payload.details || `API error: ${response.status}`);
+  }
+
+  const sources = Array.isArray(payload.sources) ? payload.sources : [];
+  const meetingsSearched = Number(payload.query_metadata?.meetings_searched) || sources.length;
+
+  return {
+    answer: payload.answer || 'Unable to generate answer',
+    sources: sources.map((source: Record<string, unknown>) => ({
+      transcriptId: String(source.source_id || ''),
+      transcriptTitle: String(source.title || 'Untitled Meeting'),
+      text: String(source.relevance_snippet || ''),
+      similarity: typeof source.relevance_score === 'number' ? source.relevance_score : 0.5,
+    })),
+    segmentsSearched: sources.length,
+    meetingsAnalyzed: sources.length,
+    totalMeetings: meetingsSearched,
+    isAggregateQuestion: true,
+    specificMeeting: null,
+  };
 }
 
 // =====================================================
@@ -414,10 +465,18 @@ export async function getSentimentTrends(params: DashboardParams & { days?: numb
 // =====================================================
 
 export async function askMeeting(params: MaAskRequest) {
-  return apiFetch<MaAskResponse>('/api/search/ask', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
+  try {
+    return await apiFetch<MaAskResponse>('/api/search/ask', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  } catch (error) {
+    if (!shouldFallbackToLegacySearch(error)) {
+      throw error;
+    }
+
+    return askMeetingViaLegacyRouter(params);
+  }
 }
 
 // =====================================================

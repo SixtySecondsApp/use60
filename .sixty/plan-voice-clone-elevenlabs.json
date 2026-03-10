@@ -1,0 +1,172 @@
+{
+  "feature": "voice-clone-elevenlabs",
+  "prd": "docs/prd/voice-clone-elevenlabs.md",
+  "createdAt": "2026-03-07T00:00:00Z",
+  "stories": [
+    {
+      "id": "VC-001",
+      "title": "Database schema - voice_clones + elevenlabs_tts_jobs tables",
+      "type": "schema",
+      "phase": 1,
+      "status": "pending",
+      "dependencies": { "stories": [] },
+      "files": ["supabase/migrations/"],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "VC-002",
+      "title": "ElevenLabs credential storage",
+      "type": "backend+frontend",
+      "phase": 1,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-001"] },
+      "files": ["supabase/functions/elevenlabs-voice-manage/", "src/components/settings/"],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "VC-003",
+      "title": "elevenlabs-voice-manage edge function - list + create_clone",
+      "type": "backend",
+      "phase": 1,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-001"] },
+      "files": ["supabase/functions/elevenlabs-voice-manage/"],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "VC-004",
+      "title": "elevenlabs-voice-manage - list_remote + import",
+      "type": "backend",
+      "phase": 1,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-003"] },
+      "files": ["supabase/functions/elevenlabs-voice-manage/"],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "VC-005",
+      "title": "elevenlabs-voice-manage - preview + delete",
+      "type": "backend",
+      "phase": 1,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-003"] },
+      "files": ["supabase/functions/elevenlabs-voice-manage/"],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "VC-006",
+      "title": "Voice Library settings page",
+      "type": "frontend",
+      "phase": 1,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-003"] },
+      "files": ["src/components/settings/VoiceLibrary.tsx", "src/pages/"],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "VC-007",
+      "title": "Voice Clone Wizard - record/upload + clone + preview + save",
+      "type": "frontend",
+      "phase": 1,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-006"] },
+      "files": ["src/components/settings/VoiceCloneWizard.tsx"],
+      "estimatedMinutes": 35
+    },
+    {
+      "id": "VC-008",
+      "title": "elevenlabs_audio column type registration",
+      "type": "frontend",
+      "phase": 2,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-003"] },
+      "files": ["src/components/ops/AddColumnModal.tsx"],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "VC-009",
+      "title": "elevenlabs-tts-generate edge function",
+      "type": "backend",
+      "phase": 2,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-001", "VC-003"] },
+      "files": ["supabase/functions/elevenlabs-tts-generate/"],
+      "estimatedMinutes": 35
+    },
+    {
+      "id": "VC-010",
+      "title": "ElevenLabsAudioCell component",
+      "type": "frontend",
+      "phase": 2,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-008"] },
+      "files": ["src/components/ops/ElevenLabsAudioCell.tsx", "src/components/ops/OpsTableCell.tsx"],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "VC-011",
+      "title": "Bulk Generate Audio action",
+      "type": "frontend",
+      "phase": 2,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-009", "VC-010"] },
+      "files": ["src/components/ops/GenerateAudioAction.tsx"],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "VC-012",
+      "title": "Update Video Avatar wizard voice step",
+      "type": "frontend",
+      "phase": 3,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-003"] },
+      "files": ["src/components/ops/VideoAvatarColumnWizard.tsx"],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "VC-013",
+      "title": "Update video generation to use cloned voice",
+      "type": "backend",
+      "phase": 3,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-009", "VC-012"] },
+      "files": ["supabase/functions/heygen-video-generate/"],
+      "estimatedMinutes": 25
+    },
+    {
+      "id": "VC-014",
+      "title": "Credit tracking for ElevenLabs usage",
+      "type": "backend+frontend",
+      "phase": 3,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-009"] },
+      "files": ["src/lib/config/creditPacks.ts", "supabase/functions/_shared/creditPacks.ts"],
+      "estimatedMinutes": 20
+    },
+    {
+      "id": "VC-015",
+      "title": "Voice preview in video settings modal",
+      "type": "frontend",
+      "phase": 4,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-012"] },
+      "files": ["src/components/ops/EditHeyGenVideoSettingsModal.tsx"],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "VC-016",
+      "title": "Audio column preview in ops table",
+      "type": "frontend",
+      "phase": 4,
+      "status": "pending",
+      "dependencies": { "stories": ["VC-010"] },
+      "files": ["src/components/ops/ElevenLabsAudioCell.tsx"],
+      "estimatedMinutes": 15
+    }
+  ],
+  "execution": {
+    "completedStories": 0,
+    "totalStories": 16,
+    "lastUpdated": "2026-03-07T00:00:00Z"
+  }
+}

@@ -86,8 +86,8 @@ import { useSubscriptionGate } from '@/lib/hooks/useSubscriptionGate';
 import { PasswordSetupModal } from '@/components/auth/PasswordSetupModal';
 import { usePasswordSetupRequired } from '@/lib/hooks/usePasswordSetupRequired';
 import { useIntegrationReconnectNeeded } from '@/lib/hooks/useIntegrationReconnectNeeded';
+import { SetupWizardSidebarIndicator } from '@/components/setup-wizard/SetupWizardSidebarIndicator';
 import { SetupWizardDialog } from '@/components/setup-wizard/SetupWizardDialog';
-import { useSetupWizardAutoTrigger } from '@/lib/hooks/useSetupWizardAutoTrigger';
 import { useTicketsNeedingAttention } from '@/lib/hooks/useTicketsNeedingAttention';
 import { TrialCountdownBadge } from '@/components/TrialCountdownBadge';
 import { TrialUpgradeModal } from '@/components/TrialUpgradeModal';
@@ -110,20 +110,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Check if user has integration that needs reconnection (must be before isIntegrationBannerVisible)
   const { needsReconnect: integrationNeedsReconnect } = useIntegrationReconnectNeeded();
 
-  // Internal admin orgs bypass all subscription/trial UI
-  const isInternalAdminOrg = !subscriptionGate.isLoading && subscriptionGate.status === 'internal_admin';
-
   // TrialConversionModal is no longer triggered on 'expired' status —
   // ProtectedRoute now redirects expired users to /trial-expired instead.
   // The modal is kept for approaching-expiry warnings only (isTrialing).
-  // Internal admin orgs never see trial modals.
-  const isTrialApproachingExpiry = !isInternalAdminOrg && trialStatus.isTrialing && !trialStatus.isLoading;
-
-  // SETUP-002: Auto-trigger setup wizard for new users with no integrations
-  useSetupWizardAutoTrigger();
-
-  // Show the trial conversion modal when the trial has expired
-  const isTrialExpired = orgSubscription?.status === 'expired';
+  const isTrialApproachingExpiry = trialStatus.isTrialing && !trialStatus.isLoading;
 
   // Check if trial banner should be showing (same logic as TrialBanner component)
   const isTrialBannerVisible = useMemo(() => {
@@ -140,15 +130,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       // Ignore errors
     }
 
-    // Internal admin orgs never see trial banners
-    if (isInternalAdminOrg) return false;
-
     // Show for trialing (with 75%+ usage — TrialBanner handles the threshold internally)
     return trialStatus.isTrialing && !trialStatus.isLoading;
-  }, [trialStatus.isTrialing, trialStatus.isLoading, isInternalAdminOrg]);
+  }, [trialStatus.isTrialing, trialStatus.isLoading]);
 
-  // Grace period banner is shown when status is 'grace_period' (never for internal admins)
-  const isGracePeriodBannerVisible = !isInternalAdminOrg && !subscriptionGate.isLoading && subscriptionGate.status === 'grace_period';
+  // Grace period banner is shown when status is 'grace_period'
+  const isGracePeriodBannerVisible = !subscriptionGate.isLoading && subscriptionGate.status === 'grace_period';
 
   // Check if integration reconnect banner should be showing
   const isIntegrationBannerVisible = hasIntegrationAlerts || !!integrationNeedsReconnect;
@@ -299,7 +286,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Auto-collapse sidebar on specific pages for more space
   useEffect(() => {
-    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow', '/platform/godseye'];
+    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow'];
     const shouldCollapse = collapsedPages.includes(location.pathname);
     
     if (shouldCollapse) {
@@ -322,7 +309,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Note: /ops/ pages removed — they use normal page scroll so users can scroll
   // when the mouse is outside the table.
   const isFullHeightPage = useMemo(() => {
-    return location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/') || location.pathname.startsWith('/landing-page-builder') || location.pathname === '/platform/godseye';
+    return location.pathname.startsWith('/copilot');
   }, [location.pathname]);
 
 
@@ -694,6 +681,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
               {/* Fixed Footer with Settings and Logout */}
               <div className="flex-shrink-0 p-4 sm:p-6 border-t border-[#E2E8F0] dark:border-gray-800 space-y-2">
+                <SetupWizardSidebarIndicator />
                 <Link
                   to="/settings"
                   onClick={() => toggleMobileMenu()}
@@ -1000,23 +988,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         {supportAttentionCount > 9 ? '9+' : supportAttentionCount}
                       </span>
                     )}
-                    {!isCollapsed && item.href === '/command-centre' && ccUnreadCount > 0 && (
-                      <span className="inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-semibold leading-none ml-auto">
-                        {ccUnreadCount > 99 ? '99+' : ccUnreadCount}
-                      </span>
-                    )}
-                    {!isCollapsed && item.href === '/coaching' && pendingQuestionsCount > 0 && (
-                      <span className="inline-flex items-center justify-center h-[18px] min-w-[18px] px-1 rounded-full bg-indigo-500 text-white text-[10px] font-semibold leading-none ml-auto">
-                        {pendingQuestionsCount > 9 ? '9+' : pendingQuestionsCount}
-                      </span>
-                    )}
                   </>
                 );
 
                 const tourAttr =
                   item.href === '/dashboard' ? 'dashboard' :
                   item.href === '/meetings' ? 'meetings' :
-                  item.href === '/meeting-analytics' ? 'insights' :
+                  item.href === '/meeting-analytics' ? 'intelligence' :
                   item.href === '/integrations' ? 'integrations' :
                   item.href === '/copilot' ? 'copilot' :
                   undefined;
@@ -1073,6 +1051,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             'mt-auto pt-6 border-t border-[#E2E8F0] dark:border-gray-800/50',
             isCollapsed ? 'space-y-1' : 'space-y-1'
           )}>
+            <SetupWizardSidebarIndicator isCollapsed={isCollapsed} />
             <Link
               to="/settings"
               data-tour="settings"

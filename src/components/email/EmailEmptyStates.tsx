@@ -193,6 +193,25 @@ export function GmailNotConnectedEmptyState({ onConnect }: { onConnect: () => vo
 }
 
 /**
+ * Gmail Upgrade Required Empty State
+ * Shown when user has Google connected but only free-tier scopes (no gmail.readonly)
+ */
+export function GmailUpgradeRequiredEmptyState({ onUpgrade }: { onUpgrade: () => void }) {
+  return (
+    <EmptyState
+      icon={<Mail className="w-10 h-10" />}
+      title="Upgrade to read Gmail"
+      description="Your Google account is connected for sending emails. Upgrade to also read your inbox, view email history, and create drafts."
+      action={{
+        label: 'Connect Gmail Fully',
+        onClick: onUpgrade,
+        icon: <Link2 className="w-4 h-4" />
+      }}
+    />
+  );
+}
+
+/**
  * Email Loading Error Empty State
  */
 export function EmailErrorEmptyState({ onRetry, error }: { onRetry: () => void; error?: string }) {

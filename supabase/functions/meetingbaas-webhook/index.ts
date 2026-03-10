@@ -639,13 +639,14 @@ async function handleBotStatusEvent(
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
       const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-      await fetch(`${supabaseUrl}/functions/v1/send-recording-notification`, {
+      await fetch(`${supabaseUrl}/functions/v1/send-router`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${serviceRoleKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'recording_notification',
           recording_id: deployment.recording_id,
           notification_type: eventType === 'bot.joining' ? 'bot_joining' : 'bot_failed',
           error_message: eventType === 'bot.failed' ? (error_message || 'Bot failed to join the meeting') : undefined,

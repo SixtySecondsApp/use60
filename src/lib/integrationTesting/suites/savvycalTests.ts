@@ -254,11 +254,12 @@ export function createSavvyCalTests(orgId: string): IntegrationTest[] {
 
           // Try to fetch a link to verify API connectivity
           const startTime = Date.now();
-          const response = await supabase.functions.invoke('fetch-savvycal-link', {
+          const response = await supabase.functions.invoke('fetch-router', {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
             body: {
+              action: 'savvycal_link',
               org_id: orgId,
               link_id: 'test-connectivity', // Will likely 404 but proves API is reachable
             },

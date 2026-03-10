@@ -227,8 +227,9 @@ export async function bulkGrantAccess(
           });
 
           // Call Edge Function to send emails
-          const { error: emailError } = await supabase.functions.invoke('send-waitlist-invite', {
+          const { error: emailError } = await supabase.functions.invoke('send-router', {
             body: {
+              action: 'waitlist_invite',
               invites,
               template_id: emailTemplateId || null,
               admin_name: adminName,
@@ -325,8 +326,9 @@ export async function resendMagicLink(
 
       const adminName = adminProfile?.name || 'Admin';
 
-      await supabase.functions.invoke('send-waitlist-invite', {
+      await supabase.functions.invoke('send-router', {
         body: {
+          action: 'waitlist_invite',
           invites: [
             {
               email: entry.email,

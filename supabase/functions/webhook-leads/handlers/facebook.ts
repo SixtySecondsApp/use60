@@ -18,9 +18,8 @@
  * }
  */
 
-;
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
-import { getCorsHeaders, handleCorsPreflightRequest } from '../../../_shared/corsHelper.ts';
+import { getCorsHeaders, handleCorsPreflightRequest } from '../../_shared/corsHelper.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -238,4 +237,4 @@ export async function handleWebhook(req: Request): Promise<Response> {
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}

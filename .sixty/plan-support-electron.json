@@ -1,0 +1,291 @@
+{
+  "feature": {
+    "id": "support-electron-readiness",
+    "name": "Support System — Electron App Readiness",
+    "status": "pending",
+    "consultReport": ".sixty/consult/support-electron-readiness.md",
+    "createdAt": "2026-03-06"
+  },
+  "stories": [
+    {
+      "id": "SUP-001",
+      "feature": "support-electron-readiness",
+      "title": "Add support tables to Supabase Realtime publication",
+      "type": "schema",
+      "status": "pending",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["support_tickets", "support_messages"]
+      },
+      "blocks": ["SUP-008"],
+      "parallelWith": ["SUP-002", "SUP-004", "SUP-007"],
+      "acceptance": [
+        "support_messages added to supabase_realtime publication",
+        "support_tickets confirmed in supabase_realtime publication",
+        "Realtime events fire on INSERT/UPDATE/DELETE for both tables",
+        "Migration is idempotent (IF NOT EXISTS pattern)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260307000001_support_realtime_publication.sql"
+      ]
+    },
+    {
+      "id": "SUP-002",
+      "feature": "support-electron-readiness",
+      "title": "Auto-create in-app notifications on support events",
+      "type": "schema",
+      "status": "pending",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["support_tickets", "support_messages", "notifications"]
+      },
+      "blocks": [],
+      "parallelWith": ["SUP-001", "SUP-003"],
+      "acceptance": [
+        "DB trigger on support_messages INSERT creates notification for ticket owner when sender_type='agent'",
+        "DB trigger on support_messages INSERT creates notification for platform admins when sender_type='user'",
+        "DB trigger on support_tickets UPDATE (status change) creates notification for ticket owner",
+        "Notifications have correct category='support', entity_type='support_ticket', entity_id, action_url",
+        "No duplicate notifications for the message sender themselves"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260307000002_support_notification_triggers.sql"
+      ]
+    },
+    {
+      "id": "SUP-003",
+      "feature": "support-electron-readiness",
+      "title": "Auto-trigger email+Slack notifications on new messages and status changes",
+      "type": "schema",
+      "status": "pending",
+      "priority": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["support_tickets", "support_messages"]
+      },
+      "blocks": [],
+      "parallelWith": ["SUP-001", "SUP-002"],
+      "acceptance": [
+        "DB trigger on support_messages INSERT calls support-ticket-notification edge function via pg_net with event='new_reply'",
+        "DB trigger on support_tickets UPDATE (status change) calls edge function via pg_net with event='status_changed'",
+        "pg_net calls use SUPABASE_URL and service_role key from vault or env",
+        "Existing manual call from useSupportTickets (ticket creation) still works alongside trigger"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260307000003_support_auto_notify_edge_fn.sql"
+      ]
+    },
+    {
+      "id": "SUP-004",
+      "feature": "support-electron-readiness",
+      "title": "Add internal notes support to support_messages",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["support_messages"]
+      },
+      "blocks": ["SUP-004b"],
+      "parallelWith": ["SUP-001", "SUP-005", "SUP-006"],
+      "acceptance": [
+        "is_internal BOOLEAN DEFAULT false column added to support_messages",
+        "RLS policy updated: users cannot SELECT messages where is_internal=true",
+        "Platform admin and org admin policies unchanged (can see all)",
+        "Existing data unaffected (all existing messages get is_internal=false)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260307000004_support_internal_notes.sql"
+      ]
+    },
+    {
+      "id": "SUP-004b",
+      "feature": "support-electron-readiness",
+      "title": "Update hooks and UI for internal notes",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": ["SUP-004"],
+        "files": ["src/lib/hooks/useSupportMessages.ts"],
+        "schema": ["support_messages"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "useSupportMessages filters out is_internal=true for non-admin users",
+        "useSendSupportMessage accepts is_internal parameter",
+        "SupportAgentDashboard shows internal notes with visual distinction (yellow/muted badge)",
+        "Internal note toggle in message compose area for admins"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/hooks/useSupportMessages.ts",
+        "src/components/support/SupportAgentDashboard.tsx"
+      ]
+    },
+    {
+      "id": "SUP-005",
+      "feature": "support-electron-readiness",
+      "title": "Create support_canned_responses table and hook",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SUP-005b"],
+      "parallelWith": ["SUP-004", "SUP-006"],
+      "acceptance": [
+        "support_canned_responses table created with id, org_id (nullable), title, content, category, shortcut, created_by, created_at, updated_at",
+        "RLS: platform admins can CRUD all, org admins can CRUD their org's responses",
+        "Indexes on org_id and category",
+        "React hook useCannedResponses with list, create, update, delete mutations"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260307000005_support_canned_responses.sql",
+        "src/lib/hooks/useCannedResponses.ts"
+      ]
+    },
+    {
+      "id": "SUP-005b",
+      "feature": "support-electron-readiness",
+      "title": "Canned responses UI in admin dashboard",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": ["SUP-005"],
+        "files": ["src/components/support/SupportAgentDashboard.tsx"],
+        "schema": ["support_canned_responses"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Canned response picker dropdown in message compose area",
+        "Clicking a canned response inserts its content into the message field",
+        "Manage canned responses panel (create, edit, delete) accessible from settings or support dashboard",
+        "Category filter in picker for quick search"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/support/SupportAgentDashboard.tsx",
+        "src/components/support/CannedResponsePicker.tsx"
+      ]
+    },
+    {
+      "id": "SUP-006",
+      "feature": "support-electron-readiness",
+      "title": "Add SLA tracking columns and auto-calculation",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["support_tickets"]
+      },
+      "blocks": ["SUP-006b"],
+      "parallelWith": ["SUP-004", "SUP-005"],
+      "acceptance": [
+        "first_response_at TIMESTAMPTZ column added (auto-set on first agent reply via trigger)",
+        "sla_response_hours INTEGER column added (default based on priority: urgent=1, high=4, medium=8, low=24)",
+        "sla_breached BOOLEAN DEFAULT false column added (auto-set by trigger when NOW() > created_at + sla_response_hours AND first_response_at IS NULL)",
+        "Trigger recalculates sla_breached on ticket update and periodically"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260307000006_support_sla_tracking.sql"
+      ]
+    },
+    {
+      "id": "SUP-006b",
+      "feature": "support-electron-readiness",
+      "title": "SLA display in admin support UI",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": ["SUP-006"],
+        "files": ["src/pages/platform/SupportTicketsPage.tsx"],
+        "schema": ["support_tickets"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "SLA countdown badge on ticket list (time remaining to first response)",
+        "Visual indicator when SLA is breached (red badge)",
+        "First response time displayed on resolved tickets",
+        "useSupportTickets hook updated to include SLA columns"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/platform/SupportTicketsPage.tsx",
+        "src/lib/hooks/useSupportTickets.ts"
+      ]
+    },
+    {
+      "id": "SUP-007",
+      "feature": "support-electron-readiness",
+      "title": "Fix support RLS policies to use is_admin_optimized()",
+      "type": "schema",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": ["support_tickets", "support_messages"]
+      },
+      "blocks": [],
+      "parallelWith": ["SUP-001", "SUP-002", "SUP-003"],
+      "acceptance": [
+        "support_tickets_platform_admin_select uses is_admin_optimized() instead of inline SELECT",
+        "support_tickets_platform_admin_update uses is_admin_optimized()",
+        "support_messages_platform_admin_select uses is_admin_optimized()",
+        "support_messages_platform_admin_insert uses is_admin_optimized()"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/migrations/20260307000007_support_rls_fix.sql"
+      ]
+    },
+    {
+      "id": "SUP-008",
+      "feature": "support-electron-readiness",
+      "title": "Add Realtime subscription to support_messages hook",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": {
+        "stories": ["SUP-001"],
+        "files": ["src/lib/hooks/useSupportMessages.ts"],
+        "schema": ["support_messages"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "useSupportMessages subscribes to realtime changes on support_messages filtered by ticket_id",
+        "New messages appear instantly without page refresh",
+        "Subscription cleaned up on unmount",
+        "Works for both web dashboard and Electron (same Supabase client)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/lib/hooks/useSupportMessages.ts"
+      ]
+    }
+  ]
+}

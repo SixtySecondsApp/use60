@@ -38,6 +38,7 @@ interface ColumnHeaderMenuProps {
   onEditButton?: () => void;
   onEditApollo?: () => void;
   onEditInstantly?: () => void;
+  onEditHeygen?: () => void;
   onEditEmailGeneration?: () => void;
   onRegenerateEmails?: () => void;
   onCreateCampaignFromSteps?: () => void;
@@ -70,6 +71,7 @@ export function ColumnHeaderMenu({
   onEditButton,
   onEditApollo,
   onEditInstantly,
+  onEditHeygen,
   onEditEmailGeneration,
   onRegenerateEmails,
   onCreateCampaignFromSteps,
@@ -380,6 +382,18 @@ export function ColumnHeaderMenu({
           label="Edit campaign settings"
           onClick={() => {
             onEditInstantly();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit HeyGen Video settings */}
+      {column.column_type === 'heygen_video' && onEditHeygen && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit video settings"
+          onClick={() => {
+            onEditHeygen();
             onClose();
           }}
         />

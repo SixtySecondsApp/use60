@@ -141,11 +141,11 @@ async function warmupEdgeFunction(): Promise<void> {
     if (!sessionData.session) return;
 
     // Fire-and-forget warmup request - don't wait for response
-    supabase.functions.invoke('hubspot-admin', {
+    supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${sessionData.session.access_token}`,
       },
-      body: { action: 'status', org_id: 'warmup' },
+      body: { action: 'hubspot_admin', sub_action: 'status', org_id: 'warmup' },
     }).catch(() => {
       // Silently ignore warmup failures
     });
@@ -415,11 +415,11 @@ export function createHubSpotTests(orgId: string): IntegrationTest[] {
               console.log(`[HubSpot API Connectivity] Attempt ${attempt + 1}...`);
               const startTime = Date.now();
 
-              response = await supabase.functions.invoke('hubspot-admin', {
+              response = await supabase.functions.invoke('crm-admin-router', {
                 headers: {
                   Authorization: `Bearer ${sessionData.session.access_token}`,
                 },
-                body: { action: 'get_pipelines', org_id: orgId },
+                body: { action: 'hubspot_admin', sub_action: 'get_pipelines', org_id: orgId },
               });
 
               const duration = Date.now() - startTime;
@@ -1250,12 +1250,13 @@ export function createHubSpotTests(orgId: string): IntegrationTest[] {
 
           // Try to get properties as a health check
           const startTime = Date.now();
-          const response = await supabase.functions.invoke('hubspot-admin', {
+          const response = await supabase.functions.invoke('crm-admin-router', {
             headers: {
               Authorization: `Bearer ${sessionData.session.access_token}`,
             },
             body: {
-              action: 'get_properties',
+              action: 'hubspot_admin',
+              sub_action: 'get_properties',
               org_id: orgId,
               object_type: 'contact',
             },

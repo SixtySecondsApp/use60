@@ -68,7 +68,7 @@ serve(async (req: Request) => {
     if (sourceRows.length === 0 && dataSource.type === 'meetings') {
       let meetQuery = supabase
         .from('meetings')
-        .select('id, title, meeting_start, owner_user_id, transcript_text, contact_id, primary_contact_id, summary, sentiment_score')
+        .select('id, title, meeting_start, owner_user_id, transcript_text, contact_id, primary_contact_id, company_id, summary, sentiment_score')
         .eq('org_id', org_id)
         .not('transcript_text', 'is', null)
         .order('meeting_start', { ascending: false })
@@ -90,25 +90,319 @@ serve(async (req: Request) => {
       if (contactIds.length > 0) {
         const { data: contacts } = await supabase
           .from('contacts')
-          .select('id, first_name, last_name, company')
+          .select('id, first_name, last_name, company, company_id, email')
           .in('id', contactIds)
         for (const c of contacts ?? []) {
-          contactMap[c.id] = { first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '' }
+          contactMap[c.id] = { first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '', company_id: c.company_id ?? '', email: c.email ?? '' }
+        }
+      }
+
+      // Batch-fetch company names from companies table
+      const companyIds = new Set<string>()
+      for (const m of meetings ?? []) {
+        if (m.company_id) companyIds.add(m.company_id)
+      }
+      for (const c of Object.values(contactMap)) {
+        if (c.company_id) companyIds.add(c.company_id)
+      }
+      let companyMap: Record<string, { name: string; domain: string }> = {}
+      if (companyIds.size > 0) {
+        const { data: companies } = await supabase
+          .from('companies')
+          .select('id, name, domain')
+          .in('id', Array.from(companyIds))
+        for (const co of companies ?? []) {
+          companyMap[co.id] = { name: co.name ?? '', domain: co.domain ?? '' }
+        }
+      }
+
+      // Fetch meeting_attendees as fallback when contact_id is null
+      const meetingIds = (meetings ?? []).map(m => m.id).filter(Boolean)
+      // Collect ALL external attendees per meeting so we can pick the best match
+      let allAttendeesMap: Record<string, Array<{ name: string; email: string }>> = {}
+      let attendeeMap: Record<string, { first_name: string; last_name: string; email: string }> = {}
+      if (meetingIds.length > 0) {
+        const { data: attendees } = await supabase
+          .from('meeting_attendees')
+          .select('meeting_id, name, email, is_external')
+          .in('meeting_id', meetingIds)
+          .eq('is_external', true)
+        for (const a of attendees ?? []) {
+          if (!allAttendeesMap[a.meeting_id]) allAttendeesMap[a.meeting_id] = []
+          allAttendeesMap[a.meeting_id].push({ name: a.name ?? '', email: a.email ?? '' })
+        }
+      }
+
+      // Build profileMap early so we can use rep names for title matching
+      const ownerIds = (meetings ?? []).map(m => m.owner_user_id).filter(Boolean)
+      const uniqueOwnerIds = [...new Set(ownerIds)]
+      let profileMap: Record<string, string> = {}
+      if (uniqueOwnerIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .in('id', uniqueOwnerIds)
+        for (const p of profiles ?? []) {
+          const name = [p.first_name, p.last_name].filter(Boolean).join(' ')
+          profileMap[p.id] = name || p.email || 'Unknown Rep'
+        }
+      }
+
+      // Helper: parse meeting title as prospect name (fallback for 1:1 sales calls)
+      const skipTitleWords = ['stand up', 'standup', 'check-in', 'checkin', 'catch up', 'catchup', 'sync', 'meeting', 'internal', 'team', 'weekly', 'biweekly', 'impromptu', 'google meet', 'pipeline', 'demo']
+      function parseTitleAsName(title: string, repName?: string): { first_name: string; last_name: string } | null {
+        if (!title) return null
+        const lower = title.toLowerCase()
+        if (skipTitleWords.some(w => lower.includes(w))) return null
+        if (title.includes('<>')) return null
+
+        // Handle "Name and Name" or "Name & Name" titles — pick the non-rep person
+        const andMatch = title.match(/^(.+?)\s+(?:and|&)\s+(.+)$/i)
+        if (andMatch) {
+          const [, personA, personB] = andMatch
+          if (repName) {
+            const repLower = repName.toLowerCase().trim()
+            const aLower = personA.trim().toLowerCase()
+            const bLower = personB.trim().toLowerCase()
+            const prospect = repLower.startsWith(aLower.split(' ')[0]) || aLower.startsWith(repLower.split(' ')[0])
+              ? personB.trim()
+              : personA.trim()
+            const parts = prospect.split(/\s+/)
+            return { first_name: parts[0], last_name: parts.slice(1).join(' ') }
+          }
+          const parts = personB.trim().split(/\s+/)
+          return { first_name: parts[0], last_name: parts.slice(1).join(' ') }
+        }
+
+        // Handle "Name — Name" or "Name - Name" separator titles
+        const sepMatch = title.match(/^(.+?)\s*(?:—|-)\s*(.+)$/)
+        if (sepMatch) {
+          const [, personA, personB] = sepMatch
+          if (repName) {
+            const repLower = repName.toLowerCase().trim()
+            const aLower = personA.trim().toLowerCase()
+            const prospect = repLower.startsWith(aLower.split(' ')[0]) || aLower.startsWith(repLower.split(' ')[0])
+              ? personB.trim()
+              : personA.trim()
+            const parts = prospect.split(/\s+/)
+            return { first_name: parts[0], last_name: parts.slice(1).join(' ') }
+          }
+          const parts = personB.trim().split(/\s+/)
+          return { first_name: parts[0], last_name: parts.slice(1).join(' ') }
+        }
+
+        // Simple single-name title (e.g. "James Bedford")
+        const parts = title.trim().split(/\s+/)
+        if (parts.length < 1 || parts.length > 4) return null
+        return { first_name: parts[0], last_name: parts.slice(1).join(' ') }
+      }
+
+      // Resolve best attendee per meeting using title matching
+      for (const meeting of meetings ?? []) {
+        const candidates = allAttendeesMap[meeting.id] ?? []
+        if (candidates.length === 0) continue
+
+        let bestCandidate = candidates[0]
+
+        if (candidates.length > 1 && meeting.title) {
+          // Parse the title to find the prospect name, excluding the rep
+          const repName = meeting.owner_user_id ? profileMap[meeting.owner_user_id] : undefined
+          const titleParsed = parseTitleAsName(meeting.title, repName)
+
+          if (titleParsed) {
+            // Match attendees against the name extracted from the title
+            const titleFirst = titleParsed.first_name.toLowerCase()
+            const titleLast = titleParsed.last_name.toLowerCase()
+            const matched = candidates.find(c => {
+              const nameLower = (c.name ?? '').toLowerCase()
+              return nameLower.includes(titleFirst) && (!titleLast || nameLower.includes(titleLast))
+            })
+            if (matched) bestCandidate = matched
+          } else {
+            // No parseable title — try matching each attendee name against the raw title
+            const titleLower = meeting.title.toLowerCase()
+            const matched = candidates.find(c => {
+              const firstName = (c.name ?? '').split(' ')[0]?.toLowerCase()
+              return firstName && firstName.length > 1 && titleLower.includes(firstName)
+            })
+            if (matched) bestCandidate = matched
+          }
+        }
+
+        const parts = (bestCandidate.name ?? '').split(' ')
+        attendeeMap[meeting.id] = {
+          first_name: parts[0] ?? '',
+          last_name: parts.slice(1).join(' ') ?? '',
+          email: bestCandidate.email ?? '',
+        }
+      }
+
+      // Try to match attendee emails to contacts for company info
+      const attendeeEmails = Object.values(attendeeMap).map(a => a.email).filter(Boolean)
+      let emailContactMap: Record<string, { company: string }> = {}
+      if (attendeeEmails.length > 0) {
+        const { data: emailContacts } = await supabase
+          .from('contacts')
+          .select('email, company')
+          .in('email', attendeeEmails)
+        for (const c of emailContacts ?? []) {
+          if (c.email && c.company) {
+            emailContactMap[c.email] = { company: c.company }
+          }
         }
       }
 
       for (const meeting of meetings ?? []) {
         const resolvedContactId = meeting.contact_id ?? meeting.primary_contact_id
-        const contact = resolvedContactId ? contactMap[resolvedContactId] : null
+        let contact = resolvedContactId ? contactMap[resolvedContactId] : null
+        let attendee = attendeeMap[meeting.id] ?? null
+        const repName = meeting.owner_user_id ? profileMap[meeting.owner_user_id] : undefined
+
+        // Helper: check if a name matches the rep
+        function isRep(firstName: string, lastName: string, repFullName?: string): boolean {
+          if (!repFullName) return false
+          const repLower = repFullName.toLowerCase().trim()
+          const first = (firstName ?? '').toLowerCase().trim()
+          const last = (lastName ?? '').toLowerCase().trim()
+          const fullName = [first, last].filter(Boolean).join(' ')
+          // Exact full name match
+          if (fullName === repLower) return true
+          // First name match (handles cases where last name is missing or different format)
+          const repFirst = repLower.split(' ')[0]
+          const repLast = repLower.split(' ').slice(1).join(' ')
+          if (first && repFirst && first === repFirst && (!last || !repLast || last === repLast)) return true
+          return false
+        }
+
+        // Guard: if the resolved contact IS the rep, discard and fall back to attendee
+        if (contact && isRep(contact.first_name, contact.last_name, repName)) {
+          console.log(`[setup-pipeline-template] Contact "${contact.first_name} ${contact.last_name}" matches rep "${repName}", falling back to attendee`)
+          contact = null
+        }
+
+        // Guard: if the resolved attendee IS the rep, try the next candidate
+        if (attendee && isRep(attendee.first_name, attendee.last_name, repName)) {
+          console.log(`[setup-pipeline-template] Attendee "${attendee.first_name} ${attendee.last_name}" matches rep "${repName}", picking alternate`)
+          const candidates = allAttendeesMap[meeting.id] ?? []
+          const alternate = candidates.find(c => {
+            const cParts = (c.name ?? '').split(' ')
+            return !isRep(cParts[0] ?? '', cParts.slice(1).join(' '), repName)
+          })
+          if (alternate) {
+            const parts = (alternate.name ?? '').split(' ')
+            attendee = { first_name: parts[0] ?? '', last_name: parts.slice(1).join(' ') ?? '', email: alternate.email ?? '' }
+          } else {
+            attendee = null
+          }
+        }
+
+        // Extra guard: if STILL no contact/attendee resolved, or the name ended up matching the rep anyway,
+        // parse the title to find the prospect (the non-rep person)
+        const resolvedFirstName = contact?.first_name || attendee?.first_name || ''
+        if (isRep(resolvedFirstName, contact?.last_name || attendee?.last_name || '', repName) || (!contact && !attendee)) {
+          contact = null
+          // Don't use attendee if it matched the rep
+          if (attendee && isRep(attendee.first_name, attendee.last_name, repName)) attendee = null
+        }
+
+        const attendeeCompany = attendee?.email ? emailContactMap[attendee.email]?.company : null
+        let titleName = (!contact && !attendee) ? parseTitleAsName(meeting.title ?? '', repName) : null
+        // Final guard on title-parsed name: if it still matches the rep, discard it
+        if (titleName && isRep(titleName.first_name, titleName.last_name, repName)) {
+          console.log(`[setup-pipeline-template] Title-parsed name "${titleName.first_name} ${titleName.last_name}" matches rep, discarding`)
+          titleName = null
+        }
+
+        // If we still have nothing, try to extract the OTHER speaker from the transcript
+        if (!contact && !attendee && !titleName && meeting.transcript_text && repName) {
+          const speakerMatch = meeting.transcript_text.match(/\[[\d:]+\]\s+([^:]+):/g)
+          if (speakerMatch) {
+            const speakers = [...new Set(speakerMatch.map((s: string) => s.replace(/\[[\d:]+\]\s+/, '').replace(':', '').trim()))]
+            const prospect = speakers.find((s: string) => !isRep(s.split(' ')[0], s.split(' ').slice(1).join(' '), repName))
+            if (prospect) {
+              const parts = prospect.split(' ')
+              titleName = { first_name: parts[0], last_name: parts.slice(1).join(' ') }
+              console.log(`[setup-pipeline-template] Extracted prospect "${prospect}" from transcript speakers`)
+            }
+          }
+        }
+
+        const finalFirst = contact?.first_name || attendee?.first_name || titleName?.first_name || 'Unknown'
+        const finalLast = contact?.last_name || attendee?.last_name || titleName?.last_name || ''
+
+        // Build a set of all known person names to check company against
+        const knownPersonNames = new Set<string>()
+        // Add prospect name
+        const prospectFull = `${finalFirst} ${finalLast}`.toLowerCase().trim()
+        if (prospectFull.length > 1) knownPersonNames.add(prospectFull)
+        if (finalFirst.toLowerCase().trim().length > 1) knownPersonNames.add(finalFirst.toLowerCase().trim())
+        // Add rep name
+        if (repName) knownPersonNames.add(repName.toLowerCase().trim())
+        // Add all attendee names for this meeting
+        const allCandidates = allAttendeesMap[meeting.id] ?? []
+        for (const c of allCandidates) {
+          const n = (c.name ?? '').toLowerCase().trim()
+          if (n.length > 1) knownPersonNames.add(n)
+        }
+
+        // Helper: detect if a string looks like a person name (e.g. "Louise Laurie", "Paul E Ryder")
+        function looksLikePersonName(val: string): boolean {
+          if (!val) return false
+          const words = val.trim().split(/\s+/)
+          if (words.length < 2 || words.length > 4) return false
+          // All words start with uppercase and are short (typical name parts)
+          return words.every(w => /^[A-Z][a-z]*$/.test(w) && w.length <= 15)
+        }
+
+        // Try all company sources in order, skip any that match a person name
+        // Priority: meeting.company_id -> contact.company -> contact.company_id -> attendeeCompany -> domain
+        const meetingCo = meeting.company_id ? companyMap[meeting.company_id] : null
+        const contactCo = contact?.company_id ? companyMap[contact.company_id] : null
+        const companyCandidates = [
+          meetingCo?.name,
+          contact?.company,
+          contactCo?.name,
+          attendeeCompany
+        ].filter(Boolean) as string[]
+        let cleanCompany = ''
+        for (const candidate of companyCandidates) {
+          const candidateLower = candidate.toLowerCase().trim()
+          if (knownPersonNames.has(candidateLower)) {
+            console.log(`[setup-pipeline-template] Company "${candidate}" matches a known person name, skipping`)
+            continue
+          }
+          if (looksLikePersonName(candidate)) {
+            console.log(`[setup-pipeline-template] Company "${candidate}" looks like a person name, skipping`)
+            continue
+          }
+          cleanCompany = candidate
+          break
+        }
+
+        // Fallback: use domain from companies table or extract from attendee email
+        if (!cleanCompany) {
+          const coDomain = meetingCo?.domain || contactCo?.domain || ''
+          const prospectEmail = attendee?.email || ''
+          const emailDomain = prospectEmail ? (prospectEmail.split('@')[1] ?? '') : ''
+          const domain = coDomain || emailDomain
+          const genericDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'live.com', 'me.com', 'protonmail.com', 'mail.com']
+          if (domain && !genericDomains.includes(domain.toLowerCase())) {
+            cleanCompany = domain.split('.')[0]
+            console.log(`[setup-pipeline-template] Extracted company "${cleanCompany}" from domain "${domain}"`)
+          }
+        }
+
         const row: Record<string, string> = {}
         const mapping = dataSource.column_mapping ?? {}
 
         for (const [templateCol, sourceCol] of Object.entries(mapping)) {
-          if (sourceCol === 'contact_first_name') row[templateCol] = contact?.first_name ?? 'Unknown'
-          else if (sourceCol === 'contact_last_name') row[templateCol] = contact?.last_name ?? ''
-          else if (sourceCol === 'contact_company') row[templateCol] = contact?.company ?? meeting.title ?? ''
+          if (sourceCol === 'contact_first_name') row[templateCol] = finalFirst
+          else if (sourceCol === 'contact_last_name') row[templateCol] = finalLast
+          else if (sourceCol === 'contact_email') row[templateCol] = contact?.email || attendee?.email || ''
+          else if (sourceCol === 'contact_company') row[templateCol] = cleanCompany
           else if (sourceCol === 'meeting_date') row[templateCol] = meeting.meeting_start ?? ''
-          else if (sourceCol === 'transcript_text') row[templateCol] = (meeting.transcript_text ?? '').slice(0, 10000)
+          else if (sourceCol === 'transcript_text') row[templateCol] = meeting.transcript_text ?? ''
+          else if (sourceCol === 'rep_name') row[templateCol] = meeting.owner_user_id ? (profileMap[meeting.owner_user_id] ?? 'Unknown Rep') : 'Unknown Rep'
         }
         sourceRows.push(row)
       }
@@ -218,7 +512,7 @@ serve(async (req: Request) => {
       column_type: col.column_type,
       position: col.position,
       width: col.width ?? 150,
-      is_visible: true,
+      is_visible: col.is_visible !== false,
       is_enrichment: false,
       ...(col.formula_expression ? { formula_expression: col.formula_expression } : {}),
       ...(col.action_config ? { action_config: col.action_config } : {}),

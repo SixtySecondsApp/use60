@@ -334,13 +334,19 @@ const ApiTesting: React.FC = () => {
       }
 
       // Mock API call for now - replace with actual Edge Function call
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-proxy`, {
+      const proxyBody = JSON.stringify({
+        action: 'proxy',
         method,
+        ...(method !== 'GET' && body ? JSON.parse(body) : {}),
+      });
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-services-router`, {
+        method: 'POST',
         headers: {
           ...parsedHeaders,
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
         },
-        body: method !== 'GET' ? body : undefined
+        body: proxyBody
       });
 
       const responseText = await response.text();

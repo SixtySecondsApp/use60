@@ -237,9 +237,9 @@ async function triggerDeactivationNotifications(orgId: string, reason: string): 
 
     // Call edge function to send notifications
     const { error: notificationError } = await supabase.functions.invoke(
-      'send-org-deactivation-email',
+      'send-router',
       {
-        body: notificationPayload
+        body: { action: 'org_deactivation_email', ...notificationPayload }
       }
     );
 

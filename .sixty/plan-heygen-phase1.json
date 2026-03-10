@@ -1,0 +1,447 @@
+{
+  "project": {
+    "name": "HeyGen Phase 1: Avatar Creator + Personalized Video Outreach",
+    "template": null,
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind"
+    },
+    "createdAt": "2026-03-06T00:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "heygen-infra",
+      "name": "HeyGen Infrastructure",
+      "status": "pending",
+      "description": "Database schema, credential storage, shared API client, webhook handler"
+    },
+    {
+      "id": "avatar-creator",
+      "name": "AI Avatar Creator",
+      "status": "pending",
+      "description": "One-click avatar setup: photo upload, LORA training, look generation, voice selection"
+    },
+    {
+      "id": "video-outreach",
+      "name": "Personalized Video Outreach",
+      "status": "pending",
+      "description": "Template-based personalized video generation integrated with Ops campaigns and Instantly push"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "HG-001",
+      "feature": "heygen-infra",
+      "title": "Database migration: HeyGen credential + avatar storage schema",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": ["organizations", "integration_credentials"] },
+      "blocks": ["HG-002", "HG-003", "HG-004"],
+      "parallelWith": [],
+      "acceptance": [
+        "heygen_org_credentials table created (org_id, api_key, plan_tier) with service-role-only RLS",
+        "heygen_avatars table created (id, org_id, user_id, heygen_avatar_id, heygen_group_id, avatar_type, status, looks JSONB, voice_id, thumbnail_url)",
+        "heygen_videos table created (id, org_id, user_id, heygen_video_id, template_id, status, video_url, thumbnail_url, prospect_data JSONB, campaign_link_id, expires_at)",
+        "Indexes on org_id, user_id, status, campaign_link_id",
+        "Migration is re-runnable (IF NOT EXISTS, DROP POLICY IF EXISTS)"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260306000001_heygen_integration_schema.sql"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-002",
+      "feature": "heygen-infra",
+      "title": "Shared HeyGen API client (_shared/heygen.ts)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["HG-001"], "files": [], "schema": ["heygen_org_credentials"] },
+      "blocks": ["HG-004", "HG-005", "HG-006", "HG-008", "HG-009"],
+      "parallelWith": ["HG-003"],
+      "acceptance": [
+        "HeyGenClient class with typed methods: listAvatars(), createPhotoAvatar(), trainAvatar(), getTrainingStatus(), generateLook(), addMotion(), generateVideo(), getVideoStatus(), listVoices()",
+        "Auth via x-api-key header, base URL https://api.heygen.com",
+        "Typed request/response interfaces for all endpoints",
+        "Error handling with typed HeyGenError (status, message, code)",
+        "Rate limit awareness (retry-after header respect)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/_shared/heygen.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-003",
+      "feature": "heygen-infra",
+      "title": "HeyGen admin edge function (credential management + avatar listing)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["HG-001"], "files": [], "schema": ["heygen_org_credentials"] },
+      "blocks": ["HG-007"],
+      "parallelWith": ["HG-002"],
+      "acceptance": [
+        "POST /heygen-admin with actions: save_credentials, test_credentials, list_voices, get_account_info",
+        "save_credentials stores API key in heygen_org_credentials (service role)",
+        "test_credentials calls HeyGen /v2/avatars to verify key works",
+        "list_voices returns available TTS voices from HeyGen",
+        "Auth: JWT validated, org membership + admin role checked (matches hubspot-admin pattern)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/heygen-admin/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-004",
+      "feature": "avatar-creator",
+      "title": "Avatar creation edge function (photo upload + training pipeline)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["HG-001", "HG-002"], "files": ["supabase/functions/_shared/heygen.ts"], "schema": ["heygen_avatars"] },
+      "blocks": ["HG-005", "HG-006", "HG-008"],
+      "parallelWith": [],
+      "acceptance": [
+        "POST /heygen-avatar-create with actions: generate_photo, upload_photo, create_group, train, check_training_status, generate_look, add_motion",
+        "generate_photo: calls /v2/photo_avatar/photo/generate with name, age, gender, ethnicity, orientation, pose, style, appearance",
+        "create_group + train: creates avatar group, kicks off LORA training, stores group_id in heygen_avatars",
+        "generate_look: creates new looks (professional, casual, branded) after training completes",
+        "add_motion: adds motion to final avatar look",
+        "All status updates written to heygen_avatars table (status: creating, training, ready, failed)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/heygen-avatar-create/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-005",
+      "feature": "avatar-creator",
+      "title": "Avatar status polling edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["HG-002", "HG-004"], "files": ["supabase/functions/_shared/heygen.ts"], "schema": ["heygen_avatars"] },
+      "blocks": ["HG-008"],
+      "parallelWith": ["HG-006"],
+      "acceptance": [
+        "POST /heygen-avatar-status with avatar_id parameter",
+        "Checks training status via /v2/photo_avatar/train/status/{group_id}",
+        "Checks generation status via /v2/photo_avatar/generation/{generation_id}",
+        "Updates heygen_avatars.status and heygen_avatars.looks JSONB on completion",
+        "Returns current status + thumbnail URLs for completed looks"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/heygen-avatar-status/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-006",
+      "feature": "avatar-creator",
+      "title": "Voice listing and selection edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["HG-002"], "files": ["supabase/functions/_shared/heygen.ts"], "schema": ["heygen_avatars"] },
+      "blocks": ["HG-008"],
+      "parallelWith": ["HG-005"],
+      "acceptance": [
+        "GET /heygen-voices returns available voices from HeyGen with language, gender, preview_url",
+        "Saves selected voice_id to heygen_avatars record",
+        "Filters by language and gender for easy UI selection",
+        "Caches voice list in-memory (voices don't change often)"
+      ],
+      "estimatedMinutes": 15,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/heygen-voices/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-007",
+      "feature": "heygen-infra",
+      "title": "HeyGen integration settings UI (API key + connection status)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": ["HG-003"], "files": [], "schema": [] },
+      "blocks": ["HG-008"],
+      "parallelWith": ["HG-004", "HG-005", "HG-006"],
+      "acceptance": [
+        "New HeyGen card on Integrations settings page (follows Instantly/HubSpot pattern)",
+        "API key input with save + test connection button",
+        "Connection status indicator (connected/disconnected/error)",
+        "Account info display (plan tier, credits remaining) after connection",
+        "Uses IntegrationCard component pattern from existing integrations"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/features/settings/integrations/HeyGenIntegrationCard.tsx",
+        "src/lib/hooks/useHeyGenIntegration.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-008",
+      "feature": "avatar-creator",
+      "title": "Avatar Creator UI (guided setup wizard)",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["HG-004", "HG-005", "HG-006", "HG-007"], "files": [], "schema": ["heygen_avatars"] },
+      "blocks": ["HG-009", "HG-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "New 'Create Your AI Avatar' page accessible from Settings or onboarding",
+        "Step 1: Upload photo OR generate AI photo (gender, ethnicity, age, style selectors)",
+        "Step 2: Training progress indicator with polling (auto-advances when LORA training completes)",
+        "Step 3: Look generation — preview 3 auto-generated looks (professional, casual, branded) with thumbnails",
+        "Step 4: Voice selection — searchable voice list with audio preview, save to heygen_avatars.voice_id",
+        "Final state: 'Your avatar is ready!' with preview thumbnail and 'Use in Outreach' CTA"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/features/settings/heygen/AvatarCreatorWizard.tsx",
+        "src/features/settings/heygen/steps/PhotoUploadStep.tsx",
+        "src/features/settings/heygen/steps/TrainingStep.tsx",
+        "src/features/settings/heygen/steps/LooksStep.tsx",
+        "src/features/settings/heygen/steps/VoiceStep.tsx",
+        "src/features/settings/heygen/useAvatarCreator.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-009",
+      "feature": "video-outreach",
+      "title": "Video generation edge function (personalized video from template)",
+      "type": "backend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["HG-002", "HG-008"], "files": ["supabase/functions/_shared/heygen.ts"], "schema": ["heygen_videos", "heygen_avatars"] },
+      "blocks": ["HG-010", "HG-011", "HG-012"],
+      "parallelWith": [],
+      "acceptance": [
+        "POST /heygen-video-generate accepts: avatar_id (from heygen_avatars), script_template, variables (first_name, company, pain_point, etc.), callback_url",
+        "Resolves avatar look + voice from heygen_avatars record",
+        "Calls POST /v2/video/generate with character (avatar), voice (text input with variable substitution), background",
+        "Stores heygen_video_id + status in heygen_videos table",
+        "Supports batch mode: accepts array of prospect variables, generates one video per prospect (max 50)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/heygen-video-generate/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-010",
+      "feature": "video-outreach",
+      "title": "Video status webhook + polling edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["HG-009"], "files": [], "schema": ["heygen_videos"] },
+      "blocks": ["HG-012"],
+      "parallelWith": ["HG-011"],
+      "acceptance": [
+        "POST /heygen-video-webhook receives HeyGen callback with video_id + status",
+        "On completed: fetches video URL from GET /v1/video_status.get, stores in heygen_videos.video_url",
+        "On failed: updates heygen_videos.status to 'failed' with error message",
+        "Fallback polling: GET /heygen-video-status?video_id= for manual status check",
+        "Public endpoint (webhook) — validates via callback_id matching"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/heygen-video-webhook/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-011",
+      "feature": "video-outreach",
+      "title": "Integrate video generation into campaign-outreach-draft",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": ["HG-009"], "files": ["supabase/functions/campaign-outreach-draft/index.ts"], "schema": ["heygen_videos", "heygen_avatars"] },
+      "blocks": ["HG-012"],
+      "parallelWith": ["HG-010"],
+      "acceptance": [
+        "campaign-outreach-draft accepts optional include_video: true flag",
+        "When include_video=true: generates video script alongside email/LinkedIn copy",
+        "Video script is shorter (15-30 sec), conversational, mentions prospect by name",
+        "Calls heygen-video-generate internally with the generated script + prospect variables",
+        "Returns video_id in response alongside text draft for async video URL resolution"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/campaign-outreach-draft/index.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-012",
+      "feature": "video-outreach",
+      "title": "Ops table video column + Instantly push integration",
+      "type": "backend",
+      "status": "pending",
+      "priority": 8,
+      "dependencies": { "stories": ["HG-009", "HG-010", "HG-011"], "files": ["supabase/functions/push-to-instantly/index.ts"], "schema": ["heygen_videos"] },
+      "blocks": ["HG-013", "HG-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "New integration_type 'heygen_video' for dynamic_table_columns",
+        "heygen_video column displays: thumbnail + status badge (pending/generating/ready/failed)",
+        "Batch video generation trigger: select rows in Ops table, click 'Generate Videos', kicks off heygen-video-generate for each row",
+        "push-to-instantly includes video URL as custom_variable (e.g., {{video_url}}) when heygen_video column has a ready video",
+        "Video URLs resolve from heygen_videos table by matching campaign_link_id or row_id"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/push-to-instantly/index.ts",
+        "src/lib/types/heygen.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-013",
+      "feature": "video-outreach",
+      "title": "OutreachComposer video toggle + preview",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 9,
+      "dependencies": { "stories": ["HG-012"], "files": [], "schema": [] },
+      "blocks": ["HG-014"],
+      "parallelWith": [],
+      "acceptance": [
+        "Toggle in OutreachComposer: 'Include personalized video' (only visible if avatar exists)",
+        "When enabled: shows video script preview below email/LinkedIn draft",
+        "Video generation status indicator (spinner while generating, thumbnail when ready)",
+        "Click thumbnail to preview video in modal",
+        "Video URL auto-inserted as [VIDEO_LINK] placeholder in email body"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/pages/OutreachComposer.tsx",
+        "packages/landing/src/components/VideoPreviewCard.tsx"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "HG-014",
+      "feature": "video-outreach",
+      "title": "Ops table batch video generation UI + status column renderer",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "dependencies": { "stories": ["HG-012", "HG-013"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New column renderer for heygen_video type: shows thumbnail + status badge in cell",
+        "Bulk action: select rows -> 'Generate Videos' button in toolbar",
+        "Progress indicator: X of Y videos generating, with per-row status updates",
+        "Click cell to expand video preview + copy video URL",
+        "Column auto-created when 'Generate Videos' action is first used on a table"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "src/features/ops/columns/HeyGenVideoCell.tsx",
+        "src/features/ops/actions/GenerateVideosAction.tsx",
+        "src/features/ops/hooks/useHeyGenVideos.ts"
+      ],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 14,
+    "completedStories": 14,
+    "currentFeature": null,
+    "lastUpdated": "2026-03-06T17:00:00Z",
+    "status": "complete"
+  }
+}
