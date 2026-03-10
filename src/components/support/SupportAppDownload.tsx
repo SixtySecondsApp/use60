@@ -22,7 +22,8 @@ interface SupportAppDownloadProps {
 
 export function SupportAppDownload({ isAdmin }: SupportAppDownloadProps) {
   const [windowsUrl, setWindowsUrl] = useState<string | null>(null);
-  const [macUrl, setMacUrl] = useState<string | null>(null);
+  const [macArm64Url, setMacArm64Url] = useState<string | null>(null);
+  const [macX64Url, setMacX64Url] = useState<string | null>(null);
   const [hasRelease, setHasRelease] = useState(false);
 
   useEffect(() => {
@@ -34,9 +35,16 @@ export function SupportAppDownload({ isAdmin }: SupportAppDownloadProps) {
         setHasRelease(true);
         const assets: ReleaseAsset[] = data.assets;
         const win = assets.find((a) => a.name.endsWith('.exe'));
-        const mac = assets.find((a) => a.name.endsWith('.dmg'));
+        const macArm64 = assets.find((a) => a.name.includes('arm64') && a.name.endsWith('.dmg'));
+        const macX64 = assets.find((a) => a.name.includes('x64') && a.name.endsWith('.dmg'));
+        const macGeneric = assets.find((a) => a.name.endsWith('.dmg') && !a.name.includes('arm64') && !a.name.includes('x64'));
         if (win) setWindowsUrl(win.browser_download_url);
-        if (mac) setMacUrl(mac.browser_download_url);
+        if (macArm64) setMacArm64Url(macArm64.browser_download_url);
+        if (macX64) setMacX64Url(macX64.browser_download_url);
+        // Fallback: if only a single generic .dmg exists
+        if (!macArm64 && !macX64 && macGeneric) {
+          setMacArm64Url(macGeneric.browser_download_url);
+        }
       })
       .catch(() => {});
   }, [isAdmin]);
@@ -70,14 +78,24 @@ export function SupportAppDownload({ isAdmin }: SupportAppDownloadProps) {
                   Windows
                 </a>
               )}
-              {(os === 'mac' || os === 'unknown') && macUrl && (
+              {(os === 'mac' || os === 'unknown') && macArm64Url && (
                 <a
-                  href={macUrl}
+                  href={macArm64Url}
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  macOS
+                  macOS (Apple Silicon)
+                </a>
+              )}
+              {(os === 'mac' || os === 'unknown') && macX64Url && (
+                <a
+                  href={macX64Url}
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  macOS (Intel)
                 </a>
               )}
             </>

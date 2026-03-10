@@ -88,7 +88,7 @@ function useAdminAllTickets(
     queryFn: async () => {
       let query = supabase
         .from('support_tickets')
-        .select('id, org_id, user_id, subject, description, category, priority, status, assigned_to, needs_attention, first_response_at, sla_response_hours, sla_breached, created_at, updated_at, resolved_at')
+        .select('id, org_id, user_id, subject, description, category, priority, status, assigned_to, needs_attention, created_at, updated_at, resolved_at')
         .order('created_at', { ascending: false });
 
       if (statusFilter === 'open') {
@@ -152,31 +152,6 @@ function useAgentNames(userIds: string[]): AgentMap {
     enabled: userIds.length > 0,
   });
   return data ?? {};
-}
-
-// ============================================================
-// SLA Countdown
-// ============================================================
-
-function SlaCountdown({ createdAt, slaHours }: { createdAt: string; slaHours: number }) {
-  const deadline = new Date(new Date(createdAt).getTime() + slaHours * 60 * 60 * 1000);
-  const now = new Date();
-  const remaining = deadline.getTime() - now.getTime();
-
-  if (remaining <= 0) {
-    return <span className="text-xs text-red-500 font-medium">Overdue</span>;
-  }
-
-  const hoursLeft = Math.floor(remaining / (1000 * 60 * 60));
-  const minutesLeft = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-
-  const isUrgent = remaining < slaHours * 60 * 60 * 1000 * 0.25; // less than 25% time left
-
-  return (
-    <span className={cn('text-xs font-medium', isUrgent ? 'text-orange-500' : 'text-gray-500 dark:text-gray-400')}>
-      {hoursLeft}h {minutesLeft}m left
-    </span>
-  );
 }
 
 // ============================================================
@@ -256,19 +231,6 @@ function TicketRow({
           <span className="text-xs text-gray-400">Unassigned</span>
         )}
       </td>
-      <td className="px-4 py-3">
-        {ticket.sla_breached ? (
-          <Badge variant="outline" className="text-[11px] bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 border-red-200 dark:border-red-500/30">
-            Breached
-          </Badge>
-        ) : ticket.first_response_at ? (
-          <span className="text-xs text-emerald-600 dark:text-emerald-400">Responded</span>
-        ) : ticket.sla_response_hours ? (
-          <SlaCountdown createdAt={ticket.created_at} slaHours={ticket.sla_response_hours} />
-        ) : (
-          <span className="text-xs text-gray-400">&mdash;</span>
-        )}
-      </td>
     </tr>
   );
 }
@@ -317,7 +279,6 @@ export default function SupportTicketsPage() {
   const needsAttentionCount = allTickets.filter((t) => (t as SupportTicket & { needs_attention?: boolean }).needs_attention).length;
   const urgentCount = allTickets.filter((t) => t.priority === 'urgent').length;
   const openCount = allTickets.filter((t) => ['open', 'in_progress', 'waiting_on_customer'].includes(t.status)).length;
-  const slaBreachedCount = allTickets.filter((t) => t.sla_breached).length;
 
   // Unique orgs for the org filter dropdown
   const uniqueOrgs = allOrgIds.map((id) => ({ id, name: orgNames[id] ?? id.slice(0, 8) }));
@@ -374,7 +335,7 @@ export default function SupportTicketsPage() {
       <SupportAppDownload isAdmin />
 
       {/* Summary stats */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
           <p className="text-xs text-gray-500 dark:text-gray-400">Total Tickets</p>
           <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-1">
@@ -397,12 +358,6 @@ export default function SupportTicketsPage() {
           <p className="text-xs text-gray-500 dark:text-gray-400">Open</p>
           <p className="text-2xl font-semibold text-blue-600 mt-1">
             {isLoading ? <span className="inline-block w-10 h-7 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" /> : openCount}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400">SLA Breached</p>
-          <p className={cn('text-2xl font-semibold mt-1', slaBreachedCount > 0 ? 'text-red-500' : 'text-gray-900 dark:text-white')}>
-            {isLoading ? <span className="inline-block w-10 h-7 bg-gray-200 dark:bg-gray-700 animate-pulse rounded" /> : slaBreachedCount}
           </p>
         </div>
       </div>
@@ -518,20 +473,19 @@ export default function SupportTicketsPage() {
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Priority</th>
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Created</th>
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Assigned To</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">SLA</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center">
+                  <td colSpan={7} className="py-12 text-center">
                     <Loader2 className="w-5 h-5 animate-spin text-gray-400 mx-auto" />
                   </td>
                 </tr>
               )}
               {error && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center">
+                  <td colSpan={7} className="py-12 text-center">
                     <AlertCircle className="w-6 h-6 text-red-400 mx-auto mb-2" />
                     <p className="text-sm text-gray-500">Failed to load tickets</p>
                   </td>
@@ -539,7 +493,7 @@ export default function SupportTicketsPage() {
               )}
               {!isLoading && filteredTickets.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center">
+                  <td colSpan={7} className="py-12 text-center">
                     <CheckSquare className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
                     <p className="text-sm text-gray-500">No tickets found</p>
                   </td>

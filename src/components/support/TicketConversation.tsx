@@ -3,18 +3,41 @@ import { Shield, User, Loader2, EyeOff } from 'lucide-react';
 import { useSupportMessages, useSupportMessagesRealtime, type SupportMessage } from '@/lib/hooks/useSupportMessages';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useUserProfileById } from '@/lib/hooks/useUserProfile';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/clientV2';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { TypingIndicator } from './TypingIndicator';
+import type { TypingUser } from '@/lib/hooks/useTypingIndicator';
 
 interface TicketConversationProps {
   ticketId: string;
+  typingUsers?: TypingUser[];
+}
+
+function useSenderName(senderId: string, isOwn: boolean) {
+  return useQuery({
+    queryKey: ['sender-name', senderId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('first_name')
+        .eq('id', senderId)
+        .single();
+      if (error) throw error;
+      return data.first_name || 'User';
+    },
+    enabled: !isOwn,
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
 function MessageBubble({ message }: { message: SupportMessage }) {
   const { user } = useAuth();
   const { data: userProfile } = useUserProfileById(user?.id);
-  const isOwn = message.sender_id === user?.id && message.sender_type === 'user';
+  const isOwn = message.sender_id === user?.id;
   const isAgent = message.sender_type === 'agent';
+  const { data: senderFirstName } = useSenderName(message.sender_id, isOwn);
   const isSystem = message.sender_type === 'system';
 
   const initials = userProfile
@@ -70,7 +93,7 @@ function MessageBubble({ message }: { message: SupportMessage }) {
       <div className={cn('max-w-[75%] space-y-1', isOwn ? 'items-end' : 'items-start')}>
         {!isOwn && (
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium px-1">
-            {isAgent ? 'System Administrator' : 'You'}
+            {isAgent ? `${senderFirstName || 'Agent'} (Agent)` : senderFirstName || 'Customer'}
           </p>
         )}
         <div
@@ -105,7 +128,7 @@ function MessageBubble({ message }: { message: SupportMessage }) {
   );
 }
 
-export function TicketConversation({ ticketId }: TicketConversationProps) {
+export function TicketConversation({ ticketId, typingUsers = [] }: TicketConversationProps) {
   const { data: messages, isLoading } = useSupportMessages(ticketId);
   useSupportMessagesRealtime(ticketId);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -138,6 +161,7 @@ export function TicketConversation({ ticketId }: TicketConversationProps) {
       {messages.map((message) => (
         <MessageBubble key={message.id} message={message} />
       ))}
+      <TypingIndicator typingUsers={typingUsers} />
       <div ref={bottomRef} />
     </div>
   );

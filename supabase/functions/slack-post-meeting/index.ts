@@ -502,34 +502,6 @@ async function sendSlackDM(
   return { ...res, channelId: dmChannelId };
 }
 
-async function createInAppNotification(
-  supabase: ReturnType<typeof createClient>,
-  params: {
-    userId: string;
-    meetingId: string;
-    title: string;
-    message: string;
-    actionUrl: string;
-    metadata?: Record<string, unknown>;
-  }
-): Promise<void> {
-  await supabase.from('notifications').insert({
-    user_id: params.userId,
-    title: params.title,
-    message: params.message,
-    type: 'info',
-    category: 'meeting',
-    entity_type: 'meeting_debrief',
-    entity_id: params.meetingId,
-    action_url: params.actionUrl,
-    metadata: {
-      ...params.metadata,
-      source: 'slack_post_meeting',
-      ai_generated: true,
-    },
-  });
-}
-
 /**
  * Record sent notification
  */
@@ -1050,27 +1022,6 @@ serve(async (req) => {
       }
     }
 
-    // Mirror to in-app (best-effort) for the meeting owner
-    try {
-      if (!isTest && meeting.owner_user_id) {
-        await createInAppNotification(supabase, {
-          userId: meeting.owner_user_id,
-          meetingId: meeting.id,
-          title: `Post-call summary: ${meeting.title || 'Meeting'}`,
-          message: analysis.summary,
-          actionUrl: `/meetings`,
-          metadata: {
-            meetingId: meeting.id,
-            sentiment: analysis.sentiment,
-            sentimentScore: analysis.sentimentScore,
-            actionItemsCount: analysis.actionItems?.length || 0,
-          },
-        });
-      }
-    } catch (e) {
-      console.warn('[slack-post-meeting] Failed to create in-app notification:', (e as any)?.message || e);
-    }
-
     // Write action items to Command Centre for inbox feed
     try {
       if (!isTest && meeting.owner_user_id && analysis.actionItems?.length > 0) {
@@ -1186,23 +1137,6 @@ serve(async (req) => {
               metadata: {
                 source: 'slack_post_meeting',
                 meetingTitle: meeting.title,
-              },
-            });
-
-            // In-app mirror: approval requested
-            await supabase.from('notifications').insert({
-              user_id: meeting.owner_user_id,
-              title: 'Approval needed: follow-up email',
-              message: `Review and approve the follow-up email draft for "${meeting.title || 'your meeting'}".`,
-              type: 'info',
-              category: 'workflow',
-              entity_type: 'email_draft',
-              entity_id: meeting.id,
-              action_url: '/meetings',
-              metadata: {
-                approval_id: approvalId,
-                meeting_id: meeting.id,
-                source: 'hitl',
               },
             });
           }
