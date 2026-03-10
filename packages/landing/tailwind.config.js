@@ -9,6 +9,8 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+        // Clash Display for V6 landing page display headings
+        display: ['Clash Display', 'sans-serif'],
         // Urbanist for headings (local font)
         heading: ['Urbanist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         // Questrial for body copy (local font)
@@ -101,12 +103,17 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.7' },
         },
+        'gradient-shift': {
+          '0%': { backgroundPosition: '0% 50%' },
+          '100%': { backgroundPosition: '200% 50%' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'shimmer': 'shimmer 2s infinite linear',
         'pulse-slow': 'pulse-slow 8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'gradient-shift': 'gradient-shift 3s linear infinite',
       },
       dropShadow: {
         'glow': [

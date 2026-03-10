@@ -30,6 +30,7 @@ import HeroV11Preview from './pages/HeroV11Preview';
 import DemoExperience from './demo/DemoExperience';
 import DemoExperienceV2 from './demo-v2/DemoExperience';
 import { LandingPageV5 } from './pages/LandingPageV5';
+import { LandingPageV6 } from './pages/LandingPageV6';
 import { lazy, Suspense } from 'react';
 
 const CampaignLanding = lazy(() => import('./pages/CampaignLanding'));
@@ -99,6 +100,7 @@ function App() {
         <Route path="/signup" element={<RedirectToApp />} />
         <Route path="/v4" element={<MeetingsLandingV4 />} />
         <Route path="/v5" element={<LandingPageV5 />} />
+        <Route path="/v6" element={<LandingPageV6 />} />
         <Route path="/" element={<LandingPage />} />
       </Routes>
     </BrowserRouter>
