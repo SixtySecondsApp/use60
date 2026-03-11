@@ -195,19 +195,18 @@ async function handleSearchDocs(
   const queryEmbedding = embData.data[0].embedding as number[];
 
   // Call the RPC for vector similarity search
-  // Pass the raw embedding array — PostgREST will cast it to the vector type
   const { data, error } = await serviceClient.rpc('match_docs_by_embedding', {
-    query_embedding: queryEmbedding,
-    match_threshold: 0.3,
+    query_embedding: JSON.stringify(queryEmbedding),
+    match_threshold: 0.4,
     match_count: limit || 5,
   });
 
   if (error) {
-    console.warn(`[docs-agent] match_docs_by_embedding RPC failed: ${error.message} — falling back to text search`);
+    throw new Error(`match_docs_by_embedding RPC failed: ${error.message}`);
   }
 
   // Map results to a clean shape; filter by category if provided
-  const results = (error ? [] : (data || [])) as Array<{
+  const results = (data || []) as Array<{
     slug: string;
     title: string;
     category: string;
@@ -221,7 +220,7 @@ async function handleSearchDocs(
       )
     : results;
 
-  // Fallback: if vector search returns nothing or errored, do a full-text search
+  // Fallback: if vector search returns nothing, do a full-text search
   if (filtered.length === 0) {
     console.log('[docs-agent] Vector search returned no results, falling back to full-text search');
     const queryLower = query.toLowerCase().split(/\s+/).filter(Boolean);
