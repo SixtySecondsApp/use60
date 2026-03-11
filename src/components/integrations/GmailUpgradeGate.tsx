@@ -29,11 +29,6 @@ export function GmailUpgradeGate({
     return <>{children}</>;
   }
 
-  // If Google isn't connected at all, don't show the gate
-  if (!google.isConnected) {
-    return <>{children}</>;
-  }
-
   const handleConnect = async () => {
     try {
       const authUrl = await connectNylas();
