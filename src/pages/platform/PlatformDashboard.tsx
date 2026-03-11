@@ -175,6 +175,14 @@ const platformSections: Record<string, PlatformSection[]> = {
       href: '/platform/support-tickets',
       color: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30',
     },
+    {
+      id: 'goldeneye-cm',
+      title: 'GoldenEye',
+      description: 'Real-time token flow visualization across all users and LLM endpoints',
+      icon: Eye,
+      href: '/platform/goldeneye',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
+    },
   ],
   'Pipeline & Automation': [
     {
@@ -412,6 +420,14 @@ const platformSections: Record<string, PlatformSection[]> = {
       icon: BarChart3,
       href: '/platform/usage',
       color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
+    },
+    {
+      id: 'goldeneye-sa',
+      title: 'GoldenEye',
+      description: 'Real-time token flow visualization across all users and LLM endpoints',
+      icon: Eye,
+      href: '/platform/goldeneye',
+      color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
     },
   ],
   'Development Tools': [
