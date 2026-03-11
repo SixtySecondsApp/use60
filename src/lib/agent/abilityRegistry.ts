@@ -9,7 +9,8 @@ import {
   Activity, Brain, Calendar, Mail, FileText, BarChart3,
   GraduationCap, Send, MessageSquare, Zap, Users, Clock,
   Bell, CheckSquare, ShieldAlert, Sparkles, TrendingUp,
-  AlertTriangle, Ghost,
+  AlertTriangle, Ghost, HeartPulse, Lightbulb, GitMerge,
+  Brush, BookOpen,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -598,6 +599,102 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
       { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
     ],
   },
+
+  // ── Proactive Sales Teammate (PST) ──────────────────────────────────────
+  {
+    id: 'deal-heartbeat',
+    name: 'Deal Heartbeat',
+    description: 'Always-on deal scanner that runs nightly, on stage changes, and after meetings. Detects 8 observation categories: stale deals, missing next steps, follow-up gaps, single-threaded deals, stage regression, and more.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: HeartPulse,
+    gradient: 'from-red-500 to-rose-600',
+    eventType: 'deal_heartbeat_scan',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 3,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Delivers overnight findings in morning brief', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'deal-improvement-suggestions',
+    name: 'Deal Improvement Suggestions',
+    description: 'Proactive coaching for every deal. Generates tagged suggestions — MULTI_THREAD, URGENCY, PROOF, COMPETITOR, EXECUTIVE_SPONSOR, NEXT_STEP — based on deal context, contacts, and meeting history.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: Lightbulb,
+    gradient: 'from-cyan-500 to-teal-600',
+    eventType: 'deal_heartbeat_scan',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 2,
+    hasApproval: false,
+    status: 'active',
+    skillKey: 'deal-next-best-actions',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Delivers suggestions in morning brief', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'cross-deal-conflict-detection',
+    name: 'Cross-Deal Conflict Detection',
+    description: 'Catches conflicts before they become problems. Detects contacts appearing in 2+ active deals and companies with deals from different reps. HIGH severity for same-week overlap.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: GitMerge,
+    gradient: 'from-pink-500 to-fuchsia-600',
+    eventType: 'deal_heartbeat_scan',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 2,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Surfaces conflicts in morning brief', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'pipeline-hygiene-digest',
+    name: 'Pipeline Hygiene Digest',
+    description: 'Weekly Monday cleanup with 5 hygiene categories: overdue tasks, stuck-in-stage (30+ days), no activity (14+ days), past close date, and ghost risk. One-tap actions: Snooze, Re-engage, Draft Follow-up, Close as Lost.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: Brush,
+    gradient: 'from-teal-500 to-emerald-600',
+    eventType: 'pipeline_hygiene_digest',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 2,
+    hasApproval: true,
+    status: 'active',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Delivers weekly digest with action buttons', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'sales-learning-loop',
+    name: 'Sales Learning Loop',
+    description: 'Learns your editing preferences from every draft you touch. After 5+ consistent edits, stores preferences like shorter_emails, casual_greeting, removes_ps_line. Feeds into future draft generation for increasingly accurate output.',
+    stage: 'coaching',
+    useCase: 'coaching-insights',
+    icon: BookOpen,
+    gradient: 'from-violet-500 to-purple-600',
+    eventType: 'learning_preference_extract',
+    triggerType: 'event',
+    backendType: 'cron-job',
+    stepCount: 2,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['in-app'],
+    requiredIntegrations: [],
+  },
 ];
 
 // =============================================================================
@@ -653,6 +750,17 @@ export const SKILL_DISPLAY_NAMES: Record<string, string> = {
   'score-deal-risks': 'Score Deal Risks',
   'generate-risk-alerts': 'Generate Risk Alerts',
   'deliver-risk-slack': 'Deliver Risk Slack',
+  // deal_heartbeat_scan (PST)
+  'scan-deal-observations': 'Scan Deal Observations',
+  'generate-improvement-suggestions': 'Generate Improvement Suggestions',
+  'detect-cross-deal-conflicts': 'Detect Cross-Deal Conflicts',
+  'deliver-morning-brief': 'Deliver to Morning Brief',
+  // pipeline_hygiene_digest (PST)
+  'scan-stale-pipeline': 'Scan Stale Pipeline',
+  'deliver-hygiene-digest': 'Deliver Hygiene Digest',
+  // learning_preference_extract (PST)
+  'extract-edit-preferences': 'Extract Editing Preferences',
+  'update-draft-prompts': 'Update Draft Generation Prompts',
 };
 
 /** Step order per event type — mirrors EVENT_SEQUENCES in eventSequences.ts */
@@ -690,6 +798,16 @@ export const SEQUENCE_STEPS: Record<string, string[]> = {
   deal_risk_scan: [
     'scan-active-deals', 'score-deal-risks',
     'generate-risk-alerts', 'deliver-risk-slack',
+  ],
+  deal_heartbeat_scan: [
+    'scan-deal-observations', 'generate-improvement-suggestions',
+    'detect-cross-deal-conflicts', 'deliver-morning-brief',
+  ],
+  pipeline_hygiene_digest: [
+    'scan-stale-pipeline', 'deliver-hygiene-digest',
+  ],
+  learning_preference_extract: [
+    'extract-edit-preferences', 'update-draft-prompts',
   ],
 };
 
@@ -729,7 +847,10 @@ export const EVENT_TYPE_TO_SEQUENCE_TYPE: Record<string, string> = {
   'email_received': 'email_received',
   'proposal_generation': 'proposal_generation',
   'calendar_find_times': 'calendar_find_times',
-  // V1 abilities and manual triggers have no mapping (localStorage-only)
+  // Proactive Sales Teammate (PST) — cron-job backed, use localStorage toggle
+  'deal_heartbeat_scan': 'deal_heartbeat_scan',
+  'pipeline_hygiene_digest': 'pipeline_hygiene_digest',
+  'learning_preference_extract': 'learning_preference_extract',
 };
 
 // =============================================================================
