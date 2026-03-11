@@ -724,26 +724,29 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
             // Recalculate dependent formula columns for this row (e.g. qualified)
             const outputKeys = new Set(outputKey ? [outputKey] : []);
-            if (outputKeys.size > 0) {
+            const dependentFormulas = columns
+              .filter((c) => c.column_type === 'formula' && c.formula_expression)
+              .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)));
+            if (dependentFormulas.length > 0) {
               try {
-                const dependentFormulas = columns
-                  .filter((c) => c.column_type === 'formula' && c.formula_expression)
-                  .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)));
-                if (dependentFormulas.length > 0) {
-                  const formulaResults = await Promise.all(
-                    dependentFormulas.map((c) =>
-                      supabase.functions.invoke('evaluate-formula', {
-                        body: { table_id: tableId, column_id: c.id, row_ids: [row.id] },
-                      }),
-                    ),
-                  );
-                  // Update local cell values with formula results so next step condition works
-                  for (let fi = 0; fi < dependentFormulas.length; fi++) {
-                    const formulaCol = dependentFormulas[fi];
-                    const formulaData = formulaResults[fi]?.data;
-                    if (formulaData?.results?.[row.id]) {
-                      rowCellValues[formulaCol.key] = formulaData.results[row.id];
-                    }
+                // evaluate-formula writes results to DB — response is just { evaluated, errors }
+                await Promise.all(
+                  dependentFormulas.map((c) =>
+                    supabase.functions.invoke('evaluate-formula', {
+                      body: { table_id: tableId, column_id: c.id, row_ids: [row.id] },
+                    }),
+                  ),
+                );
+                // Re-fetch this row's cells from DB so we have fresh formula values
+                const colIdToKey = new Map(columns.map((c) => [c.id, c.key]));
+                const { data: freshCells } = await supabase
+                  .from('dynamic_table_cells')
+                  .select('column_id, value')
+                  .eq('row_id', row.id);
+                if (freshCells) {
+                  for (const cell of freshCells) {
+                    const key = colIdToKey.get(cell.column_id);
+                    if (key && cell.value) rowCellValues[key] = cell.value;
                   }
                 }
               } catch {
