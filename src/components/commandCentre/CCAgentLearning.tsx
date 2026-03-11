@@ -1,22 +1,24 @@
 /**
- * CCAgentLearning — PST-015
+ * CCAgentLearning — PST-015 (redesigned)
  *
- * Agent Learning section for Command Centre.
- * Shows acceptance rate by category, Trust Capital score, and recent calibration events.
- * Collapsible panel following the same pattern as CCStatsPanel.
+ * Compact insight strip for the Command Centre header area.
+ * Shows Trust Capital, acceptance rate, and trend inline.
+ * Expands on click to show category breakdown and recent events.
  */
 
 import { useState } from 'react';
 import {
   Brain,
-  ChevronDown,
-  ChevronUp,
+  ChevronRight,
   CheckCircle2,
   XCircle,
   Pencil,
   Shield,
   TrendingUp,
+  TrendingDown,
+  Minus,
   Activity,
+  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -33,200 +35,281 @@ import {
 // Helpers
 // ============================================================================
 
-/** Pretty-print action_type as a human-readable label */
-function formatActionType(actionType: string): string {
-  return actionType
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+function formatActionType(s: string): string {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/** Relative time from ISO string */
 function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
 }
 
-/** Colour class for approval rate percentage */
 function rateColor(rate: number): string {
   if (rate >= 80) return 'text-emerald-600 dark:text-emerald-400';
   if (rate >= 50) return 'text-amber-600 dark:text-amber-400';
   return 'text-red-500 dark:text-red-400';
 }
 
-/** Icon + colour for calibration event status */
-function statusConfig(status: string) {
+function rateBg(rate: number): string {
+  if (rate >= 80) return 'bg-emerald-500';
+  if (rate >= 50) return 'bg-amber-500';
+  return 'bg-red-500';
+}
+
+function statusIcon(status: string) {
   switch (status) {
     case 'approved':
-      return {
-        icon: CheckCircle2,
-        label: 'Approved',
-        className: 'text-emerald-600 dark:text-emerald-400',
-      };
+      return { Icon: CheckCircle2, cls: 'text-emerald-500' };
     case 'rejected':
-      return {
-        icon: XCircle,
-        label: 'Rejected',
-        className: 'text-red-500 dark:text-red-400',
-      };
+      return { Icon: XCircle, cls: 'text-red-500' };
     case 'edited':
-      return {
-        icon: Pencil,
-        label: 'Edited',
-        className: 'text-amber-600 dark:text-amber-400',
-      };
+      return { Icon: Pencil, cls: 'text-amber-500' };
     default:
-      return {
-        icon: Activity,
-        label: status,
-        className: 'text-slate-500 dark:text-gray-400',
-      };
+      return { Icon: Activity, cls: 'text-slate-400' };
   }
 }
 
 // ============================================================================
-// Sub-sections
+// Collapsed strip — lives in the header area
 // ============================================================================
 
-/**
- * Acceptance Rate Row — shows one action type with 7d and 30d rates side by side.
- */
-function AcceptanceRateRow({
-  actionType,
-  rate7d,
-  rate30d,
-}: {
-  actionType: string;
-  rate7d: AcceptanceRateEntry | undefined;
-  rate30d: AcceptanceRateEntry | undefined;
-}) {
-  const pct7 = rate7d?.approval_rate ?? 0;
-  const pct30 = rate30d?.approval_rate ?? 0;
-  const total7 = rate7d?.total_count ?? 0;
-  const total30 = rate30d?.total_count ?? 0;
-
-  // Skip if no data in either window
-  if (total7 === 0 && total30 === 0) return null;
-
-  return (
-    <div className="flex items-center gap-3 py-2 border-b border-slate-100 dark:border-gray-800/60 last:border-0">
-      <span className="flex-1 text-sm text-slate-700 dark:text-gray-200 truncate min-w-0">
-        {formatActionType(actionType)}
-      </span>
-      <div className="flex items-center gap-4 flex-shrink-0">
-        {/* 7d */}
-        <div className="text-right w-16">
-          <span className={`text-sm font-semibold tabular-nums ${rateColor(pct7)}`}>
-            {total7 > 0 ? `${Math.round(pct7)}%` : '--'}
-          </span>
-          <p className="text-[10px] text-slate-400 dark:text-gray-500">7d</p>
-        </div>
-        {/* 30d */}
-        <div className="text-right w-16">
-          <span className={`text-sm font-semibold tabular-nums ${rateColor(pct30)}`}>
-            {total30 > 0 ? `${Math.round(pct30)}%` : '--'}
-          </span>
-          <p className="text-[10px] text-slate-400 dark:text-gray-500">30d</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Trust Capital gauge — simple score / 1000 with progress bar.
- */
-function TrustCapitalGauge({
-  score,
+function CollapsedStrip({
+  trustScore,
+  avgRate,
+  trend,
+  totalDecisions,
   isLoading,
+  onExpand,
 }: {
-  score: number | null;
+  trustScore: number;
+  avgRate: number;
+  trend: 'up' | 'down' | 'flat';
+  totalDecisions: number;
   isLoading: boolean;
+  onExpand: () => void;
 }) {
   if (isLoading) {
     return (
-      <div className="space-y-2">
-        <Skeleton className="h-4 w-32 rounded" />
-        <Skeleton className="h-2 w-full rounded" />
+      <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900/30">
+        <Skeleton className="h-4 w-4 rounded" />
+        <Skeleton className="h-3 w-48 rounded" />
       </div>
     );
   }
 
-  const s = score ?? 0;
-  const pct = Math.round((s / 1000) * 100);
+  // Don't show if no data at all
+  if (totalDecisions === 0 && trustScore === 0) return null;
 
-  const color =
-    pct >= 70
-      ? 'text-emerald-600 dark:text-emerald-400'
-      : pct >= 40
-      ? 'text-amber-600 dark:text-amber-400'
-      : 'text-red-500 dark:text-red-400';
+  const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
+  const trendColor =
+    trend === 'up'
+      ? 'text-emerald-500'
+      : trend === 'down'
+        ? 'text-red-400'
+        : 'text-slate-400';
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-violet-500 dark:text-violet-400" />
-          <span className="text-sm font-medium text-slate-700 dark:text-gray-200">
-            Trust Capital
+    <button
+      type="button"
+      onClick={onExpand}
+      className="group w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-violet-50/60 dark:bg-violet-950/20 border border-violet-100/80 dark:border-violet-900/30 hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors text-left"
+    >
+      <Brain className="h-4 w-4 text-violet-500 flex-shrink-0" />
+
+      <div className="flex items-center gap-4 flex-1 min-w-0 text-xs">
+        {/* Trust Capital */}
+        <div className="flex items-center gap-1.5">
+          <Shield className="h-3 w-3 text-violet-400" />
+          <span className="font-semibold text-slate-700 dark:text-gray-200 tabular-nums">
+            {trustScore}
           </span>
+          <span className="text-slate-400 dark:text-gray-500">TC</span>
         </div>
-        <span className={`text-lg font-bold tabular-nums ${color}`}>
-          {s}
-          <span className="text-xs font-normal text-slate-400 dark:text-gray-500">
-            /1000
+
+        <span className="text-slate-200 dark:text-gray-700">|</span>
+
+        {/* Acceptance rate */}
+        <div className="flex items-center gap-1.5">
+          <span className={`font-semibold tabular-nums ${rateColor(avgRate)}`}>
+            {Math.round(avgRate)}%
           </span>
+          <span className="text-slate-400 dark:text-gray-500">accepted</span>
+          <TrendIcon className={`h-3 w-3 ${trendColor}`} />
+        </div>
+
+        <span className="text-slate-200 dark:text-gray-700">|</span>
+
+        {/* Decisions count */}
+        <span className="text-slate-400 dark:text-gray-500">
+          <span className="font-medium text-slate-600 dark:text-gray-300 tabular-nums">{totalDecisions}</span> decisions (30d)
         </span>
       </div>
-      <Progress value={pct} className="h-2" />
-    </div>
+
+      <ChevronRight className="h-3.5 w-3.5 text-slate-300 dark:text-gray-600 group-hover:text-violet-400 transition-colors flex-shrink-0" />
+    </button>
   );
 }
 
-/**
- * Calibration Event Row — recent approval/rejection/edit.
- */
-function CalibrationEventRow({ event }: { event: CalibrationEvent }) {
-  const config = statusConfig(event.status);
-  const Icon = config.icon;
-  const timeStr = event.approved_at ? timeAgo(event.approved_at) : timeAgo(event.created_at);
+// ============================================================================
+// Expanded detail panel — slides in as an overlay-ish card
+// ============================================================================
+
+function ExpandedPanel({
+  trustScore,
+  rates7dMap,
+  rates30dMap,
+  sortedActionTypes,
+  events,
+  isLoading,
+  onClose,
+}: {
+  trustScore: number;
+  rates7dMap: Map<string, AcceptanceRateEntry>;
+  rates30dMap: Map<string, AcceptanceRateEntry>;
+  sortedActionTypes: string[];
+  events: CalibrationEvent[];
+  isLoading: boolean;
+  onClose: () => void;
+}) {
+  const pct = Math.round((trustScore / 1000) * 100);
 
   return (
-    <div className="flex items-center gap-2.5 py-2 border-b border-slate-100 dark:border-gray-800/60 last:border-0">
-      <Icon className={`h-4 w-4 flex-shrink-0 ${config.className}`} />
-      <span className="flex-1 text-sm text-slate-700 dark:text-gray-200 truncate min-w-0">
-        {formatActionType(event.field_name)}
-      </span>
-      <Badge
-        variant="outline"
-        className={`text-[10px] font-medium px-1.5 py-0 h-5 flex-shrink-0 ${config.className} border-current/20`}
-      >
-        {config.label}
-      </Badge>
-      <Badge
-        variant="outline"
-        className="text-[10px] px-1.5 py-0 h-5 flex-shrink-0 capitalize"
-      >
-        {event.confidence}
-      </Badge>
-      <span className="text-[11px] text-slate-400 dark:text-gray-500 flex-shrink-0 tabular-nums">
-        {timeStr}
-      </span>
+    <div className="rounded-lg border border-violet-200/80 dark:border-violet-800/40 bg-white dark:bg-gray-900/80 shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-violet-50/60 dark:bg-violet-950/20 border-b border-violet-100 dark:border-violet-900/30">
+        <div className="flex items-center gap-2">
+          <Brain className="h-4 w-4 text-violet-500" />
+          <span className="text-sm font-semibold text-slate-700 dark:text-gray-200">
+            Agent Learning
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1 rounded hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors"
+        >
+          <X className="h-3.5 w-3.5 text-slate-400" />
+        </button>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {/* Trust Capital gauge */}
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5 text-violet-400" />
+                <span className="text-xs font-medium text-slate-500 dark:text-gray-400">Trust Capital</span>
+              </div>
+              <span className={`text-sm font-bold tabular-nums ${rateColor(pct)}`}>
+                {trustScore}<span className="text-xs font-normal text-slate-400">/1000</span>
+              </span>
+            </div>
+            <Progress value={pct} className="h-1.5" />
+          </div>
+        </div>
+
+        {/* Acceptance rates — compact table */}
+        {sortedActionTypes.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold text-slate-400 dark:text-gray-500 uppercase tracking-wider">
+                Acceptance by category
+              </span>
+              <div className="flex gap-3 text-[10px] text-slate-400 dark:text-gray-500">
+                <span>7d</span>
+                <span>30d</span>
+              </div>
+            </div>
+            <div className="space-y-0">
+              {sortedActionTypes.slice(0, 6).map((type) => {
+                const r7 = rates7dMap.get(type);
+                const r30 = rates30dMap.get(type);
+                const pct7 = r7?.approval_rate ?? 0;
+                const pct30 = r30?.approval_rate ?? 0;
+                const has7 = (r7?.total_count ?? 0) > 0;
+                const has30 = (r30?.total_count ?? 0) > 0;
+
+                return (
+                  <div
+                    key={type}
+                    className="flex items-center gap-2 py-1.5 border-b border-slate-50 dark:border-gray-800/40 last:border-0"
+                  >
+                    {/* Mini bar */}
+                    <div className="w-12 flex-shrink-0">
+                      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-gray-800 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${rateBg(has30 ? pct30 : pct7)} transition-all`}
+                          style={{ width: `${has30 ? pct30 : pct7}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="flex-1 text-xs text-slate-600 dark:text-gray-300 truncate">
+                      {formatActionType(type)}
+                    </span>
+                    <span className={`text-xs font-medium tabular-nums w-8 text-right ${has7 ? rateColor(pct7) : 'text-slate-300 dark:text-gray-600'}`}>
+                      {has7 ? `${Math.round(pct7)}%` : '--'}
+                    </span>
+                    <span className={`text-xs font-medium tabular-nums w-8 text-right ${has30 ? rateColor(pct30) : 'text-slate-300 dark:text-gray-600'}`}>
+                      {has30 ? `${Math.round(pct30)}%` : '--'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Recent calibration — compact timeline */}
+        {events.length > 0 && (
+          <div>
+            <span className="text-[11px] font-semibold text-slate-400 dark:text-gray-500 uppercase tracking-wider">
+              Recent decisions
+            </span>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {events.slice(0, 8).map((ev) => {
+                const { Icon, cls } = statusIcon(ev.status);
+                return (
+                  <div
+                    key={ev.id}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-50 dark:bg-gray-800/50 border border-slate-100 dark:border-gray-700/40"
+                    title={`${formatActionType(ev.field_name)} — ${ev.status} (${ev.confidence})`}
+                  >
+                    <Icon className={`h-3 w-3 ${cls}`} />
+                    <span className="text-[11px] text-slate-600 dark:text-gray-300 truncate max-w-[100px]">
+                      {formatActionType(ev.field_name)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-gray-500 tabular-nums">
+                      {timeAgo(ev.approved_at || ev.created_at)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!isLoading && sortedActionTypes.length === 0 && events.length === 0 && (
+          <p className="text-xs text-slate-400 dark:text-gray-500 text-center py-2">
+            No learning data yet. Approve or edit agent suggestions to start training.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
 
 // ============================================================================
-// Main component
+// Main export
 // ============================================================================
 
 export function CCAgentLearning() {
-  const [open, setOpen] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   const { rates7d, rates30d } = useAcceptanceRates();
   const trustCapitalQuery = useTrustCapital();
@@ -234,126 +317,61 @@ export function CCAgentLearning() {
 
   const isLoading = rates7d.isLoading || rates30d.isLoading || trustCapitalQuery.isLoading;
 
-  // Merge 7d and 30d into a unified action type list
+  // Merge and sort action types
   const allActionTypes = new Set<string>();
-  for (const entry of rates7d.data ?? []) allActionTypes.add(entry.action_type);
-  for (const entry of rates30d.data ?? []) allActionTypes.add(entry.action_type);
+  for (const e of rates7d.data ?? []) allActionTypes.add(e.action_type);
+  for (const e of rates30d.data ?? []) allActionTypes.add(e.action_type);
 
-  const rates7dMap = new Map<string, AcceptanceRateEntry>(
-    (rates7d.data ?? []).map((e) => [e.action_type, e])
-  );
-  const rates30dMap = new Map<string, AcceptanceRateEntry>(
-    (rates30d.data ?? []).map((e) => [e.action_type, e])
-  );
+  const rates7dMap = new Map((rates7d.data ?? []).map((e) => [e.action_type, e]));
+  const rates30dMap = new Map((rates30d.data ?? []).map((e) => [e.action_type, e]));
 
-  // Sort by 30d total descending
   const sortedActionTypes = Array.from(allActionTypes).sort((a, b) => {
-    const totalA = (rates30dMap.get(a)?.total_count ?? 0) + (rates7dMap.get(a)?.total_count ?? 0);
-    const totalB = (rates30dMap.get(b)?.total_count ?? 0) + (rates7dMap.get(b)?.total_count ?? 0);
-    return totalB - totalA;
+    const tA = (rates30dMap.get(a)?.total_count ?? 0) + (rates7dMap.get(a)?.total_count ?? 0);
+    const tB = (rates30dMap.get(b)?.total_count ?? 0) + (rates7dMap.get(b)?.total_count ?? 0);
+    return tB - tA;
   });
 
-  const trustScore = trustCapitalQuery.data?.score ?? null;
+  // Compute aggregate stats for collapsed strip
+  const trustScore = trustCapitalQuery.data?.score ?? 0;
+  const total30d = (rates30d.data ?? []).reduce((sum, e) => sum + e.total_count, 0);
+  const approved30d = (rates30d.data ?? []).reduce((sum, e) => sum + e.approval_count, 0);
+  const avgRate30d = total30d > 0 ? (approved30d / total30d) * 100 : 0;
+
+  const total7d = (rates7d.data ?? []).reduce((sum, e) => sum + e.total_count, 0);
+  const approved7d = (rates7d.data ?? []).reduce((sum, e) => sum + e.approval_count, 0);
+  const avgRate7d = total7d > 0 ? (approved7d / total7d) * 100 : 0;
+
+  const trend: 'up' | 'down' | 'flat' =
+    total7d < 3 || total30d < 3
+      ? 'flat'
+      : avgRate7d > avgRate30d + 3
+        ? 'up'
+        : avgRate7d < avgRate30d - 3
+          ? 'down'
+          : 'flat';
+
+  if (expanded) {
+    return (
+      <ExpandedPanel
+        trustScore={trustScore}
+        rates7dMap={rates7dMap}
+        rates30dMap={rates30dMap}
+        sortedActionTypes={sortedActionTypes}
+        events={calibrationQuery.data ?? []}
+        isLoading={isLoading}
+        onClose={() => setExpanded(false)}
+      />
+    );
+  }
 
   return (
-    <div className="border border-slate-200 dark:border-gray-700/60 rounded-lg bg-white dark:bg-gray-900/60 overflow-hidden">
-      {/* Panel header / toggle */}
-      <button
-        type="button"
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-gray-800/40 transition-colors"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-violet-500 dark:text-violet-400" />
-          <span className="text-sm font-semibold text-slate-700 dark:text-gray-200">
-            Agent Learning
-          </span>
-          {trustScore !== null && trustScore > 0 && (
-            <Badge className="h-4 px-1.5 text-[10px] bg-violet-600 text-white">
-              {trustScore} TC
-            </Badge>
-          )}
-        </div>
-        {open ? (
-          <ChevronUp className="h-4 w-4 text-slate-400 dark:text-gray-500" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-slate-400 dark:text-gray-500" />
-        )}
-      </button>
-
-      {open && (
-        <div className="px-4 pb-4 border-t border-slate-100 dark:border-gray-800/60">
-          {/* ---- Trust Capital ---- */}
-          <div className="mt-4">
-            <TrustCapitalGauge
-              score={trustScore}
-              isLoading={trustCapitalQuery.isLoading}
-            />
-          </div>
-
-          {/* ---- Acceptance Rates ---- */}
-          <div className="mt-5">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="h-3.5 w-3.5 text-slate-400 dark:text-gray-500" />
-              <p className="text-xs font-semibold text-slate-400 dark:text-gray-500 uppercase tracking-wider">
-                Acceptance rate by category
-              </p>
-            </div>
-
-            {isLoading ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-8 w-full rounded" />
-                ))}
-              </div>
-            ) : sortedActionTypes.length === 0 ? (
-              <p className="text-xs text-slate-400 dark:text-gray-500 text-center py-3">
-                No approval data yet. The agent will learn from your feedback.
-              </p>
-            ) : (
-              <div>
-                {sortedActionTypes.map((actionType) => (
-                  <AcceptanceRateRow
-                    key={actionType}
-                    actionType={actionType}
-                    rate7d={rates7dMap.get(actionType)}
-                    rate30d={rates30dMap.get(actionType)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* ---- Recent Calibration Events ---- */}
-          <div className="mt-5">
-            <div className="flex items-center gap-2 mb-2">
-              <Activity className="h-3.5 w-3.5 text-slate-400 dark:text-gray-500" />
-              <p className="text-xs font-semibold text-slate-400 dark:text-gray-500 uppercase tracking-wider">
-                Recent calibration events
-              </p>
-            </div>
-
-            {calibrationQuery.isLoading ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-7 w-full rounded" />
-                ))}
-              </div>
-            ) : (calibrationQuery.data ?? []).length === 0 ? (
-              <p className="text-xs text-slate-400 dark:text-gray-500 text-center py-3">
-                No calibration events yet. Approve or reject agent suggestions to train it.
-              </p>
-            ) : (
-              <div>
-                {(calibrationQuery.data ?? []).map((event) => (
-                  <CalibrationEventRow key={event.id} event={event} />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    <CollapsedStrip
+      trustScore={trustScore}
+      avgRate={avgRate30d}
+      trend={trend}
+      totalDecisions={total30d}
+      isLoading={isLoading}
+      onExpand={() => setExpanded(true)}
+    />
   );
 }
