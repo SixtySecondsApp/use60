@@ -1,5 +1,5 @@
 import React from 'react';
-import { SectionWrapper, CtaButton, AssetSlot, MicroCopy } from '../shared';
+import { SectionWrapper, CtaButton, AssetSlot, MicroCopy, FormBlock } from '../shared';
 import type { SectionComponentProps } from '../registry';
 
 export function CtaSplitLeft({ section, onSectionClick }: SectionComponentProps) {
@@ -14,6 +14,11 @@ export function CtaSplitLeft({ section, onSectionClick }: SectionComponentProps)
             <p className="text-base opacity-60 mb-8">{copy.body}</p>
             <div><CtaButton label={copy.cta} accentColor={style.accent_color} /></div>
             <MicroCopy text={copy.micro_copy} />
+            {section.form && (
+              <div className="mt-6">
+                <FormBlock config={section.form} accentColor={style.accent_color} textColor={style.text_color} />
+              </div>
+            )}
           </div>
           <div>
             <AssetSlot strategy={section.asset_strategy} imageUrl={section.image_url} imageStatus={section.image_status} svgCode={section.svg_code} svgStatus={section.svg_status} iconName={section.icon_name} accentColor={style.accent_color} alt={copy.headline} />

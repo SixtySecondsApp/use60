@@ -8,7 +8,7 @@
  * Used by: EditorToolbar "Copy Code" and "Download HTML" buttons
  */
 
-import type { LandingSection, BrandConfig } from '../types';
+import type { LandingSection, BrandConfig, SeoConfig } from '../types';
 import { renderSectionsToCode } from '../sectionRenderer';
 import { CopilotService } from '@/lib/services/copilotService';
 
@@ -31,6 +31,7 @@ interface ExportPolishParams {
   polishWithAI?: boolean;
   onProgress?: (status: string) => void;
   format?: ExportFormat;
+  seoConfig?: SeoConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,13 +78,66 @@ function generateBaseCode(sections: LandingSection[], brandConfig: BrandConfig):
 // HTML wrapper for standalone download
 // ---------------------------------------------------------------------------
 
-function wrapInHtml(reactCode: string, brandConfig: BrandConfig, title: string): string {
+function escHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function wrapInHtml(reactCode: string, brandConfig: BrandConfig, title: string, seoConfig?: SeoConfig): string {
+  const seoTitle = seoConfig?.title || title;
+  const seoDesc = seoConfig?.description || '';
+  const ogImage = seoConfig?.og_image_url || '';
+
+  // --- SEO meta tags ---
+  const metaTags: string[] = [
+    `<title>${escHtml(seoTitle)}</title>`,
+    seoDesc ? `<meta name="description" content="${escHtml(seoDesc)}" />` : '',
+    seoConfig?.keywords?.length ? `<meta name="keywords" content="${escHtml(seoConfig.keywords.join(', '))}" />` : '',
+    // Open Graph
+    `<meta property="og:title" content="${escHtml(seoTitle)}" />`,
+    seoDesc ? `<meta property="og:description" content="${escHtml(seoDesc)}" />` : '',
+    ogImage ? `<meta property="og:image" content="${escHtml(ogImage)}" />` : '',
+    `<meta property="og:type" content="website" />`,
+    // Twitter Card
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:title" content="${escHtml(seoTitle)}" />`,
+    seoDesc ? `<meta name="twitter:description" content="${escHtml(seoDesc)}" />` : '',
+    ogImage ? `<meta name="twitter:image" content="${escHtml(ogImage)}" />` : '',
+    // Canonical URL
+    seoConfig?.canonical_url ? `<link rel="canonical" href="${escHtml(seoConfig.canonical_url)}" />` : '',
+    seoConfig?.canonical_url ? `<meta property="og:url" content="${escHtml(seoConfig.canonical_url)}" />` : '',
+  ].filter(Boolean);
+
+  // --- Google Tag Manager (head snippet) ---
+  const gtmHead = seoConfig?.gtm_id
+    ? `<!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${escHtml(seoConfig.gtm_id)}');</script>
+  <!-- End Google Tag Manager -->`
+    : '';
+
+  // --- Google Tag Manager (body noscript) ---
+  const gtmBody = seoConfig?.gtm_id
+    ? `<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=${escHtml(seoConfig.gtm_id)}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->`
+    : '';
+
+  // --- Facebook Pixel ---
+  const fbPixel = seoConfig?.facebook_pixel_id
+    ? `<!-- Facebook Pixel Code -->
+  <script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${escHtml(seoConfig.facebook_pixel_id)}');fbq('track','PageView');</script>
+  <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=${escHtml(seoConfig.facebook_pixel_id)}&ev=PageView&noscript=1"/></noscript>
+  <!-- End Facebook Pixel Code -->`
+    : '';
+
+  // --- Custom head scripts ---
+  const customHead = seoConfig?.custom_head_script || '';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title}</title>
+  ${metaTags.join('\n  ')}
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -111,8 +165,12 @@ function wrapInHtml(reactCode: string, brandConfig: BrandConfig, title: string):
     body { font-family: '${brandConfig.font_body}', sans-serif; }
     h1, h2, h3, h4, h5, h6 { font-family: '${brandConfig.font_heading}', sans-serif; }
   </style>
+  ${gtmHead}
+  ${fbPixel}
+  ${customHead}
 </head>
 <body>
+${gtmBody}
 ${reactCode}
 </body>
 </html>`;
@@ -183,7 +241,7 @@ async function polishWithAI(
  * Returns cached result if sections haven't changed.
  */
 export async function generateExport(params: ExportPolishParams): Promise<ExportResult> {
-  const { sections, brandConfig, companyName, polishWithAI: shouldPolish, onProgress } = params;
+  const { sections, brandConfig, companyName, polishWithAI: shouldPolish, onProgress, seoConfig } = params;
   const key = computeCacheKey(sections, brandConfig);
 
   // Return cache hit for polished
@@ -209,7 +267,7 @@ export async function generateExport(params: ExportPolishParams): Promise<Export
   onProgress?.('Preparing export...');
 
   const title = companyName ? `${companyName} — Landing Page` : 'Landing Page';
-  const html = wrapInHtml(code, brandConfig, title);
+  const html = wrapInHtml(code, brandConfig, title, seoConfig);
 
   const result: ExportResult = {
     code,

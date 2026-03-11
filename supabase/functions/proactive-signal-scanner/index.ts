@@ -6,6 +6,7 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
+import { emitCCItem } from '../_shared/cc/emitter.ts';
 
 serve(async (req) => {
   const preflightResponse = handleCorsPreflightRequest(req);
@@ -24,6 +25,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const signalProcessorUrl = `${supabaseUrl}/functions/v1/task-signal-processor`;
     const results: Record<string, number> = {};
+    const ccResults: Record<string, number> = {};
 
     // Helper: fire signal to task-signal-processor
     async function fireSignal(signalType: string, userId: string, data: Record<string, unknown>) {
@@ -57,7 +59,7 @@ serve(async (req) => {
     const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: approachingDeals } = await supabase
       .from('deals')
-      .select('id, name, close_date, owner_id, contact_id, company_id')
+      .select('id, name, close_date, owner_id, contact_id, company_id, org_id')
       .lte('close_date', sevenDaysFromNow)
       .gte('close_date', new Date().toISOString())
       .not('stage', 'in', '("won","lost","closed_won","closed_lost")');
@@ -66,13 +68,33 @@ serve(async (req) => {
       for (const deal of approachingDeals) {
         if (!deal.owner_id) continue;
         const daysUntil = Math.ceil((new Date(deal.close_date).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-        await fireSignal('close_date_approaching', deal.owner_id, {
+        const signalData = {
           deal_id: deal.id,
           deal_name: deal.name,
           days_until_close: daysUntil,
           contact_id: deal.contact_id,
           company_id: deal.company_id,
-        });
+        };
+        await fireSignal('close_date_approaching', deal.owner_id, signalData);
+
+        // Emit to Command Centre feed
+        if (deal.org_id) {
+          const urgency = daysUntil <= 2 ? 'critical' as const : daysUntil <= 4 ? 'high' as const : 'normal' as const;
+          const itemId = await emitCCItem({
+            org_id: deal.org_id,
+            user_id: deal.owner_id,
+            source_agent: 'pipeline_scan',
+            item_type: 'alert',
+            title: `${deal.name} closes in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`,
+            summary: `Deal close date is ${new Date(deal.close_date).toLocaleDateString()}. Review status and next steps.`,
+            urgency,
+            deal_id: deal.id,
+            contact_id: deal.contact_id ?? undefined,
+            due_date: deal.close_date,
+            context: signalData,
+          });
+          if (itemId) ccResults['close_date_approaching'] = (ccResults['close_date_approaching'] || 0) + 1;
+        }
       }
     }
 
@@ -80,7 +102,7 @@ serve(async (req) => {
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
     const { data: staleProposals } = await supabase
       .from('tasks')
-      .select('id, title, assigned_to, deal_id, contact_id, company_id, created_at')
+      .select('id, title, assigned_to, deal_id, contact_id, company_id, created_at, org_id')
       .eq('task_type', 'proposal')
       .in('status', ['pending', 'pending_review', 'approved'])
       .lte('created_at', threeDaysAgo);
@@ -89,13 +111,31 @@ serve(async (req) => {
       for (const proposal of staleProposals) {
         if (!proposal.assigned_to) continue;
         const daysSince = Math.ceil((Date.now() - new Date(proposal.created_at).getTime()) / (24 * 60 * 60 * 1000));
-        await fireSignal('proposal_stale', proposal.assigned_to, {
+        const signalData = {
           proposal_title: proposal.title,
           days_since_sent: daysSince,
           deal_id: proposal.deal_id,
           contact_id: proposal.contact_id,
           company_id: proposal.company_id,
-        });
+        };
+        await fireSignal('proposal_stale', proposal.assigned_to, signalData);
+
+        // Emit to Command Centre feed
+        if (proposal.org_id) {
+          const itemId = await emitCCItem({
+            org_id: proposal.org_id,
+            user_id: proposal.assigned_to,
+            source_agent: 'pipeline_scan',
+            item_type: 'follow_up',
+            title: `Proposal "${proposal.title}" has had no response for ${daysSince} days`,
+            summary: `Follow up on the proposal or check if the buyer has questions.`,
+            urgency: daysSince >= 7 ? 'high' as const : 'normal' as const,
+            deal_id: proposal.deal_id ?? undefined,
+            contact_id: proposal.contact_id ?? undefined,
+            context: signalData,
+          });
+          if (itemId) ccResults['proposal_stale'] = (ccResults['proposal_stale'] || 0) + 1;
+        }
       }
     }
 
@@ -103,7 +143,7 @@ serve(async (req) => {
     const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
     const { data: dormantDeals } = await supabase
       .from('deals')
-      .select('id, name, owner_id, contact_id, company_id, updated_at')
+      .select('id, name, owner_id, contact_id, company_id, updated_at, org_id')
       .not('stage', 'in', '("won","lost","closed_won","closed_lost")')
       .lte('updated_at', fiveDaysAgo);
 
@@ -121,21 +161,41 @@ serve(async (req) => {
             .maybeSingle();
           if (contact) contactName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim();
         }
-        await fireSignal('thread_dormant', deal.owner_id, {
+        const signalData = {
           deal_id: deal.id,
           deal_name: deal.name,
           days_dormant: daysDormant,
           contact_id: deal.contact_id,
           contact_name: contactName,
           company_id: deal.company_id,
-        });
+        };
+        await fireSignal('thread_dormant', deal.owner_id, signalData);
+
+        // Emit to Command Centre feed
+        if (deal.org_id) {
+          const contactLabel = contactName ? ` — re-engage ${contactName}` : '';
+          const urgency = daysDormant >= 14 ? 'high' as const : 'normal' as const;
+          const itemId = await emitCCItem({
+            org_id: deal.org_id,
+            user_id: deal.owner_id,
+            source_agent: 'pipeline_scan',
+            item_type: 'follow_up',
+            title: `${deal.name} has gone quiet for ${daysDormant} days${contactLabel}`,
+            summary: `No activity on this deal in ${daysDormant} days. Send a check-in or schedule a call.`,
+            urgency,
+            deal_id: deal.id,
+            contact_id: deal.contact_id ?? undefined,
+            context: signalData,
+          });
+          if (itemId) ccResults['thread_dormant'] = (ccResults['thread_dormant'] || 0) + 1;
+        }
       }
     }
 
     // 4. Buyer commitment due (action items past due date)
     const { data: overdueItems } = await supabase
       .from('tasks')
-      .select('id, title, description, assigned_to, deal_id, contact_id, meeting_id, contact_name, due_date')
+      .select('id, title, description, assigned_to, deal_id, contact_id, meeting_id, contact_name, due_date, org_id')
       .eq('task_type', 'action_item')
       .eq('source', 'meeting_transcript')
       .in('status', ['pending', 'pending_review'])
@@ -145,19 +205,40 @@ serve(async (req) => {
     if (overdueItems) {
       for (const item of overdueItems) {
         if (!item.assigned_to) continue;
-        await fireSignal('buyer_commitment_due', item.assigned_to, {
+        const signalData = {
           commitment: item.title,
           contact_name: item.contact_name,
           deal_id: item.deal_id,
           contact_id: item.contact_id,
           meeting_id: item.meeting_id,
-        });
+        };
+        await fireSignal('buyer_commitment_due', item.assigned_to, signalData);
+
+        // Emit to Command Centre feed
+        if (item.org_id) {
+          const contactLabel = item.contact_name ? `${item.contact_name}: ` : '';
+          const itemId = await emitCCItem({
+            org_id: item.org_id,
+            user_id: item.assigned_to,
+            source_agent: 'pipeline_scan',
+            item_type: 'alert',
+            title: `Overdue commitment — ${contactLabel}${item.title}`,
+            summary: `This action item is past its due date. Chase the buyer or update the status.`,
+            urgency: 'critical',
+            deal_id: item.deal_id ?? undefined,
+            contact_id: item.contact_id ?? undefined,
+            due_date: item.due_date,
+            context: signalData,
+          });
+          if (itemId) ccResults['buyer_commitment_due'] = (ccResults['buyer_commitment_due'] || 0) + 1;
+        }
       }
     }
 
     return jsonResponse({
       success: true,
       signals_fired: results,
+      cc_items_emitted: ccResults,
       scanned_at: new Date().toISOString(),
     }, req);
 

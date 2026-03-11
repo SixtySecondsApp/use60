@@ -207,7 +207,36 @@ export interface LandingSection {
   asset_strategy?: AssetStrategy;
   divider?: SectionDividerType;
   icon_name?: string;
+  form?: FormConfig;
 }
+
+// ---------------------------------------------------------------------------
+// Form data model (CTA inline forms)
+// ---------------------------------------------------------------------------
+
+export interface FormField {
+  name: string;
+  type: 'text' | 'email' | 'tel' | 'textarea';
+  label: string;
+  required: boolean;
+  placeholder?: string;
+}
+
+export interface FormConfig {
+  fields: FormField[];
+  submit_label: string;
+  success_message: string;
+  notification_email?: string;
+}
+
+export const DEFAULT_CTA_FORM: FormConfig = {
+  fields: [
+    { name: 'email', type: 'email', label: 'Email', required: true, placeholder: 'you@company.com' },
+    { name: 'name', type: 'text', label: 'Name', required: false, placeholder: 'Your name' },
+  ],
+  submit_label: 'Get Started',
+  success_message: 'Thanks! We\'ll be in touch soon.',
+};
 
 export interface BrandConfig {
   primary_color: string;
@@ -218,4 +247,31 @@ export interface BrandConfig {
   font_heading: string;
   font_body: string;
   show_dividers?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// SEO configuration (US-021)
+// ---------------------------------------------------------------------------
+
+export interface SeoConfig {
+  title: string;
+  description: string;
+  og_image_url?: string;
+  keywords?: string[];
+  canonical_url?: string;
+  gtm_id?: string;
+  facebook_pixel_id?: string;
+  custom_head_script?: string;
+}
+
+/**
+ * Auto-generate sensible SEO defaults from the hero section copy.
+ * Called when the user opens the SEO panel for the first time (no saved config).
+ */
+export function generateDefaultSeo(sections: LandingSection[]): SeoConfig {
+  const hero = sections.find(s => s.type === 'hero');
+  return {
+    title: hero?.copy.headline ?? 'Landing Page',
+    description: (hero?.copy.subhead ?? hero?.copy.body ?? '').slice(0, 160),
+  };
 }

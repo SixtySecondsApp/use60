@@ -127,6 +127,21 @@ Run the `/frontend-design` Phase 4 + Phase 5 checklists:
 - [ ] Max `blur(24px)`, max 2-3 overlapping glass layers
 - [ ] No `requestAnimationFrame` loops without stop conditions
 
+### Step 3.5: Content Completeness Check
+
+Verify the page has real, complete content — not placeholder text:
+
+- [ ] Zero instances of "Lorem ipsum", "TODO", "placeholder", "coming soon" in rendered text
+- [ ] All headlines are specific to THIS product (would fail if you swapped the product name)
+- [ ] All code examples are syntactically valid (test with a quick mental parse)
+- [ ] All data tables have complete rows — no empty cells, no "TBD"
+- [ ] All links have `href` values (even if `#section` for now)
+- [ ] Feature descriptions are specific, not generic ("8-type memory graph" not "advanced memory")
+- [ ] Numbers and specs are accurate (cross-check against `.web/copy.md` if available)
+- [ ] Copy tone is consistent across all sections
+- [ ] CTAs match the conversion strategy from the brief
+- [ ] If `.web/reference.md` exists, content density matches or exceeds the reference
+
 ### Step 4: Anti-Convergence Check
 
 Verify the page doesn't feel like generic AI output:
@@ -166,17 +181,20 @@ Do NOT ask the user about each fix — just fix them. Only pause for decisions t
 POLISH REPORT
 =============
 
+Content:        X/10 completeness checks passing (Y fixed)
 Accessibility:  X/10 checks passing (Y fixed)
 UX Rules:       X/10 categories clean
 Craft:          X/X checklist items passing
 Anti-Convergence: PASS/FAIL
 Performance:    X/5 targets met
+Reference Match: [N/A or density comparison]
 
 Issues fixed:
   - Added aria-label to icon button in Hero.tsx
   - Added text-balance to h2 in Features.tsx
   - Replaced animate-bounce with transform-only animation
   - Added motion-reduce:transition-none to scroll reveals
+  - Replaced placeholder text in Features.tsx with copy from copy.md
 
 Remaining (need design decision):
   - None / [list any that need user input]

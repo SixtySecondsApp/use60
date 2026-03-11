@@ -117,9 +117,18 @@ export function generateScrollScript(): string {
           }
         });
       }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
-      document.querySelectorAll('.scroll-reveal, .stagger-card').forEach(function(el) {
-        observer.observe(el);
-      });
+
+      function observeAll() {
+        document.querySelectorAll('.scroll-reveal:not(.sr-observed), .stagger-card:not(.sr-observed)').forEach(function(el) {
+          el.classList.add('sr-observed');
+          observer.observe(el);
+        });
+      }
+
+      observeAll();
+
+      var mo = new MutationObserver(function() { observeAll(); });
+      mo.observe(document.body, { childList: true, subtree: true });
     })();
   `;
 }

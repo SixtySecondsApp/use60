@@ -1,0 +1,122 @@
+{
+  "version": 2,
+  "runSlug": "native-scheduling-engine",
+  "project": "Native Scheduling Engine",
+  "description": "Close 6 UX and reliability gaps in 60's scheduling infrastructure inspired by Claude Code Desktop patterns",
+  "phase": "build",
+  "startedAt": "2026-03-07T12:00:00Z",
+  "lastUpdatedAt": "2026-03-07T12:00:00Z",
+  "input": {
+    "type": "description",
+    "source": "Claude Code scheduled tasks analysis + codebase audit",
+    "extractedRequirements": [
+      "Friendly frequency picker replacing raw cron input",
+      "Agent schedule runs table and history UI",
+      "Missed run catch-up logic",
+      "Per-schedule permission mode",
+      "One-shot reminders via copilot"
+    ],
+    "extractedConstraints": [
+      "Must not rebuild existing scheduler — extend only",
+      "Must follow existing patterns (React Query, explicit columns, maybeSingle)",
+      "Migrations must be idempotent (DROP POLICY IF EXISTS before CREATE)"
+    ],
+    "openQuestions": [],
+    "answeredQuestions": []
+  },
+  "phaseGates": {
+    "launch": { "status": "skipped", "completedAt": null },
+    "discover": { "status": "complete", "completedAt": "2026-03-07T11:30:00Z" },
+    "define": { "status": "complete", "completedAt": "2026-03-07T12:00:00Z" },
+    "plan": { "status": "complete", "completedAt": "2026-03-07T12:00:00Z" },
+    "sync": { "status": "skipped", "completedAt": null },
+    "build": { "status": "in_progress", "completedAt": null },
+    "deliver": { "status": "pending", "completedAt": null },
+    "housekeeping": { "status": "pending", "completedAt": null }
+  },
+  "team": {
+    "tier": 2,
+    "tierReason": "7 stories, 2 schema changes, familiar patterns, no external APIs",
+    "workers": { "model": "opus", "count": 1 },
+    "reviewer": { "model": "opus" }
+  },
+  "prdFile": "tasks/prd-native-scheduling-engine.md",
+  "branch": "feat/native-scheduling-engine",
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Friendly Frequency Picker Component",
+      "type": "component",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "schema": [] },
+      "parallelWith": ["US-003"],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "US-002",
+      "title": "Wire FrequencyPicker into AgentTeamSettings",
+      "type": "integration",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": ["US-001"], "schema": [] },
+      "parallelWith": ["US-004"],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "US-003",
+      "title": "Agent Schedule Runs Migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "schema": [] },
+      "parallelWith": ["US-001"],
+      "estimatedMinutes": 15
+    },
+    {
+      "id": "US-004",
+      "title": "Schedule Run History in AgentTeamSettings",
+      "type": "component",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedule_runs"] },
+      "parallelWith": ["US-002"],
+      "estimatedMinutes": 30
+    },
+    {
+      "id": "US-005",
+      "title": "Missed Run Catch-Up Logic",
+      "type": "service",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedule_runs"] },
+      "parallelWith": ["US-006"],
+      "estimatedMinutes": 45
+    },
+    {
+      "id": "US-006",
+      "title": "Per-Schedule Permission Mode",
+      "type": "schema+service",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedules"] },
+      "parallelWith": ["US-005"],
+      "estimatedMinutes": 45
+    },
+    {
+      "id": "US-007",
+      "title": "One-Shot Reminders",
+      "type": "schema+service",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": [], "schema": [] },
+      "parallelWith": [],
+      "estimatedMinutes": 45
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 0,
+    "lastUpdated": "2026-03-07T12:00:00Z"
+  }
+}

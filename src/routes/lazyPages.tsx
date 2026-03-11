@@ -50,6 +50,7 @@ export const DemoPrepBriefing = lazyWithRetry(() => import('@/pages/platform/Dem
 export const DemoConversationalCopilot = lazyWithRetry(() => import('@/pages/platform/DemoConversationalCopilot'));
 export const AutonomyDemoPage = lazyWithRetry(() => import('@/pages/platform/AutonomyDemoPage'));
 export const AutopilotTestPage = lazyWithRetry(() => import('@/pages/platform/AutopilotTestPage'));
+export const ProactiveTeammateDemo = lazyWithRetry(() => import('@/pages/platform/ProactiveTeammateDemo'));
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
 export const AgentAbilitiesPage = lazyWithRetry(() => import('@/pages/platform/AgentAbilitiesPage'));
 export const OrchestratorDashboard = lazyWithRetry(() => import('@/pages/platform/OrchestratorDashboard'));
@@ -160,6 +161,7 @@ export const FreepikFlow = lazyWithRetry(() => import('@/components/workflows/Fr
 export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m => ({ default: m.Copilot })));
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const LandingPageBuilderPage = lazyWithRetry(() => import('@/pages/LandingPageBuilderPage'));
+export const LandingPagesPage = lazyWithRetry(() => import('@/pages/platform/LandingPagesPage'));
 export const CampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/CampaignsPage'));
 export const AbmCampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/AbmCampaignsPage'));
 export const OutreachAnalyticsPage = lazyWithRetry(() => import('@/pages/OutreachAnalyticsPage'));

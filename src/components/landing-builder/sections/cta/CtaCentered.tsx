@@ -1,5 +1,5 @@
 import React from 'react';
-import { SectionWrapper, CtaButton, AssetSlot, MicroCopy } from '../shared';
+import { SectionWrapper, CtaButton, AssetSlot, MicroCopy, FormBlock } from '../shared';
 import type { SectionComponentProps } from '../registry';
 
 export function CtaCentered({ section, onSectionClick }: SectionComponentProps) {
@@ -14,6 +14,11 @@ export function CtaCentered({ section, onSectionClick }: SectionComponentProps) 
           <p className="text-base opacity-60 max-w-xl mx-auto mb-10">{copy.body}</p>
           <div><CtaButton label={copy.cta} accentColor={style.accent_color} /></div>
           <MicroCopy text={copy.micro_copy} />
+          {section.form && (
+            <div className="mt-8">
+              <FormBlock config={section.form} accentColor={style.accent_color} textColor={style.text_color} />
+            </div>
+          )}
         </div>
       </div>
     </SectionWrapper>

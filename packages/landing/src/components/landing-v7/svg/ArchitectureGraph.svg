@@ -1,0 +1,266 @@
+<svg viewBox="0 0 700 500" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>60 Command Center — Context Graph showing data flowing from CRM, Calendar, Email, Meetings, Slack, and Pipeline into the central hub</title>
+  <style>
+    /* --- Design Tokens --- */
+    :root {
+      --purple: #c084fc;
+      --purple-30: rgba(192, 132, 252, 0.3);
+      --purple-15: rgba(192, 132, 252, 0.15);
+      --purple-08: rgba(192, 132, 252, 0.08);
+      --stone-500: #78716c;
+      --stone-400: #a8a29e;
+    }
+
+    /* --- Central Hub Breathing --- */
+    @keyframes hub-breathe {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
+    }
+    @keyframes hub-glow {
+      0%, 100% { r: 38; opacity: 0.12; }
+      50% { r: 44; opacity: 0.22; }
+    }
+
+    .hub-circle {
+      animation: hub-breathe 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+      will-change: opacity;
+    }
+    .hub-glow {
+      animation: hub-glow 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+      will-change: r, opacity;
+    }
+
+    /* --- Connection Line Pulse --- */
+    @keyframes line-pulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.18; }
+    }
+    .conn-line {
+      animation: line-pulse 4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+      will-change: opacity;
+    }
+    .conn-line:nth-child(2) { animation-delay: -0.7s; }
+    .conn-line:nth-child(3) { animation-delay: -1.3s; }
+    .conn-line:nth-child(4) { animation-delay: -2.0s; }
+    .conn-line:nth-child(5) { animation-delay: -2.6s; }
+    .conn-line:nth-child(6) { animation-delay: -3.3s; }
+
+    /* --- Outer Node Drift --- */
+    @keyframes drift-0 {
+      0%, 100% { transform: translate(0, 0); }
+      33% { transform: translate(0.8px, -1.2px); }
+      66% { transform: translate(-0.6px, 0.8px); }
+    }
+    @keyframes drift-1 {
+      0%, 100% { transform: translate(0, 0); }
+      33% { transform: translate(-1px, -0.6px); }
+      66% { transform: translate(0.5px, 1.1px); }
+    }
+    @keyframes drift-2 {
+      0%, 100% { transform: translate(0, 0); }
+      33% { transform: translate(0.7px, 1px); }
+      66% { transform: translate(-1.1px, -0.5px); }
+    }
+    @keyframes drift-3 {
+      0%, 100% { transform: translate(0, 0); }
+      33% { transform: translate(-0.9px, 0.7px); }
+      66% { transform: translate(0.6px, -1.2px); }
+    }
+    @keyframes drift-4 {
+      0%, 100% { transform: translate(0, 0); }
+      33% { transform: translate(1.1px, 0.5px); }
+      66% { transform: translate(-0.8px, -0.9px); }
+    }
+    @keyframes drift-5 {
+      0%, 100% { transform: translate(0, 0); }
+      33% { transform: translate(-0.5px, -1.1px); }
+      66% { transform: translate(1px, 0.6px); }
+    }
+
+    .node-0 { animation: drift-0 5s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
+    .node-1 { animation: drift-1 5.4s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
+    .node-2 { animation: drift-2 4.8s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
+    .node-3 { animation: drift-3 5.2s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
+    .node-4 { animation: drift-4 4.6s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
+    .node-5 { animation: drift-5 5.6s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
+
+    /* --- Data Particles --- */
+    /* Each particle travels from outer node to center along a line.
+       We use motion along the line via offset-path or explicit keyframes.
+       For maximum compatibility, we use translate keyframes. */
+
+    /* CRM → Center: (350,80) → (350,250) = straight down */
+    @keyframes particle-0 {
+      0% { transform: translate(0, 0); opacity: 0; }
+      5% { opacity: 0.9; }
+      85% { opacity: 0.9; }
+      95% { opacity: 0; }
+      100% { transform: translate(0, 170px); opacity: 0; }
+    }
+    /* Calendar → Center: (497.2,165) → (350,250) = dx=-147.2, dy=85 */
+    @keyframes particle-1 {
+      0% { transform: translate(0, 0); opacity: 0; }
+      5% { opacity: 0.9; }
+      85% { opacity: 0.9; }
+      95% { opacity: 0; }
+      100% { transform: translate(-147.2px, 85px); opacity: 0; }
+    }
+    /* Email → Center: (497.2,335) → (350,250) = dx=-147.2, dy=-85 */
+    @keyframes particle-2 {
+      0% { transform: translate(0, 0); opacity: 0; }
+      5% { opacity: 0.9; }
+      85% { opacity: 0.9; }
+      95% { opacity: 0; }
+      100% { transform: translate(-147.2px, -85px); opacity: 0; }
+    }
+    /* Meetings → Center: (350,420) → (350,250) = straight up */
+    @keyframes particle-3 {
+      0% { transform: translate(0, 0); opacity: 0; }
+      5% { opacity: 0.9; }
+      85% { opacity: 0.9; }
+      95% { opacity: 0; }
+      100% { transform: translate(0, -170px); opacity: 0; }
+    }
+    /* Slack → Center: (202.8,335) → (350,250) = dx=147.2, dy=-85 */
+    @keyframes particle-4 {
+      0% { transform: translate(0, 0); opacity: 0; }
+      5% { opacity: 0.9; }
+      85% { opacity: 0.9; }
+      95% { opacity: 0; }
+      100% { transform: translate(147.2px, -85px); opacity: 0; }
+    }
+    /* Pipeline → Center: (202.8,165) → (350,250) = dx=147.2, dy=85 */
+    @keyframes particle-5 {
+      0% { transform: translate(0, 0); opacity: 0; }
+      5% { opacity: 0.9; }
+      85% { opacity: 0.9; }
+      95% { opacity: 0; }
+      100% { transform: translate(147.2px, 85px); opacity: 0; }
+    }
+
+    .particle-0 { animation: particle-0 3.5s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: 0s; will-change: transform, opacity; }
+    .particle-1 { animation: particle-1 4s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -0.6s; will-change: transform, opacity; }
+    .particle-2 { animation: particle-2 3.8s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -1.3s; will-change: transform, opacity; }
+    .particle-3 { animation: particle-3 4.2s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -2.0s; will-change: transform, opacity; }
+    .particle-4 { animation: particle-4 3.6s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -2.8s; will-change: transform, opacity; }
+    .particle-5 { animation: particle-5 4.4s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -3.5s; will-change: transform, opacity; }
+
+    /* Second wave of particles (offset timing for density) */
+    .particle-0b { animation: particle-0 3.5s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -1.8s; will-change: transform, opacity; }
+    .particle-1b { animation: particle-1 4s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -2.6s; will-change: transform, opacity; }
+    .particle-2b { animation: particle-2 3.8s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -3.2s; will-change: transform, opacity; }
+    .particle-3b { animation: particle-3 4.2s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -0.9s; will-change: transform, opacity; }
+    .particle-4b { animation: particle-4 3.6s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -1.5s; will-change: transform, opacity; }
+    .particle-5b { animation: particle-5 4.4s cubic-bezier(0.22, 1, 0.36, 1) infinite; animation-delay: -2.2s; will-change: transform, opacity; }
+
+    /* --- Typography --- */
+    .label-text {
+      font-family: 'Source Sans 3', system-ui, sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      fill: #a8a29e;
+      text-anchor: middle;
+    }
+    .hub-text {
+      font-family: 'Source Sans 3', system-ui, sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      fill: #ffffff;
+      text-anchor: middle;
+    }
+
+    /* --- Accessibility --- */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
+
+  <defs>
+    <!-- Subtle glow filter for hub -->
+    <filter id="hub-soft-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- === Connection Lines === -->
+  <g class="connections">
+    <line class="conn-line" x1="350" y1="250" x2="350" y2="80" stroke="rgba(192,132,252,0.3)" stroke-width="1"/>
+    <line class="conn-line" x1="350" y1="250" x2="497.2" y2="165" stroke="rgba(192,132,252,0.3)" stroke-width="1"/>
+    <line class="conn-line" x1="350" y1="250" x2="497.2" y2="335" stroke="rgba(192,132,252,0.3)" stroke-width="1"/>
+    <line class="conn-line" x1="350" y1="250" x2="350" y2="420" stroke="rgba(192,132,252,0.3)" stroke-width="1"/>
+    <line class="conn-line" x1="350" y1="250" x2="202.8" y2="335" stroke="rgba(192,132,252,0.3)" stroke-width="1"/>
+    <line class="conn-line" x1="350" y1="250" x2="202.8" y2="165" stroke="rgba(192,132,252,0.3)" stroke-width="1"/>
+  </g>
+
+  <!-- === Data Particles (primary wave) === -->
+  <circle class="particle-0" cx="350" cy="80" r="2.5" fill="#c084fc"/>
+  <circle class="particle-1" cx="497.2" cy="165" r="2" fill="#c084fc"/>
+  <circle class="particle-2" cx="497.2" cy="335" r="2.5" fill="#c084fc"/>
+  <circle class="particle-3" cx="350" cy="420" r="2" fill="#c084fc"/>
+  <circle class="particle-4" cx="202.8" cy="335" r="2.5" fill="#c084fc"/>
+  <circle class="particle-5" cx="202.8" cy="165" r="2" fill="#c084fc"/>
+
+  <!-- === Data Particles (second wave, offset) === -->
+  <circle class="particle-0b" cx="350" cy="80" r="2" fill="#c084fc"/>
+  <circle class="particle-1b" cx="497.2" cy="165" r="2.5" fill="#c084fc"/>
+  <circle class="particle-2b" cx="497.2" cy="335" r="2" fill="#c084fc"/>
+  <circle class="particle-3b" cx="350" cy="420" r="2.5" fill="#c084fc"/>
+  <circle class="particle-4b" cx="202.8" cy="335" r="2" fill="#c084fc"/>
+  <circle class="particle-5b" cx="202.8" cy="165" r="2.5" fill="#c084fc"/>
+
+  <!-- === Outer Nodes === -->
+  <!-- CRM (top) -->
+  <g class="node-0">
+    <circle cx="350" cy="80" r="26" fill="none" stroke="#78716c" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="350" cy="80" r="26" fill="rgba(120,113,108,0.08)"/>
+    <text class="label-text" x="350" y="84">CRM</text>
+  </g>
+  <!-- Calendar (top-right) -->
+  <g class="node-1">
+    <circle cx="497.2" cy="165" r="26" fill="none" stroke="#78716c" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="497.2" cy="165" r="26" fill="rgba(120,113,108,0.08)"/>
+    <text class="label-text" x="497.2" y="169">Calendar</text>
+  </g>
+  <!-- Email (bottom-right) -->
+  <g class="node-2">
+    <circle cx="497.2" cy="335" r="26" fill="none" stroke="#78716c" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="497.2" cy="335" r="26" fill="rgba(120,113,108,0.08)"/>
+    <text class="label-text" x="497.2" y="339">Email</text>
+  </g>
+  <!-- Meetings (bottom) -->
+  <g class="node-3">
+    <circle cx="350" cy="420" r="26" fill="none" stroke="#78716c" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="350" cy="420" r="26" fill="rgba(120,113,108,0.08)"/>
+    <text class="label-text" x="350" y="424">Meetings</text>
+  </g>
+  <!-- Slack (bottom-left) -->
+  <g class="node-4">
+    <circle cx="202.8" cy="335" r="26" fill="none" stroke="#78716c" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="202.8" cy="335" r="26" fill="rgba(120,113,108,0.08)"/>
+    <text class="label-text" x="202.8" y="339">Slack</text>
+  </g>
+  <!-- Pipeline (top-left) -->
+  <g class="node-5">
+    <circle cx="202.8" cy="165" r="26" fill="none" stroke="#78716c" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="202.8" cy="165" r="26" fill="rgba(120,113,108,0.08)"/>
+    <text class="label-text" x="202.8" y="169">Pipeline</text>
+  </g>
+
+  <!-- === Central Hub === -->
+  <!-- Outer glow ring -->
+  <circle class="hub-glow" cx="350" cy="250" r="38" fill="rgba(192,132,252,0.12)"/>
+  <!-- Hub background -->
+  <circle class="hub-circle" cx="350" cy="250" r="32" fill="#c084fc" filter="url(#hub-soft-glow)" opacity="0.9"/>
+  <!-- Hub inner highlight -->
+  <circle cx="350" cy="250" r="32" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+  <!-- Hub label -->
+  <text class="hub-text" x="350" y="258">60</text>
+</svg>

@@ -28,6 +28,16 @@ python3 ~/.claude/skills/ui-ux-pro-max/scripts/search.py "$INDUSTRY" --domain ux
 
 If scripts are unavailable, use the SKILL.md rule categories as fallback (Priority 1-10 from ui-ux-pro-max).
 
+### Step 1.5: Load Reference Analysis (if available)
+
+If `.web/reference.md` exists (from `/web/reference`), read it for:
+- **Section map** — what section types the reference uses and in what order
+- **Content density** — how much content per section (light/medium/heavy)
+- **Replicable patterns** — section flow, progressive disclosure, credibility signals
+- **Gap analysis** — what the reference does that we should match or exceed
+
+The brief should target the reference's quality level. If the reference has 12 sections with heavy content, don't produce a brief for 5 light sections.
+
 ### Step 2: Run Website Strategist
 
 Execute the full `/website-strategist` skill workflow:
@@ -65,6 +75,14 @@ Output a strategic brief in this format and save to `.web/brief.md`:
 
 ## Section Stack
 [Ordered sections with strategic purpose — HOOK → SHOW → PROVE → DIFFERENTIATE → CONVERT]
+[For each section, specify: section TYPE (from the type vocabulary below), content density (light/medium/heavy), and key content needs]
+
+### Section Type Vocabulary
+Use these types for precision (not just "features" or "CTA"):
+hero | architecture | deep-dive | integration-grid | feature-matrix | code-example | comparison-table | pricing | process-flow | tech-stack | deployment | taxonomy | narrative | social-proof | data-table | faq | cta
+
+## Content Density Target
+[Match reference if available. Specify: total section count, code examples needed, data tables needed, technical depth level]
 
 ## Conversion Strategy
 [Hero pattern, CTA strategy, social proof plan, demo approach]
@@ -141,6 +159,11 @@ After completing the brief, suggest next step:
 
 ```
 Brief complete → saved to .web/brief.md
+
+  Sections: [N] ([list of section types])
+  Content density target: [light/medium/heavy]
+  Code examples needed: [Y/N, count]
+  Data tables needed: [Y/N, count]
 
 Next: /web/design to lock in the visual direction (palette, fonts, moodboard)
   or: /web/ship to run the full pipeline from here
