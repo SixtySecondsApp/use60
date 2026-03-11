@@ -6,6 +6,7 @@
  * 2. Trust Capital score via get_trust_capital RPC
  * 3. Recent calibration events from crm_approval_queue (last 5 resolved items)
  *
+ * All hooks return empty/null data on error — the component gracefully hides itself.
  * @see PST-015
  */
 
@@ -58,7 +59,7 @@ export const AGENT_LEARNING_KEY = 'agent-learning' as const;
 
 /**
  * Fetch acceptance rates by category for 7d and 30d windows.
- * Uses the get_autonomy_analytics RPC which reads from the autonomy_analytics table.
+ * Returns empty arrays on error (RPC may not exist yet).
  */
 export function useAcceptanceRates() {
   const orgId = useActiveOrgId();
@@ -67,30 +68,40 @@ export function useAcceptanceRates() {
     queryKey: [AGENT_LEARNING_KEY, 'acceptance-rates', orgId, 7],
     queryFn: async () => {
       if (!orgId) return [];
-      const { data, error } = await supabase.rpc('get_autonomy_analytics', {
-        p_org_id: orgId,
-        p_window_days: 7,
-      } as any);
-      if (error) throw error;
-      return (data ?? []) as AcceptanceRateEntry[];
+      try {
+        const { data, error } = await supabase.rpc('get_autonomy_analytics', {
+          p_org_id: orgId,
+          p_window_days: 7,
+        } as any);
+        if (error) return [];
+        return (data ?? []) as AcceptanceRateEntry[];
+      } catch {
+        return [];
+      }
     },
     enabled: !!orgId,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   const rates30d = useQuery({
     queryKey: [AGENT_LEARNING_KEY, 'acceptance-rates', orgId, 30],
     queryFn: async () => {
       if (!orgId) return [];
-      const { data, error } = await supabase.rpc('get_autonomy_analytics', {
-        p_org_id: orgId,
-        p_window_days: 30,
-      } as any);
-      if (error) throw error;
-      return (data ?? []) as AcceptanceRateEntry[];
+      try {
+        const { data, error } = await supabase.rpc('get_autonomy_analytics', {
+          p_org_id: orgId,
+          p_window_days: 30,
+        } as any);
+        if (error) return [];
+        return (data ?? []) as AcceptanceRateEntry[];
+      } catch {
+        return [];
+      }
     },
     enabled: !!orgId,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   return { rates7d, rates30d };
@@ -98,6 +109,7 @@ export function useAcceptanceRates() {
 
 /**
  * Fetch Trust Capital score via get_trust_capital RPC.
+ * Returns null on error (RPC may not exist yet).
  */
 export function useTrustCapital() {
   const { userId } = useAuth();
@@ -107,21 +119,26 @@ export function useTrustCapital() {
     queryKey: [AGENT_LEARNING_KEY, 'trust-capital', userId, orgId],
     queryFn: async () => {
       if (!userId || !orgId) return null;
-      const { data, error } = await supabase.rpc('get_trust_capital', {
-        p_user_id: userId,
-        p_org_id: orgId,
-      } as any);
-      if (error) throw error;
-      return (data ?? null) as TrustCapitalData | null;
+      try {
+        const { data, error } = await supabase.rpc('get_trust_capital', {
+          p_user_id: userId,
+          p_org_id: orgId,
+        } as any);
+        if (error) return null;
+        return (data ?? null) as TrustCapitalData | null;
+      } catch {
+        return null;
+      }
     },
     enabled: !!userId && !!orgId,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
 
 /**
  * Fetch last 5 resolved calibration events from crm_approval_queue.
- * These are items that have been approved, rejected, or edited.
+ * Returns empty array on error (table may not have expected columns).
  */
 export function useCalibrationEvents() {
   const orgId = useActiveOrgId();
@@ -130,17 +147,22 @@ export function useCalibrationEvents() {
     queryKey: [AGENT_LEARNING_KEY, 'calibration-events', orgId],
     queryFn: async () => {
       if (!orgId) return [];
-      const { data, error } = await supabase
-        .from('crm_approval_queue')
-        .select('id, field_name, status, confidence, created_at, approved_at')
-        .eq('org_id', orgId)
-        .in('status', ['approved', 'rejected', 'edited'])
-        .order('approved_at', { ascending: false, nullsFirst: false })
-        .limit(5);
-      if (error) throw error;
-      return (data ?? []) as CalibrationEvent[];
+      try {
+        const { data, error } = await supabase
+          .from('crm_approval_queue')
+          .select('id, field_name, status, confidence, created_at, approved_at')
+          .eq('org_id', orgId)
+          .in('status', ['approved', 'rejected', 'edited'])
+          .order('approved_at', { ascending: false, nullsFirst: false })
+          .limit(5);
+        if (error) return [];
+        return (data ?? []) as CalibrationEvent[];
+      } catch {
+        return [];
+      }
     },
     enabled: !!orgId,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
