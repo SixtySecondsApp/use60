@@ -20,6 +20,7 @@ import {
 } from '@/lib/hooks/useSubscription';
 import { useSubscriptionGate } from '@/lib/hooks/useSubscriptionGate';
 import { PLAN_DETAILS, ANNUAL_SAVINGS } from '@/lib/config/planDetails';
+import { ActiveDiscount } from '@/components/billing/ActiveDiscount';
 import { CreditBalanceSection } from '@/components/billing/CreditBalanceSection';
 import { TransactionHistorySection } from '@/components/billing/TransactionHistorySection';
 import { PlanChangeModal } from '@/components/billing/PlanChangeModal';
@@ -393,6 +394,9 @@ export default function BillingSettingsPage() {
             )}
           </div>
         </section>
+
+        {/* Active Discount (if any coupon applied) */}
+        <ActiveDiscount discountInfo={subscription?.discount_info as any} />
 
         {/* ================================================================
             Section 2: Plan Comparison
