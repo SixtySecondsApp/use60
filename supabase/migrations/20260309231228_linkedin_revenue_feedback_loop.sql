@@ -397,24 +397,24 @@ $$;
 -- ============================================================
 CREATE OR REPLACE VIEW linkedin_campaign_performance AS
 SELECT
-  d.clerk_org_id AS org_id,
+  l.clerk_org_id AS org_id,
   l.source_campaign AS campaign_name,
   l.source_channel,
   COUNT(DISTINCT l.id) AS total_leads,
   COUNT(DISTINCT CASE WHEN d.id IS NOT NULL THEN l.id END) AS leads_with_deals,
   COUNT(DISTINCT d.id) AS total_deals,
   COUNT(DISTINCT CASE WHEN d.closed_won_date IS NOT NULL THEN d.id END) AS won_deals,
-  COALESCE(SUM(CASE WHEN d.closed_won_date IS NOT NULL THEN d.amount END), 0) AS won_revenue,
-  COUNT(DISTINCT m.id) AS total_meetings,
+  COALESCE(SUM(CASE WHEN d.closed_won_date IS NOT NULL THEN d.value END), 0) AS won_revenue,
+  COUNT(DISTINCT ma.meeting_id) AS total_meetings,
   COUNT(DISTINCT CASE WHEN ce.milestone_event = 'proposal_sent' THEN ce.id END) AS proposals_sent,
   COUNT(DISTINCT CASE WHEN ce.milestone_event = 'qualified_lead' THEN ce.id END) AS qualified_leads
 FROM leads l
-LEFT JOIN contacts ct ON ct.email = l.email AND ct.clerk_org_id = l.org_id
+LEFT JOIN contacts ct ON ct.email = l.contact_email AND ct.clerk_org_id = l.clerk_org_id
 LEFT JOIN deal_contacts dc ON dc.contact_id = ct.id
 LEFT JOIN deals d ON d.id = dc.deal_id
-LEFT JOIN meetings m ON m.deal_id = d.id
+LEFT JOIN activities ma ON ma.deal_id = d.id AND ma.meeting_id IS NOT NULL
 LEFT JOIN linkedin_conversion_events ce ON ce.lead_id = l.id OR ce.deal_id = d.id
 WHERE l.utm_source = 'linkedin'
    OR l.source_channel LIKE 'linkedin%'
    OR l.external_source = 'linkedin'
-GROUP BY d.clerk_org_id, l.source_campaign, l.source_channel;
+GROUP BY l.clerk_org_id, l.source_campaign, l.source_channel;

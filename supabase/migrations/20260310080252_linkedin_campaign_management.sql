@@ -165,7 +165,7 @@ CREATE POLICY "Org members can view managed campaign groups" ON linkedin_managed
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_campaign_groups.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_campaign_groups.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -174,7 +174,7 @@ CREATE POLICY "Org members can insert managed campaign groups" ON linkedin_manag
   FOR INSERT WITH CHECK (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_campaign_groups.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_campaign_groups.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -183,7 +183,7 @@ CREATE POLICY "Org members can update managed campaign groups" ON linkedin_manag
   FOR UPDATE USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_campaign_groups.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_campaign_groups.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -198,7 +198,7 @@ CREATE POLICY "Org members can view managed campaigns" ON linkedin_managed_campa
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_campaigns.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_campaigns.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -207,7 +207,7 @@ CREATE POLICY "Org members can insert managed campaigns" ON linkedin_managed_cam
   FOR INSERT WITH CHECK (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_campaigns.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_campaigns.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -216,7 +216,7 @@ CREATE POLICY "Org members can update managed campaigns" ON linkedin_managed_cam
   FOR UPDATE USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_campaigns.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_campaigns.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -231,7 +231,7 @@ CREATE POLICY "Org members can view managed creatives" ON linkedin_managed_creat
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_creatives.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_creatives.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -240,7 +240,7 @@ CREATE POLICY "Org members can insert managed creatives" ON linkedin_managed_cre
   FOR INSERT WITH CHECK (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_creatives.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_creatives.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -249,7 +249,7 @@ CREATE POLICY "Org members can update managed creatives" ON linkedin_managed_cre
   FOR UPDATE USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_creatives.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_creatives.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -264,7 +264,7 @@ CREATE POLICY "Org members can view managed lead forms" ON linkedin_managed_lead
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_lead_forms.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_lead_forms.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -273,7 +273,7 @@ CREATE POLICY "Org members can insert managed lead forms" ON linkedin_managed_le
   FOR INSERT WITH CHECK (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_lead_forms.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_lead_forms.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -282,7 +282,7 @@ CREATE POLICY "Org members can update managed lead forms" ON linkedin_managed_le
   FOR UPDATE USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_managed_lead_forms.org_id
+      WHERE organization_memberships.org_id = linkedin_managed_lead_forms.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -297,7 +297,7 @@ CREATE POLICY "Org members can view campaign approvals" ON linkedin_campaign_app
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_campaign_approvals.org_id
+      WHERE organization_memberships.org_id = linkedin_campaign_approvals.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -306,7 +306,7 @@ CREATE POLICY "Org members can insert campaign approvals" ON linkedin_campaign_a
   FOR INSERT WITH CHECK (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_campaign_approvals.org_id
+      WHERE organization_memberships.org_id = linkedin_campaign_approvals.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -315,7 +315,7 @@ CREATE POLICY "Org members can update campaign approvals" ON linkedin_campaign_a
   FOR UPDATE USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_campaign_approvals.org_id
+      WHERE organization_memberships.org_id = linkedin_campaign_approvals.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
