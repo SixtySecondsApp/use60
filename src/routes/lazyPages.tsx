@@ -58,6 +58,7 @@ export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/Cre
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
 export const GoldenEyeAdmin = lazyWithRetry(() => import('@/pages/platform/GoldenEyeAdmin'));
 export const CreditMenuAdmin = lazyWithRetry(() => import('@/pages/platform/CreditMenuAdmin'));
+export const CouponAdmin = lazyWithRetry(() => import('@/pages/platform/CouponAdmin'));
 export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo/EnrichmentComparison'));
 export const ResearchComparisonDemo = lazyWithRetry(() => import('@/pages/demo/ResearchComparison'));
 export const GeminiModelComparison = lazyWithRetry(() => import('@/pages/demo/GeminiModelComparison'));

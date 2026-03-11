@@ -14,6 +14,9 @@ import {
   BarChart3,
   PieChart,
   LineChart,
+  Tag,
+  Ticket,
+  Hash,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +46,7 @@ import {
   useRealizedLTV,
   useTrialConversionRate,
   useMRRMovement,
+  useCouponAnalytics,
 } from '@/lib/hooks/useBillingAnalytics';
 
 // Format currency helper
@@ -94,6 +98,7 @@ export default function BillingAnalytics() {
     dateRange.start,
     dateRange.end
   );
+  const { data: couponAnalytics, isLoading: couponLoading } = useCouponAnalytics();
   const { data: mrrMovement, isLoading: movementLoading } = useMRRMovement(30);
   const { data: realizedLTV, isLoading: ltvLoading } = useRealizedLTV(
     subMonths(new Date(), 12),
@@ -329,6 +334,7 @@ export default function BillingAnalytics() {
             <TabsTrigger value="retention">Retention</TabsTrigger>
             <TabsTrigger value="ltv">Lifetime Value</TabsTrigger>
             <TabsTrigger value="churn">Churn</TabsTrigger>
+            <TabsTrigger value="coupons">Coupons</TabsTrigger>
           </TabsList>
 
           <TabsContent value="mrr" className="space-y-4">
@@ -476,6 +482,153 @@ export default function BillingAnalytics() {
                 ) : (
                   <div className="flex items-center justify-center h-[400px] text-muted-foreground">
                     No churn data available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="coupons" className="space-y-4">
+            {/* Summary cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Active Coupons</CardTitle>
+                  <Tag className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {couponLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      couponAnalytics?.activeCoupons ?? 0
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Currently active</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Redemptions</CardTitle>
+                  <Ticket className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {couponLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      couponAnalytics?.totalRedemptions ?? 0
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">All time</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Discount Given</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {couponLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      formatCurrency(couponAnalytics?.totalDiscountCents ?? 0)
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Cumulative discount</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Est. MRR Impact</CardTitle>
+                  <TrendingDown className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {couponLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      formatCurrency(couponAnalytics?.totalDiscountCents ?? 0)
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Revenue reduction</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Per-coupon table */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Per-Coupon Breakdown</CardTitle>
+                <CardDescription>
+                  Redemptions and discount totals per coupon
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {couponLoading ? (
+                  <Skeleton className="h-[300px] w-full rounded-xl" />
+                ) : couponAnalytics?.perCoupon && couponAnalytics.perCoupon.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-gray-800">
+                          <th className="text-left py-3 px-2 font-medium text-muted-foreground">Coupon Name</th>
+                          <th className="text-left py-3 px-2 font-medium text-muted-foreground">Type</th>
+                          <th className="text-right py-3 px-2 font-medium text-muted-foreground">Redemptions</th>
+                          <th className="text-right py-3 px-2 font-medium text-muted-foreground">Total Discount</th>
+                          <th className="text-left py-3 px-2 font-medium text-muted-foreground">Last Used</th>
+                          <th className="text-left py-3 px-2 font-medium text-muted-foreground">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {couponAnalytics.perCoupon.map((coupon) => (
+                          <tr
+                            key={coupon.id}
+                            className="border-b border-gray-100 dark:border-gray-800/50 hover:bg-muted/50 transition-colors"
+                          >
+                            <td className="py-3 px-2 font-medium text-gray-900 dark:text-gray-100">
+                              {coupon.name}
+                            </td>
+                            <td className="py-3 px-2 text-gray-600 dark:text-gray-400">
+                              {coupon.discount_type === 'percent_off'
+                                ? `${coupon.discount_value}%`
+                                : formatCurrency(coupon.discount_value, coupon.currency || 'GBP')}
+                            </td>
+                            <td className="py-3 px-2 text-right text-gray-900 dark:text-gray-100">
+                              {coupon.redemption_count}
+                            </td>
+                            <td className="py-3 px-2 text-right text-gray-900 dark:text-gray-100">
+                              {formatCurrency(coupon.total_discount_cents)}
+                            </td>
+                            <td className="py-3 px-2 text-gray-600 dark:text-gray-400">
+                              {coupon.last_used
+                                ? format(new Date(coupon.last_used), 'dd MMM yyyy')
+                                : 'Never'}
+                            </td>
+                            <td className="py-3 px-2">
+                              <span
+                                className={cn(
+                                  'px-2 py-0.5 text-xs font-medium rounded-full',
+                                  coupon.is_active
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                                )}
+                              >
+                                {coupon.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                    No coupon data available
                   </div>
                 )}
               </CardContent>
