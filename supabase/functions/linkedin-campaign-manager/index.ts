@@ -12,7 +12,7 @@ import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse
 // Actions:
 //   Campaign Groups: list_groups, create_group, update_group
 //   Campaigns:       list_campaigns, get_campaign, create_campaign, update_campaign, update_status
-//   Creatives:       list_creatives, create_creative, update_creative
+//   Creatives:       list_creatives, create_creative, update_creative, create_creatives_from_ops
 //   Audiences:       estimate_audience, list_audiences, create_audience, upload_audience_members,
 //                    delete_audience, sync_audience_status, push_ops_to_audience
 // ---------------------------------------------------------------------------
@@ -24,9 +24,10 @@ const LINKEDIN_API_VERSION = '202511'
 const VALID_ACTIONS = [
   'list_groups', 'create_group', 'update_group',
   'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign', 'update_status',
-  'list_creatives', 'create_creative', 'update_creative',
+  'list_creatives', 'create_creative', 'update_creative', 'create_creatives_from_ops',
   'estimate_audience', 'list_audiences', 'create_audience', 'upload_audience_members',
   'delete_audience', 'sync_audience_status', 'push_ops_to_audience',
+  'update_campaign_budget',
 ] as const
 
 type Action = typeof VALID_ACTIONS[number]
@@ -1526,6 +1527,620 @@ async function handlePushOpsToAudience(
 }
 
 // ---------------------------------------------------------------------------
+// Ops-table creative creation
+// ---------------------------------------------------------------------------
+
+interface CreativeFromOpsResult {
+  row_id: string
+  success: boolean
+  linkedin_creative_urn?: string
+  local_creative_id?: string
+  error?: string
+}
+
+/**
+ * Upload an image to LinkedIn via the Images API initialise-upload flow.
+ * Returns the LinkedIn image URN (e.g. "urn:li:image:C550...").
+ */
+async function uploadImageToLinkedIn(
+  accessToken: string,
+  adAccountId: string,
+  imageUrl: string,
+): Promise<string> {
+  // Step 1: initialise upload
+  const initPayload = {
+    initializeUploadRequest: {
+      owner: `urn:li:sponsoredAccount:${adAccountId}`,
+    },
+  }
+
+  const initResp = await fetch(
+    `${LINKEDIN_API_BASE}/images?action=initializeUpload`,
+    {
+      method: 'POST',
+      headers: linkedInHeaders(accessToken),
+      body: JSON.stringify(initPayload),
+    },
+  )
+
+  if (!initResp.ok) {
+    const text = await initResp.text()
+    throw new Error(`LinkedIn image init failed (${initResp.status}): ${text.slice(0, 300)}`)
+  }
+
+  const initData = await initResp.json()
+  const uploadUrl: string = initData?.value?.uploadUrl || initData?.uploadUrl || ''
+  const imageUrn: string = initData?.value?.image || initData?.image || ''
+
+  if (!uploadUrl || !imageUrn) {
+    throw new Error('LinkedIn image init response missing uploadUrl or image URN')
+  }
+
+  // Step 2: fetch the image bytes and upload to the pre-signed URL
+  const imageResp = await fetch(imageUrl)
+  if (!imageResp.ok) {
+    throw new Error(`Failed to fetch image from URL (${imageResp.status}): ${imageUrl}`)
+  }
+
+  const imageBytes = await imageResp.arrayBuffer()
+  const contentType = imageResp.headers.get('content-type') || 'image/jpeg'
+
+  const uploadResp = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: imageBytes,
+  })
+
+  if (!uploadResp.ok) {
+    const text = await uploadResp.text()
+    throw new Error(`LinkedIn image upload failed (${uploadResp.status}): ${text.slice(0, 300)}`)
+  }
+
+  return imageUrn
+}
+
+/**
+ * create_creatives_from_ops
+ *
+ * Reads mapped column values from `dynamic_table_cells` for each row,
+ * optionally uploads images to LinkedIn, creates LinkedIn creatives via the
+ * Creatives API, stores them in `linkedin_managed_creatives`, and records
+ * the LinkedIn creative URN back in the cell metadata.
+ *
+ * Request body:
+ *   {
+ *     action: 'create_creatives_from_ops',
+ *     org_id: string,
+ *     table_id: string,
+ *     row_ids: string[],
+ *     campaign_id: string,           // local UUID in linkedin_managed_campaigns
+ *     column_mapping: {
+ *       headline_column_id?: string,
+ *       body_text_column_id?: string,
+ *       cta_text_column_id?: string,
+ *       destination_url_column_id?: string,
+ *       image_url_column_id?: string,
+ *     },
+ *     structure?: {
+ *       is_direct_sponsored?: boolean,
+ *       cta_override?: string,
+ *       destination_url_override?: string,
+ *     }
+ *   }
+ */
+async function handleCreateCreativesFromOps(
+  serviceClient: SupabaseClient,
+  body: Record<string, any>,
+  userId: string,
+): Promise<Record<string, unknown>> {
+  const { org_id, table_id, row_ids, campaign_id, column_mapping, structure } = body
+
+  if (!org_id) throw new Error('org_id is required')
+  if (!table_id) throw new Error('table_id is required')
+  if (!campaign_id) throw new Error('campaign_id is required')
+  if (!row_ids || !Array.isArray(row_ids) || row_ids.length === 0) {
+    throw new Error('row_ids must be a non-empty array')
+  }
+  if (!column_mapping || typeof column_mapping !== 'object') {
+    throw new Error('column_mapping is required')
+  }
+
+  const BATCH_SIZE_CREATIVES = 10
+
+  // Resolve local campaign → LinkedIn campaign ID + ad account
+  const { data: campaign, error: campaignError } = await serviceClient
+    .from('linkedin_managed_campaigns')
+    .select('id, org_id, linkedin_campaign_id, ad_account_id')
+    .eq('id', campaign_id)
+    .maybeSingle()
+
+  if (campaignError || !campaign) throw new Error('Campaign not found')
+  if (campaign.org_id !== org_id) throw new Error('Campaign does not belong to this organization')
+
+  // Collect all distinct column IDs we need to fetch
+  const mappedColumnIds = Object.values(column_mapping).filter(
+    (id): id is string => typeof id === 'string' && id.length > 0,
+  )
+
+  if (mappedColumnIds.length === 0) {
+    throw new Error('column_mapping must reference at least one column')
+  }
+
+  // Fetch all relevant cells in one query
+  const { data: cells, error: cellsError } = await serviceClient
+    .from('dynamic_table_cells')
+    .select('row_id, column_id, value, metadata')
+    .in('row_id', row_ids)
+    .in('column_id', mappedColumnIds)
+
+  if (cellsError) throw new Error(`Failed to read ops table data: ${cellsError.message}`)
+
+  // Build a lookup: rowId -> { columnId -> { value, metadata } }
+  const cellsByRow: Record<string, Record<string, { value: string; metadata: any }>> = {}
+  for (const cell of (cells ?? [])) {
+    if (!cellsByRow[cell.row_id]) cellsByRow[cell.row_id] = {}
+    cellsByRow[cell.row_id][cell.column_id] = {
+      value: cell.value ?? '',
+      metadata: cell.metadata ?? null,
+    }
+  }
+
+  // Get LinkedIn access token once for the whole batch
+  const { token: accessToken } = await getLinkedInToken(serviceClient, org_id)
+
+  const results: CreativeFromOpsResult[] = []
+  const isDirectSponsored = structure?.is_direct_sponsored ?? true
+
+  // Process in batches of BATCH_SIZE_CREATIVES
+  for (let batchStart = 0; batchStart < row_ids.length; batchStart += BATCH_SIZE_CREATIVES) {
+    const batchRowIds = row_ids.slice(batchStart, batchStart + BATCH_SIZE_CREATIVES)
+
+    // Process each row in the batch — partial failures are captured per-row
+    await Promise.all(
+      batchRowIds.map(async (rowId) => {
+        try {
+          const rowCells = cellsByRow[rowId] ?? {}
+
+          // Extract values using column mapping
+          const getCellValue = (columnKey: keyof typeof column_mapping): string => {
+            const columnId = column_mapping[columnKey]
+            if (!columnId) return ''
+            return rowCells[columnId]?.value ?? ''
+          }
+
+          const headline = getCellValue('headline_column_id')
+          const bodyText = getCellValue('body_text_column_id')
+          const ctaText = structure?.cta_override || getCellValue('cta_text_column_id')
+          const destinationUrl = structure?.destination_url_override || getCellValue('destination_url_column_id')
+          const imageUrl = getCellValue('image_url_column_id')
+
+          // Upload image if a URL is provided
+          let imageUrn: string | null = null
+          if (imageUrl) {
+            try {
+              imageUrn = await uploadImageToLinkedIn(accessToken, campaign.ad_account_id, imageUrl)
+            } catch (imgErr) {
+              console.warn(`${LOG_PREFIX} Image upload failed for row ${rowId}: ${imgErr instanceof Error ? imgErr.message : imgErr}`)
+              // Continue without image — creative will be text-only
+            }
+          }
+
+          // Build LinkedIn Creatives API payload
+          const linkedInPayload: Record<string, any> = {
+            campaign: campaign.linkedin_campaign_id
+              ? `urn:li:sponsoredCampaign:${campaign.linkedin_campaign_id}`
+              : undefined,
+            intendedStatus: 'ACTIVE',
+            isDirectSponsoredContent: isDirectSponsored,
+          }
+
+          const adContent: Record<string, any> = {
+            introductoryText: bodyText || '',
+            actionTarget: destinationUrl || '',
+            title: headline || '',
+          }
+          if (ctaText) adContent.callToAction = ctaText
+          if (imageUrn) adContent.media = { id: imageUrn }
+
+          linkedInPayload.content = adContent
+
+          // Push to LinkedIn Creatives API
+          let linkedInCreativeId: string | null = null
+          let linkedInCreativeUrn: string | null = null
+          let versionTag: string | null = null
+
+          if (campaign.linkedin_campaign_id) {
+            const liResult = await linkedInFetch(
+              `${LINKEDIN_API_BASE}/adAccounts/${campaign.ad_account_id}/creatives`,
+              {
+                method: 'POST',
+                headers: linkedInHeaders(accessToken),
+                body: linkedInPayload,
+              },
+            )
+            linkedInCreativeId = liResult.data?.id
+              || liResult.data?.value?.id
+              || null
+            // Build URN from numeric ID
+            if (linkedInCreativeId) {
+              linkedInCreativeUrn = `urn:li:sponsoredCreative:${linkedInCreativeId}`
+            }
+            versionTag = liResult.versionTag || null
+          }
+
+          // Persist to local linkedin_managed_creatives table
+          const { data: creative, error: insertError } = await serviceClient
+            .from('linkedin_managed_creatives')
+            .insert({
+              org_id,
+              campaign_id,
+              linkedin_creative_id: linkedInCreativeId ? String(linkedInCreativeId) : null,
+              headline: headline || null,
+              body_text: bodyText || null,
+              cta_text: ctaText || null,
+              destination_url: destinationUrl || null,
+              media_type: imageUrn ? 'IMAGE' : 'TEXT',
+              media_asset_id: imageUrn || null,
+              status: 'DRAFT',
+              is_direct_sponsored: isDirectSponsored,
+              version_tag: versionTag,
+              created_by: userId,
+              last_synced_at: linkedInCreativeId ? new Date().toISOString() : null,
+            })
+            .select('id')
+            .single()
+
+          if (insertError) {
+            throw new Error(`DB insert failed: ${insertError.message}`)
+          }
+
+          // Store the LinkedIn creative URN back into cell metadata so the UI
+          // can display it and link back to the ops row. We update the first
+          // mapped column that has a value for this row (prefer image, then headline).
+          const metaColumnId = column_mapping.image_url_column_id
+            || column_mapping.headline_column_id
+            || mappedColumnIds[0]
+
+          if (metaColumnId && linkedInCreativeUrn) {
+            const existingMeta = rowCells[metaColumnId]?.metadata ?? {}
+            await serviceClient
+              .from('dynamic_table_cells')
+              .update({
+                metadata: {
+                  ...existingMeta,
+                  linkedin_creative_urn: linkedInCreativeUrn,
+                  linkedin_creative_id: linkedInCreativeId,
+                  creative_created_at: new Date().toISOString(),
+                },
+              })
+              .eq('row_id', rowId)
+              .eq('column_id', metaColumnId)
+          }
+
+          results.push({
+            row_id: rowId,
+            success: true,
+            linkedin_creative_urn: linkedInCreativeUrn ?? undefined,
+            local_creative_id: creative?.id,
+          })
+        } catch (rowErr) {
+          const message = rowErr instanceof Error ? rowErr.message : String(rowErr)
+          console.error(`${LOG_PREFIX} Failed to create creative for row ${rowId}: ${message}`)
+          results.push({ row_id: rowId, success: false, error: message })
+        }
+      }),
+    )
+  }
+
+  const succeeded = results.filter((r) => r.success).length
+  const failed = results.filter((r) => !r.success).length
+
+  console.log(`${LOG_PREFIX} create_creatives_from_ops: ${succeeded} succeeded, ${failed} failed from ${row_ids.length} rows`)
+
+  return {
+    success: failed === 0,
+    total: row_ids.length,
+    succeeded,
+    failed,
+    results,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Budget sync from ops table handler
+// ---------------------------------------------------------------------------
+
+/**
+ * update_campaign_budget
+ *
+ * Reads the budget configuration stored in `dynamic_tables.integration_config.linkedin.budget`
+ * for a given ops table and pushes the resolved daily budgets to the bound LinkedIn campaign(s).
+ *
+ * Budget config shape:
+ *   {
+ *     source: 'manual' | 'column',
+ *     daily_budget: number | null,    -- used when source = 'manual'
+ *     budget_column: string | null,   -- column key when source = 'column'
+ *     weight_column: string | null,   -- optional proportional distribution
+ *   }
+ *
+ * Campaign structure (from the linkedin binding):
+ *   'single_campaign'  → one campaign, applies the single resolved budget
+ *   'per_row_campaign' → one campaign per row, each gets its resolved budget
+ *
+ * Minimum daily budget: $10 USD per campaign (LinkedIn requirement).
+ * Sync direction: ops table → LinkedIn only.
+ *
+ * Required body fields:
+ *   table_id: string
+ */
+async function handleUpdateCampaignBudget(
+  serviceClient: SupabaseClient,
+  body: Record<string, any>,
+  userId: string,
+): Promise<Record<string, unknown>> {
+  const { table_id } = body
+  if (!table_id) throw new Error('table_id is required')
+
+  const LINKEDIN_MIN_DAILY_BUDGET_CENTS = 1000 // LinkedIn budget is in microcurrency (1/100 cents)
+  const LINKEDIN_MIN_DAILY_BUDGET_USD = 10
+
+  // 1. Fetch the dynamic table record to get integration_config
+  const { data: tableRecord, error: tableError } = await serviceClient
+    .from('dynamic_tables')
+    .select('id, org_id, integration_config')
+    .eq('id', table_id)
+    .maybeSingle()
+
+  if (tableError) throw new Error(`Failed to load ops table: ${tableError.message}`)
+  if (!tableRecord) throw new Error('Ops table not found')
+
+  // Verify the requesting user belongs to the table's org
+  await validateOrgMembership(serviceClient, userId, tableRecord.org_id)
+
+  const integrationConfig = (tableRecord.integration_config ?? {}) as Record<string, any>
+  const linkedInConfig = (integrationConfig.linkedin ?? {}) as Record<string, any>
+
+  // 2. Extract campaign binding
+  const campaignGroupId = linkedInConfig.campaign_group_id as string | undefined
+  if (!campaignGroupId) throw new Error('No LinkedIn campaign binding found for this table')
+
+  const campaignId = linkedInConfig.campaign_id as string | undefined
+  const structure = (linkedInConfig.structure as string) || 'single_campaign'
+
+  // 3. Extract budget config
+  const budgetConfig = (linkedInConfig.budget ?? {}) as Record<string, any>
+  const budgetSource = budgetConfig.source as 'manual' | 'column' | undefined
+  if (!budgetSource) throw new Error('No budget configuration found. Complete the Creative Mapping wizard first.')
+
+  const dailyBudgetManual = budgetConfig.daily_budget as number | null
+  const budgetColumnKey = budgetConfig.budget_column as string | null
+  const weightColumnKey = budgetConfig.weight_column as string | null
+
+  // 4. Get LinkedIn access token
+  const { token: accessToken, adAccountId } = await getLinkedInToken(serviceClient, tableRecord.org_id)
+
+  // 5. Resolve budget values
+  let budgetLines: { rowId: string | null; dailyBudgetUsd: number }[] = []
+
+  if (budgetSource === 'manual') {
+    if (dailyBudgetManual === null) throw new Error('Manual budget value is not set')
+    if (dailyBudgetManual < LINKEDIN_MIN_DAILY_BUDGET_USD) {
+      throw new Error(`Daily budget must be at least $${LINKEDIN_MIN_DAILY_BUDGET_USD}`)
+    }
+    // For per-row structure, this same budget applies to every campaign row
+    budgetLines = [{ rowId: null, dailyBudgetUsd: dailyBudgetManual }]
+  } else {
+    // Column mode — need to read cells
+    if (!budgetColumnKey) throw new Error('Budget column is not configured')
+
+    // Resolve column key → column id
+    const { data: budgetCol, error: colError } = await serviceClient
+      .from('dynamic_table_columns')
+      .select('id, key')
+      .eq('table_id', table_id)
+      .eq('key', budgetColumnKey)
+      .maybeSingle()
+
+    if (colError || !budgetCol) throw new Error(`Budget column "${budgetColumnKey}" not found`)
+
+    let weightColId: string | null = null
+    if (weightColumnKey) {
+      const { data: weightCol } = await serviceClient
+        .from('dynamic_table_columns')
+        .select('id, key')
+        .eq('table_id', table_id)
+        .eq('key', weightColumnKey)
+        .maybeSingle()
+      weightColId = weightCol?.id ?? null
+    }
+
+    // Fetch all rows in order
+    const { data: rows, error: rowsError } = await serviceClient
+      .from('dynamic_table_rows')
+      .select('id, row_index')
+      .eq('table_id', table_id)
+      .order('row_index', { ascending: true })
+
+    if (rowsError) throw new Error(`Failed to load table rows: ${rowsError.message}`)
+    if (!rows || rows.length === 0) {
+      return { success: true, updated_count: 0, message: 'No rows found in table' }
+    }
+
+    const rowIds = rows.map((r: any) => r.id)
+
+    // Fetch budget column cells
+    const columnIdsToFetch = [budgetCol.id, ...(weightColId ? [weightColId] : [])]
+    const { data: cells, error: cellsError } = await serviceClient
+      .from('dynamic_table_cells')
+      .select('row_id, column_id, value')
+      .in('row_id', rowIds)
+      .in('column_id', columnIdsToFetch)
+
+    if (cellsError) throw new Error(`Failed to read budget cells: ${cellsError.message}`)
+
+    // Build lookup
+    const cellLookup: Record<string, Record<string, string>> = {}
+    for (const cell of (cells ?? [])) {
+      if (!cellLookup[cell.row_id]) cellLookup[cell.row_id] = {}
+      cellLookup[cell.row_id][cell.column_id] = cell.value ?? ''
+    }
+
+    // Parse raw values
+    const rawValues = rows.map((r: any) => {
+      const raw = parseFloat(cellLookup[r.id]?.[budgetCol.id] ?? '')
+      return { rowId: r.id, raw: isNaN(raw) ? null : raw }
+    })
+
+    // Apply weight distribution if configured
+    if (weightColId) {
+      const weights = rows.map((r: any) => {
+        const w = parseFloat(cellLookup[r.id]?.[weightColId!] ?? '')
+        return isNaN(w) ? null : w
+      })
+      const totalWeight = weights.reduce<number>((sum, w) => sum + (w ?? 0), 0)
+      const totalBudget = rawValues.reduce<number>((sum, { raw }) => sum + (raw ?? 0), 0)
+
+      if (totalWeight <= 0) throw new Error('Weight column total is zero or all weights are missing')
+      if (totalBudget <= 0) throw new Error('Budget column total is zero or all budget values are missing')
+
+      budgetLines = rawValues.map(({ rowId }, i) => {
+        const w = weights[i] ?? 0
+        const daily = totalWeight > 0 ? (w / totalWeight) * totalBudget : 0
+        return { rowId, dailyBudgetUsd: daily }
+      })
+    } else {
+      budgetLines = rawValues.map(({ rowId, raw }) => ({
+        rowId,
+        dailyBudgetUsd: raw ?? 0,
+      }))
+    }
+
+    // Validate all rows meet minimum
+    const belowMin = budgetLines.filter((l) => l.dailyBudgetUsd < LINKEDIN_MIN_DAILY_BUDGET_USD)
+    if (belowMin.length > 0) {
+      throw new Error(
+        `${belowMin.length} row(s) have daily budgets below the $${LINKEDIN_MIN_DAILY_BUDGET_USD} minimum. Fix values and try again.`
+      )
+    }
+  }
+
+  // 6. Find the linked campaigns in our managed_campaigns table
+  let updatedCount = 0
+
+  if (structure === 'single_campaign') {
+    // Single campaign: use campaignId or find by campaign_group_id
+    let managedCampaignId: string | null = null
+    let linkedInCampaignId: string | null = null
+    let versionTag: string | null = null
+
+    if (campaignId) {
+      // Direct campaign ID binding
+      const { data: mc } = await serviceClient
+        .from('linkedin_managed_campaigns')
+        .select('id, linkedin_campaign_id, version_tag, org_id')
+        .eq('org_id', tableRecord.org_id)
+        .or(`id.eq.${campaignId},linkedin_campaign_id.eq.${campaignId}`)
+        .maybeSingle()
+
+      managedCampaignId = mc?.id ?? null
+      linkedInCampaignId = mc?.linkedin_campaign_id ?? null
+      versionTag = mc?.version_tag ?? null
+    } else {
+      // Fall back: find campaigns under the group
+      const { data: groupCampaigns } = await serviceClient
+        .from('linkedin_managed_campaigns')
+        .select('id, linkedin_campaign_id, version_tag')
+        .eq('org_id', tableRecord.org_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (groupCampaigns && groupCampaigns.length > 0) {
+        managedCampaignId = groupCampaigns[0].id
+        linkedInCampaignId = groupCampaigns[0].linkedin_campaign_id ?? null
+        versionTag = groupCampaigns[0].version_tag ?? null
+      }
+    }
+
+    const budgetUsd = budgetLines[0]?.dailyBudgetUsd ?? 0
+
+    if (managedCampaignId) {
+      // Update via our existing update_campaign path (handles LinkedIn sync)
+      await handleUpdateCampaign(serviceClient, {
+        campaign_id: managedCampaignId,
+        version_tag: versionTag ?? 'default',
+        daily_budget_amount: budgetUsd,
+      })
+      updatedCount = 1
+    } else if (linkedInCampaignId) {
+      // Push directly to LinkedIn (no local record)
+      const budgetMicro = Math.round(budgetUsd * 100)
+      await linkedInFetch(`${LINKEDIN_API_BASE}/adCampaigns/${linkedInCampaignId}`, {
+        method: 'POST',
+        headers: linkedInHeaders(accessToken, { 'X-Restli-Method': 'PARTIAL_UPDATE' }),
+        body: {
+          patch: {
+            dailyBudget: {
+              $set: { amount: String(budgetMicro), currencyCode: 'USD' },
+            },
+          },
+        },
+      })
+      updatedCount = 1
+    } else {
+      console.warn(`${LOG_PREFIX} No managed campaign found for table ${table_id} — budget sync skipped`)
+    }
+  } else {
+    // per_row_campaign: look for managed campaigns tagged with this table's row IDs
+    // We look for campaigns in our managed_campaigns table that have table_id metadata
+    // matching this ops table, in row_index order.
+    const { data: perRowCampaigns } = await serviceClient
+      .from('linkedin_managed_campaigns')
+      .select('id, linkedin_campaign_id, version_tag, metadata')
+      .eq('org_id', tableRecord.org_id)
+      .eq('metadata->>ops_table_id', table_id)
+      .order('metadata->>row_index', { ascending: true })
+
+    if (!perRowCampaigns || perRowCampaigns.length === 0) {
+      console.warn(`${LOG_PREFIX} No per-row managed campaigns found for table ${table_id}`)
+      return {
+        success: true,
+        updated_count: 0,
+        message: 'No per-row campaigns found linked to this table. Push creatives first to create campaigns.',
+      }
+    }
+
+    // Match budget lines to campaigns by position
+    const updatePromises = perRowCampaigns.map(async (mc: any, i: number) => {
+      const line = budgetLines[i] ?? budgetLines[0]
+      if (!line) return
+
+      try {
+        await handleUpdateCampaign(serviceClient, {
+          campaign_id: mc.id,
+          version_tag: mc.version_tag ?? 'default',
+          daily_budget_amount: line.dailyBudgetUsd,
+        })
+        updatedCount++
+      } catch (err) {
+        console.error(`${LOG_PREFIX} Failed to update budget for campaign ${mc.id}: ${err}`)
+      }
+    })
+
+    await Promise.all(updatePromises)
+  }
+
+  console.log(`${LOG_PREFIX} update_campaign_budget: updated ${updatedCount} campaign(s) for table ${table_id}`)
+
+  return {
+    success: true,
+    updated_count: updatedCount,
+    budget_source: budgetSource,
+    total_daily_budget_usd: budgetLines.reduce((sum, l) => sum + l.dailyBudgetUsd, 0),
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -1585,7 +2200,7 @@ serve(async (req: Request) => {
     if (!orgId && (body.campaign_id || body.group_id || body.creative_id || body.audience_id)) {
       let resolvedOrgId: string | null = null
 
-      if (body.campaign_id && ['get_campaign', 'update_campaign', 'update_status', 'list_creatives'].includes(action)) {
+      if (body.campaign_id && ['get_campaign', 'update_campaign', 'update_status', 'list_creatives', 'create_creatives_from_ops'].includes(action)) {
         const { data: c } = await serviceClient
           .from('linkedin_managed_campaigns')
           .select('org_id')
@@ -1661,6 +2276,9 @@ serve(async (req: Request) => {
       case 'update_creative':
         result = await handleUpdateCreative(serviceClient, body)
         break
+      case 'create_creatives_from_ops':
+        result = await handleCreateCreativesFromOps(serviceClient, body, user.id)
+        break
 
       // Audiences
       case 'estimate_audience':
@@ -1683,6 +2301,11 @@ serve(async (req: Request) => {
         break
       case 'push_ops_to_audience':
         result = await handlePushOpsToAudience(serviceClient, body, user.id)
+        break
+
+      // Budget sync
+      case 'update_campaign_budget':
+        result = await handleUpdateCampaignBudget(serviceClient, body, user.id)
         break
 
       default:

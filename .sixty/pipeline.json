@@ -1,410 +1,44 @@
 {
   "version": 2,
-  "runSlug": "proactive-sales-teammate",
-  "project": "Proactive Sales Teammate",
-  "description": "Wire existing proactive infrastructure into 7 patterns: single human gate, deal heartbeat, overnight+morning triage, learning loop, deal improvement suggestions, cross-deal awareness, pipeline hygiene",
+  "runSlug": "linkedin-ops-ads-pipeline",
+  "project": "LinkedIn Ad Library → Ops Tables → Ads Manager Pipeline",
+  "description": "Connect Ad Library (intelligence), Ops Tables (creative workspace), and LinkedIn Ads Manager (campaign execution).",
   "phase": "build",
-  "startedAt": "2026-03-10T19:00:00.000Z",
-  "lastUpdatedAt": "2026-03-10T20:00:00.000Z",
-
-  "input": {
-    "type": "interactive",
-    "source": "convergence-report.md analysis + discover phase research",
-    "extractedRequirements": [
-      "Pattern 1: Single human gate — agent drafts follow-ups/prep, rep approves output not intent",
-      "Pattern 2: Deal heartbeat — scan after every deal event (meeting, email, stage change), route by severity",
-      "Pattern 3: Overnight work + morning triage — actionable morning brief with approve/edit/dismiss buttons",
-      "Pattern 4: Sales learning loop — calibrate from accepted/rejected drafts, track what works per rep",
-      "Pattern 5: Deal improvement suggestions — proactive 'strengthen this deal' recommendations",
-      "Pattern 6: Cross-deal awareness — detect conflicts across parallel sales activities",
-      "Pattern 7: Pipeline hygiene — periodic cleanup with one-tap fixes"
-    ],
-    "extractedConstraints": [
-      "Must wire existing infrastructure — orchestrator, triageRules, morning brief, HITL, trustCapital all exist",
-      "Event source wiring is the primary gap — adapters ready, runner ready, triggers need connecting",
-      "Edge function timeout limit (5-10min) — async job queuing for heavy scans",
-      "Claude API cost — use Haiku for scanning, batch findings per call",
-      "Must follow existing patterns: getCorsHeaders, maybeSingle, explicit column selection"
-    ],
-    "openQuestions": [],
-    "answeredQuestions": [
-      { "q": "Scope?", "a": "All 7 patterns — complete proactive sales teammate" },
-      { "q": "MVP or full?", "a": "Full suite, estimated 10+ dev-days" }
-    ]
-  },
+  "startedAt": "2026-03-11T18:30:00.000Z",
+  "lastUpdatedAt": "2026-03-11T20:00:00.000Z",
+  "lastActiveAt": "2026-03-11T20:00:00.000Z",
 
   "phaseGates": {
     "launch": { "status": "skipped", "completedAt": null },
-    "discover": { "status": "complete", "completedAt": "2026-03-10T19:00:00.000Z" },
-    "define": { "status": "complete", "completedAt": "2026-03-10T19:15:00.000Z" },
-    "plan": { "status": "complete", "completedAt": "2026-03-10T19:20:00.000Z" },
+    "discover": { "status": "skipped", "completedAt": null },
+    "define": { "status": "complete", "completedAt": "2026-03-11T18:30:00.000Z" },
+    "plan": { "status": "complete", "completedAt": "2026-03-11T18:50:00.000Z" },
     "sync": { "status": "skipped", "completedAt": null },
-    "build": { "status": "in_progress", "completedAt": null },
+    "build": { "status": "complete", "completedAt": "2026-03-11T20:00:00.000Z" },
     "deliver": { "status": "pending", "completedAt": null },
     "housekeeping": { "status": "pending", "completedAt": null }
   },
 
-  "team": {
-    "tier": 3,
-    "tierReason": "15+ stories, schema changes, cross-feature deps (orchestrator+Slack+HITL+morning brief), security surface (deal data, contact PII)",
-    "workers": { "model": "sonnet", "count": 3 },
-    "reviewer": { "model": "opus" },
-    "architect": { "model": "opus", "phaseOnly": "plan" },
-    "manager": { "model": "opus" }
-  },
-
-  "prdFile": "tasks/prd-proactive-sales-teammate.md",
-  "branch": "feature/proactive-sales-teammate",
+  "prdFile": "tasks/prd-linkedin-ops-ads-pipeline.md",
+  "branch": "feature/linkedin-ops-ads-pipeline",
 
   "stories": [
-    {
-      "id": "PST-001",
-      "title": "Create deal_observations table + RLS policies",
-      "type": "schema",
-      "status": "complete",
-      "priority": 1,
-      "dependencies": { "stories": [], "schema": [] },
-      "parallelWith": ["PST-002"],
-      "acceptance": [
-        "deal_observations table created with all columns from PRD",
-        "Unique dedup index on (org_id, deal_id, category) WHERE status = 'open'",
-        "RLS policies: users see own org's observations only",
-        "Migration is idempotent (DROP POLICY IF EXISTS before CREATE)"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "visibility": "internal",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-002",
-      "title": "Create learning_preferences table + RLS policies",
-      "type": "schema",
-      "status": "complete",
-      "priority": 1,
-      "dependencies": { "stories": [], "schema": [] },
-      "parallelWith": ["PST-001"],
-      "acceptance": [
-        "learning_preferences table: id, user_id, org_id, preference_key, preference_value, confidence, sample_count, updated_at",
-        "Tracks extracted preferences like 'prefers_short_emails', 'removes_ps_line', 'casual_greeting'",
-        "RLS: users see own preferences only",
-        "Upsert-friendly unique index on (user_id, preference_key)"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 15,
-      "actualMinutes": null,
-      "visibility": "internal",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-003",
-      "title": "Build proactive-deal-heartbeat edge function",
-      "type": "service",
-      "status": "complete",
-      "priority": 2,
-      "dependencies": { "stories": ["PST-001"], "schema": ["deal_observations"] },
-      "parallelWith": [],
-      "acceptance": [
-        "Edge function scans deals for 8 observation categories from PRD",
-        "Classifies severity using existing triageRules.ts",
-        "Stores observations in deal_observations with dedup",
-        "Auto-resolves observations when condition clears",
-        "Follows agent-crm-heartbeat auth pattern (CRON_SECRET or service-role)",
-        "Uses getCorsHeaders(req) from _shared/corsHelper.ts"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 60,
-      "actualMinutes": null,
-      "visibility": "internal",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-004",
-      "title": "Wire deal stage change trigger to heartbeat",
-      "type": "integration",
-      "status": "complete",
-      "priority": 3,
-      "dependencies": { "stories": ["PST-003"], "schema": ["deal_observations"] },
-      "parallelWith": ["PST-005"],
-      "acceptance": [
-        "Database trigger on deals table fires on stage_id changes",
-        "Trigger calls proactive-deal-heartbeat via pg_net or webhook",
-        "Heartbeat runs within 5 minutes of stage change",
-        "Idempotent: re-triggering same event doesn't create duplicate observations"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 30,
-      "actualMinutes": null,
-      "visibility": "internal",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-005",
-      "title": "Wire meeting_ended event to follow-up draft + heartbeat",
-      "type": "integration",
-      "status": "complete",
-      "priority": 3,
-      "dependencies": { "stories": ["PST-003"], "schema": ["deal_observations"] },
-      "parallelWith": ["PST-004"],
-      "acceptance": [
-        "meeting_ended event in orchestrator triggers: (1) follow-up draft adapter, (2) deal heartbeat",
-        "Follow-up draft stored in crm_approval_queue with action_type='email_draft'",
-        "Draft includes meeting context, attendee names, key topics discussed",
-        "Draft appears within 2 hours of meeting end",
-        "Autonomy tier checked via autonomyResolver before delivery method"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 45,
-      "actualMinutes": null,
-      "visibility": "external",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-006",
-      "title": "Add nightly heartbeat cron (2am scan of all active deals)",
-      "type": "integration",
-      "status": "complete",
-      "priority": 3,
-      "dependencies": { "stories": ["PST-003"], "schema": ["deal_observations"] },
-      "parallelWith": ["PST-004", "PST-005"],
-      "acceptance": [
-        "pg_cron job fires at 2am UTC daily",
-        "Calls proactive-deal-heartbeat for each org with active deals",
-        "Batches by org to respect edge function timeouts",
-        "Results available for morning brief at 8am"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 25,
-      "actualMinutes": null,
-      "visibility": "internal",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-007",
-      "title": "Extend morning brief with actionable sections",
-      "type": "service",
-      "status": "complete",
-      "priority": 4,
-      "dependencies": { "stories": ["PST-003", "PST-006"], "schema": ["deal_observations"] },
-      "parallelWith": [],
-      "acceptance": [
-        "buildMorningBriefData() queries deal_observations (HIGH, open) and crm_approval_queue (pending)",
-        "'Ready to Send' section shows pending follow-up drafts with preview + Send/Edit buttons",
-        "'Prep Complete' section shows today's meeting briefs",
-        "'Attention Needed' section shows HIGH observations with action buttons",
-        "Block Kit buttons use existing slack-interactive action handler pattern"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 60,
-      "actualMinutes": null,
-      "visibility": "external",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-008",
-      "title": "Add morning brief action handlers to slack-interactive",
-      "type": "service",
-      "status": "complete",
-      "priority": 5,
-      "dependencies": { "stories": ["PST-007"], "schema": [] },
-      "parallelWith": ["PST-009"],
-      "acceptance": [
-        "Send action: executes email via existing adapter, updates crm_approval_queue status",
-        "Edit action: opens Slack modal with pre-filled draft, saves edits back",
-        "Dismiss action: updates observation/approval status to 'dismissed'",
-        "Snooze action: sets next_check_at on observation + 7 days",
-        "All actions record outcome via outcomeLearning.recordOutcome()"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 45,
-      "actualMinutes": null,
-      "visibility": "external",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-009",
-      "title": "Wire Slack button outcomes to outcomeLearning",
-      "type": "integration",
-      "status": "complete",
-      "priority": 5,
-      "dependencies": { "stories": ["PST-008"], "schema": [] },
-      "parallelWith": ["PST-008"],
-      "acceptance": [
-        "Send → recordOutcome('accepted', { category, deal_id })",
-        "Edit → recordOutcome('edited', { category, deal_id, changes_diff })",
-        "Dismiss → recordOutcome('rejected', { category, deal_id, reason })",
-        "Edit diffs captured: what the rep changed in the draft",
-        "Confidence adjustments applied via getConfidenceAdjustment()"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 30,
-      "actualMinutes": null,
-      "visibility": "internal",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-010",
-      "title": "Extract and store learning preferences from edit diffs",
-      "type": "service",
-      "status": "complete",
-      "priority": 6,
-      "dependencies": { "stories": ["PST-002", "PST-009"], "schema": ["learning_preferences"] },
-      "parallelWith": [],
-      "acceptance": [
-        "After 5+ edits with similar pattern, extract preference (e.g. 'shorter_emails', 'casual_greeting')",
-        "Store in learning_preferences table with confidence score",
-        "Preferences fed into follow-up draft generation prompts",
-        "Top 3 preferences per user included in draft context"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 45,
-      "actualMinutes": null,
-      "visibility": "internal",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-011",
-      "title": "Build deal improvement suggestions skill",
-      "type": "service",
-      "status": "complete",
-      "priority": 6,
-      "dependencies": { "stories": ["PST-001"], "schema": ["deal_observations"] },
-      "parallelWith": ["PST-010"],
-      "acceptance": [
-        "Analyzes: deal stage, contact count, conversation history, competitor mentions, proposal status",
-        "Generates 2-3 tagged suggestions (MULTI-THREAD, URGENCY, PROOF, etc.)",
-        "Stores as deal_observations with category='improvement_suggestion' severity='medium'",
-        "Delivered via Command Centre writeToCommandCentre() adapter",
-        "Included in daily digest for deals with recent activity"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 45,
-      "actualMinutes": null,
-      "visibility": "external",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-012",
-      "title": "Add cross-deal conflict detection to heartbeat",
-      "type": "service",
-      "status": "complete",
-      "priority": 7,
-      "dependencies": { "stories": ["PST-003"], "schema": ["deal_observations"] },
-      "parallelWith": ["PST-011"],
-      "acceptance": [
-        "Detects contacts appearing in 2+ active deals",
-        "Detects companies with deals from different reps",
-        "MEDIUM severity → daily digest; HIGH (same-day overlap) → morning brief",
-        "Dismissible with 'this is intentional' flag",
-        "Query uses existing deals + contacts + deal_contacts tables"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 35,
-      "actualMinutes": null,
-      "visibility": "external",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-013",
-      "title": "Extend pipeline hygiene digest with actionable buttons",
-      "type": "service",
-      "status": "complete",
-      "priority": 7,
-      "dependencies": { "stories": ["PST-008"], "schema": [] },
-      "parallelWith": ["PST-012"],
-      "acceptance": [
-        "Archive button: moves deal to Closed Lost with reason",
-        "Snooze button: sets check-in reminder + 7 days",
-        "Re-engage button: drafts re-engagement email from deal context",
-        "Update stage button: dropdown to move deal",
-        "5 hygiene categories: stale deals, duplicate contacts, undone tasks, stuck deals, bounced emails"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 45,
-      "actualMinutes": null,
-      "visibility": "external",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-014",
-      "title": "Add weekly hygiene cron (Monday 9am)",
-      "type": "integration",
-      "status": "complete",
-      "priority": 8,
-      "dependencies": { "stories": ["PST-013"], "schema": [] },
-      "parallelWith": ["PST-015"],
-      "acceptance": [
-        "pg_cron fires Monday 9am UTC",
-        "Calls extended pipeline hygiene digest per org",
-        "Grouped Slack DM with all hygiene items + action buttons",
-        "Actions feed into outcomeLearning"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 20,
-      "actualMinutes": null,
-      "visibility": "internal",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    },
-    {
-      "id": "PST-015",
-      "title": "Add Agent Learning section to Command Centre",
-      "type": "component",
-      "status": "complete",
-      "priority": 8,
-      "dependencies": { "stories": ["PST-009", "PST-010"], "schema": ["learning_preferences"] },
-      "parallelWith": ["PST-014"],
-      "acceptance": [
-        "Shows acceptance rate by category (7d / 30d)",
-        "Shows Trust Capital score with milestone progress bar",
-        "Shows recent calibration events",
-        "Weekly summary in morning brief: 'Your agent accepted 85% of follow-ups (up from 72%)'",
-        "Uses existing Command Centre layout patterns"
-      ],
-      "testFiles": [],
-      "estimatedMinutes": 45,
-      "actualMinutes": null,
-      "visibility": "external",
-      "completedAt": null,
-      "aiDevHubSubtaskId": null
-    }
+    { "id": "LAP-001", "title": "Schema migration: add linkedin_analytics column type", "status": "complete", "group": 1 },
+    { "id": "LAP-002", "title": "Multi-select UI in Ad Library", "status": "complete", "group": 1 },
+    { "id": "LAP-003", "title": "from_ad_library import edge function", "status": "complete", "group": 1 },
+    { "id": "LAP-004", "title": "Ad Library Import Wizard", "status": "complete", "group": 2 },
+    { "id": "LAP-005", "title": "Source image auto-detection in AI wizards", "status": "complete", "group": 2 },
+    { "id": "LAP-006", "title": "Ops table to LinkedIn campaign binding UI", "status": "complete", "group": 2 },
+    { "id": "LAP-007", "title": "Column-to-creative mapping wizard", "status": "complete", "group": 3 },
+    { "id": "LAP-008", "title": "Remix All bulk action", "status": "complete", "group": 3 },
+    { "id": "LAP-009", "title": "LinkedIn Analytics column type + wizard", "status": "complete", "group": 3 },
+    { "id": "LAP-010", "title": "create_creatives_from_ops edge function", "status": "complete", "group": 4 },
+    { "id": "LAP-011", "title": "Budget column mapping + validation", "status": "complete", "group": 4 },
+    { "id": "LAP-012", "title": "Analytics-to-ops sync edge function", "status": "complete", "group": 4 },
+    { "id": "LAP-013", "title": "Campaign launch with spend approval gate", "status": "complete", "group": 5 },
+    { "id": "LAP-014", "title": "Auto-sync cron + manual refresh controls", "status": "complete", "group": 5 },
+    { "id": "LAP-015", "title": "Analytics controls + comparison view", "status": "complete", "group": 5 }
   ],
 
-  "devHub": { "projectId": null, "taskId": null, "taskCode": null },
-
-  "slack": { "warRoomChannel": null, "warRoomThreadTs": null },
-
-  "heartbeat": {
-    "observations": [],
-    "proposedTickets": [],
-    "routing": { "high": "slack_immediate", "medium": "slack_daily_digest", "low": "dev_hub_backlog" }
-  },
-
-  "testing": {
-    "strategy": "tdd",
-    "tiers": { "unit": true, "component": true, "playwriterMcp": false, "headlessE2e": false },
-    "testCredentials": { "stored": false, "location": null }
-  },
-
-  "documentation": { "devDocs": [], "userDocs": [], "visibility": {} },
-
-  "execution": { "totalStories": 15, "completedStories": 15, "lastUpdated": "2026-03-10T21:45:00.000Z" },
-
-  "learnings": { "file": ".sixty/learnings.json", "calibrationApplied": false, "recurringIssuesLoaded": [] },
-
-  "crossRunConflicts": []
+  "execution": { "totalStories": 15, "completedStories": 15, "lastUpdated": "2026-03-11T20:00:00.000Z" }
 }
