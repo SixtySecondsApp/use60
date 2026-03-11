@@ -131,7 +131,7 @@ function ActivityFeed({ items }: { items: ActivityItem[] }) {
 }
 
 export function TestSetupStep() {
-  const { steps, completeStep, setCurrentStep } = useSetupWizard();
+  const { steps, completeStep, setCurrentStep, closeWizard } = useSetupWizard();
   const { user } = useAuth();
   const { activeOrgId } = useOrgStore();
   const { activeICP } = useActiveICP();
@@ -948,7 +948,7 @@ If you lack personalization data, do NOT ask the user for details. Instead, offe
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleFinishSetup}
+            onClick={() => closeWizard()}
             className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
           >
             Skip for now
