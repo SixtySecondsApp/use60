@@ -139,6 +139,11 @@ export const FalVideoCell: React.FC<FalVideoCellProps> = ({
       try {
         const { supabase } = await import('@/lib/supabase/clientV2');
 
+        // Trigger backend poll to check fal.ai and update cells
+        await supabase.functions.invoke('fal-video-poll', {
+          body: { action: 'poll_all' },
+        }).catch(() => {}); // fire-and-forget
+
         const { data: cell } = await supabase
           .from('dynamic_table_cells')
           .select('value')

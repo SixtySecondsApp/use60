@@ -39,6 +39,9 @@ interface ColumnHeaderMenuProps {
   onEditApollo?: () => void;
   onEditInstantly?: () => void;
   onEditHeygen?: () => void;
+  onEditFalVideo?: () => void;
+  onEditAiImage?: () => void;
+  onEditSvgAnimation?: () => void;
   onEditEmailGeneration?: () => void;
   onRegenerateEmails?: () => void;
   onCreateCampaignFromSteps?: () => void;
@@ -72,6 +75,9 @@ export function ColumnHeaderMenu({
   onEditApollo,
   onEditInstantly,
   onEditHeygen,
+  onEditFalVideo,
+  onEditAiImage,
+  onEditSvgAnimation,
   onEditEmailGeneration,
   onRegenerateEmails,
   onCreateCampaignFromSteps,
@@ -394,6 +400,42 @@ export function ColumnHeaderMenu({
           label="Edit video settings"
           onClick={() => {
             onEditHeygen();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit FAL Video settings */}
+      {column.column_type === 'fal_video' && onEditFalVideo && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit video settings"
+          onClick={() => {
+            onEditFalVideo();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit AI Image settings */}
+      {column.column_type === 'ai_image' && onEditAiImage && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit image settings"
+          onClick={() => {
+            onEditAiImage();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* Edit SVG Animation settings */}
+      {column.column_type === 'svg_animation' && onEditSvgAnimation && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit animation settings"
+          onClick={() => {
+            onEditSvgAnimation();
             onClose();
           }}
         />

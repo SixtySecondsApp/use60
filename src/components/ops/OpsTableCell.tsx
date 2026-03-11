@@ -1711,6 +1711,33 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
 
   // FAL video column — generate button + thumbnail + status + preview
   if (columnType === 'fal_video') {
+    const handleGenerateFalVideo = async () => {
+      if (!integrationConfig || !rowId || !tableId) {
+        toast.error('Video column not configured — open column settings first');
+        return;
+      }
+      onEdit?.(JSON.stringify({ status: 'pending' }));
+      try {
+        const { data, error } = await supabase.functions.invoke('fal-video-generate', {
+          body: {
+            model_id: integrationConfig.model_id || 'fal-ai/kling-video/v3/pro/text-to-video',
+            prompt_template: integrationConfig.prompt_template,
+            table_id: tableId,
+            row_ids: [rowId],
+            image_column_key: integrationConfig.image_column_key,
+            duration: integrationConfig.duration || '5',
+            aspect_ratio: integrationConfig.aspect_ratio || '16:9',
+            generate_audio: integrationConfig.generate_audio,
+          },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+      } catch (err) {
+        onEdit?.(JSON.stringify({ status: 'failed', error_message: err instanceof Error ? err.message : 'Generation failed' }));
+        toast.error(err instanceof Error ? err.message : 'Video generation failed');
+      }
+    };
+
     return (
       <FalVideoCell
         cellValue={cell.value}
@@ -1718,8 +1745,8 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         columnId={agentColumnId ?? ''}
         tableId={tableId ?? ''}
         integrationConfig={integrationConfig ?? undefined}
-        rowData={rowData}
-        onGenerate={onEdit ? () => onEdit(JSON.stringify({ status: 'pending' })) : undefined}
+        rowData={rowCellValues}
+        onGenerate={integrationConfig ? () => handleGenerateFalVideo() : undefined}
         onCellUpdate={onEdit}
       />
     );
@@ -1727,6 +1754,34 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
 
   // AI Image column — generate button + thumbnail + status + preview
   if (columnType === 'ai_image') {
+    const handleGenerateAiImage = async () => {
+      if (!integrationConfig || !rowId || !tableId || !agentColumnId) {
+        toast.error('Image column not configured — open column settings first');
+        return;
+      }
+      onEdit?.(JSON.stringify({ status: 'pending' }));
+      try {
+        const { data, error } = await supabase.functions.invoke('ai-image-generate', {
+          body: {
+            action: 'generate',
+            org_id: '', // edge function resolves from JWT
+            user_id: '', // edge function resolves from JWT
+            table_id: tableId,
+            column_id: agentColumnId,
+            row_ids: [rowId],
+            model_id: integrationConfig.model_id,
+            resolution: integrationConfig.resolution,
+            aspect_ratio: integrationConfig.aspect_ratio,
+          },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+      } catch (err) {
+        onEdit?.(JSON.stringify({ status: 'failed', error_message: err instanceof Error ? err.message : 'Generation failed' }));
+        toast.error(err instanceof Error ? err.message : 'Image generation failed');
+      }
+    };
+
     return (
       <AiImageCell
         cellValue={cell.value}
@@ -1734,8 +1789,8 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         columnId={agentColumnId ?? ''}
         tableId={tableId ?? ''}
         integrationConfig={integrationConfig ?? undefined}
-        rowData={rowData}
-        onGenerate={onEdit ? () => onEdit(JSON.stringify({ status: 'pending' })) : undefined}
+        rowData={rowCellValues}
+        onGenerate={integrationConfig ? () => handleGenerateAiImage() : undefined}
         onCellUpdate={onEdit}
       />
     );
@@ -1743,6 +1798,32 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
 
   // SVG Animation column — generate button + live preview + expand
   if (columnType === 'svg_animation') {
+    const handleGenerateSvgAnimation = async () => {
+      if (!integrationConfig || !rowId || !tableId || !agentColumnId) {
+        toast.error('Animation column not configured — open column settings first');
+        return;
+      }
+      onEdit?.(JSON.stringify({ status: 'pending' }));
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-svg-animation', {
+          body: {
+            action: 'generate',
+            org_id: '', // edge function resolves from JWT
+            user_id: '', // edge function resolves from JWT
+            table_id: tableId,
+            column_id: agentColumnId,
+            row_ids: [rowId],
+            complexity: integrationConfig.complexity || 'medium',
+          },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.error) throw new Error(data.error);
+      } catch (err) {
+        onEdit?.(JSON.stringify({ status: 'failed', error_message: err instanceof Error ? err.message : 'Generation failed' }));
+        toast.error(err instanceof Error ? err.message : 'SVG animation generation failed');
+      }
+    };
+
     return (
       <SvgAnimationCell
         cellValue={cell.value}
@@ -1750,8 +1831,8 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         columnId={agentColumnId ?? ''}
         tableId={tableId ?? ''}
         integrationConfig={integrationConfig ?? undefined}
-        rowData={rowData}
-        onGenerate={onEdit ? () => onEdit(JSON.stringify({ status: 'pending' })) : undefined}
+        rowData={rowCellValues}
+        onGenerate={integrationConfig ? () => handleGenerateSvgAnimation() : undefined}
         onCellUpdate={onEdit}
       />
     );

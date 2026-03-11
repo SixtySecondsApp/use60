@@ -44,7 +44,7 @@ export interface FalVideoColumnConfig {
 
 interface FalVideoColumnWizardProps {
   tableId: string;
-  existingColumns: Array<{ key: string; label: string; column_type: string }>;
+  existingColumns: Array<{ key: string; label: string; column_type?: string }>;
   onComplete: (config: FalVideoColumnConfig) => void;
   onCancel: () => void;
   initialConfig?: FalVideoColumnConfig;
@@ -55,6 +55,8 @@ interface FalVideoModel {
   name: string;
   provider: string;
   fal_model_id: string;
+  /** fal model ID for I2V mode (may differ from id/fal_model_id which is T2V) */
+  fal_model_id_i2v?: string;
   supports_t2v: boolean;
   supports_i2v: boolean;
   max_duration: number;
@@ -79,47 +81,48 @@ const ALL_STEPS: WizardStep[] = ['model', 'mode', 'prompt', 'settings', 'preview
 
 const FALLBACK_MODELS: FalVideoModel[] = [
   {
-    id: 'kling-v3-pro',
+    id: 'fal-ai/kling-video/v3/pro/text-to-video',
     name: 'Kling 3.0 Pro',
-    provider: 'Kling AI',
-    fal_model_id: 'fal-ai/kling-video/v1.6/pro/text-to-video',
+    provider: 'fal.ai',
+    fal_model_id: 'fal-ai/kling-video/v3/pro/text-to-video',
+    fal_model_id_i2v: 'fal-ai/kling-video/v3/pro/image-to-video',
     supports_t2v: true,
     supports_i2v: true,
-    max_duration: 10,
-    supports_audio: false,
+    max_duration: 15,
+    supports_audio: true,
     credit_cost_per_second: INTEGRATION_CREDIT_COSTS.fal_video_kling_v3_pro,
     is_active: true,
   },
   {
-    id: 'kling-v2-master',
+    id: 'fal-ai/kling-video/v2/master/text-to-video',
     name: 'Kling 2.5 Master',
-    provider: 'Kling AI',
-    fal_model_id: 'fal-ai/kling-video/v1.5/pro/text-to-video',
+    provider: 'fal.ai',
+    fal_model_id: 'fal-ai/kling-video/v2/master/text-to-video',
     supports_t2v: true,
-    supports_i2v: true,
+    supports_i2v: false,
     max_duration: 10,
     supports_audio: false,
     credit_cost_per_second: INTEGRATION_CREDIT_COSTS.fal_video_kling_v2_master,
     is_active: true,
   },
   {
-    id: 'veo3',
+    id: 'fal-ai/veo3',
     name: 'Google Veo 3',
-    provider: 'Google',
+    provider: 'fal.ai',
     fal_model_id: 'fal-ai/veo3',
     supports_t2v: true,
     supports_i2v: false,
-    max_duration: 15,
+    max_duration: 8,
     supports_audio: true,
     credit_cost_per_second: INTEGRATION_CREDIT_COSTS.fal_video_veo3,
     is_active: true,
   },
   {
-    id: 'wan-2-5',
+    id: 'fal-ai/wan-ai/wan2.1-i2v-720p',
     name: 'Wan 2.5',
-    provider: 'Wan Video',
-    fal_model_id: 'fal-ai/wan-i2v',
-    supports_t2v: true,
+    provider: 'fal.ai',
+    fal_model_id: 'fal-ai/wan-ai/wan2.1-i2v-720p',
+    supports_t2v: false,
     supports_i2v: true,
     max_duration: 5,
     supports_audio: false,
@@ -175,7 +178,7 @@ export function FalVideoColumnWizard({
 
   // Columns that are likely image/URL sources for I2V mode
   const imageColumns = existingColumns.filter((c) =>
-    ['url', 'image', 'text'].includes(c.column_type)
+    ['url', 'image', 'text', 'ai_image', 'svg_animation'].includes(c.column_type)
   );
 
   // Estimated credit cost
@@ -192,17 +195,48 @@ export function FalVideoColumnWizard({
       try {
         const { data, error: dbError } = await supabase
           .from('fal_video_models')
-          .select('id, name, provider, fal_model_id, supports_t2v, supports_i2v, max_duration, supports_audio, credit_cost_per_second, is_active')
+          .select('id, display_name, provider, mode, max_duration_seconds, supports_audio, credit_cost_per_second, is_active, sort_order')
           .eq('is_active', true)
-          .order('name');
+          .order('sort_order');
 
         if (cancelled) return;
 
         if (dbError || !data || data.length === 0) {
-          // Fall back to hardcoded list
           setModels(FALLBACK_MODELS);
         } else {
-          setModels(data as FalVideoModel[]);
+          // Group DB rows by base model (strip /text-to-video or /image-to-video suffix)
+          const grouped = new Map<string, FalVideoModel>();
+          for (const row of data) {
+            // Derive a stable group key: strip mode suffix from id
+            const baseId = (row.id as string)
+              .replace(/\/text-to-video$/, '')
+              .replace(/\/image-to-video$/, '');
+            const isT2V = (row.mode as string) === 'text-to-video';
+            const isI2V = (row.mode as string) === 'image-to-video';
+
+            const existing = grouped.get(baseId);
+            if (existing) {
+              if (isT2V) { existing.supports_t2v = true; existing.id = row.id as string; existing.fal_model_id = row.id as string; }
+              if (isI2V) { existing.supports_i2v = true; existing.fal_model_id_i2v = row.id as string; }
+              existing.max_duration = Math.max(existing.max_duration, row.max_duration_seconds as number);
+            } else {
+              const cleanName = (row.display_name as string).replace(/\s*\((?:T2V|I2V)\)\s*$/, '');
+              grouped.set(baseId, {
+                id: row.id as string,
+                name: cleanName,
+                provider: row.provider as string,
+                fal_model_id: isT2V ? (row.id as string) : '',
+                fal_model_id_i2v: isI2V ? (row.id as string) : undefined,
+                supports_t2v: isT2V,
+                supports_i2v: isI2V,
+                max_duration: row.max_duration_seconds as number,
+                supports_audio: row.supports_audio as boolean,
+                credit_cost_per_second: parseFloat(row.credit_cost_per_second as string) || 2.5,
+                is_active: true,
+              });
+            }
+          }
+          setModels(Array.from(grouped.values()));
         }
       } catch {
         if (!cancelled) setModels(FALLBACK_MODELS);
@@ -217,7 +251,11 @@ export function FalVideoColumnWizard({
   // When models load and we have an initialConfig, pre-select the model
   useEffect(() => {
     if (models.length > 0 && initialConfig?.model_id && !selectedModel) {
-      const found = models.find((m) => m.id === initialConfig.model_id);
+      const found = models.find((m) =>
+        m.id === initialConfig.model_id ||
+        m.fal_model_id === initialConfig.model_id ||
+        m.fal_model_id_i2v === initialConfig.model_id
+      );
       if (found) setSelectedModel(found);
     }
   }, [models, initialConfig, selectedModel]);
@@ -242,7 +280,8 @@ export function FalVideoColumnWizard({
         setError('Please select a model to continue.');
         return;
       }
-      setConfig((c) => ({ ...c, model_id: selectedModel.id }));
+      // Use fal_model_id (the real fal.ai endpoint), resolved to T2V/I2V at submit
+      setConfig((c) => ({ ...c, model_id: selectedModel.fal_model_id || selectedModel.id }));
     }
 
     if (step === 'mode') {
@@ -285,7 +324,11 @@ export function FalVideoColumnWizard({
       toast.error('No model selected');
       return;
     }
-    onComplete(config);
+    // Resolve the correct fal model ID based on the selected mode
+    const resolvedModelId = config.mode === 'image-to-video' && selectedModel.fal_model_id_i2v
+      ? selectedModel.fal_model_id_i2v
+      : selectedModel.fal_model_id || selectedModel.id;
+    onComplete({ ...config, model_id: resolvedModelId });
   }
 
   // ── Prompt variable insertion ──────────────────────────────────────────────
