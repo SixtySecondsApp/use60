@@ -97,7 +97,10 @@ export interface OpsTableColumn {
     | 'linkedin_property'
     | 'instantly'
     | 'signal'
-    | 'agent_research';
+    | 'agent_research'
+    | 'fal_video'
+    | 'ai_image'
+    | 'svg_animation';
   is_enrichment: boolean;
   enrichment_prompt: string | null;
   enrichment_model: string | null;

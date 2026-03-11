@@ -13,6 +13,9 @@ import { ButtonColumnConfigPanel } from './ButtonColumnConfigPanel';
 import { InstantlyColumnWizard } from './InstantlyColumnWizard';
 import { VideoAvatarColumnWizard } from './VideoAvatarColumnWizard';
 import { ElevenLabsAudioColumnWizard } from './ElevenLabsAudioColumnWizard';
+import { FalVideoColumnWizard } from './FalVideoColumnWizard';
+import { AiImageColumnWizard } from './AiImageColumnWizard';
+import { SvgAnimationColumnWizard } from './SvgAnimationColumnWizard';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
 import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
 
@@ -308,6 +311,9 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
     types.push(INSTANTLY_COLUMN_TYPE);
     types.push({ value: 'heygen_video', label: hasHeyGenKey ? 'HeyGen' : 'Video Avatar' });
     types.push({ value: 'elevenlabs_audio', label: hasElevenLabsKey ? 'ElevenLabs Audio' : 'AI Audio' });
+    types.push({ value: 'fal_video', label: 'AI Video (FAL)' });
+    types.push({ value: 'ai_image', label: 'AI Image' });
+    types.push({ value: 'svg_animation', label: 'SVG Animation' });
     return types;
   }, [isHubSpotTable, hasHeyGenKey, hasElevenLabsKey]);
   const [label, setLabel] = useState('');
@@ -402,7 +408,10 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
     && (!isAgentResearch || agentPromptTemplate.trim().length > 0)
     && !isInstantly // Instantly uses its own wizard flow, not the standard Add button
     && columnType !== 'heygen_video' // Video Avatar uses its own wizard flow
-    && columnType !== 'elevenlabs_audio'; // ElevenLabs Audio uses its own wizard flow
+    && columnType !== 'elevenlabs_audio' // ElevenLabs Audio uses its own wizard flow
+    && columnType !== 'fal_video' // FAL Video uses its own wizard flow
+    && columnType !== 'ai_image' // AI Image uses its own wizard flow
+    && columnType !== 'svg_animation'; // SVG Animation uses its own wizard flow
 
   // Filter columns for the @mention dropdown (enrichment prompt)
   const filteredColumns = useMemo(() => {
@@ -1456,6 +1465,84 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
             </div>
           )}
 
+          {/* FAL Video Wizard */}
+          {columnType === 'fal_video' && tableId && orgId && (
+            <FalVideoColumnWizard
+              tableId={tableId}
+              existingColumns={existingColumns}
+              onComplete={(config) => {
+                onAdd({
+                  key: label.toLowerCase().replace(/\s+/g, '_') || 'fal_video',
+                  label: label || 'AI Video',
+                  columnType: 'fal_video',
+                  integrationConfig: config as unknown as Record<string, unknown>,
+                });
+                onClose();
+              }}
+              onCancel={onClose}
+            />
+          )}
+
+          {columnType === 'fal_video' && (!tableId || !orgId) && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm text-amber-300">
+                Save this table first before adding an AI Video column.
+              </p>
+            </div>
+          )}
+
+          {/* AI Image Wizard */}
+          {columnType === 'ai_image' && tableId && orgId && (
+            <AiImageColumnWizard
+              tableId={tableId}
+              existingColumns={existingColumns}
+              onComplete={(config) => {
+                onAdd({
+                  key: label.toLowerCase().replace(/\s+/g, '_') || 'ai_image',
+                  label: label || 'AI Image',
+                  columnType: 'ai_image',
+                  integrationConfig: config as unknown as Record<string, unknown>,
+                });
+                onClose();
+              }}
+              onCancel={onClose}
+            />
+          )}
+
+          {columnType === 'ai_image' && (!tableId || !orgId) && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm text-amber-300">
+                Save this table first before adding an AI Image column.
+              </p>
+            </div>
+          )}
+
+          {/* SVG Animation Wizard */}
+          {columnType === 'svg_animation' && tableId && orgId && (
+            <SvgAnimationColumnWizard
+              tableId={tableId}
+              existingColumns={existingColumns}
+              onComplete={(config) => {
+                onAdd({
+                  key: label.toLowerCase().replace(/\s+/g, '_') || 'svg_animation',
+                  label: label || 'SVG Animation',
+                  columnType: 'svg_animation',
+                  integrationConfig: config as unknown as Record<string, unknown>,
+                });
+                onClose();
+              }}
+              onCancel={onClose}
+            />
+          )}
+
+          {columnType === 'svg_animation' && (!tableId || !orgId) && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+              <p className="text-sm text-amber-300">
+                Save this table first before adding an SVG Animation column.
+              </p>
+            </div>
+          )}
+
           {/* AI Research Agent Section */}
           {isAgentResearch && (
             <div className="space-y-4">
@@ -2028,8 +2115,8 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
           )}
         </div>
 
-        {/* Footer — hidden for types that use their own wizard (Video Avatar, Instantly) */}
-        {columnType !== 'heygen_video' && columnType !== 'elevenlabs_audio' && !isInstantly && (
+        {/* Footer — hidden for types that use their own wizard */}
+        {columnType !== 'heygen_video' && columnType !== 'elevenlabs_audio' && columnType !== 'fal_video' && columnType !== 'ai_image' && columnType !== 'svg_animation' && !isInstantly && (
         <div className="flex items-center justify-end gap-3 border-t border-gray-700/60 px-6 py-4">
           <button
             onClick={onClose}

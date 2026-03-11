@@ -6,6 +6,9 @@ import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableServic
 import { AgentColumnCell } from './AgentColumnCell';
 import { HeyGenVideoCell } from './HeyGenVideoCell';
 import { ElevenLabsAudioCell } from './ElevenLabsAudioCell';
+import { FalVideoCell } from './FalVideoCell';
+import { AiImageCell } from './AiImageCell';
+import { SvgAnimationCell } from './SvgAnimationCell';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 
@@ -1701,6 +1704,54 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         onGenerateAudio={integrationConfig ? handleGenerateAudio : undefined}
         missingVariables={hasAudioMissingVars ? audioMissingVars : undefined}
         rowId={rowId}
+        onCellUpdate={onEdit}
+      />
+    );
+  }
+
+  // FAL video column — generate button + thumbnail + status + preview
+  if (columnType === 'fal_video') {
+    return (
+      <FalVideoCell
+        cellValue={cell.value}
+        rowId={rowId ?? ''}
+        columnId={agentColumnId ?? ''}
+        tableId={tableId ?? ''}
+        integrationConfig={integrationConfig ?? undefined}
+        rowData={rowData}
+        onGenerate={onEdit ? () => onEdit(JSON.stringify({ status: 'pending' })) : undefined}
+        onCellUpdate={onEdit}
+      />
+    );
+  }
+
+  // AI Image column — generate button + thumbnail + status + preview
+  if (columnType === 'ai_image') {
+    return (
+      <AiImageCell
+        cellValue={cell.value}
+        rowId={rowId ?? ''}
+        columnId={agentColumnId ?? ''}
+        tableId={tableId ?? ''}
+        integrationConfig={integrationConfig ?? undefined}
+        rowData={rowData}
+        onGenerate={onEdit ? () => onEdit(JSON.stringify({ status: 'pending' })) : undefined}
+        onCellUpdate={onEdit}
+      />
+    );
+  }
+
+  // SVG Animation column — generate button + live preview + expand
+  if (columnType === 'svg_animation') {
+    return (
+      <SvgAnimationCell
+        cellValue={cell.value}
+        rowId={rowId ?? ''}
+        columnId={agentColumnId ?? ''}
+        tableId={tableId ?? ''}
+        integrationConfig={integrationConfig ?? undefined}
+        rowData={rowData}
+        onGenerate={onEdit ? () => onEdit(JSON.stringify({ status: 'pending' })) : undefined}
         onCellUpdate={onEdit}
       />
     );
