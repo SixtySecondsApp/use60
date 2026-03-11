@@ -43,7 +43,7 @@ serve(async (req: Request) => {
     }
 
     const body = await req.json()
-    const { org_id, template_key, template_config, filters, use_synthetic } = body
+    const { org_id, template_key, template_config, filters, use_synthetic, existing_table_id } = body
     if (!org_id || !template_config) {
       return new Response(
         JSON.stringify({ error: 'org_id and template_config required' }),
@@ -52,7 +52,8 @@ serve(async (req: Request) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey)
-    console.log(`[setup-pipeline-template] Starting template="${template_key}" org=${org_id} user=${user.id}`)
+    const isAppendMode = !!existing_table_id
+    console.log(`[setup-pipeline-template] Starting template="${template_key}" org=${org_id} user=${user.id}${isAppendMode ? ` APPEND to ${existing_table_id}` : ''}`)
 
     // ── 1. Fetch source data ────────────────────────────────────
 
@@ -392,7 +393,7 @@ serve(async (req: Request) => {
           }
         }
 
-        const row: Record<string, string> = {}
+        const row: Record<string, string> = { __source_id: meeting.id }
         const mapping = dataSource.column_mapping ?? {}
 
         for (const [templateCol, sourceCol] of Object.entries(mapping)) {
@@ -466,83 +467,144 @@ serve(async (req: Request) => {
       console.log(`[setup-pipeline-template] Using ${sourceRows.length} synthetic rows (no real data)`)
     }
 
-    // ── 2. Create table ─────────────────────────────────────────
+    // ── 2. Create or reuse table ─────────────────────────────────
 
-    const baseName = template_config.name
-    const { data: existingTables } = await supabase
-      .from('dynamic_tables')
-      .select('name')
-      .eq('organization_id', org_id)
-      .like('name', `${baseName}%`)
-
-    let tableName = baseName
-    if (existingTables && existingTables.length > 0) {
-      const taken = new Set(existingTables.map((t: any) => t.name))
-      let n = 2
-      while (taken.has(tableName)) {
-        tableName = `${baseName} ${n}`
-        n++
-      }
-    }
-
-    const { data: table, error: tableError } = await supabase
-      .from('dynamic_tables')
-      .insert({
-        organization_id: org_id,
-        created_by: user.id,
-        name: tableName,
-        description: template_config.description ?? '',
-        source_type: 'manual',
-        row_count: sourceRows.length,
-      })
-      .select('id')
-      .single()
-
-    if (tableError) throw tableError
-    const tableId = table.id
-    console.log(`[setup-pipeline-template] Created table: ${tableId} "${tableName}"`)
-
-    // ── 3. Create columns ───────────────────────────────────────
-
+    let tableId: string
+    let tableName: string
+    let colKeyToId: Record<string, string> = {}
     const columns = template_config.columns ?? []
-    const columnInserts = columns.map((col: any) => ({
-      table_id: tableId,
-      key: col.key,
-      label: col.label,
-      column_type: col.column_type,
-      position: col.position,
-      width: col.width ?? 150,
-      is_visible: col.is_visible !== false,
-      is_enrichment: false,
-      ...(col.formula_expression ? { formula_expression: col.formula_expression } : {}),
-      ...(col.action_config ? { action_config: col.action_config } : {}),
-      ...(col.integration_config ? { integration_config: col.integration_config } : {}),
-    }))
 
-    const { data: createdColumns, error: colError } = await supabase
-      .from('dynamic_table_columns')
-      .insert(columnInserts)
-      .select('id, key')
+    if (isAppendMode) {
+      // Append mode: reuse existing table and columns
+      const { data: existingTable, error: tableErr } = await supabase
+        .from('dynamic_tables')
+        .select('id, name')
+        .eq('id', existing_table_id)
+        .single()
+      if (tableErr || !existingTable) throw new Error('Table not found')
+      tableId = existingTable.id
+      tableName = existingTable.name
 
-    if (colError) {
-      console.error('[setup-pipeline-template] Column insert error:', JSON.stringify(colError))
-      throw colError
-    }
+      // Get existing columns
+      const { data: existingCols } = await supabase
+        .from('dynamic_table_columns')
+        .select('id, key')
+        .eq('table_id', tableId)
+      for (const c of existingCols ?? []) {
+        colKeyToId[c.key] = c.id
+      }
 
-    const colKeyToId: Record<string, string> = {}
-    for (const c of createdColumns ?? []) {
-      colKeyToId[c.key] = c.id
+      // Get existing source_ids to deduplicate
+      const { data: existingRows } = await supabase
+        .from('dynamic_table_rows')
+        .select('source_id')
+        .eq('table_id', tableId)
+        .not('source_id', 'is', null)
+      const existingSourceIds = new Set((existingRows ?? []).map((r: any) => r.source_id))
+
+      // Filter out meetings already in the table
+      const beforeCount = sourceRows.length
+      sourceRows = sourceRows.filter((r: any) => !r.__source_id || !existingSourceIds.has(r.__source_id))
+      console.log(`[setup-pipeline-template] Append dedup: ${beforeCount} fetched, ${beforeCount - sourceRows.length} already exist, ${sourceRows.length} new`)
+
+      if (sourceRows.length === 0) {
+        return new Response(
+          JSON.stringify({ table_id: tableId, table_name: tableName, rows_created: 0, rows_skipped: beforeCount, columns_created: 0, used_synthetic: false }),
+          { status: 200, headers: JSON_HEADERS },
+        )
+      }
+
+      console.log(`[setup-pipeline-template] Appending ${sourceRows.length} rows to "${tableName}"`)
+    } else {
+      // Create mode: new table + columns
+      const baseName = template_config.name
+      const { data: existingTables } = await supabase
+        .from('dynamic_tables')
+        .select('name')
+        .eq('organization_id', org_id)
+        .like('name', `${baseName}%`)
+
+      tableName = baseName
+      if (existingTables && existingTables.length > 0) {
+        const taken = new Set(existingTables.map((t: any) => t.name))
+        let n = 2
+        while (taken.has(tableName)) {
+          tableName = `${baseName} ${n}`
+          n++
+        }
+      }
+
+      const { data: table, error: tableError } = await supabase
+        .from('dynamic_tables')
+        .insert({
+          organization_id: org_id,
+          created_by: user.id,
+          name: tableName,
+          description: template_config.description ?? '',
+          source_type: 'manual',
+          row_count: sourceRows.length,
+        })
+        .select('id')
+        .single()
+
+      if (tableError) throw tableError
+      tableId = table.id
+      console.log(`[setup-pipeline-template] Created table: ${tableId} "${tableName}"`)
+
+      // ── 3. Create columns ───────────────────────────────────────
+
+      const columnInserts = columns.map((col: any) => ({
+        table_id: tableId,
+        key: col.key,
+        label: col.label,
+        column_type: col.column_type,
+        position: col.position,
+        width: col.width ?? 150,
+        is_visible: col.is_visible !== false,
+        is_enrichment: false,
+        ...(col.formula_expression ? { formula_expression: col.formula_expression } : {}),
+        ...(col.action_config ? { action_config: col.action_config } : {}),
+        ...(col.integration_config ? { integration_config: col.integration_config } : {}),
+      }))
+
+      const { data: createdColumns, error: colError } = await supabase
+        .from('dynamic_table_columns')
+        .insert(columnInserts)
+        .select('id, key')
+
+      if (colError) {
+        console.error('[setup-pipeline-template] Column insert error:', JSON.stringify(colError))
+        throw colError
+      }
+
+      for (const c of createdColumns ?? []) {
+        colKeyToId[c.key] = c.id
+      }
     }
 
     // ── 4. Create rows + cells ──────────────────────────────────
 
     const sourceColumnKeys = columns.filter((c: any) => c.is_source).map((c: any) => c.key)
 
+    // In append mode, start row_index after existing rows
+    let startRowIndex = 0
+    if (isAppendMode) {
+      const { data: maxRow } = await supabase
+        .from('dynamic_table_rows')
+        .select('row_index')
+        .eq('table_id', tableId)
+        .order('row_index', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      startRowIndex = (maxRow?.row_index ?? -1) + 1
+    }
+
     for (let rowIdx = 0; rowIdx < sourceRows.length; rowIdx++) {
       const rowData = sourceRows[rowIdx]
+      const sourceId = rowData.__source_id || null
       const { data: row, error: rowError } = await supabase
         .from('dynamic_table_rows')
-        .insert({ table_id: tableId, row_index: rowIdx })
+        .insert({ table_id: tableId, row_index: startRowIndex + rowIdx, ...(sourceId ? { source_id: sourceId } : {}) })
         .select('id')
         .single()
 
@@ -565,6 +627,15 @@ serve(async (req: Request) => {
           .insert(cells)
         if (cellError) throw cellError
       }
+    }
+
+    // Update row_count on the table
+    if (isAppendMode) {
+      const { count } = await supabase
+        .from('dynamic_table_rows')
+        .select('id', { count: 'exact', head: true })
+        .eq('table_id', tableId)
+      await supabase.from('dynamic_tables').update({ row_count: count ?? 0 }).eq('id', tableId)
     }
 
     // ── 5. Instantly integration (optional) ──────────────────────
@@ -700,14 +771,14 @@ serve(async (req: Request) => {
       }
     }
 
-    console.log(`[setup-pipeline-template] Done. Rows: ${sourceRows.length}, Columns: ${createdColumns?.length ?? 0}`)
+    console.log(`[setup-pipeline-template] Done. Rows: ${sourceRows.length}, Append: ${isAppendMode}`)
 
     return new Response(
       JSON.stringify({
         table_id: tableId,
         table_name: tableName,
         rows_created: sourceRows.length,
-        columns_created: createdColumns?.length ?? 0,
+        columns_created: isAppendMode ? 0 : Object.keys(colKeyToId).length,
         used_synthetic: sourceRows === dataSource.synthetic_rows,
         ...(instantlyCampaignId ? { instantly_campaign_id: instantlyCampaignId } : {}),
         ...(hubspotEnrolledCount > 0 ? { hubspot_enrolled_count: hubspotEnrolledCount } : {}),
