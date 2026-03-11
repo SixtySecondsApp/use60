@@ -74,7 +74,7 @@ const METHODOLOGY_TOOLTIPS: Record<string, string> = {
   meddic: 'Metrics, Economic Buyer, Decision Criteria, Decision Process, Identify Pain, Champion',
   bant: 'Budget, Authority, Need, Timeline',
   spin: 'Situation, Problem, Implication, Need-Payoff',
-  challenger: 'The Challenger Sale — teach, tailor, and take control of the conversation',
+  challenger: 'The Challenger Sale — teach, tailor and take control of the conversation',
 };
 
 const CONFIG_META: Record<string, ConfigMeta> = {
