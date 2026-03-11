@@ -323,14 +323,14 @@ export function useUsers() {
         }
 
         if (data?.error) {
-          // Check if it's an auth deletion failure vs profile deletion failure
-          if (data.code === 'AUTH_DELETION_FAILED') {
-            throw new Error(`Failed to revoke user access: ${data.error}. User cannot be deleted.`);
-          }
           throw new Error(data.error);
         }
 
-        toast.success('User deleted successfully and access revoked');
+        if (data?.warning) {
+          toast.warning('User removed. Auth cleanup had a warning — user may need to be re-deleted if they can still sign in.');
+        } else {
+          toast.success('User deleted successfully and access revoked');
+        }
         await fetchUsers();
         return;
       } catch (edgeFunctionError: any) {
