@@ -151,6 +151,15 @@ const platformSections: Record<string, PlatformSection[]> = {
       badge: 'New',
     },
     {
+      id: 'coupons',
+      title: 'Coupons & Promotions',
+      description: 'Create and manage discount codes and promotional offers',
+      icon: Tag,
+      href: '/platform/coupons',
+      color: 'text-pink-600 bg-pink-100 dark:bg-pink-900/30',
+      badge: 'New',
+    },
+    {
       id: 'billing-analytics',
       title: 'Billing Analytics',
       description: 'RevenueCat-inspired subscription metrics (MRR, churn, retention, LTV)',

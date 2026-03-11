@@ -1,423 +1,134 @@
 {
-  "project": "Landing Builder V2",
-  "runSlug": "landing-builder-v2",
-  "branchName": "feature/landing-builder-v2",
-  "description": "5 improvements: one-click Vercel publish, form builder with lead capture, image upload/crop, template library, SEO & analytics",
+  "project": "Stripe Coupon System",
+  "runSlug": "stripe-coupon-system",
+  "branchName": "feature/stripe-coupon-system",
+  "description": "Build a Stripe coupon management system within the 60 platform admin — CRUD coupons/promotion codes, modify billing to accept and display coupons, track redemptions via webhooks, show analytics.",
   "aiDevHubProjectId": null,
-  "createdAt": "2026-03-10T21:14:00.000Z",
+  "createdAt": "2026-03-11T12:00:00Z",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Published pages database schema",
-      "description": "As a developer, I want a published_landing_pages table so that published page data is persisted and queryable",
+      "title": "Database schema for coupon tracking",
+      "description": "As a platform admin, I need database tables to store coupon metadata and track redemptions so that coupon data is queryable locally without hitting the Stripe API for every read.",
       "acceptanceCriteria": [
-        "Migration creates published_landing_pages table with: id (UUID PK), session_id (FK), org_id, user_id, slug (unique), title, html_content, meta_description, og_image_url, custom_domain, vercel_deployment_id, vercel_url, status (draft/published/unpublished), published_at, updated_at, created_at",
-        "RLS policies: users can CRUD own org's pages",
-        "Unique index on slug, index on org_id",
-        "DROP POLICY IF EXISTS before CREATE POLICY",
+        "stripe_coupons table with all columns: id, stripe_coupon_id, name, discount_type, discount_value, currency, duration, duration_in_months, max_redemptions, times_redeemed, redeem_by, applies_to_products, is_active, metadata, created_by, created_at, updated_at",
+        "coupon_redemptions table: id, coupon_id, org_id, stripe_promotion_code_id, promotion_code, stripe_subscription_id, stripe_checkout_session_id, discount_amount_cents, applied_at, removed_at",
+        "stripe_promotion_codes table: id, coupon_id, stripe_promotion_code_id, code, is_active, max_redemptions, times_redeemed, expires_at, customer_restriction, first_time_only, minimum_amount_cents, minimum_amount_currency, created_at",
+        "RLS policies: platform admins can CRUD all tables; service role has full access",
+        "Indexes on stripe_coupon_id, code, and org_id",
+        "Migration uses DROP POLICY IF EXISTS before CREATE POLICY",
+        "Migration created via ./scripts/new-migration.sh",
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "Feature 1: Publish. Schema first.",
+      "passes": false,
+      "notes": "Schema story — must complete before backend stories. Follow existing billing table patterns.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-002",
-      "title": "Publish service with Vercel deploy API",
-      "description": "As a developer, I want a landingPublishService that deploys HTML to Vercel so pages go live with a URL",
+      "title": "Coupon admin edge function",
+      "description": "As a platform admin, I need a backend API to create, list, update, and delete coupons and promotion codes so that coupon management is handled securely server-side via the Stripe API.",
       "acceptanceCriteria": [
-        "New service at src/lib/services/landingPublishService.ts",
-        "publish() method: generates final HTML with SEO tags, calls Vercel Deploy API, stores in published_landing_pages",
-        "unpublish() method: removes deployment, updates status",
-        "updateSlug() method: updates slug, triggers redeployment",
-        "Vercel API token from org settings (not VITE_ prefixed)",
-        "Returns live URL on success, toast on error",
+        "New edge function coupon-admin-router/index.ts with router pattern (follows stripe-router)",
+        "list_coupons handler: reads from local stripe_coupons table with promotion code counts",
+        "create_coupon handler: calls stripe.coupons.create(), inserts into stripe_coupons",
+        "update_coupon handler: calls stripe.coupons.update() (name/metadata only), updates local",
+        "delete_coupon handler: calls stripe.coupons.del(), marks is_active = false locally",
+        "create_promotion_code handler: calls stripe.promotionCodes.create(), inserts into stripe_promotion_codes",
+        "list_promotion_codes handler: reads from stripe_promotion_codes filtered by coupon_id",
+        "update_promotion_code handler: calls stripe.promotionCodes.update() (active status)",
+        "apply_to_subscription handler: calls stripe.subscriptions.update({ coupon }) for existing subscribers",
+        "Auth: JWT validation + platform admin check",
+        "In-memory rate limiting: 20 req/min per IP on create/update actions",
+        "Uses getStripeClient() from _shared/stripe.ts, getCorsHeaders(req), pins @2.43.4",
+        "TypeScript types added to src/lib/types/subscription.ts",
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "Feature 1: Publish. Core service.",
+      "passes": false,
+      "notes": "Backend story — follows stripe-router handler pattern. Includes apply_to_subscription for existing subscribers.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-003",
-      "title": "Image persistence on publish",
-      "description": "As a user, I want AI-generated images permanently hosted so they don't break after publish",
+      "title": "Coupon admin page",
+      "description": "As a platform admin, I want a dedicated page to view and manage all coupons so that I can create discounts, generate promotion codes, and monitor usage without leaving 60.",
       "acceptanceCriteria": [
-        "On publish, all base64/temporary image URLs uploaded to Supabase Storage landing-page-assets bucket",
-        "HTML updated with permanent public URLs before Vercel deploy",
-        "Storage bucket: public read, write for authenticated users",
-        "Handles both base64 data URLs and external URLs",
-        "Typecheck passes"
+        "New page CouponAdmin at /platform/coupons behind PlatformAdminRouteGuard",
+        "Route registered in App.tsx, lazy import in lazyPages.tsx",
+        "Navigation link added to platform admin nav",
+        "Coupons table: name, type, value, duration, redemptions/max, status badge, created date",
+        "Create Coupon dialog: name, discount type toggle, value, currency, duration, duration_in_months, max redemptions, redeem by, plan restriction",
+        "Per-coupon row actions: View Promo Codes, Edit, Deactivate/Reactivate, Delete",
+        "Expandable promo codes per coupon with create/deactivate actions",
+        "Create Promotion Code dialog: code, max redemptions, expires at, customer restriction, first-time-only, minimum amount",
+        "Frontend service couponAdminService.ts calling coupon-admin-router via supabase.functions.invoke()",
+        "React Query hooks: useCoupons(), useCreateCoupon(), usePromotionCodes(), useCreatePromotionCode()",
+        "Toast notifications on all CRUD operations",
+        "Empty state, Lucide icons only, dark mode support",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Feature 1: Publish. Prevents broken images.",
+      "passes": false,
+      "notes": "Frontend story — follows PricingControl page pattern. Largest story but scoped to one page.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-004",
-      "title": "Publish modal UI",
-      "description": "As a user, I want a publish button and modal so I can set my page slug and publish with one click",
+      "title": "Stripe webhook discount handlers",
+      "description": "As the system, I need to capture discount events from Stripe webhooks so that local coupon data stays in sync and redemptions are tracked.",
       "acceptanceCriteria": [
-        "Publish button in EditorToolbar (assembly mode), Lucide Globe icon",
-        "Modal with: slug input (auto-suggested), title, URL preview (pages.use60.com/{slug}), publish button",
-        "Slug validation: lowercase, alphanumeric + hyphens, 3-60 chars, unique check",
-        "Loading state during deployment, success state with copy URL + open link",
-        "Re-publish updates existing deployment",
-        "Verify in browser on localhost:5175",
+        "Extend webhook-integrations/handlers/stripe.ts with customer.discount.created and customer.discount.deleted handlers",
+        "handleDiscountCreated: updates organization_subscriptions.discount_info, inserts coupon_redemptions, increments times_redeemed",
+        "handleDiscountDeleted: sets removed_at on coupon_redemptions, clears discount_info",
+        "Extract discount data from existing checkout.session.completed handler",
+        "All events logged to billing_event_log for idempotency",
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "Feature 1: Publish. Main user-facing UI.",
+      "passes": false,
+      "notes": "Integration story — extends existing webhook handler. Critical for keeping local data in sync.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-005",
-      "title": "Published pages list view",
-      "description": "As a user, I want to see all my published pages so I can manage them",
+      "title": "Customer billing discount display",
+      "description": "As a customer, I want to see my active discount on the billing page so that I know what coupon is applied, how much I'm saving, and when it expires.",
       "acceptanceCriteria": [
-        "New route at /landing-pages with table of published pages",
-        "Columns: title, slug, status, published date, live URL (clickable)",
-        "Actions: copy URL, open page, unpublish, edit (opens builder)",
-        "Empty state when no pages",
-        "Filtered by active org",
-        "Verify in browser on localhost:5175",
-        "Typecheck passes"
+        "New ActiveDiscount component on BillingSettingsPage",
+        "Shows: coupon name, discount value, duration remaining, savings per billing cycle",
+        "Reads from organization_subscriptions.discount_info JSONB",
+        "Hidden when no active discount",
+        "Badge styling: green active, amber expiring (<1 month), grey expired",
+        "Dark mode support",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": "Feature 1: Publish. Management view.",
+      "passes": false,
+      "notes": "Small UI story — reads existing data, no new API calls needed.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-006",
-      "title": "Custom domain mapping via Vercel",
-      "description": "As a user, I want to connect a custom domain to my published page",
+      "title": "Coupon usage analytics",
+      "description": "As a platform admin, I want to see coupon performance metrics in the billing analytics dashboard so that I can measure the revenue impact of discounts.",
       "acceptanceCriteria": [
-        "Custom domain input in publish modal (expandable section)",
-        "Instructions: Add CNAME record pointing to cname.vercel-dns.com",
-        "Calls Vercel Domains API to add domain",
-        "Stores in published_landing_pages.custom_domain",
-        "Shows verification status (pending/active)",
-        "Typecheck passes"
+        "New Coupons section in BillingAnalytics page",
+        "Metrics: total active coupons, total redemptions (7d/30d/all-time), total discount given, redemption rate",
+        "Per-coupon table: code, redemptions, total discount amount, last used",
+        "Revenue impact: estimated MRR reduction from active discounts",
+        "Data from stripe_coupons, coupon_redemptions, stripe_promotion_codes tables",
+        "React Query hook: useCouponAnalytics()",
+        "Follows existing BillingAnalytics card patterns, dark mode support",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": "Feature 1: Publish. Custom domains.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-007",
-      "title": "Form submissions database schema",
-      "description": "As a developer, I want a landing_form_submissions table so form data from published pages is stored",
-      "acceptanceCriteria": [
-        "Migration creates landing_form_submissions with: id (UUID PK), page_id (FK), org_id, form_data (JSONB), source_url, ip_address, user_agent, submitted_at",
-        "RLS: org members can read their org's submissions",
-        "Index on page_id and org_id",
-        "DROP POLICY IF EXISTS before CREATE POLICY",
-        "Typecheck passes"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": "Feature 2: Forms. Schema first.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-008",
-      "title": "Form submission edge function",
-      "description": "As a developer, I want an edge function that receives form submissions from published pages",
-      "acceptanceCriteria": [
-        "New edge function handle-landing-form-submission/index.ts",
-        "POST with { page_id, form_data, source_url }",
-        "Validates page_id exists and is published",
-        "Stores in landing_form_submissions",
-        "Rate limit: 10 per IP per minute per page",
-        "CORS via getCorsHeaders(req), verify_jwt = false (public)",
-        "Typecheck passes"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": "Feature 2: Forms. Backend.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-009",
-      "title": "FormBlock shared component",
-      "description": "As a user, I want CTA sections to have working email capture forms so pages collect leads",
-      "acceptanceCriteria": [
-        "New component src/components/landing-builder/sections/shared/FormBlock.tsx",
-        "Configurable fields: name, email, phone, company, message",
-        "Client-side validation: email format, required fields",
-        "Submit button with loading + success/error states",
-        "POST to handle-landing-form-submission edge function",
-        "Styled with section brand config",
-        "Works in preview iframe and published HTML",
-        "Typecheck passes"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": "Feature 2: Forms. Core component.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-010",
-      "title": "Form config in section data model + CTA integration",
-      "description": "As a developer, I want sections to support form configuration so the builder can add forms to CTAs",
-      "acceptanceCriteria": [
-        "Extend LandingSection with optional form?: { fields: FormField[], submit_label, success_message, notification_email? }",
-        "FormField type: { name, type, label, required, placeholder? }",
-        "CTA components (CtaCentered, CtaSplitLeft, CtaGradient) render FormBlock when section.form defined",
-        "Default form config for CTAs: email (required) + name (optional)",
-        "Typecheck passes"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": "Feature 2: Forms. Data model + rendering.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-011",
-      "title": "Form editor in Properties Panel",
-      "description": "As a user, I want to configure form fields in the editor so I can customize what data I collect",
-      "acceptanceCriteria": [
-        "Form tab in PropertiesPanel for CTA sections",
-        "Toggle to enable/disable form",
-        "Add/remove/reorder fields with drag handles",
-        "Per-field: label, placeholder, required toggle, type dropdown",
-        "Submit label + success message editors",
-        "Live preview updates",
-        "Verify in browser on localhost:5175",
-        "Typecheck passes"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": "Feature 2: Forms. Builder UI.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-012",
-      "title": "Form submissions viewer",
-      "description": "As a user, I want to view form submissions so I can follow up with leads",
-      "acceptanceCriteria": [
-        "Submissions tab on /landing-pages list view",
-        "Click page to see submissions table",
-        "Columns: date, email, name, other fields",
-        "Export to CSV button",
-        "Submission count badge on page row",
-        "Verify in browser on localhost:5175",
-        "Typecheck passes"
-      ],
-      "priority": 12,
-      "passes": true,
-      "notes": "Feature 2: Forms. Management UI.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-013",
-      "title": "Auto-create contacts from form submissions",
-      "description": "As a user, I want submissions to auto-create contacts in 60's pipeline so leads flow into my CRM",
-      "acceptanceCriteria": [
-        "Toggle in page settings: Auto-create contacts from submissions",
-        "Edge function creates contacts record with owner_id = page owner",
-        "Maps: email → contact email, name → name, company → company",
-        "Creates activities record: Lead captured from landing page",
-        "Deduplicates by email — existing contact gets activity only",
-        "Typecheck passes"
-      ],
-      "priority": 13,
-      "passes": true,
-      "notes": "Feature 2: Forms. CRM sync follow-up.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-014",
-      "title": "Landing builder assets storage bucket",
-      "description": "As a developer, I want a Supabase Storage bucket for user-uploaded landing page assets",
-      "acceptanceCriteria": [
-        "landing-builder-assets bucket created",
-        "Public read, authenticated write within org",
-        "Max file: 5MB, types: jpeg, png, webp, gif, svg+xml",
-        "Typecheck passes"
-      ],
-      "priority": 14,
-      "passes": true,
-      "notes": "Feature 3: Image upload. Infrastructure.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-015",
-      "title": "Image upload service",
-      "description": "As a developer, I want a service that handles image upload and URL generation for the builder",
-      "acceptanceCriteria": [
-        "New service src/lib/services/landingAssetService.ts",
-        "uploadImage(file, sessionId) → uploads to landing-builder-assets/{orgId}/{sessionId}/{filename}, returns public URL",
-        "deleteImage(url) → removes from storage",
-        "File validation: type, size, max 4096x4096",
-        "Unique filenames to prevent collisions",
-        "Typecheck passes"
-      ],
-      "priority": 15,
-      "passes": true,
-      "notes": "Feature 3: Image upload. Service layer.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-016",
-      "title": "Image upload in Properties Panel + inline toolbar",
-      "description": "As a user, I want to upload my own image for a section so I'm not limited to AI generation",
-      "acceptanceCriteria": [
-        "Upload Image button in PropertiesPanel Assets section",
-        "Upload button in InlineEditController floating toolbar (Lucide Upload icon)",
-        "File picker filtered to image types",
-        "Upload progress indicator",
-        "Updates section.image_url and sets image_status to complete",
-        "Thumbnail preview after upload",
-        "Paste URL input for external images",
-        "Verify in browser on localhost:5175",
-        "Typecheck passes"
-      ],
-      "priority": 16,
-      "passes": true,
-      "notes": "Feature 3: Image upload. UI integration.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-017",
-      "title": "Image crop modal",
-      "description": "As a user, I want to crop images so they fit my section layout",
-      "acceptanceCriteria": [
-        "After upload, optional crop modal with react-easy-crop",
-        "Aspect ratio presets: Free, 16:9, 4:3, 1:1",
-        "Apply saves cropped version to storage, updates URL",
-        "Skip uses original uncropped",
-        "Also accessible from Properties Panel Crop button",
-        "Verify in browser on localhost:5175",
-        "Typecheck passes"
-      ],
-      "priority": 17,
-      "passes": true,
-      "notes": "Feature 3: Image upload. Crop capability.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-018",
-      "title": "Template data format and 6 starter templates",
-      "description": "As a developer, I want a template format and starter templates so users can start from pre-built pages",
-      "acceptanceCriteria": [
-        "New directory src/components/landing-builder/templates/",
-        "Template type with: id, name, description, category, thumbnail, sections[], brandConfig",
-        "6 templates: SaaS Hero, Agency, Product Launch, Event/Webinar, Waitlist, Minimal Portfolio",
-        "Each has 4-8 sections with placeholder copy and layout variants",
-        "Exported from templates/index.ts",
-        "Typecheck passes"
-      ],
-      "priority": 18,
-      "passes": true,
-      "notes": "Feature 4: Templates. Data + content.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-019",
-      "title": "Template gallery in builder empty state",
-      "description": "As a user, I want to browse and pick a template so I can skip the strategy phase",
-      "acceptanceCriteria": [
-        "Start from Template card in LandingBuilderEmpty",
-        "Opens gallery modal showing templates as cards",
-        "Cards: name, description, category badge, section count, thumbnail",
-        "Category filter tabs",
-        "Full-width preview with ReactSectionRenderer on click",
-        "Use this template button loads into assembly mode",
-        "Verify in browser on localhost:5175",
-        "Typecheck passes"
-      ],
-      "priority": 19,
-      "passes": true,
-      "notes": "Feature 4: Templates. Gallery UI.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-020",
-      "title": "Template selection phase skip logic",
-      "description": "As a developer, I want template selection to bypass Strategy + Copy so users go straight to editing",
-      "acceptanceCriteria": [
-        "Template select: setAssemblySections(template.sections), setAssemblyBrandConfig(template.brandConfig)",
-        "Sets isAssemblyMode = true, currentPhase = 2",
-        "Workspace created with sections pre-populated, current_phase: 2",
-        "Asset queue NOT started (templates use placeholders, user regenerates or uploads)",
-        "Chat available for refinements",
-        "Typecheck passes"
-      ],
-      "priority": 20,
-      "passes": true,
-      "notes": "Feature 4: Templates. Phase integration.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-021",
-      "title": "SEO fields data model + auto-generation",
-      "description": "As a developer, I want SEO metadata stored in workspace so pages have proper meta tags",
-      "acceptanceCriteria": [
-        "Extend workspace type with seo?: { title, description, og_image_url?, keywords?, canonical_url?, gtm_id?, facebook_pixel_id? }",
-        "Auto-generate: title from hero headline, description from hero subhead (160 chars)",
-        "SEO fields saved to workspace and copied to published_landing_pages on publish",
-        "Typecheck passes"
-      ],
-      "priority": 21,
-      "passes": true,
-      "notes": "Feature 5: SEO. Data model.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-022",
-      "title": "SEO settings panel",
-      "description": "As a user, I want to edit SEO meta tags so my page appears correctly in search and social",
-      "acceptanceCriteria": [
-        "Page Settings button in EditorToolbar (Lucide Settings icon)",
-        "Panel with SEO tab: title (60 char counter), description (160 char counter), keywords, OG image preview",
-        "Analytics tab: GTM ID input, Facebook Pixel ID, custom head script textarea",
-        "Auto-saves to workspace",
-        "Verify in browser on localhost:5175",
-        "Typecheck passes"
-      ],
-      "priority": 22,
-      "passes": true,
-      "notes": "Feature 5: SEO. Editor UI.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-023",
-      "title": "SEO tags + analytics scripts in HTML export",
-      "description": "As a developer, I want HTML export to include all SEO meta and tracking scripts",
-      "acceptanceCriteria": [
-        "wrapInHtml() includes: <title>, meta description, og:title, og:description, og:image, og:url, twitter:card, canonical",
-        "GTM script in <head> + noscript in <body> if ID provided",
-        "Facebook Pixel script if ID provided",
-        "Custom head scripts injected",
-        "JSON-LD Organization schema from org profile",
-        "Typecheck passes"
-      ],
-      "priority": 23,
-      "passes": true,
-      "notes": "Feature 5: SEO. Export integration.",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-024",
-      "title": "OG image auto-generation on publish",
-      "description": "As a user, I want an OG image auto-generated so social shares look professional",
-      "acceptanceCriteria": [
-        "On publish (if no custom OG image), generate 1200x630 image via Nano Banana",
-        "Prompt uses hero headline + brand colors",
-        "Upload to Supabase Storage, set as og_image_url",
-        "Fallback: use hero section image if generation fails",
-        "Typecheck passes"
-      ],
-      "priority": 24,
-      "passes": true,
-      "notes": "Feature 5: SEO. OG image.",
+      "passes": false,
+      "notes": "Analytics story — extends existing BillingAnalytics page. Depends on schema + webhook data.",
       "aiDevHubTaskId": null
     }
   ]

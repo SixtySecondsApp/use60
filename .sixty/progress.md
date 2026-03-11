@@ -168,3 +168,29 @@ All 7 COMP stories were already implemented in prior sessions. Verified and lint
 
 No new code written — all stories pre-implemented.
 
+### 2026-03-11 — US-001 through US-006
+
+**Stripe Coupon System — COMPLETE**
+
+All 6 stories delivered:
+
+- **US-001**: Migration `20260311151413_stripe_coupon_system.sql` — creates `stripe_coupons`, `stripe_promotion_codes`, `coupon_redemptions` tables with RLS, indexes, and `discount_info` JSONB column on `organization_subscriptions`.
+- **US-002**: Edge function `coupon-admin-router/` — 8 handlers (list/create/update/delete coupons, list/create/update promo codes, apply to subscription). Router with rate limiting, `requireSuperAdmin` auth, Sentry error capture.
+- **US-003**: `CouponAdmin.tsx` page at `/platform/coupons` — coupons table with expandable promo codes, create/edit/delete coupon dialogs, create promo code dialog, search, empty state. Service: `couponAdminService.ts`. Hooks: `useCoupons.ts`. Route + lazy import pre-wired.
+- **US-004**: Webhook handlers `handleDiscountCreated` and `handleDiscountDeleted` in `webhook-integrations/handlers/stripe.ts` — updates `discount_info` JSONB, inserts/updates `coupon_redemptions`, increments `times_redeemed`.
+- **US-005**: `ActiveDiscount` component in `src/components/billing/ActiveDiscount.tsx` — shows coupon name, discount value, duration, green/amber/grey status badge. Integrated into `BillingSettingsPage.tsx`.
+- **US-006**: `useCouponAnalytics()` hook + Coupons tab in `BillingAnalytics.tsx` — active coupons count, total redemptions, total discount, per-coupon breakdown table.
+
+Files created/modified:
+- `supabase/migrations/20260311151413_stripe_coupon_system.sql`
+- `supabase/functions/coupon-admin-router/` (index.ts, helpers/auth.ts, 8 handler files)
+- `src/lib/types/subscription.ts` (coupon types added)
+- `src/lib/services/couponAdminService.ts`
+- `src/lib/hooks/useCoupons.ts`
+- `src/pages/platform/CouponAdmin.tsx`
+- `src/components/billing/ActiveDiscount.tsx`
+- `src/pages/settings/BillingSettingsPage.tsx` (ActiveDiscount integration)
+- `src/pages/admin/BillingAnalytics.tsx` (Coupons tab)
+- `src/lib/hooks/useBillingAnalytics.ts` (useCouponAnalytics)
+- `supabase/functions/webhook-integrations/handlers/stripe.ts` (discount handlers)
+
