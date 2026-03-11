@@ -531,27 +531,52 @@ new thought: "I think you just had too much on at the time, which
 totally made sense."
 
 =================================================================
+CRITICAL — DO NOT COPY EXAMPLES
+=================================================================
+
+The few-shot examples above are ONLY to show the format and tone.
+You MUST write fresh, unique content for every contact. NEVER
+copy phrases verbatim from the examples. If I see "the managed
+service wasn't the right fit budget-wise" or "built a much cheaper
+version" repeated across contacts I will know you are copying.
+
+For blocker_ref: use the suggested phrasings as a STARTING POINT
+only. Adjust the wording to reference something specific from THIS
+prospect's conversation. Two budget blockers should NOT have
+identical blocker_ref text.
+
+For use60_bridge: tailor to THIS prospect's specific pain. Two
+contacts with different pains must have different bridges.
+
+For curiosity_line: must reference THIS prospect's specific
+challenge. Never reuse the same curiosity line across contacts.
+
+=================================================================
 FINAL CHECK
 =================================================================
 
 1. Read time_ref in both template slots. Does it work grammatically
    in "We spoke [time_ref] about" AND "When we chatted [time_ref]
    you were"?
-2. Read pain_ref after "about". Does it flow naturally?
-3. Read "[hook_line] [blocker_ref], which totally made sense." Does
-   the full sentence flow?
-4. Does blocker_ref match the blocker_type from the input?
-5. Does curiosity_line work as a standalone sentence after
+2. VERIFY time_ref against months_ago: 0-1 = "the other week" /
+   "recently", 2-4 = "a few months back", 5-8 = "earlier this
+   year" (same year only), 9+ = "a while back". If months_ago
+   says 6, do NOT write "the other week".
+3. Read pain_ref after "about". Does it flow naturally?
+4. Read "[hook_line] [blocker_ref], which totally made sense." Does
+   the full sentence flow? Is hook_line COMPLETE (not cut off)?
+5. Does blocker_ref match the blocker_type from the input?
+6. Does curiosity_line work as a standalone sentence after
    "[pain_ref]."? Is it casual and intriguing, not salesy?
-6. Is pain_reframe a genuinely different angle from pain_ref?
-7. Is use60_intro the correct version for this months_ago?
+7. Is pain_reframe a genuinely different angle from pain_ref?
+8. Is use60_intro the correct version for this months_ago?
    (0-1 = "got", 2+ = "built since then")
-8. Does use60_bridge work in "we've [use60_bridge] that's designed
+9. Does use60_bridge work in "we've [use60_bridge] that's designed
    for..."? Max 6 words, grammatical after "we've"?
-9. Any em dashes? Remove.
-10. Any Oxford commas? Fix.
-11. All within max word counts?
-12. Return ONLY valid JSON.`;
+10. Any em dashes? Remove.
+11. Any Oxford commas? Fix.
+12. All within max word counts?
+13. Return ONLY valid JSON.`;
 
 const REENGAGEMENT_PROMPT_2_USER = `Today's date: {{today_date}}
 Contact: {{first_name}} at {{company}}
@@ -672,8 +697,8 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
             user_message_template: REENGAGEMENT_PROMPT_2_USER,
             model: 'claude-sonnet-4-5-20250929',
             provider: 'anthropic',
-            temperature: 0.5,
-            max_tokens: 512,
+            temperature: 0.6,
+            max_tokens: 768,
             output_column_key: 'email_variables',
           },
         }],
@@ -725,7 +750,7 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
       rep_name: 'rep_name',
       transcript_text: 'transcript_text',
     },
-    limit: 100,
+    limit: 500,
     synthetic_rows: [
       { first_name: 'Sarah', last_name: 'Chen', company: 'TechFlow Inc', meeting_date: '2025-11-15', rep_name: 'Andrew', transcript_text: 'Rep: Thanks for taking the time today Sarah. So tell me about what\'s happening at TechFlow.\nSarah: Sure, so we\'re a 50-person SaaS company and honestly our sales process is a mess. We have leads coming in from the website, LinkedIn, events — but nobody follows up consistently.\nRep: What happens after a lead comes in?\nSarah: It sits in HubSpot until someone remembers to check. Could be days. Our AEs are good on calls but terrible at admin. We tried hiring an SDR but they quit after 3 months.\nRep: What\'s the revenue impact?\nSarah: We estimated we\'re losing 30-40% of inbound leads to slow follow-up. At our ACV of $24k, that\'s significant. Our CEO is frustrated.\nRep: Have you looked at automation tools?\nSarah: We tried Outreach but it felt too enterprise for us. And the reps hated it. We need something that just works without a lot of setup.' },
       { first_name: 'Marcus', last_name: 'Rivera', company: 'GrowthPath Advisory', meeting_date: '2025-10-22', rep_name: 'Andrew', transcript_text: 'Rep: Marcus, great to connect. What prompted you to take this call?\nMarcus: We\'re a boutique consulting firm, 12 people. I handle all the business development myself and I\'m drowning. Between client work and trying to grow the pipeline, something always drops.\nRep: What does your current sales process look like?\nMarcus: Honestly? It\'s my inbox and my memory. I meet someone at an event, exchange cards, maybe send a follow-up if I remember. Half the time I don\'t. I know I need a CRM but every time I try one I stop using it within a week.\nRep: What would success look like for you?\nMarcus: If someone could just handle the follow-ups and keep deals moving while I focus on delivery. I don\'t need complex pipelines — I need consistency. Budget isn\'t really an issue if it actually works, probably $500-1000/mo range.' },

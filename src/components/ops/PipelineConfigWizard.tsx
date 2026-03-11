@@ -329,7 +329,9 @@ export function PipelineConfigWizard({ open, onOpenChange, template, onComplete 
           .eq('owner_id', (await supabase.auth.getUser()).data.user?.id ?? '');
       }
       const { count } = await query!;
-      setPreviewCount(count ?? 0);
+      const rawCount = count ?? 0;
+      const limit = template.dataSource.limit ?? 500;
+      setPreviewCount(Math.min(rawCount, limit));
     } catch {
       setPreviewCount(null);
     } finally {

@@ -33,6 +33,8 @@ import {
   Inbox,
   Play,
   Columns,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -226,6 +228,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   }>>([]);
   const [nlViewConfig, setNlViewConfig] = useState<ViewConfigState | null>(null);
   const [nlQueryLoading, setNlQueryLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const OPS_PAGE_SIZE = 500;
 
   // Snapshot state before panel opens so we can revert on cancel
   const preConfigSnapshot = useRef<{
@@ -351,16 +355,25 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     data: tableData,
     isLoading: isDataLoading,
   } = useQuery({
-    queryKey: ['ops-table-data', tableId, sortState, filterConditions],
+    queryKey: ['ops-table-data', tableId, sortState, filterConditions, currentPage],
     queryFn: () =>
       tableService.getTableData(tableId!, {
-        perPage: 500,
+        page: currentPage,
+        perPage: OPS_PAGE_SIZE,
         sortBy: primarySort?.key ?? 'row_index',
         sortDir: primarySort?.dir,
         filters: filterConditions.length > 0 ? filterConditions : undefined,
       }),
     enabled: !!tableId,
   });
+
+  // Reset to page 1 when filters or sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterConditions, sortState]);
+
+  const totalRows = tableData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalRows / OPS_PAGE_SIZE));
 
   const { data: views = [], isLoading: isViewsLoading } = useQuery({
     queryKey: ['ops-table-views', tableId],
@@ -471,6 +484,15 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       (table?.columns ?? []).sort((a, b) => a.position - b.position),
     [table?.columns],
   );
+
+  // Default sort: if table has a meeting_date column and no sort is set, sort desc
+  useEffect(() => {
+    if (sortState || !columns.length) return;
+    const hasDateCol = columns.some((c) => c.key === 'meeting_date');
+    if (hasDateCol) {
+      setSortState({ key: 'meeting_date', dir: 'desc' });
+    }
+  }, [columns, sortState]);
 
   // ---- Enrich All handler ----
   const APOLLO_ENRICHABLE_KEYS = new Set(['email', 'phone', 'linkedin_url', 'city', 'website_url', 'funding_stage', 'employees']);
@@ -1191,6 +1213,26 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     onError: () => toast.error('Failed to recalculate formula'),
   });
 
+  /** Recalculate dependent formula columns for a specific row, then refresh data */
+  const recalcFormulasForRow = useCallback(async (rowId: string, outputKeys: Set<string>) => {
+    const dependentFormulas = columns
+      .filter((c) => c.column_type === 'formula' && c.formula_expression)
+      .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)));
+    if (dependentFormulas.length === 0) return;
+    try {
+      await Promise.all(
+        dependentFormulas.map((c) =>
+          supabase.functions.invoke('evaluate-formula', {
+            body: { table_id: tableId, column_id: c.id, row_ids: [rowId] },
+          }),
+        ),
+      );
+    } catch {
+      // Non-fatal — formulas will be stale until next full recalc
+    }
+    queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+  }, [tableId, columns, queryClient]);
+
   const cellEditMutation = useMutation({
     mutationFn: ({ cellId, rowId, columnId, value }: { cellId?: string; rowId: string; columnId: string; value: string }) => {
       if (cellId) {
@@ -1527,21 +1569,19 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               },
             },
             {
-              onSuccess: () => {
+              onSuccess: async () => {
                 cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
-                // Re-evaluate any formula columns that reference the output column
+                // Re-evaluate dependent formula columns for this specific row
                 const outputKeys = new Set(
                   (buttonConfig.actions ?? [])
                     .filter((a: any) => a.type === 'run_prompt' && a.config?.output_column_key)
                     .map((a: any) => a.config.output_column_key),
                 );
                 if (outputKeys.size > 0) {
-                  columns
-                    .filter((c) => c.column_type === 'formula' && c.formula_expression)
-                    .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)))
-                    .forEach((c) => recalcFormulaMutation.mutate(c.id));
+                  await recalcFormulasForRow(rowId, outputKeys);
+                } else {
+                  queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
                 }
-                queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
                 toast.success(`Done: ${actionLabel}`);
               },
               onError: () => {
@@ -3204,6 +3244,36 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             })()}
             onRowExpand={(rowId) => setExpandedRowId(rowId)}
           />
+
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-2 py-3 border-t border-zinc-800/60">
+              <span className="text-xs text-zinc-500">
+                Showing {((currentPage - 1) * OPS_PAGE_SIZE) + 1}–{Math.min(currentPage * OPS_PAGE_SIZE, totalRows)} of {totalRows} rows
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Prev
+                </button>
+                <span className="px-2 text-xs text-zinc-400">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

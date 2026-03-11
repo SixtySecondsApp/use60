@@ -72,7 +72,7 @@ serve(async (req: Request) => {
         .eq('org_id', org_id)
         .not('transcript_text', 'is', null)
         .order('meeting_start', { ascending: false })
-        .limit(dataSource.limit ?? 10)
+        .limit(dataSource.limit ?? 500)
 
       // Apply optional filters
       if (filters?.date_from) meetQuery = meetQuery.gte('meeting_start', filters.date_from)
@@ -538,10 +538,11 @@ serve(async (req: Request) => {
 
     const sourceColumnKeys = columns.filter((c: any) => c.is_source).map((c: any) => c.key)
 
-    for (const rowData of sourceRows) {
+    for (let rowIdx = 0; rowIdx < sourceRows.length; rowIdx++) {
+      const rowData = sourceRows[rowIdx]
       const { data: row, error: rowError } = await supabase
         .from('dynamic_table_rows')
-        .insert({ table_id: tableId, row_index: 0 })
+        .insert({ table_id: tableId, row_index: rowIdx })
         .select('id')
         .single()
 
