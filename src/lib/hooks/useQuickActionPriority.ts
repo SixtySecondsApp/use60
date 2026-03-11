@@ -1,6 +1,12 @@
 import { useMemo } from 'react';
 
-export type QuickActionId = 'follow_up_email' | 'book_call' | 'share_recording';
+export type QuickActionId =
+  | 'follow_up_email'
+  | 'generate_proposal'
+  | 'create_task'
+  | 'create_deal'
+  | 'share_recording'
+  | 'book_call';
 
 export interface QuickActionPriorityResult {
   orderedActions: QuickActionId[];
@@ -15,6 +21,15 @@ interface Meeting {
   voice_recording_id?: string | null;
 }
 
+const DEFAULT_ORDER: QuickActionId[] = [
+  'follow_up_email',
+  'generate_proposal',
+  'create_task',
+  'create_deal',
+  'share_recording',
+  'book_call',
+];
+
 /**
  * Determines the priority order of quick actions based on meeting context.
  * Returns ordered actions with optional urgency indicator for the first action.
@@ -23,37 +38,37 @@ export function useQuickActionPriority(meeting: Meeting | null): QuickActionPrio
   return useMemo(() => {
     if (!meeting) {
       return {
-        orderedActions: ['follow_up_email', 'book_call', 'share_recording'],
+        orderedActions: DEFAULT_ORDER,
         urgentAction: null,
         urgencyReason: null,
       };
     }
 
-    const { meeting_type, sentiment_score, source_type } = meeting;
+    const { meeting_type, sentiment_score } = meeting;
 
-    // Default priority
-    let priority: QuickActionId[] = ['follow_up_email', 'book_call', 'share_recording'];
+    let priority: QuickActionId[] = [...DEFAULT_ORDER];
     let urgentAction: QuickActionId | null = null;
     let urgencyReason: string | null = null;
 
-    // Adjust based on meeting type
+    // Adjust top actions based on meeting type
     switch (meeting_type) {
       case 'discovery':
       case 'demo':
-        // After discovery/demo, booking next call is most important
-        priority = ['book_call', 'follow_up_email', 'share_recording'];
+        // After discovery/demo, book next call + proposal are key
+        priority = ['book_call', 'generate_proposal', 'follow_up_email', 'create_task', 'create_deal', 'share_recording'];
         urgentAction = 'book_call';
-        urgencyReason = 'Keep momentum after demo';
+        urgencyReason = 'Keep momentum';
         break;
       case 'negotiation':
       case 'closing':
-        priority = ['follow_up_email', 'book_call', 'share_recording'];
-        urgentAction = 'follow_up_email';
+        // Closing meetings: proposal + follow-up are critical
+        priority = ['generate_proposal', 'follow_up_email', 'create_deal', 'create_task', 'book_call', 'share_recording'];
+        urgentAction = 'generate_proposal';
         urgencyReason = 'Strike while hot';
         break;
       case 'follow_up':
-        // Follow-up meetings benefit from email recap and sharing recordings
-        priority = ['follow_up_email', 'share_recording', 'book_call'];
+        // Follow-up meetings: email recap + tasks from action items
+        priority = ['follow_up_email', 'create_task', 'share_recording', 'generate_proposal', 'create_deal', 'book_call'];
         break;
     }
 
@@ -61,7 +76,7 @@ export function useQuickActionPriority(meeting: Meeting | null): QuickActionPrio
     if (sentiment_score !== null && sentiment_score !== undefined && sentiment_score < 0.4) {
       priority = ['follow_up_email', ...priority.filter(a => a !== 'follow_up_email')];
       urgentAction = 'follow_up_email';
-      urgencyReason = 'Address concerns quickly';
+      urgencyReason = 'Address concerns';
     }
 
     // High positive sentiment - strike while hot

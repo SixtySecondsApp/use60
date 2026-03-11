@@ -68,6 +68,8 @@ export function TimelineView({ type, id, onItemClick, className }: TimelineViewP
         return DollarSign;
       case 'task':
         return CheckCircle2;
+      case 'communication':
+        return Mail;
       default:
         return FileText;
     }
@@ -85,6 +87,8 @@ export function TimelineView({ type, id, onItemClick, className }: TimelineViewP
         return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
       case 'task':
         return 'bg-orange-500/10 text-orange-400 border-orange-500/30';
+      case 'communication':
+        return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
       default:
         return 'bg-gray-500/10 text-gray-400 border-gray-500/30';
     }

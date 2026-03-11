@@ -2117,7 +2117,7 @@ export function createDbNotificationAdapter(_client: SupabaseClient): Notificati
   };
 }
 
-const GEMINI_MODEL = Deno.env.get('GEMINI_FLASH_MODEL') ?? Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.0-flash';
+const GEMINI_MODEL = Deno.env.get('GEMINI_FLASH_MODEL') ?? Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.1-flash-lite-preview';
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? Deno.env.get('GOOGLE_GEMINI_API_KEY') ?? '';
 
 /**

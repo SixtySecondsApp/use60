@@ -225,6 +225,7 @@ export type SandboxView =
   | 'meetings'
   | 'email'
   | 'proposals'
+  | 'relationships'
   | 'copilot';
 
 /** Logo.dev URL for company logos — uses public token from main app */

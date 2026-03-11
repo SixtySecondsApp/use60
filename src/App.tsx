@@ -80,7 +80,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GodsEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage, ProactiveTeammateDemo,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GodsEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, GeminiModelComparison, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage, ProactiveTeammateDemo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -475,6 +475,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/credit-system-demo" element={<PlatformAdminRouteGuard><AppLayout><CreditSystemDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/enrichment-demo" element={<PlatformAdminRouteGuard><AppLayout><EnrichmentComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/research-comparison" element={<PlatformAdminRouteGuard><AppLayout><ResearchComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/gemini-comparison" element={<PlatformAdminRouteGuard><AppLayout><GeminiModelComparison /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/exa-abilities" element={<PlatformAdminRouteGuard><AppLayout><ExaAbilitiesDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/email-sequence-test" element={<PlatformAdminRouteGuard><AppLayout><EmailSequenceTest /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/agent-research" element={<PlatformAdminRouteGuard><AppLayout><AgentResearchDemo /></AppLayout></PlatformAdminRouteGuard>} />

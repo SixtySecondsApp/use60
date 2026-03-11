@@ -16,7 +16,7 @@ import { useActivitiesActions } from '@/lib/hooks/useActivitiesActions';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import { toast } from 'sonner';
 import { ProposalWizard } from '@/components/proposals/ProposalWizard';
-import { ProposalQuickGenerate } from '@/components/proposals/ProposalQuickGenerate';
+import { ProposalQuickGenerate, type ProposalQuickGenerateHandle } from '@/components/proposals/ProposalQuickGenerate';
 import { TalkTimeChart } from '@/components/meetings/analytics/TalkTimeChart';
 import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsights';
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard';
@@ -265,6 +265,7 @@ export function MeetingDetail() {
   const [isReprocessing, setIsReprocessing] = useState(false);
   const { execute: executeMeetingSummaryGated } = useCreditGatedAction('meeting_summary', 5);
   const [showShareModal, setShowShareModal] = useState(false);
+  const proposalRef = useRef<ProposalQuickGenerateHandle>(null);
 
   const handleQuickAdd = async (type: 'meeting' | 'outbound' | 'proposal' | 'sale') => {
     if (!meeting) return;
@@ -297,6 +298,28 @@ export function MeetingDetail() {
         }
       }
     });
+  };
+
+  const handleDraftFollowUp = async () => {
+    if (!meeting) return;
+    const toastId = toast.loading('Drafting follow-up email...');
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-follow-up', {
+        body: { meeting_id: meeting.id },
+      });
+      if (error) throw error;
+      const body = data?.email?.body || data?.body;
+      const subject = data?.email?.subject || data?.subject;
+      if (body) {
+        await navigator.clipboard.writeText(`Subject: ${subject || ''}\n\n${body}`);
+        toast.success('Follow-up email copied to clipboard', { id: toastId });
+      } else {
+        toast.error('Could not generate follow-up email', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('[MeetingDetail] Draft follow-up failed:', err);
+      toast.error(err?.message || 'Failed to draft follow-up', { id: toastId });
+    }
   };
 
   useEffect(() => {
@@ -1154,6 +1177,7 @@ export function MeetingDetail() {
                       hasRecording={!!meeting.fathom_recording_id}
                       hasNotes={!!meeting.transcript_text}
                       onCustomise={() => setShowProposalWizard(true)}
+                      triggerRef={proposalRef}
                     />
                   </div>
 
@@ -1585,13 +1609,16 @@ export function MeetingDetail() {
             <PrepBriefCard brief={prepBrief} />
           )}
 
-          {/* Quick Actions */}
+          {/* Quick Actions — Next Steps */}
           {meeting && (
             <QuickActionsCard
               meeting={meeting}
-              onEmailClick={() => toast.info('Email follow-up requires OAuth setup — coming soon')}
-              onBookCallClick={() => toast.info('Book call feature coming soon')}
+              onEmailClick={handleDraftFollowUp}
+              onGenerateProposal={() => proposalRef.current?.trigger()}
+              onCreateTask={() => handleQuickAdd('outbound')}
+              onCreateDeal={() => handleQuickAdd('sale')}
               onShareClick={() => setShowShareModal(true)}
+              onBookCallClick={() => handleQuickAdd('meeting')}
             />
           )}
 

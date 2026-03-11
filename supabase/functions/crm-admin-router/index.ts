@@ -7,7 +7,7 @@
  * Excludes: OAuth callbacks and webhooks (external endpoints).
  */
 
-import { getCorsHeaders } from '../_shared/corsHelper.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 
 // HubSpot handlers
 import { handleHubspotAdmin } from './handlers/hubspot-admin.ts'
@@ -60,8 +60,9 @@ const HANDLERS: Record<string, (req: Request) => Promise<Response>> = {
 }
 
 Deno.serve(async (req: Request) => {
+  const preflight = handleCorsPreflightRequest(req)
+  if (preflight) return preflight
   const cors = getCorsHeaders(req)
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   try {
     const bodyText = await req.text()

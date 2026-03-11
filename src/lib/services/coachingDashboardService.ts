@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/clientV2';
 
 export type CoachingPeriod = '7d' | '30d' | '90d' | '365d';
 
@@ -6,14 +7,27 @@ export interface TeamMemberStats {
   user_id: string;
   scorecard_count: number;
   avg_score: number;
+  grade_a: number;
+  grade_b: number;
+  grade_c: number;
+  grade_d: number;
+  grade_f: number;
   trend_direction: number;
 }
 
 export function useTeamCoachingStats(orgId: string, period: CoachingPeriod) {
   return useQuery<TeamMemberStats[]>({
     queryKey: ['team-coaching-stats', orgId, period],
-    queryFn: async () => [],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_team_coaching_stats', {
+        p_org_id: orgId,
+        p_period: period,
+      });
+      if (error) throw error;
+      return (data ?? []) as TeamMemberStats[];
+    },
     enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -28,16 +42,51 @@ export interface RepScorecard {
 export function useRepScorecards(userId: string) {
   return useQuery<RepScorecard[]>({
     queryKey: ['rep-scorecards', userId],
-    queryFn: async () => [],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('meeting_scorecards')
+        .select('id, meeting_id, overall_score, grade, created_at')
+        .eq('rep_user_id', userId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as RepScorecard[];
+    },
     enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
+export interface SkillProgressionEntry {
+  id: string;
+  org_id: string;
+  user_id: string;
+  week_start: string;
+  talk_ratio: number | null;
+  question_quality_score: number | null;
+  objection_handling_score: number | null;
+  discovery_depth_score: number | null;
+  overall_score: number | null;
+  meetings_analysed: number;
+  forecast_accuracy: number | null;
+  competitive_win_rate: number | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export function useSkillProgression(userId: string, orgId: string) {
-  return useQuery({
+  return useQuery<SkillProgressionEntry[]>({
     queryKey: ['skill-progression', userId, orgId],
-    queryFn: async () => [],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_coaching_progression', {
+        p_org_id: orgId,
+        p_user_id: userId,
+        p_weeks: 8,
+      });
+      if (error) throw error;
+      return (data ?? []) as SkillProgressionEntry[];
+    },
     enabled: !!userId && !!orgId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

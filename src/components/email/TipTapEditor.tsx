@@ -90,6 +90,13 @@ export function TipTapEditor({
     }
   }, [content, editor]);
 
+  // Sync editable prop — TipTap doesn't auto-update on prop change
+  useEffect(() => {
+    if (editor && editor.isEditable !== editable) {
+      editor.setEditable(editable);
+    }
+  }, [editable, editor]);
+
   if (!editor) {
     return null;
   }

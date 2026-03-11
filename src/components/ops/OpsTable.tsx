@@ -918,13 +918,13 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           metadata={cellData.metadata}
                           onEnrichRow={(col.is_enrichment || col.column_type === 'apollo_property' || col.column_type === 'apollo_org_property' || col.column_type === 'linkedin_property') ? () => onEnrichRow?.(row.id, col.id) : undefined}
                           buttonConfig={(col.column_type === 'button' || col.column_type === 'action') ? col.action_config as any : undefined}
-                          rowCellValues={(col.column_type === 'button' || col.column_type === 'action' || col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio') ? Object.fromEntries(
+                          rowCellValues={(col.column_type === 'button' || col.column_type === 'action' || col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video') ? Object.fromEntries(
                             Object.entries(row.cells).map(([k, v]) => [k, v.value ?? ''])
                           ) : undefined}
-                          integrationConfig={(col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio') ? col.integration_config : undefined}
-                          agentColumnId={col.column_type === 'agent_research' ? col.id : undefined}
-                          rowId={(col.column_type === 'agent_research' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio') ? row.id : undefined}
-                          tableId={(col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio') ? tableId : undefined}
+                          integrationConfig={(col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video') ? col.integration_config : undefined}
+                          agentColumnId={(col.column_type === 'agent_research' || col.column_type === 'fal_video') ? col.id : undefined}
+                          rowId={(col.column_type === 'agent_research' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video') ? row.id : undefined}
+                          tableId={(col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video') ? tableId : undefined}
                           columnKey={(col.column_type === 'elevenlabs_audio') ? col.key : undefined}
                           onRunAgentResearch={col.column_type === 'agent_research' ? () => handleRunAgentResearch(col.id, row.id) : undefined}
                           onRetryAgentResearch={col.column_type === 'agent_research' ? (depth) => handleRetryAgentResearch(col.id, row.id, depth) : undefined}

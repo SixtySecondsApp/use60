@@ -52,6 +52,7 @@ export interface StorageCreditCosts {
   transcripts_per_100_month: number;
   docs_per_100_month: number;
   enrichment_per_500_month: number;
+  video_per_gb_month: number;
 }
 
 export interface IntegrationCreditCosts {
@@ -67,6 +68,22 @@ export interface IntegrationCreditCosts {
   heygen_video_per_second: number;
   elevenlabs_voice_clone: number;
   elevenlabs_tts_per_1k_chars: number;
+  // fal.ai Video Generation — per-second costs by model (~50% margin over fal.ai)
+  fal_video_kling_v3_pro: number;     // Kling 3.0 Pro (T2V + I2V)
+  fal_video_kling_v2_master: number;  // Kling 2.5 Master
+  fal_video_veo3: number;             // Google Veo 3
+  fal_video_wan_2_5: number;          // Wan 2.5
+  // fal.ai storage — monthly retention cost
+  fal_video_storage_per_gb_month: number;
+  // Nano Banana 2 Image Generation — per-image costs (~50% margin)
+  nano_banana_2_05k: number;    // 0.5K resolution
+  nano_banana_2_1k: number;     // 1K resolution (default)
+  nano_banana_2_2k: number;     // 2K resolution
+  nano_banana_2_4k: number;     // 4K resolution
+  // Gemini 3.1 Pro SVG Animation — per-generation estimate
+  gemini_svg_simple: number;    // simple animations (~2K tokens)
+  gemini_svg_medium: number;    // medium complexity (~8K tokens)
+  gemini_svg_complex: number;   // complex animations (~16K tokens)
 }
 
 // ============================================================================
@@ -192,6 +209,7 @@ export const STORAGE_CREDIT_COSTS: StorageCreditCosts = {
   transcripts_per_100_month: 0.1,
   docs_per_100_month: 0.05,
   enrichment_per_500_month: 0.1,
+  video_per_gb_month: 0.5,  // ~$0.05/GB/month for video retention
 };
 
 // ============================================================================
@@ -213,6 +231,25 @@ export const INTEGRATION_CREDIT_COSTS: IntegrationCreditCosts = {
   // ElevenLabs Voice Clone — platform key usage
   elevenlabs_voice_clone: 20,     // One-time cost for instant voice clone
   elevenlabs_tts_per_1k_chars: 1, // ~$0.10 per 1k characters
+  // fal.ai Video — per-second credit costs (~50% margin over provider)
+  // 1 credit ≈ $0.10 USD
+  fal_video_kling_v3_pro: 2.5,      // fal.ai: $0.168/s → we charge $0.25/s = 2.5 credits/s
+  fal_video_kling_v2_master: 1.0,   // fal.ai: $0.07/s → we charge $0.10/s = 1.0 credits/s
+  fal_video_veo3: 6.0,              // fal.ai: $0.40/s → we charge $0.60/s = 6.0 credits/s
+  fal_video_wan_2_5: 0.75,          // fal.ai: $0.05/s → we charge $0.075/s = 0.75 credits/s
+  // fal.ai video storage — charged monthly for retained videos
+  fal_video_storage_per_gb_month: 0.5, // ~$0.05/GB/month
+  // Nano Banana 2 Image Generation (~50% margin over fal.ai)
+  // 1 credit ≈ $0.10 USD
+  nano_banana_2_05k: 0.9,    // fal.ai: $0.06 → we charge $0.09 = 0.9 credits
+  nano_banana_2_1k: 1.2,     // fal.ai: $0.08 → we charge $0.12 = 1.2 credits
+  nano_banana_2_2k: 1.8,     // fal.ai: $0.12 → we charge $0.18 = 1.8 credits
+  nano_banana_2_4k: 2.4,     // fal.ai: $0.16 → we charge $0.24 = 2.4 credits
+  // Gemini 3.1 Pro SVG Animation — per-generation credit costs
+  // Cost varies by output tokens; estimates at $12/1M output tokens
+  gemini_svg_simple: 0.5,    // ~2K output tokens → ~$0.024 → 0.5 credits
+  gemini_svg_medium: 1.5,    // ~8K output tokens → ~$0.096 → 1.5 credits
+  gemini_svg_complex: 3.0,   // ~16K output tokens → ~$0.192 → 3.0 credits
 };
 
 // ============================================================================

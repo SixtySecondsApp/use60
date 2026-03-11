@@ -343,7 +343,7 @@ export function ButtonColumnConfigPanel({ value, onChange, existingColumns }: Bu
                                 <>
                                   <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5</option>
                                   <option value="anthropic/claude-haiku-4-5">Claude Haiku 4.5</option>
-                                  <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                  <option value="google/gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
                                   <option value="openai/gpt-4o">GPT-4o</option>
                                 </>
                               ) : (

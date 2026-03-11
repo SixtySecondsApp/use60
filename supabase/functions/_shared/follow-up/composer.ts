@@ -493,11 +493,15 @@ Write the follow-up email. Return only the JSON object.`;
       `aiSuccess=${parsed !== null} wordCount=${countWords(email.body)}`
   );
 
+  // Strip em-dashes/en-dashes — biggest AI tell
+  const cleanBody = email.body.replace(/[—–]/g, '-');
+  const cleanSubject = email.subject.replace(/[—–]/g, '-');
+
   return {
     to: recipient.email,
-    subject: email.subject,
-    body: email.body,
-    wordCount: countWords(email.body),
+    subject: cleanSubject,
+    body: cleanBody,
+    wordCount: countWords(cleanBody),
   };
 }
 
@@ -625,11 +629,15 @@ Write the first-meeting follow-up email. Return only the JSON object.`;
       `aiSuccess=${parsed !== null} wordCount=${countWords(email.body)}`
   );
 
+  // Strip em-dashes/en-dashes — biggest AI tell
+  const cleanBody = email.body.replace(/[—–]/g, '-');
+  const cleanSubject = email.subject.replace(/[—–]/g, '-');
+
   return {
     to: recipient.email,
-    subject: email.subject,
-    body: email.body,
-    wordCount: countWords(email.body),
+    subject: cleanSubject,
+    body: cleanBody,
+    wordCount: countWords(cleanBody),
   };
 }
 

@@ -14,6 +14,7 @@ import {
   Mail,
   Bot,
   FileText,
+  Network,
 } from 'lucide-react';
 import { SandboxDataProvider, useSandboxData } from './data/SandboxDataProvider';
 import { SandboxSidebar } from './SandboxSidebar';
@@ -30,6 +31,7 @@ const SandboxMeetings = lazy(() => import('./views/SandboxMeetings'));
 const SandboxEmailDraft = lazy(() => import('./views/SandboxEmailDraft'));
 const SandboxCopilot = lazy(() => import('./views/SandboxCopilot'));
 const SandboxProposals = lazy(() => import('./views/SandboxProposals'));
+const SandboxRelationships = lazy(() => import('./views/SandboxRelationships'));
 
 interface SandboxAppProps {
   data?: SandboxData;
@@ -55,6 +57,7 @@ const VIEW_MAP: Record<SandboxView, React.LazyExoticComponent<React.ComponentTyp
   meetings: SandboxMeetings,
   email: SandboxEmailDraft,
   proposals: SandboxProposals,
+  relationships: SandboxRelationships,
   copilot: SandboxCopilot,
 };
 
@@ -108,6 +111,7 @@ const MOBILE_TABS: { id: SandboxView; label: string; icon: React.ElementType }[]
   { id: 'meetings', label: 'Meetings', icon: Video },
   { id: 'email', label: 'Email', icon: Mail },
   { id: 'proposals', label: 'Proposals', icon: FileText },
+  { id: 'relationships', label: 'Relationships', icon: Network },
   { id: 'copilot', label: 'Copilot', icon: Bot },
 ];
 
@@ -236,6 +240,7 @@ function SandboxAppInner({
                 : activeView === 'meetings' ? 'Get AI meeting prep for real'
                 : activeView === 'email' ? `Send this email to ${data.emailDraft?.to_name ?? 'your prospect'} for real`
                 : activeView === 'proposals' ? 'Generate proposals from your deal context'
+                : activeView === 'relationships' ? 'Map your deal relationships like this'
                 : activeView === 'copilot' ? 'Ask 60 anything about your pipeline'
                 : 'This is real. Try it free'}
               <span className="text-white/60">&rarr;</span>

@@ -48,13 +48,13 @@ const FALLBACK_MAP: Record<FeatureCategory, Record<QualityTier, { provider: stri
     premium:  { provider: 'anthropic', modelId: 'claude-opus-4-6',             displayName: 'Claude Opus 4.6' },
   },
   meeting_summary: {
-    economy:  { provider: 'google',    modelId: 'gemini-2.0-flash',            displayName: 'Gemini 2.0 Flash' },
+    economy:  { provider: 'google',    modelId: 'gemini-3.1-flash-lite-preview',       displayName: 'Gemini 3.1 Flash Lite' },
     standard: { provider: 'anthropic', modelId: 'claude-haiku-4-5-20251001',   displayName: 'Claude Haiku 4.5' },
     premium:  { provider: 'anthropic', modelId: 'claude-sonnet-4-6',           displayName: 'Claude Sonnet 4.6' },
   },
   research_enrichment: {
-    economy:  { provider: 'google',    modelId: 'gemini-2.0-flash',            displayName: 'Gemini 2.0 Flash' },
-    standard: { provider: 'google',    modelId: 'gemini-2.5-flash',            displayName: 'Gemini 2.5 Flash' },
+    economy:  { provider: 'google',    modelId: 'gemini-3.1-flash-lite-preview',       displayName: 'Gemini 3.1 Flash Lite' },
+    standard: { provider: 'google',    modelId: 'gemini-3.1-flash-lite-preview',       displayName: 'Gemini 3.1 Flash Lite' },
     premium:  { provider: 'anthropic', modelId: 'claude-sonnet-4-6',           displayName: 'Claude Sonnet 4.6' },
   },
   content_generation: {

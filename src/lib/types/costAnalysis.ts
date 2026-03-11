@@ -12,7 +12,7 @@
 export interface CostRate {
   id: string;
   provider: 'anthropic' | 'gemini' | 'supabase';
-  model: string; // 'claude-haiku-4-5', 'claude-sonnet-4', 'gemini-2.5-flash'
+  model: string; // 'claude-haiku-4-5', 'claude-sonnet-4', 'gemini-3.1-flash-lite-preview'
   input_cost_per_million: number; // Cost per 1M input tokens
   output_cost_per_million: number; // Cost per 1M output tokens
   effective_from: string;
@@ -44,7 +44,7 @@ export const DEFAULT_COST_RATES: Omit<CostRate, 'id' | 'created_at' | 'effective
   },
   {
     provider: 'gemini',
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.1-flash-lite-preview',
     input_cost_per_million: 0.059,  // $0.075 → £0.059
     output_cost_per_million: 0.237,  // $0.30 → £0.237
   },
