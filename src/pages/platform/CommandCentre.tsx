@@ -281,8 +281,10 @@ export default function CommandCentre() {
     [allItems],
   );
 
-  // Apply active filter
+  // Apply active filter + sort by urgency then priority_score
   const filteredItems = useMemo(() => {
+    const URGENCY_RANK: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
+
     let items = allItems;
 
     switch (activeFilter) {
@@ -306,12 +308,25 @@ export default function CommandCentre() {
       // 'all' — no filter
     }
 
-    // Pin pending items to top in All view
-    if (activeFilter === 'all') {
-      const pending = items.filter((i) => i.status === 'open' || i.status === 'ready');
-      const rest = items.filter((i) => i.status !== 'open' && i.status !== 'ready');
-      items = [...pending, ...rest];
-    }
+    // Sort: pending first (in All view), then by urgency rank, then priority_score DESC
+    items = [...items].sort((a, b) => {
+      // Pin pending items to top in All view
+      if (activeFilter === 'all') {
+        const aPending = a.status === 'open' || a.status === 'ready' ? 0 : 1;
+        const bPending = b.status === 'open' || b.status === 'ready' ? 0 : 1;
+        if (aPending !== bPending) return aPending - bPending;
+      }
+
+      // Urgency rank: critical > high > normal > low
+      const aUrg = URGENCY_RANK[a.urgency] ?? 2;
+      const bUrg = URGENCY_RANK[b.urgency] ?? 2;
+      if (aUrg !== bUrg) return aUrg - bUrg;
+
+      // Priority score DESC (nulls last)
+      const aScore = a.priority_score ?? -1;
+      const bScore = b.priority_score ?? -1;
+      return bScore - aScore;
+    });
 
     return items;
   }, [allItems, activeFilter]);
