@@ -30,9 +30,4 @@ export const URGENCY_CONFIG: Record<string, { label: string; color: string; icon
   },
 };
 
-export const URGENCY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'critical', label: 'Critical' },
-  { value: 'high', label: 'High' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'low', label: 'Low' },
-];
+export const URGENCY_OPTIONS: string[] = ['critical', 'high', 'normal', 'low'];
