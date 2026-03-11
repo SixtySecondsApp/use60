@@ -31,6 +31,7 @@ import {
   Trophy,
   X,
   Settings,
+  Workflow,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -425,24 +426,28 @@ export default function GoldenEyeAdmin() {
       )}
 
       {/* Main visualization + activity log side by side */}
-      <div className="flex-1 flex min-h-0 min-w-0">
+      <div className="flex-1 flex min-h-0 min-w-0 pb-[50px]">
+        {/* Left panel + Canvas — fixed height driven by left panel content */}
+        <div className="flex-1 flex min-w-0 self-start p-2 gap-2">
         {/* Left panel — Leaderboard + Model Ratio */}
-        <div className="w-[440px] shrink-0 flex flex-col gap-2 p-2">
-          <div className="flex-1 min-h-0 rounded-lg border border-slate-700/50 bg-slate-900/60 flex flex-col overflow-hidden">
+        <div className="w-[520px] shrink-0 flex flex-col gap-2">
+          <div className="shrink-0 rounded-lg border border-slate-700/50 bg-slate-900/60 flex flex-col overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/50">
               <Trophy className="h-3.5 w-3.5 text-amber-400" />
               <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Leaderboard — Top 15 All Time</span>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div>
               <table className="w-full text-[10px]">
                 <thead className="sticky top-0 bg-slate-900/90 backdrop-blur">
                   <tr className="text-slate-500 border-b border-slate-700/50">
                     <th className="text-left px-2 py-1 font-medium">#</th>
                     <th className="text-left px-2 py-1 font-medium">User</th>
+                    <th className="text-left px-2 py-1 font-medium">Org</th>
                     <th className="text-right px-2 py-1 font-medium">In</th>
                     <th className="text-right px-2 py-1 font-medium">Out</th>
                     <th className="text-right px-2 py-1 font-medium">GBP</th>
                     <th className="text-right px-2 py-1 font-medium">Credits</th>
+                    <th className="text-right px-2 py-1 font-medium">Spend</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -454,24 +459,25 @@ export default function GoldenEyeAdmin() {
                     >
                       <td className="px-2 py-1 text-slate-600 font-mono">{i + 1}</td>
                       <td className="px-2 py-1">
-                        <div className="truncate max-w-[110px]">
+                        <div className="truncate max-w-[90px]">
                           <span className={`font-medium ${user.is_active ? 'text-emerald-300' : 'text-slate-300'}`}>
                             {user.user_name || user.user_email || 'Unknown'}
                           </span>
                         </div>
-                        {user.org_name && (
-                          <div className="text-[9px] text-slate-600 truncate max-w-[110px]">{user.org_name}</div>
-                        )}
+                      </td>
+                      <td className="px-2 py-1">
+                        <div className="truncate max-w-[70px] text-slate-500">{user.org_name || '—'}</div>
                       </td>
                       <td className="px-2 py-1 text-right text-indigo-300 font-mono">{formatTokens(user.total_input_tokens)}</td>
                       <td className="px-2 py-1 text-right text-emerald-300 font-mono">{formatTokens(user.total_output_tokens)}</td>
                       <td className="px-2 py-1 text-right text-amber-300 font-mono">£{user.total_cost_gbp.toFixed(2)}</td>
                       <td className="px-2 py-1 text-right text-cyan-300 font-mono">{user.credits_bought}</td>
+                      <td className="px-2 py-1 text-right text-slate-600 font-mono">—</td>
                     </tr>
                   ))}
                   {leaderboardUsers.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-6 text-center text-slate-600">No usage data</td>
+                      <td colSpan={8} className="px-4 py-6 text-center text-slate-600">No usage data</td>
                     </tr>
                   )}
                 </tbody>
@@ -483,10 +489,21 @@ export default function GoldenEyeAdmin() {
           <div className="shrink-0">
             <ModelRatioChart modelBreakdown={modelBreakdown} />
           </div>
+
+          {/* Usage totals */}
+          <div className="shrink-0">
+            <UsageTotalsBar usageTotals={usageTotals} />
+          </div>
+
         </div>
 
         {/* Canvas area — constrained to prevent pushing siblings off-screen */}
-        <div ref={containerRef} className="flex-1 min-w-0 relative min-h-0 overflow-hidden">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col rounded-lg border border-slate-700/50 bg-slate-900/60 overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/50 shrink-0">
+            <Workflow className="h-3.5 w-3.5 text-slate-400" />
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Gateway Flow</span>
+          </div>
+          <div ref={containerRef} className="flex-1 min-h-0 relative overflow-hidden">
           {isLoading && recentEvents.length === 0 && !useSeedData ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
@@ -512,10 +529,12 @@ export default function GoldenEyeAdmin() {
               onEndpointClick={handleEndpointClick}
             />
           )}
+          </div>
         </div>
+        </div>{/* end Left panel + Canvas wrapper */}
 
-        {/* Activity log terminal — right side */}
-        <div className="w-[340px] shrink-0">
+        {/* Activity log terminal — right side, stretchy height */}
+        <div className="w-[340px] shrink-0 min-h-0 h-full">
           <ActivityLogTerminal
             events={recentEvents}
             llmEndpoints={llmEndpoints}
@@ -524,9 +543,6 @@ export default function GoldenEyeAdmin() {
           />
         </div>
       </div>
-
-      {/* Bottom usage totals bar */}
-      <UsageTotalsBar usageTotals={usageTotals} />
 
       {/* Flagging Rules Panel */}
       <Sheet open={showRulesPanel} onOpenChange={setShowRulesPanel}>
