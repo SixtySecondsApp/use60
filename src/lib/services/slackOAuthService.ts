@@ -171,14 +171,14 @@ class SlackOAuthService {
 
     // Call edge function to refresh channels (handles Slack API call server-side)
     const response = await fetch(
-      `${(import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL)}/functions/v1/slack-refresh-user-channels`,
+      `${(import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL)}/functions/v1/slack-ops-router`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ teamId }),
+        body: JSON.stringify({ action: 'refresh_user_channels', teamId }),
       }
     );
 
@@ -240,14 +240,14 @@ class SlackOAuthService {
       
       // Call our Edge Function to send the message
       const response = await fetch(
-        `${(import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL)}/functions/v1/send-slack-message`,
+        `${(import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL)}/functions/v1/send-router`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify(messagePayload),
+          body: JSON.stringify({ action: 'slack_message', ...messagePayload }),
         }
       );
       

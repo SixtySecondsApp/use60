@@ -66,7 +66,7 @@ serve(async (req) => {
     // Retrieve the state and PKCE verifier from database
     const { data: oauthState, error: stateError } = await supabase
       .from('google_oauth_states')
-      .select('user_id, code_verifier, redirect_uri, created_at')
+      .select('user_id, code_verifier, redirect_uri, scope_tier, created_at')
       .eq('state', state)
       .single();
 
@@ -169,6 +169,7 @@ serve(async (req) => {
         refresh_token: tokenData.refresh_token,
         expires_at: expiresAt.toISOString(),
         scopes: tokenData.scope,
+        scope_tier: oauthState.scope_tier || 'free',
         is_active: true,
       }, {
         onConflict: 'user_id',
@@ -182,19 +183,21 @@ serve(async (req) => {
     // Clean up the OAuth state (one-time use)
     await supabase.from('google_oauth_states').delete().eq('state', state);
 
-    // Log successful connection
-    await supabase
-      .from('google_service_logs')
-      .insert({
-        integration_id: null,
-        service: 'oauth',
-        action: 'connect',
-        status: 'success',
-        request_data: { email: userInfo.email, user_id: oauthState.user_id },
-        response_data: { scopes: tokenData.scope },
-      }).catch(() => {
-        // Non-critical - don't fail if logging fails
-      });
+    // Log successful connection (non-critical — ignore failures)
+    try {
+      await supabase
+        .from('google_service_logs')
+        .insert({
+          integration_id: null,
+          service: 'oauth',
+          action: 'connect',
+          status: 'success',
+          request_data: { email: userInfo.email, user_id: oauthState.user_id },
+          response_data: { scopes: tokenData.scope },
+        });
+    } catch {
+      // Non-critical — don't fail if logging fails
+    }
 
     // Redirect back to the app with success
     return redirectToFrontend('/integrations', { 

@@ -48,13 +48,14 @@ export async function handleOrchestratorAction(ctx: OrchestratorActionContext): 
       .eq('id', pendingAction.id);
 
     // Resume orchestrator sequence
-    await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+    await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         resume_job_id: jobId,
         approval_data: {
           approved: true,

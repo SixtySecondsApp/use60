@@ -93,12 +93,12 @@ export function useBullhornIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('bullhorn-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'status', org_id: activeOrgId }),
+        body: JSON.stringify({ action: 'bullhorn_admin', sub_action: 'status', org_id: activeOrgId }),
       });
 
       if (resp.error) {
@@ -140,7 +140,7 @@ export function useBullhornIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('bullhorn-oauth-initiate', {
+    const resp = await supabase.functions.invoke('oauth-initiate/bullhorn', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -176,12 +176,12 @@ export function useBullhornIntegration(enabled: boolean = true) {
 
     setDisconnecting(true);
     try {
-      const resp = await supabase.functions.invoke('bullhorn-disconnect', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ org_id: activeOrgId }),
+        body: JSON.stringify({ action: 'bullhorn_disconnect', org_id: activeOrgId }),
       });
 
       if (resp.error) {
@@ -215,12 +215,12 @@ export function useBullhornIntegration(enabled: boolean = true) {
 
       setSaving(true);
       try {
-        const resp = await supabase.functions.invoke('bullhorn-admin', {
+        const resp = await supabase.functions.invoke('crm-admin-router', {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ action: 'save_settings', org_id: activeOrgId, settings }),
+          body: JSON.stringify({ action: 'bullhorn_admin', sub_action: 'save_settings', org_id: activeOrgId, settings }),
         });
 
         if (resp.error) throw new Error(resp.error.message || 'Failed to save settings');
@@ -249,12 +249,12 @@ export function useBullhornIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('bullhorn-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'enqueue', org_id: activeOrgId, ...args }),
+        body: JSON.stringify({ action: 'bullhorn_admin', sub_action: 'enqueue', org_id: activeOrgId, ...args }),
       });
 
       if (resp.error) throw new Error(resp.error.message || 'Failed to enqueue job');
@@ -284,12 +284,12 @@ export function useBullhornIntegration(enabled: boolean = true) {
 
       setSyncing(true);
       try {
-        const resp = await supabase.functions.invoke('bullhorn-admin', {
+        const resp = await supabase.functions.invoke('crm-admin-router', {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ action: 'trigger_sync', org_id: activeOrgId, ...args }),
+          body: JSON.stringify({ action: 'bullhorn_admin', sub_action: 'trigger_sync', org_id: activeOrgId, ...args }),
         });
 
         if (resp.error) throw new Error(resp.error.message || 'Failed to trigger sync');
@@ -325,13 +325,14 @@ export function useBullhornIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('bullhorn-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'search',
+          action: 'bullhorn_admin',
+          sub_action: 'search',
           org_id: activeOrgId,
           entity_type: 'Candidate',
           query,
@@ -356,13 +357,14 @@ export function useBullhornIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('bullhorn-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'search',
+          action: 'bullhorn_admin',
+          sub_action: 'search',
           org_id: activeOrgId,
           entity_type: 'ClientContact',
           query,
@@ -390,12 +392,12 @@ export function useBullhornIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('bullhorn-admin', {
+    const resp = await supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action: 'test_connection', org_id: activeOrgId }),
+      body: JSON.stringify({ action: 'bullhorn_admin', sub_action: 'test_connection', org_id: activeOrgId }),
     });
 
     if (resp.error) throw new Error(resp.error.message || 'Connection test failed');

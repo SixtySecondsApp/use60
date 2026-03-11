@@ -18,6 +18,7 @@ import {
   useCurrentSubscription,
   useCreateCheckoutSession,
 } from '@/lib/hooks/useSubscription';
+import { useSubscriptionGate } from '@/lib/hooks/useSubscriptionGate';
 import { PLAN_DETAILS, ANNUAL_SAVINGS } from '@/lib/config/planDetails';
 import { CreditBalanceSection } from '@/components/billing/CreditBalanceSection';
 import { TransactionHistorySection } from '@/components/billing/TransactionHistorySection';
@@ -93,6 +94,7 @@ export default function BillingSettingsPage() {
   const { symbol } = useOrgMoney();
   const { subscription, trial, isLoading, error } = useCurrentSubscription();
   const createCheckoutSession = useCreateCheckoutSession();
+  const subscriptionGate = useSubscriptionGate(organizationId);
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
@@ -102,23 +104,24 @@ export default function BillingSettingsPage() {
     cycle: ModalBillingCycle;
   } | null>(null);
 
+  // Internal admin orgs bypass subscription entirely
+  const isInternalAdmin = subscriptionGate.status === 'internal_admin';
+
   const currentPlan = subscription?.plan;
-  const currentPlanSlug = (currentPlan?.slug ?? 'free') as PlanSlug;
-  const isFreeTier = currentPlanSlug === 'free' || currentPlan?.is_free_tier;
-  const isBasicUser = currentPlanSlug === 'basic';
-  const canUpgrade = currentPlanSlug !== 'pro';
+  const hasSubscription = !!subscription || isInternalAdmin;
+  const currentPlanSlug = currentPlan?.slug as PlanSlug | null ?? null;
+  const hasNoPlan = !hasSubscription;
+  const isBasicUser = hasSubscription && (currentPlanSlug === 'basic' || currentPlan?.is_free_tier);
   const hasStripeSubscription = !!subscription?.stripe_subscription_id;
   const currentBillingCycle: ModalBillingCycle =
     subscription?.billing_cycle === 'yearly' ? 'annual' : 'monthly';
 
-  // Bundled credits from plan features, falling back to static config
+  // Bundled credits from plan features
   const bundledCredits = currentPlan?.features?.bundled_credits;
-  const staticCredits = PLAN_DETAILS[currentPlanSlug as keyof typeof PLAN_DETAILS]?.features
-    ?.find((f) => f.name === 'Monthly Credits')?.value;
   const bundledDisplay =
     typeof bundledCredits === 'number' && bundledCredits > 0
       ? `${bundledCredits}/mo`
-      : staticCredits ?? '0';
+      : '0';
 
   // Cancelled / cancel-at-period-end state
   const isCancelled = subscription?.status === 'canceled';
@@ -134,13 +137,15 @@ export default function BillingSettingsPage() {
     : null;
 
   // Billing cycle label
-  const billingCycleLabel =
+  const billingCycleLabel = !hasSubscription ? '—' :
     subscription?.billing_cycle === 'yearly' ? 'Annual' : 'Monthly';
 
   // Monthly cost display
-  const monthlyCostDisplay = currentPlan?.price_monthly != null
-    ? `${symbol}${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
-    : `${symbol}0/mo`;
+  const monthlyCostDisplay = isInternalAdmin
+    ? 'Free'
+    : currentPlan?.price_monthly != null
+      ? `${symbol}${(currentPlan.price_monthly / 100).toFixed(0)}/mo`
+      : hasSubscription ? `${symbol}29/mo` : '—';
 
   // Trial progress
   const daysRemaining = trial?.daysRemaining ?? 0;
@@ -152,30 +157,6 @@ export default function BillingSettingsPage() {
 
   const trialEndsFormatted = trial?.endsAt
     ? new Date(trial.endsAt).toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })
-    : null;
-
-  // Free tier: calculate days remaining from subscription start (14-day window)
-  const freeTierDaysRemaining = (() => {
-    if (!isFreeTier || !subscription?.started_at) return null;
-    const startDate = new Date(subscription.started_at);
-    const expiryDate = new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000);
-    const now = new Date();
-    const remaining = Math.max(0, Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-    return remaining;
-  })();
-
-  const freeTierExpiryDate = (() => {
-    if (!isFreeTier || !subscription?.started_at) return null;
-    const startDate = new Date(subscription.started_at);
-    return new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000);
-  })();
-
-  const freeTierExpiryFormatted = freeTierExpiryDate
-    ? freeTierExpiryDate.toLocaleDateString('en-GB', {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -264,17 +245,19 @@ export default function BillingSettingsPage() {
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-xl font-bold text-gray-900 dark:text-white">
-                      {currentPlan?.name ?? 'Free'}
+                      {isInternalAdmin ? 'Internal Admin' : hasSubscription ? (currentPlan?.name ?? 'Basic Plan') : 'No Plan Selected'}
                     </span>
-                    {subscription?.status ? (
+                    {isInternalAdmin ? (
+                      <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
+                        No Subscription Required
+                      </span>
+                    ) : subscription?.status ? (
                       <StatusBadge status={subscription.status} />
-                    ) : (
-                      <StatusBadge status="active" />
-                    )}
+                    ) : null}
                   </div>
 
-                  {/* Upgrade CTA for Free/Basic users */}
-                  {canUpgrade && (
+                  {/* Upgrade CTA for Basic users or no-plan users (hidden for internal admins) */}
+                  {!isInternalAdmin && (isBasicUser || hasNoPlan) && (
                     <Button
                       size="sm"
                       onClick={() => handlePlanAction('pro')}
@@ -286,7 +269,7 @@ export default function BillingSettingsPage() {
                       ) : (
                         <Sparkles className="w-3.5 h-3.5 mr-1.5" />
                       )}
-                      Upgrade to Pro
+                      {hasNoPlan ? 'Choose a Plan' : 'Upgrade to Pro'}
                       <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                     </Button>
                   )}
@@ -310,19 +293,8 @@ export default function BillingSettingsPage() {
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Billing Cycle
                     </p>
-                    <p className={cn(
-                      'text-lg font-semibold',
-                      isFreeTier && freeTierDaysRemaining != null && freeTierDaysRemaining <= 3
-                        ? 'text-red-600 dark:text-red-400'
-                        : isFreeTier && freeTierDaysRemaining != null && freeTierDaysRemaining <= 7
-                          ? 'text-amber-600 dark:text-amber-400'
-                          : 'text-gray-900 dark:text-white'
-                    )}>
-                      {isFreeTier && freeTierDaysRemaining != null
-                        ? freeTierDaysRemaining === 0
-                          ? 'Expired'
-                          : `Expires in ${freeTierDaysRemaining} day${freeTierDaysRemaining !== 1 ? 's' : ''}`
-                        : billingCycleLabel}
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {billingCycleLabel}
                     </p>
                   </div>
 
@@ -341,19 +313,17 @@ export default function BillingSettingsPage() {
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {isCancelPending ? 'Ends On' : isFreeTier ? 'Trial Expires' : 'Next Billing'}
+                      {isCancelPending ? 'Ends On' : 'Next Billing'}
                     </p>
                     <p className={cn(
                       'text-lg font-semibold',
                       isCancelPending
                         ? 'text-amber-600 dark:text-amber-400'
-                        : isFreeTier && freeTierDaysRemaining != null && freeTierDaysRemaining <= 3
-                          ? 'text-red-600 dark:text-red-400'
-                          : (nextBillingDate || freeTierExpiryFormatted)
-                            ? 'text-gray-900 dark:text-white'
-                            : 'text-gray-400 dark:text-gray-500'
+                        : nextBillingDate
+                          ? 'text-gray-900 dark:text-white'
+                          : 'text-gray-400 dark:text-gray-500'
                     )}>
-                      {nextBillingDate ?? freeTierExpiryFormatted ?? '—'}
+                      {nextBillingDate ?? '—'}
                     </p>
                   </div>
                 </div>
@@ -385,44 +355,6 @@ export default function BillingSettingsPage() {
                         Subscription ends on {nextBillingDate}. You&apos;ll keep access until then.
                       </span>
                     </div>
-                  </div>
-                )}
-
-                {/* Free tier days remaining */}
-                {isFreeTier && freeTierDaysRemaining != null && !trial?.isTrialing && (
-                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                    <div className="flex items-center justify-between text-sm mb-2">
-                      <span className="text-gray-600 dark:text-gray-400">Free Trial</span>
-                      <span className={cn(
-                        'font-medium',
-                        freeTierDaysRemaining <= 3
-                          ? 'text-red-600 dark:text-red-400'
-                          : freeTierDaysRemaining <= 7
-                            ? 'text-amber-600 dark:text-amber-400'
-                            : 'text-gray-900 dark:text-white'
-                      )}>
-                        {freeTierDaysRemaining === 0
-                          ? 'Expired'
-                          : `${freeTierDaysRemaining} day${freeTierDaysRemaining !== 1 ? 's' : ''} remaining`}
-                      </span>
-                    </div>
-                    <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          'h-full rounded-full transition-all',
-                          freeTierDaysRemaining > 7 ? 'bg-emerald-500' :
-                          freeTierDaysRemaining > 3 ? 'bg-amber-500' : 'bg-red-500'
-                        )}
-                        style={{ width: `${Math.min(((14 - freeTierDaysRemaining) / 14) * 100, 100)}%` }}
-                      />
-                    </div>
-                    {freeTierExpiryFormatted && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {freeTierDaysRemaining === 0
-                          ? 'Your free trial has ended. Upgrade to continue using 60.'
-                          : `Expires ${freeTierExpiryFormatted}. Upgrade anytime to keep access.`}
-                      </p>
-                    )}
                   </div>
                 )}
 
@@ -503,8 +435,8 @@ export default function BillingSettingsPage() {
           </div>
 
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[...Array(3)].map((_, i) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[...Array(2)].map((_, i) => (
                 <div
                   key={i}
                   className="relative rounded-xl border border-gray-200 dark:border-gray-800 p-5 flex flex-col bg-white dark:bg-gray-900 space-y-4"
@@ -537,17 +469,15 @@ export default function BillingSettingsPage() {
           ) : null}
 
           {!isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {(['free', 'basic', 'pro'] as const).map((slug) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {(['basic', 'pro'] as const).map((slug) => {
               const plan = PLAN_DETAILS[slug];
               const savings = ANNUAL_SAVINGS[slug];
-              const isCurrentPlan = currentPlanSlug === slug;
-              const tierRank = { free: 0, basic: 1, pro: 2 } as const;
-              const isUpgrade = tierRank[slug] > tierRank[currentPlanSlug as keyof typeof tierRank];
-              const isDowngrade = tierRank[slug] < tierRank[currentPlanSlug as keyof typeof tierRank];
-              const isFreeCard = slug === 'free';
+              const isCurrentPlan = currentPlanSlug !== null && currentPlanSlug === slug;
+              const isUpgrade = slug === 'pro' && (hasNoPlan || isBasicUser);
+              const isDowngrade = slug === 'basic' && !isBasicUser && !hasNoPlan;
               // Cycle switch: on the current plan card but selected a different cycle
-              const isCycleSwitch = isCurrentPlan && !isFreeCard && billingCycle !== currentBillingCycle;
+              const isCycleSwitch = isCurrentPlan && billingCycle !== currentBillingCycle;
 
               const displayPrice = billingCycle === 'annual'
                 ? plan.yearlyPrice
@@ -559,11 +489,11 @@ export default function BillingSettingsPage() {
                   key={slug}
                   className={cn(
                     'relative rounded-xl border p-5 flex flex-col bg-white dark:bg-gray-900 transition-all',
-                    isFreeCard
-                      ? 'border-gray-200 dark:border-gray-800'
-                      : isCurrentPlan
-                        ? 'border-[#37bd7e] ring-1 ring-[#37bd7e]/30'
-                        : 'border-[#37bd7e]/60 dark:border-[#37bd7e]/40 ring-1 ring-[#37bd7e]/20'
+                    isCurrentPlan
+                      ? 'border-[#37bd7e] ring-1 ring-[#37bd7e]/30'
+                      : plan.badge
+                        ? 'border-blue-400 dark:border-blue-600 ring-2 ring-blue-400/30 dark:ring-blue-500/20'
+                        : 'border-gray-200 dark:border-gray-800'
                   )}
                 >
                   {/* Badges */}
@@ -582,7 +512,7 @@ export default function BillingSettingsPage() {
                   </div>
 
                   {/* Plan header */}
-                  <div className="mb-4 pr-16 min-h-[3rem]">
+                  <div className="mb-4 pr-16">
                     <h4 className="text-base font-bold text-gray-900 dark:text-white">
                       {plan.name}
                     </h4>
@@ -592,36 +522,29 @@ export default function BillingSettingsPage() {
                   </div>
 
                   {/* Price */}
-                  <div className="mb-4 min-h-[3.5rem]">
+                  <div className="mb-4">
                     <div className="flex items-baseline gap-1">
                       <span className="text-3xl font-bold text-gray-900 dark:text-white">
-                        {isFreeCard ? 'Free' : `${symbol}${displayPrice}`}
+                        {symbol}{displayPrice}
                       </span>
-                      {!isFreeCard && (
-                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                          {priceSuffix}
-                        </span>
-                      )}
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {priceSuffix}
+                      </span>
                     </div>
-                    {billingCycle === 'annual' && !isFreeCard && savings.saved > 0 && (
+                    {billingCycle === 'annual' && (
                       <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
                         Save {symbol}{savings.saved}/yr vs monthly
-                      </p>
-                    )}
-                    {isFreeCard && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        14-day free trial
                       </p>
                     )}
                   </div>
 
                   {/* Feature list */}
-                  <ul className="space-y-0 mb-5 flex-1">
+                  <ul className="space-y-2 mb-5 flex-1">
                     {plan.features.map((feature) => (
                       <li
                         key={feature.name}
                         className={cn(
-                          'flex items-start gap-2 rounded-md px-2 py-1.5 -mx-2 min-h-[2.75rem]',
+                          'flex items-start gap-2 rounded-md px-2 py-1 -mx-2',
                           feature.highlight
                             ? 'bg-indigo-50 dark:bg-indigo-950/30'
                             : ''
@@ -641,21 +564,26 @@ export default function BillingSettingsPage() {
                           )}>
                             {feature.name}
                           </span>
-                          <p className={cn(
-                            'text-xs leading-snug',
-                            feature.included
-                              ? 'text-gray-500 dark:text-gray-400'
-                              : 'text-gray-300 dark:text-gray-600'
-                          )}>
-                            {feature.value}
-                          </p>
+                          {feature.included && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">
+                              {feature.value}
+                            </p>
+                          )}
                         </div>
                       </li>
                     ))}
                   </ul>
 
                   {/* CTA button */}
-                  {isCurrentPlan && !isCycleSwitch ? (
+                  {isInternalAdmin ? (
+                    <Button
+                      variant="outline"
+                      disabled
+                      className="w-full opacity-60 cursor-default"
+                    >
+                      No Subscription Required
+                    </Button>
+                  ) : isCurrentPlan && !isCycleSwitch ? (
                     <Button
                       variant="outline"
                       disabled
@@ -686,7 +614,7 @@ export default function BillingSettingsPage() {
                       )}
                       {plan.ctaText}
                     </Button>
-                  ) : isDowngrade && !isFreeCard ? (
+                  ) : isDowngrade ? (
                     <Button
                       variant="outline"
                       onClick={() => handlePlanAction(slug)}
@@ -695,14 +623,6 @@ export default function BillingSettingsPage() {
                     >
                       <ArrowDown className="w-4 h-4 mr-2" />
                       Downgrade to {plan.name}
-                    </Button>
-                  ) : isFreeCard && !isCurrentPlan ? (
-                    <Button
-                      variant="outline"
-                      disabled
-                      className="w-full opacity-50 cursor-default"
-                    >
-                      {plan.ctaText}
                     </Button>
                   ) : (
                     <Button
@@ -735,7 +655,7 @@ export default function BillingSettingsPage() {
           isOpen={!!planChangeTarget}
           onClose={() => setPlanChangeTarget(null)}
           orgId={organizationId}
-          currentPlanSlug={currentPlanSlug}
+          currentPlanSlug={(currentPlanSlug ?? 'basic') as PlanSlug}
           currentBillingCycle={currentBillingCycle}
           currentPeriodEnd={subscription?.current_period_end ?? null}
           targetPlanSlug={planChangeTarget.slug}

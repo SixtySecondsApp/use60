@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import type { EmailResponse as EmailResponseData } from '../types';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/clientV2';
+import { useGmailSendEnabled } from '@/lib/hooks/useGoogleIntegration';
 
 interface EmailResponseProps {
   data: EmailResponseData;
@@ -124,7 +125,7 @@ export const EmailResponse: React.FC<EmailResponseProps> = ({ data, onActionClic
       }
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-copilot/actions/regenerate-email-tone`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api-services-router`,
         {
           method: 'POST',
           headers: {
@@ -132,6 +133,8 @@ export const EmailResponse: React.FC<EmailResponseProps> = ({ data, onActionClic
             'Authorization': `Bearer ${session.session.access_token}`
           },
           body: JSON.stringify({
+            action: 'copilot',
+            path: '/actions/regenerate-email-tone',
             currentEmail: {
               subject: data.data.email.subject,
               body: data.data.email.body,

@@ -1,0 +1,224 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" role="img" aria-labelledby="skill-network-title">
+  <title id="skill-network-title">Skill network visualization showing 127 interconnected AI sales skills across 6 categories</title>
+  <defs>
+    <!-- Motion paths for activation pulses (invisible, used by animateMotion) -->
+    <path id="path-1" d="M 135 105 C 180 130, 220 160, 280 175 C 340 190, 390 170, 420 155"/>
+    <path id="path-2" d="M 420 155 C 460 145, 510 165, 545 195 C 580 225, 610 250, 650 235"/>
+    <path id="path-3" d="M 280 280 C 310 260, 360 240, 400 260 C 440 280, 490 300, 530 310"/>
+    <path id="path-4" d="M 530 100 C 490 120, 450 150, 420 155 C 380 165, 330 200, 280 280"/>
+  </defs>
+  <style>
+    /* Category node pulse — gentle opacity breathing */
+    @keyframes cat-pulse-a { 0%,100% { opacity: 0.7; } 50% { opacity: 1; } }
+    @keyframes cat-pulse-b { 0%,100% { opacity: 0.75; } 50% { opacity: 1; } }
+    @keyframes cat-pulse-c { 0%,100% { opacity: 0.72; } 50% { opacity: 1; } }
+
+    .cat-a { animation: cat-pulse-a 3.2s cubic-bezier(0.37,0,0.63,1) infinite; will-change: opacity; }
+    .cat-b { animation: cat-pulse-b 4.1s cubic-bezier(0.37,0,0.63,1) infinite; will-change: opacity; }
+    .cat-c { animation: cat-pulse-c 3.7s cubic-bezier(0.37,0,0.63,1) infinite; will-change: opacity; }
+    .cat-d { animation: cat-pulse-a 4.6s cubic-bezier(0.37,0,0.63,1) infinite; animation-delay: -1.2s; will-change: opacity; }
+    .cat-e { animation: cat-pulse-b 3.4s cubic-bezier(0.37,0,0.63,1) infinite; animation-delay: -0.8s; will-change: opacity; }
+    .cat-f { animation: cat-pulse-c 4.9s cubic-bezier(0.37,0,0.63,1) infinite; animation-delay: -2.1s; will-change: opacity; }
+
+    /* Subtle node drift */
+    @keyframes drift-a { 0%,100% { transform: translate(0,0); } 50% { transform: translate(0.6px, -0.8px); } }
+    @keyframes drift-b { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-0.7px, 0.5px); } }
+    @keyframes drift-c { 0%,100% { transform: translate(0,0); } 50% { transform: translate(0.4px, 0.7px); } }
+    @keyframes drift-d { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-0.5px, -0.6px); } }
+
+    .drift-a { animation: drift-a 7s cubic-bezier(0.37,0,0.63,1) infinite; will-change: transform; }
+    .drift-b { animation: drift-b 8.5s cubic-bezier(0.37,0,0.63,1) infinite; will-change: transform; }
+    .drift-c { animation: drift-c 9s cubic-bezier(0.37,0,0.63,1) infinite; will-change: transform; }
+    .drift-d { animation: drift-d 6.5s cubic-bezier(0.37,0,0.63,1) infinite; will-change: transform; }
+
+    /* Node brighten on pulse arrival */
+    @keyframes brighten-1 {
+      0%,80%,100% { fill: #78716c; r: 3.5; }
+      90% { fill: #c084fc; r: 5; }
+    }
+    @keyframes brighten-2 {
+      0%,75%,100% { fill: #78716c; r: 3; }
+      85% { fill: #c084fc; r: 4.5; }
+    }
+    @keyframes brighten-3 {
+      0%,70%,100% { fill: #78716c; r: 4; }
+      80% { fill: #c084fc; r: 5.5; }
+    }
+
+    .node-react-1 { animation: brighten-1 4.5s cubic-bezier(0.37,0,0.63,1) infinite; animation-delay: 2s; }
+    .node-react-2 { animation: brighten-2 5.2s cubic-bezier(0.37,0,0.63,1) infinite; animation-delay: 3.5s; }
+    .node-react-3 { animation: brighten-3 4.8s cubic-bezier(0.37,0,0.63,1) infinite; animation-delay: 1s; }
+    .node-react-4 { animation: brighten-1 6s cubic-bezier(0.37,0,0.63,1) infinite; animation-delay: 4.2s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; }
+    }
+  </style>
+
+  <!-- Connection lines — organic paths between nodes -->
+  <g stroke="rgba(168,162,158,0.12)" stroke-width="1" fill="none">
+    <!-- Follow-ups cluster connections -->
+    <path d="M 135 105 C 155 115, 165 130, 170 145"/>
+    <path d="M 135 105 C 145 85, 155 70, 165 65"/>
+    <path d="M 135 105 C 120 120, 115 140, 118 158"/>
+    <path d="M 135 105 C 160 108, 185 115, 200 125"/>
+    <path d="M 135 105 C 150 130, 170 155, 195 170"/>
+
+    <!-- Follow-ups to Meeting Prep -->
+    <path d="M 135 105 C 180 130, 220 160, 280 175"/>
+
+    <!-- Meeting Prep cluster connections -->
+    <path d="M 280 175 C 260 155, 240 140, 225 130"/>
+    <path d="M 280 175 C 290 150, 295 130, 290 115"/>
+    <path d="M 280 175 C 310 165, 330 155, 340 140"/>
+    <path d="M 280 175 C 265 195, 255 215, 250 235"/>
+    <path d="M 280 175 C 300 190, 310 200, 315 215"/>
+
+    <!-- Meeting Prep to Pipeline -->
+    <path d="M 280 175 C 340 190, 390 170, 420 155"/>
+
+    <!-- Pipeline cluster connections -->
+    <path d="M 420 155 C 400 135, 385 118, 380 100"/>
+    <path d="M 420 155 C 435 130, 445 115, 450 98"/>
+    <path d="M 420 155 C 440 170, 455 180, 468 190"/>
+    <path d="M 420 155 C 405 175, 395 195, 390 210"/>
+    <path d="M 420 155 C 430 140, 445 130, 462 128"/>
+
+    <!-- Pipeline to Research -->
+    <path d="M 420 155 C 460 145, 510 165, 545 195"/>
+    <path d="M 545 195 C 580 225, 610 250, 650 235"/>
+
+    <!-- Research cluster connections -->
+    <path d="M 650 235 C 670 220, 685 205, 690 190"/>
+    <path d="M 650 235 C 665 250, 675 268, 678 280"/>
+    <path d="M 650 235 C 630 225, 610 218, 600 210"/>
+    <path d="M 650 235 C 660 255, 665 270, 658 288"/>
+    <path d="M 650 235 C 680 238, 700 232, 715 225"/>
+
+    <!-- Proposals cluster connections -->
+    <path d="M 280 280 C 260 268, 245 258, 235 252"/>
+    <path d="M 280 280 C 300 268, 315 258, 322 248"/>
+    <path d="M 280 280 C 270 300, 265 315, 268 332"/>
+    <path d="M 280 280 C 295 295, 305 305, 310 320"/>
+    <path d="M 280 280 C 255 290, 240 300, 230 315"/>
+
+    <!-- Proposals to Pipeline -->
+    <path d="M 280 280 C 330 250, 380 220, 420 155"/>
+
+    <!-- Proposals to Coaching -->
+    <path d="M 280 280 C 360 290, 430 305, 530 310"/>
+
+    <!-- Coaching cluster connections -->
+    <path d="M 530 310 C 545 295, 555 282, 558 270"/>
+    <path d="M 530 310 C 515 325, 505 338, 500 350"/>
+    <path d="M 530 310 C 550 318, 565 322, 578 328"/>
+    <path d="M 530 310 C 520 295, 512 278, 508 265"/>
+    <path d="M 530 310 C 545 330, 555 345, 558 355"/>
+
+    <!-- Cross-cluster sparse connections -->
+    <path d="M 530 100 C 490 120, 450 150, 420 155"/>
+    <path d="M 650 235 C 600 270, 560 295, 530 310"/>
+    <path d="M 135 105 C 170 170, 220 240, 280 280"/>
+    <path d="M 530 100 C 580 140, 620 185, 650 235"/>
+  </g>
+
+  <!-- Regular nodes — organic clusters, constellation-style -->
+  <g>
+    <!-- Follow-ups cluster nodes -->
+    <circle class="drift-a" cx="170" cy="145" r="3.5" fill="#78716c"/>
+    <circle class="drift-b" cx="165" cy="65" r="3" fill="#78716c"/>
+    <circle class="drift-c" cx="118" cy="158" r="3.5" fill="#78716c"/>
+    <circle class="drift-d" cx="200" cy="125" r="3" fill="#78716c"/>
+    <circle class="drift-a node-react-1" cx="195" cy="170" r="3.5" fill="#78716c"/>
+    <circle class="drift-b" cx="148" cy="78" r="2.5" fill="#78716c"/>
+    <circle class="drift-c" cx="108" cy="130" r="2.5" fill="#78716c"/>
+
+    <!-- Meeting Prep cluster nodes -->
+    <circle class="drift-d" cx="225" cy="130" r="3" fill="#78716c"/>
+    <circle class="drift-a" cx="290" cy="115" r="3.5" fill="#78716c"/>
+    <circle class="drift-b" cx="340" cy="140" r="3" fill="#78716c"/>
+    <circle class="drift-c" cx="250" cy="235" r="3.5" fill="#78716c"/>
+    <circle class="drift-d node-react-3" cx="315" cy="215" r="3" fill="#78716c"/>
+    <circle class="drift-a" cx="255" cy="155" r="2.5" fill="#78716c"/>
+
+    <!-- Pipeline cluster nodes -->
+    <circle class="drift-b" cx="380" cy="100" r="3" fill="#78716c"/>
+    <circle class="drift-c" cx="450" cy="98" r="3.5" fill="#78716c"/>
+    <circle class="drift-d" cx="468" cy="190" r="3" fill="#78716c"/>
+    <circle class="drift-a node-react-2" cx="390" cy="210" r="3.5" fill="#78716c"/>
+    <circle class="drift-b" cx="462" cy="128" r="2.5" fill="#78716c"/>
+    <circle class="drift-c" cx="405" cy="130" r="2.5" fill="#78716c"/>
+
+    <!-- Research cluster nodes -->
+    <circle class="drift-d" cx="690" cy="190" r="3" fill="#78716c"/>
+    <circle class="drift-a" cx="678" cy="280" r="3.5" fill="#78716c"/>
+    <circle class="drift-b" cx="600" cy="210" r="3" fill="#78716c"/>
+    <circle class="drift-c" cx="658" cy="288" r="3.5" fill="#78716c"/>
+    <circle class="drift-d" cx="715" cy="225" r="2.5" fill="#78716c"/>
+
+    <!-- Proposals cluster nodes -->
+    <circle class="drift-a" cx="235" cy="252" r="3" fill="#78716c"/>
+    <circle class="drift-b" cx="322" cy="248" r="3.5" fill="#78716c"/>
+    <circle class="drift-c" cx="268" cy="332" r="3" fill="#78716c"/>
+    <circle class="drift-d node-react-4" cx="310" cy="320" r="3.5" fill="#78716c"/>
+    <circle class="drift-a" cx="230" cy="315" r="2.5" fill="#78716c"/>
+
+    <!-- Coaching cluster nodes -->
+    <circle class="drift-b" cx="558" cy="270" r="3" fill="#78716c"/>
+    <circle class="drift-c" cx="500" cy="350" r="3.5" fill="#78716c"/>
+    <circle class="drift-d" cx="578" cy="328" r="3" fill="#78716c"/>
+    <circle class="drift-a" cx="508" cy="265" r="3.5" fill="#78716c"/>
+    <circle class="drift-b" cx="558" cy="355" r="2.5" fill="#78716c"/>
+
+    <!-- Scattered ambient nodes (between clusters) -->
+    <circle class="drift-c" cx="530" cy="100" r="3" fill="#78716c"/>
+    <circle class="drift-d" cx="350" cy="320" r="2.5" fill="#78716c"/>
+    <circle class="drift-a" cx="490" cy="250" r="2.5" fill="#78716c"/>
+    <circle class="drift-b" cx="180" cy="230" r="2.5" fill="#78716c"/>
+    <circle class="drift-c" cx="620" cy="155" r="2.5" fill="#78716c"/>
+    <circle class="drift-d" cx="72" cy="88" r="2.5" fill="#78716c"/>
+    <circle class="drift-a" cx="740" cy="280" r="2.5" fill="#78716c"/>
+  </g>
+
+  <!-- Category nodes — larger, purple, pulsing -->
+  <g>
+    <!-- Follow-ups -->
+    <circle class="cat-a" cx="135" cy="105" r="10" fill="#c084fc"/>
+    <!-- Meeting Prep -->
+    <circle class="cat-b" cx="280" cy="175" r="9" fill="#c084fc"/>
+    <!-- Pipeline -->
+    <circle class="cat-c" cx="420" cy="155" r="10" fill="#c084fc"/>
+    <!-- Research -->
+    <circle class="cat-d" cx="650" cy="235" r="9" fill="#c084fc"/>
+    <!-- Proposals -->
+    <circle class="cat-e" cx="280" cy="280" r="9" fill="#c084fc"/>
+    <!-- Coaching -->
+    <circle class="cat-f" cx="530" cy="310" r="10" fill="#c084fc"/>
+  </g>
+
+  <!-- Activation pulse dots traveling along paths via animateMotion -->
+  <circle r="4" fill="#c084fc">
+    <animateMotion dur="4.5s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.22 1 0.36 1">
+      <mpath href="#path-1"/>
+    </animateMotion>
+    <animate attributeName="opacity" values="0;0.9;0.9;0" keyTimes="0;0.05;0.85;1" dur="4.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="3.5" fill="#c084fc">
+    <animateMotion dur="5.2s" repeatCount="indefinite" begin="1.8s" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.22 1 0.36 1">
+      <mpath href="#path-2"/>
+    </animateMotion>
+    <animate attributeName="opacity" values="0;0.9;0.9;0" keyTimes="0;0.05;0.85;1" dur="5.2s" repeatCount="indefinite" begin="1.8s"/>
+  </circle>
+  <circle r="4" fill="#c084fc">
+    <animateMotion dur="4.8s" repeatCount="indefinite" begin="3.2s" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.22 1 0.36 1">
+      <mpath href="#path-3"/>
+    </animateMotion>
+    <animate attributeName="opacity" values="0;0.9;0.9;0" keyTimes="0;0.05;0.85;1" dur="4.8s" repeatCount="indefinite" begin="3.2s"/>
+  </circle>
+  <circle r="3.5" fill="#c084fc">
+    <animateMotion dur="6s" repeatCount="indefinite" begin="0.5s" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.22 1 0.36 1">
+      <mpath href="#path-4"/>
+    </animateMotion>
+    <animate attributeName="opacity" values="0;0.9;0.9;0" keyTimes="0;0.05;0.85;1" dur="6s" repeatCount="indefinite" begin="0.5s"/>
+  </circle>
+</svg>

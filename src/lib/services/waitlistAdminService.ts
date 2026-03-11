@@ -86,8 +86,9 @@ export async function grantAccess(
 
     try {
       const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
-      const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-waitlist-token', {
+      const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-router', {
         body: {
+          action: 'waitlist_token',
           email: entry.email,
           waitlist_entry_id: entryId,
         },
@@ -257,8 +258,9 @@ export async function bulkGrantAccess(
         try {
           // Generate custom waitlist token (not a Supabase magic link)
           const edgeFunctionSecret = import.meta.env.VITE_EDGE_FUNCTION_SECRET || '';
-          const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-waitlist-token', {
+          const { data: tokenData, error: tokenError } = await supabase.functions.invoke('generate-router', {
             body: {
+              action: 'waitlist_token',
               email: entry.email,
               waitlist_entry_id: entry.id,
             },

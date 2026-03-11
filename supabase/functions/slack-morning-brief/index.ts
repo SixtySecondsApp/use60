@@ -301,13 +301,14 @@ serve(async (req) => {
             if (new Date().getDay() === 1) {
               try {
                 const today = new Date().toISOString().split('T')[0];
-                fetch(`${SUPABASE_URL}/functions/v1/agent-orchestrator`, {
+                fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
+                    action: 'orchestrator',
                     type: 'coaching_weekly',
                     source: 'cron:weekly',
                     org_id: org.org_id,
@@ -333,13 +334,14 @@ serve(async (req) => {
 
               if (instantlyCreds?.credentials?.api_key) {
                 const today = new Date().toISOString().split('T')[0];
-                fetch(`${SUPABASE_URL}/functions/v1/agent-orchestrator`, {
+                fetch(`${SUPABASE_URL}/functions/v1/agent-fleet-router`, {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
+                    action: 'orchestrator',
                     type: 'campaign_daily_check',
                     source: 'cron:morning',
                     org_id: org.org_id,
@@ -819,6 +821,74 @@ async function buildMorningBriefData(
     console.warn('[slack-morning-brief] Could not load signal watch data (non-fatal):', sigErr);
   }
 
+  // PST-007: Fetch HIGH severity deal observations from heartbeat system
+  let dealObservations: MorningBriefData['dealObservations'];
+  try {
+    const { data: obsRows } = await supabase
+      .from('deal_observations')
+      .select('id, deal_id, category, severity, title, description, proposed_action')
+      .eq('user_id', userId)
+      .eq('status', 'open')
+      .eq('severity', 'high')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (obsRows && obsRows.length > 0) {
+      // Fetch deal names for observations
+      const obsDealIds = [...new Set(obsRows.map((o: { deal_id: string }) => o.deal_id))];
+      const { data: obsDealRows } = await supabase
+        .from('deals')
+        .select('id, name')
+        .in('id', obsDealIds);
+      const obsDealNameMap = new Map((obsDealRows || []).map((d: { id: string; name: string }) => [d.id, d.name]));
+
+      dealObservations = obsRows.map((o: any) => ({
+        id: o.id,
+        deal_id: o.deal_id,
+        deal_name: obsDealNameMap.get(o.deal_id) || 'Unknown deal',
+        category: o.category,
+        severity: o.severity,
+        title: o.title,
+        description: o.description,
+        proposed_action: o.proposed_action,
+      }));
+    }
+  } catch (obsErr) {
+    console.warn('[slack-morning-brief] Could not load deal observations (non-fatal):', obsErr);
+  }
+
+  // PST-007: Fetch pending follow-up drafts from CRM approval queue
+  let pendingDrafts: MorningBriefData['pendingDrafts'];
+  try {
+    const { data: draftRows } = await supabase
+      .from('crm_approval_queue')
+      .select('id, deal_id, field_name, created_at')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .in('field_name', ['follow_up_email', 'email_draft', 'reengagement_email'])
+      .order('created_at', { ascending: false })
+      .limit(3);
+
+    if (draftRows && draftRows.length > 0) {
+      const draftDealIds = [...new Set(draftRows.map((d: { deal_id: string | null }) => d.deal_id).filter(Boolean))];
+      const { data: draftDealRows } = draftDealIds.length > 0
+        ? await supabase.from('deals').select('id, name').in('id', draftDealIds)
+        : { data: [] };
+      const draftDealNameMap = new Map((draftDealRows || []).map((d: { id: string; name: string }) => [d.id, d.name]));
+
+      pendingDrafts = draftRows.map((d: any) => ({
+        id: d.id,
+        deal_id: d.deal_id,
+        deal_name: d.deal_id ? draftDealNameMap.get(d.deal_id) || null : null,
+        field_name: d.field_name,
+        preview: null, // Preview loaded on demand via Slack modal
+        created_at: d.created_at,
+      }));
+    }
+  } catch (draftErr) {
+    console.warn('[slack-morning-brief] Could not load pending drafts (non-fatal):', draftErr);
+  }
+
   // Format meetings (include IDs for actionable buttons - SLACK-003)
   const formattedMeetings = (meetings || []).map((m: any) => {
     const startTime = new Date(m.start_time);
@@ -943,5 +1013,7 @@ async function buildMorningBriefData(
     campaigns,
     signalWatch,
     appUrl: APP_URL,
+    dealObservations,
+    pendingDrafts,
   };
 }

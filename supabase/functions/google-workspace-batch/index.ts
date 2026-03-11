@@ -23,6 +23,8 @@ import {
   errorResponse,
 } from '../_shared/corsHelper.ts';
 import { authenticateRequest } from '../_shared/edgeAuth.ts';
+// WS-027: Legacy refreshAccessToken removed — now uses centralized tokenManager
+import { getValidToken } from '../_shared/tokenManager.ts';
 
 // ============================================================================
 // Types
@@ -60,47 +62,16 @@ interface BatchResponse {
 // ============================================================================
 
 async function refreshAccessToken(
-  refreshToken: string,
-  supabase: ReturnType<typeof createClient>,
+  _refreshToken: string,
+  _supabase: ReturnType<typeof createClient>,
   userId: string
 ): Promise<string> {
-  const clientId = Deno.env.get('GOOGLE_CLIENT_ID') || '';
-  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET') || '';
-
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(
-      `Failed to refresh token: ${errorData.error_description || 'Unknown error'}`
-    );
-  }
-
-  const data = await response.json();
-
-  const expiresAt = new Date();
-  expiresAt.setSeconds(expiresAt.getSeconds() + (data.expires_in || 3600));
-
-  await supabase
-    .from('google_integrations')
-    .update({
-      access_token: data.access_token,
-      expires_at: expiresAt.toISOString(),
-    })
-    .eq('user_id', userId);
-
-  return data.access_token;
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const { createClient: cc } = await import('https://esm.sh/@supabase/supabase-js@2.43.4');
+  const supa = cc(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+  const { accessToken } = await getValidToken('google', userId, supa);
+  return accessToken;
 }
 
 // ============================================================================

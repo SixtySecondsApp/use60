@@ -74,12 +74,12 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
   const allAnswered = data.questions.every((q) => answers[q.key]);
   const answeredCount = data.questions.filter((q) => answers[q.key]).length + (campaignName.trim() ? 1 : 0);
 
-  const handleSelect = (key: string, value: string) => {
+  const handleSelect = (key: string, value: string, autoAdvance = true) => {
     if (submitted) return;
     setAnswers((prev) => ({ ...prev, [key]: value }));
-    // Auto-advance for select-type questions
+    // Auto-advance for select-type questions (not text input)
     const questionIndex = data.questions.findIndex((q) => q.key === key);
-    if (questionIndex !== -1 && data.questions[questionIndex].type !== 'text') {
+    if (autoAdvance && questionIndex !== -1 && data.questions[questionIndex].type !== 'text') {
       setCurrentStep(Math.min(questionIndex + 1, totalSteps - 1));
     }
   };
@@ -97,7 +97,7 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
       skip_enrichment: answers.enrichment_scope === 'Skip enrichment',
       skip_email_generation: answers.email_steps?.startsWith('No'),
       skip_campaign_creation: false,
-      num_email_steps: answers.email_steps?.includes('3') ? 3 : answers.email_steps?.includes('5') ? 5 : 0,
+      num_email_steps: answers.email_steps?.includes('1') ? 1 : answers.email_steps?.includes('3') ? 3 : answers.email_steps?.includes('5') ? 5 : 0,
       table_name: campaignName,
       ...(requestedCount ? { max_results: requestedCount } : {}),
       ...(targetTableId ? { target_table_id: targetTableId, skip_search: true } : {}),
@@ -328,7 +328,7 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
                   <input
                     type="text"
                     value={answers[data.questions[currentStep].key] || ''}
-                    onChange={(e) => handleSelect(data.questions[currentStep].key, e.target.value)}
+                    onChange={(e) => handleSelect(data.questions[currentStep].key, e.target.value, false)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && answers[data.questions[currentStep].key]?.trim()) {
                         setCurrentStep((s) => Math.min(s + 1, totalSteps - 1));
@@ -352,6 +352,13 @@ export const CampaignWorkflowResponse: React.FC<CampaignWorkflowResponseProps> =
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              ) : data.questions[currentStep].type === 'select_or_text' ? (
+                <SelectOrTextQuestion
+                  question={data.questions[currentStep]}
+                  value={answers[data.questions[currentStep].key] || ''}
+                  onSelect={(value, advance) => handleSelect(data.questions[currentStep].key, value, advance)}
+                  onAdvance={() => setCurrentStep((s) => Math.min(s + 1, totalSteps - 1))}
+                />
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {data.questions[currentStep].options?.map((option) => {
@@ -699,6 +706,94 @@ function StepRow({ step, index }: { step: WorkflowStep; index: number }) {
         </div>
       )}
     </motion.div>
+  );
+}
+
+/** select_or_text: preset chips + "Other" that reveals a text input */
+function SelectOrTextQuestion({
+  question,
+  value,
+  onSelect,
+  onAdvance,
+}: {
+  question: { options?: string[]; placeholder?: string };
+  value: string;
+  onSelect: (value: string, autoAdvance?: boolean) => void;
+  onAdvance: () => void;
+}) {
+  const [showCustom, setShowCustom] = useState(false);
+  const isPreset = question.options?.includes(value);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {question.options?.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => {
+              setShowCustom(false);
+              onSelect(option, true);
+            }}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
+              'border focus:outline-none focus:ring-2 focus:ring-blue-500/40',
+              value === option
+                ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
+                : 'bg-gray-800 text-gray-300 border-gray-700 hover:border-blue-500'
+            )}
+          >
+            {option}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => {
+            setShowCustom(true);
+            if (isPreset) onSelect('', false);
+          }}
+          className={cn(
+            'px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
+            'border focus:outline-none focus:ring-2 focus:ring-blue-500/40',
+            showCustom
+              ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
+              : 'bg-gray-800 text-gray-300 border-gray-700 hover:border-blue-500'
+          )}
+        >
+          Other
+        </button>
+      </div>
+      {showCustom && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          transition={{ duration: 0.15 }}
+          className="flex gap-2"
+        >
+          <input
+            type="text"
+            autoFocus
+            value={isPreset ? '' : value}
+            onChange={(e) => onSelect(e.target.value, false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && value.trim()) onAdvance();
+            }}
+            placeholder={question.placeholder || 'Type your own...'}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+          />
+          {value.trim() && !isPreset && (
+            <button
+              type="button"
+              onClick={onAdvance}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+            >
+              Next
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </motion.div>
+      )}
+    </div>
   );
 }
 

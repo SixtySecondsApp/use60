@@ -50,6 +50,7 @@ import {
   Filter
 } from 'lucide-react'
 import { MeetingUsageBar } from '@/components/MeetingUsageIndicator'
+import { CallGridThumbnail } from './shared/RecordingBadges'
 
 // Helper to format duration safely (filters out corrupted data)
 const formatDuration = (minutes: number | null | undefined): string => {
@@ -442,8 +443,9 @@ const MeetingsList: React.FC = () => {
           if (embedUrl) {
             // Choose a representative timestamp: midpoint, clamped to >=5s
             const midpointSeconds = Math.max(5, Math.floor((m.duration_minutes || 0) * 60 / 2))
-            const { data, error } = await supabase.functions.invoke('generate-video-thumbnail-v2', {
+            const { data, error } = await supabase.functions.invoke('generate-router', {
               body: {
+                action: 'video_thumbnail_v2',
                 recording_id: m.fathom_recording_id,
                 share_url: m.share_url,
                 fathom_embed_url: embedUrl,
@@ -560,7 +562,8 @@ const MeetingsList: React.FC = () => {
           *,
           company:companies!meetings_company_id_fkey(name, domain),
           action_items:meeting_action_items(completed),
-          tasks!tasks_meeting_id_fkey(status)
+          tasks!tasks_meeting_id_fkey(status),
+          meeting_attendees(name)
         `)
         .neq('source_type', '60_notetaker') // 60 Notetaker has its own tab
         .order(sortField, { ascending: sortDirection === 'asc' })
@@ -1135,9 +1138,7 @@ const MeetingsList: React.FC = () => {
                             }}
                           />
                         ) : (
-                          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-500/10 via-blue-600/5 to-indigo-500/10 dark:from-blue-500/20 dark:via-blue-600/10 dark:to-indigo-500/20">
-                            <Video className="h-10 w-10 text-blue-400/60" />
-                          </div>
+                          <CallGridThumbnail title={meeting.title} companyName={meeting.company?.name} attendeeNames={meeting.meeting_attendees?.map((a: any) => a.name)} className="absolute inset-0" />
                         )}
                         {/* 60 Notetaker badge - top left */}
                         <div className="absolute top-2 left-2">
@@ -1197,17 +1198,22 @@ const MeetingsList: React.FC = () => {
                       /* Fathom/Video Meeting - Standard Thumbnail */
                       <>
                         {meeting.thumbnail_url && !meeting.thumbnail_url.includes('dummyimage.com') ? (
-                          <img
-                            src={meeting.thumbnail_url}
-                            alt={meeting.title}
-                            className="absolute inset-0 w-full h-full object-cover"
-                            loading="lazy"
-                            onError={(e) => {
-                              // Fallback to placeholder if image fails to load
-                              e.currentTarget.style.display = 'none'
-                            }}
-                          />
-                        ) : null}
+                          <>
+                            <CallGridThumbnail title={meeting.title} companyName={meeting.company?.name} attendeeNames={meeting.meeting_attendees?.map((a: any) => a.name)} className="absolute inset-0" />
+                            <img
+                              src={meeting.thumbnail_url}
+                              alt={meeting.title}
+                              className="absolute inset-0 w-full h-full object-cover"
+                              loading="lazy"
+                              onError={(e) => {
+                                // Hide broken image to reveal CallGridThumbnail underneath
+                                e.currentTarget.style.display = 'none'
+                              }}
+                            />
+                          </>
+                        ) : (
+                          <CallGridThumbnail title={meeting.title} companyName={meeting.company?.name} attendeeNames={meeting.meeting_attendees?.map((a: any) => a.name)} className="absolute inset-0" />
+                        )}
 
                         {/* Thumbnail Processing Indicator */}
                         {meeting.thumbnail_status === 'processing' && (
@@ -1215,16 +1221,6 @@ const MeetingsList: React.FC = () => {
                             <div className="flex flex-col items-center gap-2">
                               <Loader2 className="h-8 w-8 text-white animate-spin" />
                               <span className="text-xs text-white/80">Generating thumbnail...</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Thumbnail Pending (Queued) Indicator */}
-                        {meeting.thumbnail_status === 'pending' && !meeting.thumbnail_url && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="flex flex-col items-center gap-2 text-gray-400 dark:text-gray-500">
-                              <Video className="h-12 w-12" />
-                              <span className="text-xs">Queued</span>
                             </div>
                           </div>
                         )}

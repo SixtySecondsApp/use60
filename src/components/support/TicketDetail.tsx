@@ -1,23 +1,46 @@
 import { useState } from 'react';
-import { X, Send, Clock, CheckCircle2, Loader2, AlertCircle, XCircle, Ticket } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader } from '@/components/ui/sheet';
+import { X, Send, Clock, CheckCircle2, Loader2, AlertCircle, XCircle, Ticket, EyeOff, Shield } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { type SupportTicket, type TicketStatus, useUpdateTicketStatus } from '@/lib/hooks/useSupportTickets';
 import { useSendSupportMessage } from '@/lib/hooks/useSupportMessages';
 import { TicketConversation } from './TicketConversation';
+import { CannedResponsePicker } from './CannedResponsePicker';
+import { useTypingIndicator } from '@/lib/hooks/useTypingIndicator';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/clientV2';
+
+function useAgentName(agentId: string | null) {
+  return useQuery({
+    queryKey: ['agent-name', agentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, email')
+        .eq('id', agentId!)
+        .single();
+      if (error) throw error;
+      const name = [data.first_name, data.last_name].filter(Boolean).join(' ');
+      return name || data.email || 'Support Agent';
+    },
+    enabled: !!agentId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 interface TicketDetailProps {
   ticket: SupportTicket;
   open: boolean;
   onClose: () => void;
+  isAdmin?: boolean;
 }
 
 const STATUS_CONFIG: Record<TicketStatus, { label: string; icon: React.ElementType; color: string }> = {
   open: { label: 'Open', icon: Clock, color: 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-blue-200 dark:border-blue-500/30' },
-  in_progress: { label: 'In Progress', icon: Loader2, color: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border-amber-200 dark:border-amber-500/30' },
+  in_progress: { label: 'Waiting on Agent', icon: Loader2, color: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border-amber-200 dark:border-amber-500/30' },
   waiting_on_customer: { label: 'Waiting on You', icon: AlertCircle, color: 'bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400 border-purple-200 dark:border-purple-500/30' },
   resolved: { label: 'Resolved', icon: CheckCircle2, color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30' },
   closed: { label: 'Closed', icon: XCircle, color: 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700' },
@@ -25,7 +48,7 @@ const STATUS_CONFIG: Record<TicketStatus, { label: string; icon: React.ElementTy
 
 const STATUS_TIMELINE: { status: TicketStatus; label: string }[] = [
   { status: 'open', label: 'Opened' },
-  { status: 'in_progress', label: 'In Progress' },
+  { status: 'in_progress', label: 'Waiting on Agent' },
   { status: 'waiting_on_customer', label: 'Waiting on Customer' },
   { status: 'resolved', label: 'Resolved' },
 ];
@@ -87,19 +110,23 @@ function StatusTimeline({ currentStatus }: { currentStatus: TicketStatus }) {
   );
 }
 
-export function TicketDetail({ ticket, open, onClose }: TicketDetailProps) {
+export function TicketDetail({ ticket, open, onClose, isAdmin = false }: TicketDetailProps) {
   const [replyText, setReplyText] = useState('');
+  const [isInternalNote, setIsInternalNote] = useState(false);
   const statusConfig = STATUS_CONFIG[ticket.status];
   const StatusIcon = statusConfig.icon;
+  const { data: agentName } = useAgentName(ticket.assigned_to ?? null);
+  const { typingUsers, sendTyping } = useTypingIndicator(ticket.id);
 
-  const { mutateAsync: sendMessage, isPending: isSending } = useSendSupportMessage(ticket);
+  const { mutateAsync: sendMessage, isPending: isSending } = useSendSupportMessage(ticket, isAdmin ? 'agent' : 'user');
   const { mutateAsync: updateStatus } = useUpdateTicketStatus();
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replyText.trim() || isSending) return;
-    await sendMessage(replyText);
+    await sendMessage({ content: replyText, isInternal: isInternalNote });
     setReplyText('');
+    setIsInternalNote(false);
   };
 
   const handleClose = async () => {
@@ -114,7 +141,9 @@ export function TicketDetail({ ticket, open, onClose }: TicketDetailProps) {
         side="right"
         hideClose
         className="!top-16 !h-[calc(100vh-4rem)] w-full sm:max-w-lg p-0 flex flex-col overflow-hidden"
+        aria-describedby={undefined}
       >
+        <SheetTitle className="sr-only">{ticket.subject}</SheetTitle>
         {/* Header */}
         <SheetHeader className="px-5 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">
           <div className="flex items-start justify-between gap-3">
@@ -149,6 +178,22 @@ export function TicketDetail({ ticket, open, onClose }: TicketDetailProps) {
             <span className={cn('text-[11px] font-medium', PRIORITY_COLOR[ticket.priority])}>
               {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)} priority
             </span>
+            {ticket.sla_breached && (
+              <Badge variant="outline" className="text-[11px] bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 border-red-200 dark:border-red-500/30">
+                SLA Breached
+              </Badge>
+            )}
+            {ticket.first_response_at && !ticket.sla_breached && (
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                First response: {formatDistanceToNow(new Date(ticket.first_response_at), { addSuffix: true })}
+              </span>
+            )}
+            {agentName && (
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                <Shield className="w-3 h-3" />
+                Assigned to {agentName}
+              </span>
+            )}
           </div>
         </SheetHeader>
 
@@ -189,7 +234,7 @@ export function TicketDetail({ ticket, open, onClose }: TicketDetailProps) {
           {/* Conversation thread */}
           <div className="px-5 py-4">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Conversation</p>
-            <TicketConversation ticketId={ticket.id} />
+            <TicketConversation ticketId={ticket.id} typingUsers={typingUsers} />
           </div>
         </div>
 
@@ -199,19 +244,45 @@ export function TicketDetail({ ticket, open, onClose }: TicketDetailProps) {
             <form onSubmit={handleSendReply} className="space-y-2">
               <textarea
                 value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Add a reply..."
+                onChange={(e) => { setReplyText(e.target.value); sendTyping(); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (replyText.trim() && !isSending) handleSendReply(e);
+                  }
+                }}
+                placeholder={isInternalNote ? "Add an internal note (only visible to admins)..." : "Add a reply... (Enter to send, Shift+Enter for new line)"}
                 rows={3}
                 className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
               <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                >
-                  Close ticket
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  >
+                    Close ticket
+                  </button>
+                  {isAdmin && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setIsInternalNote(!isInternalNote)}
+                        className={cn(
+                          'flex items-center gap-1 text-xs px-2 py-1 rounded-md transition-colors',
+                          isInternalNote
+                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30'
+                            : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                        )}
+                      >
+                        <EyeOff className="w-3 h-3" />
+                        Internal
+                      </button>
+                      <CannedResponsePicker onSelect={(content) => setReplyText((prev) => prev ? `${prev}\n${content}` : content)} />
+                    </>
+                  )}
+                </div>
                 <Button
                   type="submit"
                   size="sm"

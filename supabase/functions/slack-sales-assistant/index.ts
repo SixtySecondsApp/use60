@@ -167,29 +167,6 @@ serve(async (req) => {
                   slack_channel_id: dmResult.channel,
                 });
 
-              // Mirror into in-app notifications (best-effort)
-              try {
-                await supabase.from('notifications').insert({
-                  user_id: mapping.sixty_user_id,
-                  title: 'Sales Assistant Digest',
-                  message: `New action items: ${digest.actionItems.length} • Emails: ${digest.emailsToRespond} • Ghost risks: ${digest.ghostRisks} • Meetings: ${digest.upcomingMeetings}`,
-                  type: 'info',
-                  category: 'task',
-                  entity_type: 'digest',
-                  entity_id: null,
-                  action_url: '/tasks',
-                  metadata: {
-                    source: 'slack_sales_assistant',
-                    actionItemsCount: digest.actionItems.length,
-                    emailsToRespond: digest.emailsToRespond,
-                    ghostRisks: digest.ghostRisks,
-                    upcomingMeetings: digest.upcomingMeetings,
-                  },
-                });
-              } catch (e) {
-                console.warn('[slack-sales-assistant] Failed to create in-app notification:', (e as any)?.message || e);
-              }
-
               totalDmsSent++;
             }
           } catch (userError: any) {

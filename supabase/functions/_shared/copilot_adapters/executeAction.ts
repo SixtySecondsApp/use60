@@ -1572,13 +1572,14 @@ export async function executeAction(
       const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
 
       try {
-        const resp = await fetch(`${supabaseUrl}/functions/v1/ops-table-ai-query`, {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ops-table-router`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': authHeader,
           },
           body: JSON.stringify({
+            action: 'ai_query',
             table_id: tableId,
             query: queryText,
             organization_id: orgId,
@@ -1627,13 +1628,14 @@ export async function executeAction(
       const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
 
       try {
-        const resp = await fetch(`${supabaseUrl}/functions/v1/ops-table-transform-column`, {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ops-table-router`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': authHeader,
           },
           body: JSON.stringify({
+            action: 'transform_column',
             table_id: tableId,
             column_id: columnId,
             prompt,
@@ -1964,13 +1966,14 @@ export async function executeAction(
       const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
 
       try {
-        const resp = await fetch(`${supabaseUrl}/functions/v1/push-to-instantly`, {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/crm-push`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': authHeader,
           },
           body: JSON.stringify({
+            action: 'to_instantly',
             table_id: tableId,
             campaign_id: params.campaign_id ? String(params.campaign_id) : undefined,
             row_ids: Array.isArray(params.row_ids) ? params.row_ids : undefined,
@@ -2022,13 +2025,14 @@ export async function executeAction(
       const authHeader = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`;
 
       try {
-        const resp = await fetch(`${supabaseUrl}/functions/v1/ops-table-insights-engine`, {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/ops-table-router`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': authHeader,
           },
           body: JSON.stringify({
+            action: 'insights_engine',
             table_id: tableId,
             insight_type: params.insight_type ? String(params.insight_type) : undefined,
             organization_id: orgId,

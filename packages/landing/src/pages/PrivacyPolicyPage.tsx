@@ -17,6 +17,7 @@ const tableOfContents: TOCItem[] = [
   { id: 'data-collection', title: 'Data Collection', icon: Shield },
   { id: 'how-collected', title: 'How Data Is Collected', icon: Globe },
   { id: 'data-usage', title: 'How We Use Your Data', icon: Lock },
+  { id: 'google-api', title: 'Google API Data', icon: Globe },
   { id: 'disclosures', title: 'Data Disclosures', icon: Users },
   { id: 'international-transfers', title: 'International Transfers', icon: Globe },
   { id: 'data-security', title: 'Data Security', icon: Lock },
@@ -132,7 +133,7 @@ export function PrivacyPolicyPage() {
                     Your privacy and data security is important to us. This policy explains how we collect, use, and protect your personal information.
                   </p>
                   <p className="text-sm text-gray-500 mt-4">
-                    Last Updated: <time dateTime="2026-01-06">6 January 2026</time>
+                    Last Updated: <time dateTime="2026-03-04">4 March 2026</time>
                   </p>
                 </motion.div>
               </div>
@@ -307,6 +308,53 @@ export function PrivacyPolicyPage() {
                     </p>
                     <p className="mt-4">
                       <strong>Cookies:</strong> You can set your browser to refuse cookies. Some parts of the website may become inaccessible if you disable cookies.
+                    </p>
+                  </Subsection>
+                </Section>
+
+                {/* Google API Services */}
+                <Section id="google-api" title="Google API Services — User Data Policy">
+                  <p>
+                    60 integrates with Google Workspace services including Gmail, Google Calendar, Google Drive, Google Docs, and Google Tasks. When you connect your Google account, we access data from these services to provide 60's features.
+                  </p>
+
+                  <Subsection title="How We Use Google Data">
+                    <ul>
+                      <li><strong>Gmail:</strong> We sync emails from your CRM contacts to display communication history on deals and contacts. AI generates summaries of email threads — only summaries are stored, not raw email bodies. We send emails and create drafts on your behalf when you explicitly request it. We apply triage labels and manage read/starred/archived states within 60.</li>
+                      <li><strong>Google Calendar:</strong> We sync your calendar events to display meetings alongside deal context, power meeting prep briefs, and check availability for scheduling. We create, update, and delete events when you use scheduling features.</li>
+                      <li><strong>Google Drive & Docs:</strong> We create and share documents (proposals, meeting notes) in your Drive when you request it.</li>
+                      <li><strong>Google Tasks:</strong> We provide bidirectional sync between 60's task system and Google Tasks.</li>
+                    </ul>
+                  </Subsection>
+
+                  <Subsection title="Limited Use Disclosure">
+                    <InfoBox variant="info">
+                      <strong>Google API Services User Data Policy Compliance</strong>
+                      <p className="mt-2">
+                        60's use and transfer to any other app of information received from Google APIs will adhere to the{' '}
+                        <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:text-blue-200 underline">
+                          Google API Services User Data Policy
+                        </a>
+                        , including the Limited Use requirements.
+                      </p>
+                    </InfoBox>
+                    <p className="mt-4">Specifically, we commit to the following:</p>
+                    <ul>
+                      <li>Google user data is only used to provide and improve user-facing features within 60 that are prominent in the application's user interface.</li>
+                      <li>We do not transfer Google user data to third parties, except: (a) as necessary to provide or improve user-facing features visible in 60; (b) to comply with applicable laws; (c) for security purposes such as investigating abuse; or (d) as part of a merger, acquisition, or asset sale with explicit user consent.</li>
+                      <li>We do not use Google user data for serving advertisements, including retargeting, personalised, or interest-based advertising.</li>
+                      <li>We do not use Google user data to determine creditworthiness or for lending purposes.</li>
+                      <li>Human employees do not read Google user data unless: (a) we have your affirmative agreement to view specific data; (b) it is necessary for security purposes; (c) it is necessary to comply with applicable law; or (d) the data is aggregated and anonymised for internal operations.</li>
+                    </ul>
+                  </Subsection>
+
+                  <Subsection title="Revoking Access">
+                    <p>
+                      You can disconnect your Google account at any time from Settings &rarr; Integrations within 60. You can also revoke access from your{' '}
+                      <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
+                        Google Account permissions page
+                      </a>
+                      . When access is revoked, we stop all syncing and delete cached Google data.
                     </p>
                   </Subsection>
                 </Section>
@@ -506,7 +554,7 @@ export function PrivacyPolicyPage() {
           <div className="flex flex-col items-center gap-4">
             <img src={logoDark} alt="60" className="h-8 w-auto" />
             <p className="text-gray-400 text-sm text-center">
-              © 2025 Sixty Seconds Ltd. All rights reserved.
+              © 2026 Sixty Seconds Ltd. All rights reserved.
             </p>
           </div>
         </div>

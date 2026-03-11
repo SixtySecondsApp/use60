@@ -74,14 +74,14 @@ export default function MeetingContextResponse({ data, onActionClick }: MeetingC
                 </div>
               )}
 
-              {/* View in Meeting Analytics link */}
+              {/* View in Insights link */}
               <button
                 onClick={() =>
                   onActionClick?.({ type: 'open_external_url', url: '/meeting-analytics' })
                 }
                 className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
               >
-                View in Meeting Analytics
+                View in Insights
                 <ExternalLink className="w-3 h-3" />
               </button>
             </div>

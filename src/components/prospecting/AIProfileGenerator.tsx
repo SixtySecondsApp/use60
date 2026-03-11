@@ -136,8 +136,8 @@ export function AIProfileGenerator({ onProfileCreated, onEditAndSave, orgId }: A
     setError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('generate-icp-profiles', {
-        body: { force_regenerate: forceRegenerate },
+      const { data, error: fnError } = await supabase.functions.invoke('generate-router', {
+        body: { action: 'icp_profiles', force_regenerate: forceRegenerate },
       });
 
       if (fnError) throw new Error(fnError.message || 'Failed to generate profiles');

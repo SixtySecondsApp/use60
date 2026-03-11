@@ -1035,8 +1035,9 @@ export const NotetakerSettingsTab: React.FC = () => {
               </div>
 
               <Button
+                type="button"
                 onClick={handleSaveCalendarSelection}
-                disabled={isUpdating || selectedCalendarId === userSettings?.selected_calendar_id}
+                disabled={isUpdating}
                 className="w-full bg-emerald-600 hover:bg-emerald-700"
               >
                 {isUpdating ? (
@@ -1138,6 +1139,7 @@ export const NotetakerSettingsTab: React.FC = () => {
                 </div>
 
                 <Button
+                  type="button"
                   onClick={() => connectMeetingBaaSCalendar(selectedCalendarId)}
                   disabled={meetingBaaSConnecting}
                   className="w-full bg-emerald-600 hover:bg-emerald-700"

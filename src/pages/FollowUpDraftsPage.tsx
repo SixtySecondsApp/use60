@@ -6,7 +6,7 @@
  * Status filters: Pending, Edited, Scheduled, Sent, Rejected
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import {
   Mail,
@@ -18,6 +18,7 @@ import {
   Loader2,
   RefreshCw,
   Inbox,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useAuth } from '@/lib/contexts/AuthContext';
@@ -27,6 +28,8 @@ import { DraftHistoryTimeline } from '@/components/followups/DraftHistoryTimelin
 import { MeetingContextSidebar } from '@/components/followups/MeetingContextSidebar';
 import { BatchDraftActions } from '@/components/followups/BatchDraftActions';
 import { ScheduleSendPicker } from '@/components/followups/ScheduleSendPicker';
+import { BuyerSignalBadge } from '@/components/followups/BuyerSignalBadge';
+import { FollowUpChainView } from '@/components/followups/FollowUpChainView';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -68,12 +71,14 @@ function DraftCard({
   draft,
   isSelected,
   isActive,
+  isChainGrouped,
   onSelect,
   onOpen,
 }: {
   draft: FollowUpDraft;
   isSelected: boolean;
   isActive: boolean;
+  isChainGrouped?: boolean;
   onSelect: (id: string, checked: boolean) => void;
   onOpen: (draft: FollowUpDraft) => void;
 }) {
@@ -84,7 +89,8 @@ function DraftCard({
         isActive
           ? 'border-[#37bd7e]/40 bg-[#37bd7e]/5'
           : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/40 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/60',
-        isSelected && 'ring-1 ring-[#37bd7e]/30'
+        isSelected && 'ring-1 ring-[#37bd7e]/30',
+        isChainGrouped && 'ml-4 border-l-2 border-l-[#37bd7e]/30'
       )}
       onClick={() => onOpen(draft)}
     >
@@ -116,10 +122,17 @@ function DraftCard({
             {draft.to_name ?? draft.to_email}
           </span>
           <StatusBadge status={draft.status} />
+          <BuyerSignalBadge draft={draft} />
         </div>
         <p className="text-sm text-gray-600 dark:text-gray-300 truncate mb-1">{draft.subject}</p>
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          {draft.meeting_id && (
+          {draft.chain_id && (
+            <span className="flex items-center gap-1 text-[#37bd7e]">
+              <LinkIcon className="w-3 h-3" />
+              Chain {(draft.chain_position ?? 0) + 1}/4
+            </span>
+          )}
+          {draft.meeting_id && !draft.chain_id && (
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
               From meeting
@@ -144,12 +157,59 @@ export default function FollowUpDraftsPage() {
   const [activeDraft, setActiveDraft] = useState<FollowUpDraft | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
+  const [activeChainId, setActiveChainId] = useState<string | null>(null);
 
   const { drafts, isLoading, error, refetch, updateDraftStatus } = useFollowUpDrafts({
     orgId: activeOrgId ?? undefined,
     userId: user?.id,
     status: statusFilter === 'all' ? undefined : statusFilter,
   });
+
+  // Group drafts by chain_id for chain view
+  const chainDraftsMap = useMemo(() => {
+    const map = new Map<string, FollowUpDraft[]>();
+    for (const draft of drafts) {
+      if (draft.chain_id) {
+        const existing = map.get(draft.chain_id) ?? [];
+        existing.push(draft);
+        map.set(draft.chain_id, existing);
+      }
+    }
+    // Sort chain members by position
+    for (const [, members] of map) {
+      members.sort((a, b) => (a.chain_position ?? 0) - (b.chain_position ?? 0));
+    }
+    return map;
+  }, [drafts]);
+
+  // Build display list: group chain drafts under the first member, indent the rest
+  const displayDrafts = useMemo(() => {
+    const seenChains = new Set<string>();
+    const result: { draft: FollowUpDraft; isChainGrouped: boolean }[] = [];
+
+    for (const draft of drafts) {
+      if (draft.chain_id) {
+        if (!seenChains.has(draft.chain_id)) {
+          seenChains.add(draft.chain_id);
+          // Add all chain members in order
+          const chainMembers = chainDraftsMap.get(draft.chain_id) ?? [draft];
+          for (let i = 0; i < chainMembers.length; i++) {
+            result.push({ draft: chainMembers[i], isChainGrouped: i > 0 });
+          }
+        }
+        // Skip individual chain members already added
+      } else {
+        result.push({ draft, isChainGrouped: false });
+      }
+    }
+
+    return result;
+  }, [drafts, chainDraftsMap]);
+
+  const activeChainDrafts = useMemo(() => {
+    if (!activeChainId) return [];
+    return chainDraftsMap.get(activeChainId) ?? [];
+  }, [activeChainId, chainDraftsMap]);
 
   const handleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -164,6 +224,17 @@ export default function FollowUpDraftsPage() {
     setActiveDraft(draft);
     setShowHistory(false);
     setShowScheduler(false);
+    // If opening a chain draft, show chain view
+    if (draft.chain_id) {
+      setActiveChainId(draft.chain_id);
+    } else {
+      setActiveChainId(null);
+    }
+  }, []);
+
+  const handleShowChainView = useCallback((chainId: string) => {
+    setActiveChainId(chainId);
+    setActiveDraft(null);
   }, []);
 
   const handleBatchComplete = useCallback(() => {
@@ -173,6 +244,10 @@ export default function FollowUpDraftsPage() {
 
   const handleDraftUpdated = useCallback((updatedDraft: FollowUpDraft) => {
     setActiveDraft(updatedDraft);
+    refetch();
+  }, [refetch]);
+
+  const handleChainUpdated = useCallback(() => {
     refetch();
   }, [refetch]);
 
@@ -237,8 +312,10 @@ export default function FollowUpDraftsPage() {
           {selectedIds.size > 0 && (
             <BatchDraftActions
               selectedIds={selectedIds}
+              drafts={drafts}
               orgId={activeOrgId ?? ''}
               onComplete={handleBatchComplete}
+              onClearSelection={() => setSelectedIds(new Set())}
             />
           )}
 
@@ -268,26 +345,79 @@ export default function FollowUpDraftsPage() {
                 </p>
               </div>
             ) : (
-              drafts.map((draft) => (
-                <DraftCard
-                  key={draft.id}
-                  draft={draft}
-                  isSelected={selectedIds.has(draft.id)}
-                  isActive={activeDraft?.id === draft.id}
-                  onSelect={handleSelect}
-                  onOpen={handleOpen}
-                />
+              displayDrafts.map(({ draft, isChainGrouped }) => (
+                <div key={draft.id}>
+                  <DraftCard
+                    draft={draft}
+                    isSelected={selectedIds.has(draft.id)}
+                    isActive={activeDraft?.id === draft.id}
+                    isChainGrouped={isChainGrouped}
+                    onSelect={handleSelect}
+                    onOpen={handleOpen}
+                  />
+                  {/* Show "View Chain" button on the first draft of a chain */}
+                  {draft.chain_id && !isChainGrouped && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleShowChainView(draft.chain_id!);
+                      }}
+                      className={cn(
+                        'ml-[60px] mt-1 mb-1 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors',
+                        activeChainId === draft.chain_id
+                          ? 'bg-[#37bd7e]/20 text-[#37bd7e]'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-[#37bd7e] hover:bg-[#37bd7e]/10'
+                      )}
+                    >
+                      <LinkIcon className="w-3 h-3" />
+                      View Chain ({(chainDraftsMap.get(draft.chain_id!) ?? []).length} emails)
+                    </button>
+                  )}
+                </div>
               ))
             )}
           </div>
         </div>
 
-        {/* Right panel: editor / empty state */}
+        {/* Right panel: chain view / editor / empty state */}
         <div className="flex-1 flex min-h-0">
-          {activeDraft ? (
+          {activeChainId && !activeDraft ? (
+            /* Chain timeline view */
+            <div className="flex-1 flex min-h-0">
+              <div className="flex-1 min-h-0">
+                <FollowUpChainView
+                  meetingId={activeChainDrafts[0]?.meeting_id ?? ''}
+                  chainDrafts={activeChainDrafts}
+                  onOpenDraft={(draft) => {
+                    setActiveDraft(draft);
+                  }}
+                  onChainUpdated={handleChainUpdated}
+                />
+              </div>
+              {activeChainDrafts[0]?.meeting_id && (
+                <div className="w-72 border-l border-gray-200 dark:border-gray-800 flex-shrink-0 overflow-y-auto">
+                  <MeetingContextSidebar meetingId={activeChainDrafts[0].meeting_id} orgId={activeOrgId ?? undefined} />
+                </div>
+              )}
+            </div>
+          ) : activeDraft ? (
             <>
               {/* Editor panel */}
               <div className="flex-1 flex flex-col min-h-0">
+                {/* Back to chain view link (when editing a chain draft) */}
+                {activeDraft.chain_id && (
+                  <button
+                    onClick={() => {
+                      setActiveDraft(null);
+                      setActiveChainId(activeDraft.chain_id);
+                    }}
+                    className="flex items-center gap-1.5 px-5 py-2 text-xs font-medium text-[#37bd7e] hover:bg-[#37bd7e]/5 border-b border-gray-200 dark:border-gray-800 transition-colors flex-shrink-0"
+                  >
+                    <LinkIcon className="w-3 h-3" />
+                    Back to chain view
+                  </button>
+                )}
+
                 <DraftEditor
                   draft={activeDraft}
                   orgId={activeOrgId ?? ''}
@@ -307,6 +437,7 @@ export default function FollowUpDraftsPage() {
                         handleDraftUpdated(updated);
                         setShowScheduler(false);
                       }}
+                      onCancel={() => setShowScheduler(false)}
                     />
                   </div>
                 )}
@@ -321,7 +452,7 @@ export default function FollowUpDraftsPage() {
               {/* Meeting context sidebar */}
               {activeDraft.meeting_id && (
                 <div className="w-72 border-l border-gray-200 dark:border-gray-800 flex-shrink-0 overflow-y-auto">
-                  <MeetingContextSidebar meetingId={activeDraft.meeting_id} />
+                  <MeetingContextSidebar meetingId={activeDraft.meeting_id} orgId={activeOrgId ?? undefined} />
                 </div>
               )}
             </>

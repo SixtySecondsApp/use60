@@ -102,6 +102,7 @@ interface OpsTableProps {
   columnScheduleLabels?: Record<string, string>;
   groupConfig?: GroupConfig | null;
   summaryConfig?: Record<string, AggregateType> | null;
+  onRowExpand?: (rowId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +132,8 @@ const columnTypeIcons: Record<string, React.FC<React.SVGProps<SVGSVGElement>>> =
 // Constants
 // ---------------------------------------------------------------------------
 
-const CHECKBOX_COL_WIDTH = 44;
+const CHECKBOX_COL_WIDTH_BASE = 44;
+const CHECKBOX_COL_WIDTH_EXPAND = 64;
 const ADD_COL_WIDTH = 44;
 const ROW_HEIGHT = 36;
 const HEADER_HEIGHT = 34;
@@ -313,9 +315,13 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   columnScheduleLabels,
   groupConfig,
   summaryConfig,
+  onRowExpand,
 }) => {
+  const CHECKBOX_COL_WIDTH = onRowExpand ? CHECKBOX_COL_WIDTH_EXPAND : CHECKBOX_COL_WIDTH_BASE;
   const parentRef = useRef<HTMLDivElement>(null);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
+  const [horizontalScrollLeft, setHorizontalScrollLeft] = useState(0);
+  const [maxHorizontalScroll, setMaxHorizontalScroll] = useState(0);
 
   // Column resize state
   const [resizingColumnId, setResizingColumnId] = useState<string | null>(null);
@@ -520,6 +526,55 @@ export const OpsTable: React.FC<OpsTableProps> = ({
     }
     return Object.keys(result).length > 0 ? result : null;
   }, [summaryConfig, rows]);
+  const bottomScrollPadding = summaryValues && rows.length > 0 ? ROW_HEIGHT + 24 : 24;
+
+  const handleTableWheel = useCallback((container: HTMLDivElement, event: WheelEvent | React.WheelEvent<HTMLDivElement>) => {
+    const canScrollHorizontally = container.scrollWidth > container.clientWidth;
+    if (!canScrollHorizontally) return;
+
+    const horizontalDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      ? event.deltaX
+      : event.shiftKey
+        ? event.deltaY
+        : 0;
+
+    if (horizontalDelta === 0) return;
+
+    event.preventDefault();
+    container.scrollLeft += horizontalDelta;
+  }, []);
+
+  useEffect(() => {
+    const container = parentRef.current;
+    if (!container) return;
+
+    const handleNativeWheel = (event: WheelEvent) => {
+      handleTableWheel(container, event);
+    };
+
+    container.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleNativeWheel);
+  }, [handleTableWheel]);
+
+  useEffect(() => {
+    const container = parentRef.current;
+    if (!container) return;
+
+    const updateScrollMetrics = () => {
+      setHorizontalScrollLeft(container.scrollLeft);
+      setMaxHorizontalScroll(Math.max(0, container.scrollWidth - container.clientWidth));
+    };
+
+    const resizeObserver = new ResizeObserver(() => updateScrollMetrics());
+    resizeObserver.observe(container);
+    updateScrollMetrics();
+    container.addEventListener('scroll', updateScrollMetrics, { passive: true });
+
+    return () => {
+      resizeObserver.disconnect();
+      container.removeEventListener('scroll', updateScrollMetrics);
+    };
+  }, [totalWidth]);
 
   // Virtual row scroller — uses flatItems for grouped view
   const rowVirtualizer = useVirtualizer({
@@ -564,8 +619,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   // Agent research handlers
   const handleRunAgentResearch = useCallback(async (agentColumnId: string, rowId: string) => {
     try {
-      await supabase.functions.invoke('research-orchestrator', {
+      await supabase.functions.invoke('research-router-v2', {
         body: {
+          action: 'orchestrator',
           agent_column_id: agentColumnId,
           row_ids: [rowId],
         },
@@ -589,8 +645,9 @@ export const OpsTable: React.FC<OpsTableProps> = ({
         .eq('row_id', rowId);
 
       // Trigger new run
-      await supabase.functions.invoke('research-orchestrator', {
+      await supabase.functions.invoke('research-router-v2', {
         body: {
+          action: 'orchestrator',
           agent_column_id: agentColumnId,
           row_ids: [rowId],
           depth_override: depthOverride,
@@ -664,6 +721,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
       <div
         ref={parentRef}
         className="overflow-auto"
+        onWheel={(event) => handleTableWheel(event.currentTarget, event)}
         style={{ maxHeight: 'var(--ops-table-max-height, calc(100vh - 220px))', overscrollBehavior: 'contain' }}
       >
         <div style={{ width: totalWidth, minWidth: '100%' }}>
@@ -729,7 +787,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
           {/* ---- BODY (virtualised) ---- */}
           <div
             style={{
-              height: rowVirtualizer.getTotalSize(),
+              height: rowVirtualizer.getTotalSize() + bottomScrollPadding,
               position: 'relative',
             }}
           >
@@ -803,6 +861,15 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                       onChange={() => onSelectRow(row.id)}
                       className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
                     />
+                    {onRowExpand && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onRowExpand(row.id); }}
+                        className="ml-0.5 p-0.5 rounded text-gray-500 hover:text-white hover:bg-gray-700/50 transition-colors"
+                        title="Expand row"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Data cells */}
@@ -851,12 +918,14 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           metadata={cellData.metadata}
                           onEnrichRow={(col.is_enrichment || col.column_type === 'apollo_property' || col.column_type === 'apollo_org_property' || col.column_type === 'linkedin_property') ? () => onEnrichRow?.(row.id, col.id) : undefined}
                           buttonConfig={(col.column_type === 'button' || col.column_type === 'action') ? col.action_config as any : undefined}
-                          rowCellValues={(col.column_type === 'button' || col.column_type === 'action' || col.column_type === 'instantly') ? Object.fromEntries(
+                          rowCellValues={(col.column_type === 'button' || col.column_type === 'action' || col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video') ? Object.fromEntries(
                             Object.entries(row.cells).map(([k, v]) => [k, v.value ?? ''])
                           ) : undefined}
-                          integrationConfig={col.column_type === 'instantly' ? col.integration_config : undefined}
-                          agentColumnId={col.column_type === 'agent_research' ? col.id : undefined}
-                          rowId={col.column_type === 'agent_research' ? row.id : undefined}
+                          integrationConfig={(col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video') ? col.integration_config : undefined}
+                          agentColumnId={(col.column_type === 'agent_research' || col.column_type === 'fal_video') ? col.id : undefined}
+                          rowId={(col.column_type === 'agent_research' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video') ? row.id : undefined}
+                          tableId={(col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video') ? tableId : undefined}
+                          columnKey={(col.column_type === 'elevenlabs_audio') ? col.key : undefined}
                           onRunAgentResearch={col.column_type === 'agent_research' ? () => handleRunAgentResearch(col.id, row.id) : undefined}
                           onRetryAgentResearch={col.column_type === 'agent_research' ? (depth) => handleRetryAgentResearch(col.id, row.id, depth) : undefined}
                         />
@@ -926,6 +995,23 @@ export const OpsTable: React.FC<OpsTableProps> = ({
           )}
         </div>
       </div>
+      {maxHorizontalScroll > 0 && (
+        <div className="border-t border-gray-800 bg-gray-900/90 px-3 py-2">
+          <input
+            type="range"
+            min={0}
+            max={maxHorizontalScroll}
+            value={Math.min(horizontalScrollLeft, maxHorizontalScroll)}
+            onChange={(event) => {
+              const nextScrollLeft = Number(event.target.value);
+              setHorizontalScrollLeft(nextScrollLeft);
+              parentRef.current?.scrollTo({ left: nextScrollLeft });
+            }}
+            className="w-full cursor-ew-resize accent-violet-500"
+            aria-label="Scroll table horizontally"
+          />
+        </div>
+      )}
     </div>
   );
 };

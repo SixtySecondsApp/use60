@@ -84,7 +84,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(body.error || `API error: ${res.status}`);
+    throw new Error(body.error || body.message || body.details || `API error: ${res.status}`);
   }
 
   const json = await res.json();
@@ -95,6 +95,57 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   return json as T;
+}
+
+function shouldFallbackToLegacySearch(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  return (
+    error.message.includes('Requested function was not found') ||
+    error.message.includes('API error: 404') ||
+    error.message.includes('NOT_FOUND')
+  );
+}
+
+async function askMeetingViaLegacyRouter(params: MaAskRequest): Promise<MaAskResponse> {
+  if (!SUPABASE_URL) {
+    throw new Error('Meeting Analytics is not configured');
+  }
+
+  const headers = await getHeaders();
+  const response = await fetch(`${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/meeting-router`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      action: 'intelligence_search',
+      query: params.question,
+      // Match the newer org-wide ask behavior instead of defaulting to "me".
+      filters: { owner_user_id: null },
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error || payload.message || payload.details || `API error: ${response.status}`);
+  }
+
+  const sources = Array.isArray(payload.sources) ? payload.sources : [];
+  const meetingsSearched = Number(payload.query_metadata?.meetings_searched) || sources.length;
+
+  return {
+    answer: payload.answer || 'Unable to generate answer',
+    sources: sources.map((source: Record<string, unknown>) => ({
+      transcriptId: String(source.source_id || ''),
+      transcriptTitle: String(source.title || 'Untitled Meeting'),
+      text: String(source.relevance_snippet || ''),
+      similarity: typeof source.relevance_score === 'number' ? source.relevance_score : 0.5,
+    })),
+    segmentsSearched: sources.length,
+    meetingsAnalyzed: sources.length,
+    totalMeetings: meetingsSearched,
+    isAggregateQuestion: true,
+    specificMeeting: null,
+  };
 }
 
 // =====================================================
@@ -298,7 +349,19 @@ export async function previewReport(params: GenerateReportParams & { format?: 'j
   return apiFetch<MaReport>(`/api/reports/preview?${qs.toString()}`);
 }
 
-export async function sendReport(params: { type: 'daily' | 'weekly'; settingId?: string }) {
+/** Fetch the email-html preview as raw HTML string (not JSON-wrapped). */
+export async function previewReportHtml(type: 'daily' | 'weekly'): Promise<string> {
+  const url = `${BASE_URL}/api/reports/preview?type=${type}&format=email-html`;
+  const headers = await getHeaders();
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`Preview failed: ${text}`);
+  }
+  return res.text();
+}
+
+export async function sendReport(params: { type: 'daily' | 'weekly'; settingId?: string; channels?: 'slack' | 'email' }) {
   return apiFetch<{ results: Array<{ channel: string; success: boolean; error?: string }>; summary: { sent: number; failed: number; total: number } }>(
     '/api/reports/send',
     { method: 'POST', body: JSON.stringify(params) }
@@ -322,6 +385,13 @@ export async function testSlackWebhook(webhookUrl: string) {
   return apiFetch<{ success: boolean; error?: string }>('/api/reports/test/slack', {
     method: 'POST',
     body: JSON.stringify({ webhookUrl }),
+  });
+}
+
+export async function testEmailDelivery(emailAddress: string) {
+  return apiFetch<{ success: boolean; error?: string }>('/api/reports/test/email', {
+    method: 'POST',
+    body: JSON.stringify({ emailAddress }),
   });
 }
 
@@ -395,10 +465,18 @@ export async function getSentimentTrends(params: DashboardParams & { days?: numb
 // =====================================================
 
 export async function askMeeting(params: MaAskRequest) {
-  return apiFetch<MaAskResponse>('/api/search/ask', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
+  try {
+    return await apiFetch<MaAskResponse>('/api/search/ask', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  } catch (error) {
+    if (!shouldFallbackToLegacySearch(error)) {
+      throw error;
+    }
+
+    return askMeetingViaLegacyRouter(params);
+  }
 }
 
 // =====================================================

@@ -1,3 +1,4 @@
+// Deploy trigger: 2026-03-03
 import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
@@ -41,9 +42,11 @@ import Login from '@/pages/auth/login';
 import AuthCallback from '@/pages/auth/AuthCallback';
 import AcceptInvitation from '@/pages/auth/AcceptInvitation';
 import InviteSignup from '@/pages/auth/InviteSignup';
+import TestUserSignup from '@/pages/auth/TestUserSignup';
 import PendingApprovalPage from '@/pages/auth/PendingApprovalPage';
 import RequestRejectedPage from '@/pages/auth/RequestRejectedPage';
 import InactiveOrganizationScreen from '@/pages/InactiveOrganizationScreen';
+import TrialExpiredPage from '@/pages/TrialExpiredPage';
 import RemovedUserStep from '@/pages/onboarding/v2/RemovedUserStep';
 import TestGoogleTasks from '@/pages/TestGoogleTasks';
 import MeetingThumbnail from '@/pages/MeetingThumbnail';
@@ -77,7 +80,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GoldenEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GoldenEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, GeminiModelComparison, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage, ProactiveTeammateDemo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -87,19 +90,20 @@ import {
   // Features
   MeetingsPage, MeetingLibraryPage, ProposalsList, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   Events, ActivityLog,
-  ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage,
+  ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage, LandingPagesPage,
   CampaignsPage,
+  AbmCampaignsPage,
   OutreachAnalyticsPage,
   WinLossPage,
   FollowUpDraftsPage,
-  OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
+  OpsPage, OpsDetailPage, PipelineGalleryPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
   ProductProfileViewPage, ProductProfileEditPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
   AccountSettings, AppearanceSettings, AIPersonalizationPage, AIIntelligencePage, SalesCoachingPage,
   APIKeysPage, EmailSyncPage, TaskSyncPage, TeamMembersPage, OrganizationManagementPage,
   CallTypeSettings, PipelineAutomationSettings, FollowUpSettings, OrganizationSettingsPage,
-  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, AutonomyDashboardPage, SearchResultsPage, CompetitiveIntelPage, CoachingDashboardPage, CoachingRepDetailPage, TeachSixtySection, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
+  LogoSettings, SlackSettings, ProactiveAgentSettings, JustCallSettings, HubSpotSettings, AttioSettings, BullhornSettings, InstantlySettings, SmartListeningSettings, AutonomySettingsPage, AutonomyDashboardPage, SearchResultsPage, CompetitiveIntelPage, AdLibraryPage, LinkedInRevenuePage, LinkedInAnalyticsPage, LinkedInHubPage, CoachingDashboardPage, CoachingRepDetailPage, TeachSixtySection, SalesMethodologySettings, CRMFieldMappingSettings, CustomSOPBuilderPage, SignalIntelligenceSettings, KnowledgeMemorySettings,
   CreditPurchaseSuccess, CreditsSettingsPage, ModelPreferencesPage, BillingSettingsPage, SalesGoalsPage,
   GoogleWorkspaceIntegrationPage, FathomIntegrationPage, FirefliesIntegrationPage, MeetingSettingsPage,
   OrgBilling,
@@ -114,8 +118,7 @@ import {
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
 const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
-const RelationshipGraphDemoPage = lazy(() => import('./pages/RelationshipGraphDemoPage'));
-const ProposalLineTunerPage = lazy(() => import('./pages/platform/ProposalLineTunerPage'));
+// AvatarCreatorWizard is now inline in Ops table VideoAvatarColumnWizard — no standalone route needed
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -307,6 +310,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/auth/signup" element={<Signup />} />
         <Route path="/auth/invite-signup/:token" element={<InviteSignup />} />
+        <Route path="/auth/test-signup/:token" element={<TestUserSignup />} />
         <Route path="/auth/verify-email" element={<VerifyEmail />} />
         <Route path="/auth/forgot-password" element={<ForgotPassword />} />
         <Route path="/auth/reset-password/*" element={<ResetPassword />} />
@@ -335,6 +339,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/onboarding/removed-user" element={<RemovedUserStep />} />
                 <Route path="/inactive-organization" element={<InactiveOrganizationScreen />} />
+                <Route path="/trial-expired" element={<TrialExpiredPage />} />
                 <Route path="/debug-auth" element={<DebugAuth />} />
                 <Route path="/debug/auth" element={<AuthDebug />} />
                 <Route path="/debug-permissions" element={<DebugPermissions />} />
@@ -348,6 +353,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/copilot/:conversationId" element={<InternalRouteGuard><AppLayout><CopilotPage /></AppLayout></InternalRouteGuard>} />
                 {/* Landing Page Builder */}
                 <Route path="/landing-page-builder" element={<InternalRouteGuard><AppLayout><LandingPageBuilderPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/landing-pages" element={<InternalRouteGuard><AppLayout><LandingPagesPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/action-centre" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/command-centre" element={<InternalRouteGuard><AppLayout><CommandCentre /></AppLayout></InternalRouteGuard>} />
                 <Route path="/activity" element={<InternalRouteGuard><AppLayout><ActivityLog /></AppLayout></InternalRouteGuard>} />
@@ -406,6 +412,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Platform Admin - Email Templates */}
                 <Route path="/platform/email-templates" element={<PlatformAdminRouteGuard><AppLayout><EmailTemplates /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - Customer Management */}
+                <Route path="/platform/abm-campaigns" element={<PlatformAdminRouteGuard><AppLayout><Suspense fallback={null}><AbmCampaignsPage /></Suspense></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/customers" element={<PlatformAdminRouteGuard><AppLayout><SaasAdminDashboard /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/plans" element={<Navigate to="/platform/pricing" replace />} />
                 <Route path="/platform/pricing" element={<PlatformAdminRouteGuard><AppLayout><PricingControl /></AppLayout></PlatformAdminRouteGuard>} />
@@ -462,11 +469,13 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/demo/conversational-copilot" element={<PlatformAdminRouteGuard><AppLayout><DemoConversationalCopilot /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/demo/autonomy" element={<PlatformAdminRouteGuard><AppLayout><AutonomyDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/test/autopilot" element={<PlatformAdminRouteGuard><AppLayout><AutopilotTestPage /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/demo/proactive-teammate" element={<PlatformAdminRouteGuard><AppLayout><ProactiveTeammateDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-teams-live" element={<PlatformAdminRouteGuard><AppLayout><AgentTeamsLiveDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-abilities" element={<PlatformAdminRouteGuard><AppLayout><AgentAbilitiesPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/credit-system-demo" element={<PlatformAdminRouteGuard><AppLayout><CreditSystemDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/enrichment-demo" element={<PlatformAdminRouteGuard><AppLayout><EnrichmentComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/research-comparison" element={<PlatformAdminRouteGuard><AppLayout><ResearchComparisonDemo /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/demo/gemini-comparison" element={<PlatformAdminRouteGuard><AppLayout><GeminiModelComparison /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/exa-abilities" element={<PlatformAdminRouteGuard><AppLayout><ExaAbilitiesDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/email-sequence-test" element={<PlatformAdminRouteGuard><AppLayout><EmailSequenceTest /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/demo/agent-research" element={<PlatformAdminRouteGuard><AppLayout><AgentResearchDemo /></AppLayout></PlatformAdminRouteGuard>} />
@@ -507,7 +516,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/dev/billing-analytics" element={<PlatformAdminRouteGuard><AppLayout><BillingAnalytics /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/functions" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/function-testing" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
-                <Route path="/platform/dev/proposal-line-tuner" element={<InternalRouteGuard><AppLayout><ProposalLineTunerPage /></AppLayout></InternalRouteGuard>} />
+
                 <Route path="/platform/onboarding-simulator" element={<InternalRouteGuard><AppLayout><OnboardingSimulator /></AppLayout></InternalRouteGuard>} />
                 <Route path="/platform/quickadd-simulator" element={<PlatformAdminRouteGuard><AppLayout><QuickAddSimulator /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/trial-timeline" element={<InternalRouteGuard><AppLayout><TrialTimelineSimulator /></AppLayout></InternalRouteGuard>} />
@@ -553,12 +562,13 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/tasks" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/crm/tasks" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/projects" element={<Navigate to="/command-centre" replace />} />
-                <Route path="/campaigns" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><CampaignsPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                <Route path="/campaigns" element={<Navigate to="/linkedin?tab=campaigns" replace />} />
                 <Route path="/outreach/analytics" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><OutreachAnalyticsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/analytics/win-loss" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><WinLossPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/follow-ups/drafts" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><FollowUpDraftsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/ops/pipelines" element={<InternalRouteGuard><AppLayout><PipelineGalleryPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
                 {/* Unified profiles routes */}
                 <Route path="/profiles" element={<InternalRouteGuard><AppLayout><ProfilesPage /></AppLayout></InternalRouteGuard>} />
@@ -625,6 +635,11 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/autonomy" element={<InternalRouteGuard><AppLayout><AutonomyDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/search" element={<AppLayout><SearchResultsPage /></AppLayout>} />
                 <Route path="/intelligence/competitive" element={<AppLayout><CompetitiveIntelPage /></AppLayout>} />
+                <Route path="/linkedin" element={<AppLayout><Suspense fallback={null}><LinkedInHubPage /></Suspense></AppLayout>} />
+                {/* Legacy LinkedIn routes → redirect to hub tabs */}
+                <Route path="/intelligence/ads" element={<Navigate to="/linkedin?tab=ad_library" replace />} />
+                <Route path="/intelligence/linkedin-revenue" element={<Navigate to="/linkedin?tab=revenue" replace />} />
+                <Route path="/intelligence/linkedin-analytics" element={<Navigate to="/linkedin?tab=analytics" replace />} />
                 <Route path="/coaching" element={<InternalRouteGuard><AppLayout><CoachingDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/coaching/rep/:userId" element={<InternalRouteGuard><AppLayout><CoachingRepDetailPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/methodology" element={<OrgAdminRouteGuard><AppLayout><SalesMethodologySettings /></AppLayout></OrgAdminRouteGuard>} />
@@ -640,7 +655,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 {/* Legacy routes for backwards compatibility */}
                 <Route path="/settings/team-members" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
                 <Route path="/settings/organization" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
-                <Route path="/settings/branding" element={<Navigate to="/settings" replace />} />
+                <Route path="/settings/branding" element={<ProtectedRoute><AppLayout><OrganizationSettingsPage /></AppLayout></ProtectedRoute>} />
                 {/* Agent Marketplace - org admins */}
                 <Route path="/agent/marketplace" element={
                   <OrgAdminRouteGuard>
@@ -674,13 +689,13 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/bullhorn" element={<Navigate to="/settings/integrations/bullhorn" replace />} />
                 {/* Google Workspace Settings - visible only when Google is connected (enforced inside page) */}
                 <Route path="/settings/integrations/google-workspace" element={<AppLayout><GoogleWorkspaceIntegrationPage /></AppLayout>} />
-                {/* Meeting Settings - unified tab page for Fathom, Fireflies, and 60 Notetaker */}
-                <Route path="/settings/meeting-settings" element={<AppLayout><MeetingSettingsPage /></AppLayout>} />
-                {/* Legacy redirects to unified Meeting Settings page */}
-                <Route path="/settings/integrations/fathom" element={<Navigate to="/settings/meeting-settings?tab=fathom" replace />} />
-                <Route path="/settings/integrations/fireflies" element={<Navigate to="/settings/meeting-settings?tab=fireflies" replace />} />
-                <Route path="/settings/integrations/60-notetaker" element={<Navigate to="/settings/meeting-settings" replace />} />
-                <Route path="/meetings/recordings/settings" element={<Navigate to="/settings/meeting-settings" replace />} />
+                {/* Meeting Settings - redirects to new hub under /meetings/settings */}
+                <Route path="/settings/meeting-settings" element={<Navigate to="/meetings/settings" replace />} />
+                {/* Legacy redirects to new recorder-specific settings pages */}
+                <Route path="/settings/integrations/fathom" element={<Navigate to="/meetings/settings/fathom" replace />} />
+                <Route path="/settings/integrations/fireflies" element={<Navigate to="/meetings/settings/fireflies" replace />} />
+                <Route path="/settings/integrations/60-notetaker" element={<Navigate to="/meetings/settings/notetaker" replace />} />
+                <Route path="/meetings/recordings/settings" element={<Navigate to="/meetings/settings/notetaker" replace />} />
                 <Route path="/settings/ai" element={<AppLayout><AISettings /></AppLayout>} />
                 <Route path="/settings/extraction-rules" element={<Navigate to="/settings/task-sync" replace />} />
                 <Route path="/settings/task-sync" element={<AppLayout><TaskSyncSettings /></AppLayout>} />
@@ -711,7 +726,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/freepik-flow" element={<AppLayout><div className="h-[calc(100vh-4rem)]"><FreepikFlow /></div></AppLayout>} />
                 <Route path="/test-fallback" element={<ProtectedRoute><TestFallback /></ProtectedRoute>} />
                 <Route path="/test-google-tasks" element={<AppLayout><TestGoogleTasks /></AppLayout>} />
-                <Route path="/relationship-graph-demo" element={<InternalRouteGuard><RelationshipGraphDemoPage /></InternalRouteGuard>} />
+
               </Routes>
             </Suspense>
           </ProtectedRoute>

@@ -514,7 +514,7 @@ function TimelineSection({ item }: { item: CCItem }) {
 // ============================================================================
 
 export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
-  const { approveItem, dismissItem, snoozeItem, undoItem, updateDraftedAction, approveAndSendEmail } =
+  const { approveItem, dismissItem, snoozeItem, undoItem, updateDraftedAction, approveAndSendEmail, saveEmailAsDraft, markGoodSuggestion, regenerateWithFeedback } =
     useCommandCentreItemMutations();
 
   // Ref to hold the pending send timeout so it can be cancelled on undo
@@ -552,6 +552,30 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
   const handleSaveDraftedAction = (action: Record<string, unknown>) => {
     if (!item) return;
     updateDraftedAction.mutate({ id: item.id, action });
+  };
+
+  const handleSaveAsDraft = (payload: { to: string; subject: string; body_html: string }) => {
+    if (!item) return;
+    saveEmailAsDraft.mutate(
+      { id: item.id, emailPayload: payload },
+      {
+        onSuccess: () => onClose(),
+        onError: (err) => {
+          const message = err instanceof Error ? err.message : 'Failed to save draft';
+          toast.error(message);
+        },
+      },
+    );
+  };
+
+  const handleGoodSuggestion = () => {
+    if (!item) return;
+    markGoodSuggestion.mutate(item.id, { onSuccess: onClose });
+  };
+
+  const handleRegenerate = (feedback: string) => {
+    if (!item) return;
+    regenerateWithFeedback.mutate({ id: item.id, feedback });
   };
 
   const handleApproveAndSend = (payload: { to: string; subject: string; body_html: string }) => {
@@ -772,6 +796,12 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
                       isSaving={updateDraftedAction.isPending}
                       onApproveAndSend={handleApproveAndSend}
                       isSending={approveAndSendEmail.isPending}
+                      onSaveAsDraft={handleSaveAsDraft}
+                      isSavingDraft={saveEmailAsDraft.isPending}
+                      onGoodSuggestion={handleGoodSuggestion}
+                      isMarkingGood={markGoodSuggestion.isPending}
+                      onRegenerate={handleRegenerate}
+                      isRegenerating={regenerateWithFeedback.isPending}
                     />
                   </CollapsibleSection>
                 );

@@ -28,7 +28,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.32.1';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
-import { checkCreditBalance, logAICostEvent, extractClientIp } from '../_shared/costTracking.ts';
+import { checkCreditBalance, logAICostEvent } from '../_shared/costTracking.ts';
 
 // =============================================================================
 // Configuration
@@ -39,7 +39,7 @@ const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const MODEL = 'claude-sonnet-4-20250514';
+const MODEL = 'claude-sonnet-4-6';
 const MAX_ITERATIONS = 8;
 const MAX_TOKENS = 2048;
 
@@ -84,11 +84,18 @@ Your job is to help users find answers to their questions about 60's features, i
 3. Synthesize a clear, helpful answer from the documentation
 4. Always cite your sources by mentioning the article title
 
+## Common questions you can answer:
+- How do I add a Google account? → Search "google" or "integrations"
+- How do meetings work? → Search "meetings"
+- How do I add credits? → Search "credits"
+- How do I invite team members? → Search "team" or "settings"
+- How does the AI Notetaker work? → Search "notetaker" or "meetings"
+
 ## Rules:
 - ALWAYS search the docs before answering — never guess or make up features
 - Provide direct, actionable answers (not link dumps)
 - Keep answers concise (2-5 sentences for simple questions, more for complex ones)
-- If you can't find an answer, say so honestly and suggest they open a support ticket
+- If you can't find a specific answer in the docs, say honestly: "I don't have specific documentation on that yet, but I'd suggest opening a support ticket so our team can help you directly."
 - Include the article title(s) as sources at the end of your response
 - Format your response as plain text (the frontend will render it)
 
@@ -188,18 +195,19 @@ async function handleSearchDocs(
   const queryEmbedding = embData.data[0].embedding as number[];
 
   // Call the RPC for vector similarity search
+  // Pass the raw embedding array — PostgREST will cast it to the vector type
   const { data, error } = await serviceClient.rpc('match_docs_by_embedding', {
-    query_embedding: JSON.stringify(queryEmbedding),
-    match_threshold: 0.4,
+    query_embedding: queryEmbedding,
+    match_threshold: 0.3,
     match_count: limit || 5,
   });
 
   if (error) {
-    throw new Error(`match_docs_by_embedding RPC failed: ${error.message}`);
+    console.warn(`[docs-agent] match_docs_by_embedding RPC failed: ${error.message} — falling back to text search`);
   }
 
   // Map results to a clean shape; filter by category if provided
-  const results = (data || []) as Array<{
+  const results = (error ? [] : (data || [])) as Array<{
     slug: string;
     title: string;
     category: string;
@@ -207,11 +215,54 @@ async function handleSearchDocs(
     similarity: number;
   }>;
 
-  const filtered = category
+  let filtered = category
     ? results.filter(
         (r) => r.category?.toLowerCase() === category.toLowerCase()
       )
     : results;
+
+  // Fallback: if vector search returns nothing or errored, do a full-text search
+  if (filtered.length === 0) {
+    console.log('[docs-agent] Vector search returned no results, falling back to full-text search');
+    const queryLower = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const searchTerm = queryLower.join(' | ');
+
+    let ftQuery = serviceClient
+      .from('docs_articles')
+      .select('slug, title, category, content')
+      .eq('published', true)
+      .order('order_index', { ascending: true })
+      .limit(limit || 5);
+
+    if (category) {
+      ftQuery = ftQuery.eq('category', category);
+    }
+
+    // Use postgres full-text search if supported, otherwise ilike on title
+    const { data: ftData } = await ftQuery.ilike('title', `%${queryLower[0] || query}%`);
+
+    if (ftData && ftData.length > 0) {
+      filtered = (ftData as Array<{ slug: string; title: string; category: string; content: string }>).map((r) => ({
+        ...r,
+        similarity: 0.5, // Nominal similarity score for fallback
+      }));
+    } else {
+      // Last resort: return top articles from Getting Started category
+      const { data: topArticles } = await serviceClient
+        .from('docs_articles')
+        .select('slug, title, category, content')
+        .eq('published', true)
+        .order('order_index', { ascending: true })
+        .limit(3);
+
+      if (topArticles) {
+        filtered = (topArticles as Array<{ slug: string; title: string; category: string; content: string }>).map((r) => ({
+          ...r,
+          similarity: 0.3,
+        }));
+      }
+    }
+  }
 
   return filtered.map((r) => ({
     slug: r.slug,
@@ -454,7 +505,6 @@ serve(async (req: Request) => {
   if (preflightResponse) return preflightResponse;
 
   const corsHeaders = getCorsHeaders(req);
-  let clientIp = extractClientIp(req);
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -497,11 +547,6 @@ serve(async (req: Request) => {
     // Parse request body
     const body = await req.json() as RequestBody;
     const { message, conversationHistory } = body;
-
-    // Prefer client_ip from request body (set by frontend) over header extraction
-    if ((body as Record<string, unknown>).client_ip && !clientIp) {
-      clientIp = (body as Record<string, unknown>).client_ip as string;
-    }
 
     if (!message || typeof message !== 'string' || message.trim() === '') {
       return new Response(
@@ -563,11 +608,7 @@ serve(async (req: Request) => {
         if (authedUserId && authedOrgId) {
           await logAICostEvent(
             serviceClient, authedUserId, authedOrgId, 'anthropic', MODEL,
-            inputTokens, outputTokens, 'copilot_chat',
-            undefined, // metadata
-            undefined, // logContext
-            undefined, // sourceAgent
-            clientIp,
+            inputTokens, outputTokens, 'copilot_chat'
           );
         }
 

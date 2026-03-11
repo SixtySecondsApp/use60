@@ -37,7 +37,8 @@ export type ButtonActionType =
   | 'push_to_crm'
   | 'push_to_instantly'
   | 're_enrich'
-  | 'start_sequence';
+  | 'start_sequence'
+  | 'run_prompt';
 
 export interface ButtonAction {
   type: ButtonActionType;
@@ -51,11 +52,18 @@ export interface ButtonAction {
   // start_sequence:   { sequence_id: string; input_mapping?: Record<string, string> }
 }
 
+export interface ButtonCondition {
+  column_key: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty';
+  value?: string;
+}
+
 export interface ButtonConfig {
   label: string;              // Static text or formula with @column refs e.g. "Email @first_name"
   color: string;              // Hex color e.g. "#8b5cf6"
   icon?: string;              // Lucide icon name e.g. "send", "zap", "play"
   actions: ButtonAction[];    // Ordered list of actions (executed sequentially)
+  condition?: ButtonCondition; // Optional visibility condition
 }
 
 export interface OpsTableColumn {
@@ -89,7 +97,10 @@ export interface OpsTableColumn {
     | 'linkedin_property'
     | 'instantly'
     | 'signal'
-    | 'agent_research';
+    | 'agent_research'
+    | 'fal_video'
+    | 'ai_image'
+    | 'svg_animation';
   is_enrichment: boolean;
   enrichment_prompt: string | null;
   enrichment_model: string | null;
@@ -1401,20 +1412,31 @@ export class OpsTableService {
   static generateCSVExport(
     rows: OpsTableRow[],
     columns: OpsTableColumn[],
-    filename: string = 'export'
+    filename: string = 'export',
+    extraColumns?: Array<{ label: string; value: string | ((row: OpsTableRow) => string) }>
   ): void {
-    const visibleCols = columns.filter((c) => c.is_visible);
+    // Export ALL passed columns (caller decides which to include)
+    const exportCols = columns;
 
     // Header row
-    const headers = visibleCols.map((c) => `"${c.label.replace(/"/g, '""')}"`);
+    const headers = exportCols.map((c) => `"${c.label.replace(/"/g, '""')}"`);
+    if (extraColumns) {
+      for (const ec of extraColumns) headers.push(`"${ec.label.replace(/"/g, '""')}"`);
+    }
     const csvLines = [headers.join(',')];
 
     // Data rows
     for (const row of rows) {
-      const values = visibleCols.map((col) => {
+      const values = exportCols.map((col) => {
         const val = row.cells[col.key]?.value ?? '';
         return `"${val.replace(/"/g, '""')}"`;
       });
+      if (extraColumns) {
+        for (const ec of extraColumns) {
+          const val = typeof ec.value === 'function' ? ec.value(row) : ec.value;
+          values.push(`"${val.replace(/"/g, '""')}"`);
+        }
+      }
       csvLines.push(values.join(','));
     }
 
@@ -1587,9 +1609,9 @@ export class OpsTableService {
 
   async getActiveInsights(tableId: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-insights-engine',
+      'ops-table-router',
       {
-        body: { tableId, action: 'get_active' },
+        body: { action: 'insights_engine', handler_action: 'get_active', tableId },
       }
     );
 
@@ -1622,11 +1644,12 @@ export class OpsTableService {
 
   async saveWorkflow(workflow: any) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-workflow-engine',
+      'ops-table-router',
       {
         body: {
+          action: 'workflow_engine',
+          handler_action: 'save',
           tableId: workflow.tableId,
-          action: 'save',
           workflow,
         },
       }
@@ -1638,9 +1661,9 @@ export class OpsTableService {
 
   async executeWorkflow(workflowId: string, tableId: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-workflow-engine',
+      'ops-table-router',
       {
-        body: { tableId, action: 'execute', workflowId },
+        body: { action: 'workflow_engine', handler_action: 'execute', tableId, workflowId },
       }
     );
 
@@ -1694,11 +1717,12 @@ export class OpsTableService {
 
     // Execute via ai-query with saved parsed_config
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-ai-query',
+      'ops-table-router',
       {
         body: {
+          action: 'ai_query',
           tableId: recipe.table_id,
-          action: 'execute_recipe',
+          handler_action: 'execute_recipe',
           recipeId,
         },
       }
@@ -1752,9 +1776,9 @@ export class OpsTableService {
 
   async executeCrossQuery(tableId: string, query: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-cross-query',
+      'ops-table-router',
       {
-        body: { tableId, query },
+        body: { action: 'cross_query', tableId, query },
       }
     );
 
@@ -1977,9 +2001,9 @@ export class OpsTableService {
 
   async getActivePredictions(tableId: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-predictions',
+      'ops-table-router',
       {
-        body: { tableId, action: 'get_active' },
+        body: { action: 'predictions', handler_action: 'get_active', tableId },
       }
     );
 
@@ -1998,9 +2022,9 @@ export class OpsTableService {
 
   async runPredictions(tableId: string) {
     const { data, error } = await this.supabase.functions.invoke(
-      'ops-table-predictions',
+      'ops-table-router',
       {
-        body: { tableId, action: 'analyze' },
+        body: { action: 'predictions', handler_action: 'analyze', tableId },
       }
     );
 

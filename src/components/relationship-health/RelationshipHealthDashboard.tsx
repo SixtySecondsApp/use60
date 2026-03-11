@@ -42,6 +42,8 @@ import {
   Clock,
   Target,
   RefreshCw,
+  Building2,
+  User,
 } from 'lucide-react';
 
 interface RelationshipHealthDashboardProps {
@@ -50,6 +52,7 @@ interface RelationshipHealthDashboardProps {
 
 type ViewMode = 'overview' | 'at-risk' | 'interventions' | 'templates' | 'analytics';
 type SortOption = 'health' | 'risk' | 'recent' | 'value';
+type EntityFilter = 'all' | 'contacts' | 'companies';
 
 export function RelationshipHealthDashboard({ userId }: RelationshipHealthDashboardProps) {
   const { user } = useAuth();
@@ -57,6 +60,7 @@ export function RelationshipHealthDashboard({ userId }: RelationshipHealthDashbo
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [sortBy, setSortBy] = useState<SortOption>('health');
   const [searchQuery, setSearchQuery] = useState('');
+  const [entityFilter, setEntityFilter] = useState<EntityFilter>('all');
   const [selectedRelationship, setSelectedRelationship] = useState<RelationshipHealthScore | null>(null);
   const [selectedGhostRisk, setSelectedGhostRisk] = useState<GhostRiskAssessment | null>(null);
   const [showInterventionModal, setShowInterventionModal] = useState(false);
@@ -148,6 +152,13 @@ export function RelationshipHealthDashboard({ userId }: RelationshipHealthDashbo
 
     let filtered = relationships;
 
+    // Filter by entity type (contacts vs companies)
+    if (entityFilter === 'contacts') {
+      filtered = filtered.filter((r) => !!r.contact_id);
+    } else if (entityFilter === 'companies') {
+      filtered = filtered.filter((r) => !!r.company_id && !r.contact_id);
+    }
+
     // Filter by search
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -180,7 +191,7 @@ export function RelationshipHealthDashboard({ userId }: RelationshipHealthDashbo
     });
 
     return filtered;
-  }, [relationships, searchQuery, viewMode, sortBy]);
+  }, [relationships, searchQuery, viewMode, sortBy, entityFilter]);
 
   // Helper to create a basic GhostRiskAssessment from RelationshipHealthScore
   const createGhostRiskAssessment = (relationship: RelationshipHealthScore): GhostRiskAssessment => {
@@ -313,6 +324,45 @@ export function RelationshipHealthDashboard({ userId }: RelationshipHealthDashbo
           />
         </div>
       )}
+
+      {/* Entity Filter + View Mode Tabs */}
+      <div className="flex items-center justify-between border-b border-white/10">
+        {/* Simple entity toggle — matches contacts view style */}
+        <div className="flex items-center bg-gray-100 dark:bg-gray-800/50 rounded-lg p-1 mr-4">
+          <button
+            onClick={() => setEntityFilter('all')}
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-all duration-200 ${
+              entityFilter === 'all'
+                ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setEntityFilter('contacts')}
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1 ${
+              entityFilter === 'contacts'
+                ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <User className="w-3 h-3" />
+            Contacts
+          </button>
+          <button
+            onClick={() => setEntityFilter('companies')}
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1 ${
+              entityFilter === 'companies'
+                ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <Building2 className="w-3 h-3" />
+            Companies
+          </button>
+        </div>
+      </div>
 
       {/* View Mode Tabs */}
       <div className="flex items-center gap-2 border-b border-white/10">

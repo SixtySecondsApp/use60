@@ -17,6 +17,7 @@ import {
   Info,
   ChevronUp,
   ChevronDown,
+  Mic,
 } from 'lucide-react';
 import { HelpPanel } from '@/components/docs/HelpPanel';
 import { motion } from 'framer-motion';
@@ -44,9 +45,13 @@ import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
 import { ExplloriumConfigModal } from '@/components/integrations/ExplloriumConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
+import { LinkedInConfigModal } from '@/components/integrations/LinkedInConfigModal';
+import { HeyGenConfigModal } from '@/components/integrations/HeyGenConfigModal';
+import { ElevenLabsConfigModal } from '@/components/integrations/ElevenLabsConfigModal';
+import { FalConfigModal } from '@/components/integrations/FalConfigModal';
 
 // Hooks and stores
-import { useGoogleIntegration } from '@/lib/stores/integrationStore';
+import { useGoogleIntegration, useMicrosoftIntegration, useIntegrationStore } from '@/lib/stores/integrationStore';
 import { useFathomIntegration } from '@/lib/hooks/useFathomIntegration';
 import { useSlackIntegration } from '@/lib/hooks/useSlackIntegration';
 import { useJustCallIntegration } from '@/lib/hooks/useJustCallIntegration';
@@ -60,6 +65,10 @@ import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { useExploriumIntegration } from '@/lib/hooks/useExploriumIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
+import { useLinkedInIntegration } from '@/lib/hooks/useLinkedInIntegration';
+import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
+import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
+import { useFalIntegration } from '@/lib/hooks/useFalIntegration';
 import { getIntegrationDomain, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { useUser } from '@/lib/hooks/useUser';
@@ -95,20 +104,24 @@ function IntegrationCardWithLogo({
   config,
   isBuilt,
   status,
+  statusText,
   onAction,
   actionLoading,
   vote,
   onToggleUpvote,
   sixtyLogoUrl,
+  customFooter,
 }: {
   config: IntegrationConfig;
   isBuilt: boolean;
   status: IntegrationStatus;
+  statusText?: string;
   onAction?: () => void;
   actionLoading?: boolean;
   vote?: IntegrationVoteState | null;
   onToggleUpvote?: (args: { integrationId: string; integrationName: string; description?: string }) => Promise<void>;
   sixtyLogoUrl?: string | null;
+  customFooter?: React.ReactNode;
 }) {
   // Skip S3 fetch for 60-notetaker since it's our own product
   const is60Notetaker = config.id === '60-notetaker';
@@ -118,6 +131,40 @@ function IntegrationCardWithLogo({
   // Use DEFAULT_SIXTY_ICON_URL directly for 60 Notetaker
   const finalLogoUrl = is60Notetaker ? DEFAULT_SIXTY_ICON_URL : logoUrl;
 
+  const voteFooter = !isBuilt && vote && onToggleUpvote ? (
+    <div className="flex items-center justify-between">
+      <div className="text-xs text-gray-500 dark:text-gray-400">Vote to prioritize</div>
+      <button
+        type="button"
+        onClick={async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            await onToggleUpvote({
+              integrationId: config.id,
+              integrationName: config.name,
+              description: config.description,
+            });
+          } catch (err: any) {
+            toast.error(err?.message || 'Failed to upvote');
+          }
+        }}
+        disabled={vote?.isLoading}
+        className={[
+          'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors',
+          vote?.hasVoted
+            ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700',
+          vote?.isLoading ? 'opacity-60 cursor-not-allowed' : '',
+        ].join(' ')}
+        aria-label={`${vote?.hasVoted ? 'Remove upvote' : 'Upvote'} ${config.name} integration`}
+      >
+        <ChevronUp className="w-4 h-4" />
+        <span>{(vote?.votesCount ?? 0).toLocaleString()}</span>
+      </button>
+    </div>
+  ) : undefined;
+
   return (
     <IntegrationCard
       name={config.name}
@@ -125,49 +172,17 @@ function IntegrationCardWithLogo({
       logoUrl={finalLogoUrl}
       fallbackIcon={config.fallbackIcon}
       status={status}
+      statusText={statusText}
       onAction={onAction}
       actionLoading={actionLoading}
       iconBgColor={config.iconBgColor}
       iconBorderColor={config.iconBorderColor}
       sixtyLogoUrl={sixtyLogoUrl}
-      footer={
-        !isBuilt && vote && onToggleUpvote ? (
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-gray-500 dark:text-gray-400">Vote to prioritize</div>
-            <button
-              type="button"
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                try {
-                  await onToggleUpvote({
-                    integrationId: config.id,
-                    integrationName: config.name,
-                    description: config.description,
-                  });
-                } catch (err: any) {
-                  toast.error(err?.message || 'Failed to upvote');
-                }
-              }}
-              disabled={vote?.isLoading}
-              className={[
-                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors',
-                vote?.hasVoted
-                  ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-                  : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700',
-                vote?.isLoading ? 'opacity-60 cursor-not-allowed' : '',
-              ].join(' ')}
-              aria-label={`${vote?.hasVoted ? 'Remove upvote' : 'Upvote'} ${config.name} integration`}
-            >
-              <ChevronUp className="w-4 h-4" />
-              <span>{(vote?.votesCount ?? 0).toLocaleString()}</span>
-            </button>
-          </div>
-        ) : undefined
-      }
+      footer={customFooter || voteFooter}
     />
   );
 }
+
 
 function CategorySection({
   category,
@@ -305,13 +320,10 @@ function CategorySection({
 const builtIntegrations: IntegrationConfig[] = [
   {
     id: 'google-workspace',
-    name: 'Google Workspace',
-    description: 'Gmail, Calendar, Drive & Tasks.',
+    name: 'Google Calendar',
+    description: 'Sync your Google Calendar events.',
     permissions: [
-      { title: 'View and send email', description: 'Send emails from contact pages.' },
       { title: 'Access calendar', description: 'Schedule meetings and sync events.' },
-      { title: 'Access files', description: 'Share and attach files from Drive.' },
-      { title: 'Manage tasks', description: 'Sync tasks bidirectionally.' },
     ],
     brandColor: 'blue',
     iconBgColor: 'bg-gray-50 dark:bg-gray-800',
@@ -322,6 +334,29 @@ const builtIntegrations: IntegrationConfig[] = [
         <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+      </svg>
+    ),
+    isBuilt: true,
+  },
+  {
+    id: 'microsoft-365',
+    name: 'Microsoft 365',
+    description: 'Outlook, Calendar & OneDrive.',
+    permissions: [
+      { title: 'View and send email', description: 'Send emails via Outlook.' },
+      { title: 'Access calendar', description: 'Schedule meetings and sync events.' },
+      { title: 'Access files', description: 'Share and attach files from OneDrive.' },
+      { title: 'Read contacts', description: 'Import contacts from Outlook.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-gray-50 dark:bg-gray-800',
+    iconBorderColor: 'border-gray-200 dark:border-gray-700',
+    fallbackIcon: (
+      <svg className="w-6 h-6" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#F25022" d="M1 1h10v10H1z" />
+        <path fill="#7FBA00" d="M12 1h10v10H12z" />
+        <path fill="#00A4EF" d="M1 12h10v10H1z" />
+        <path fill="#FFB900" d="M12 12h10v10H12z" />
       </svg>
     ),
     isBuilt: true,
@@ -527,6 +562,48 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'heygen',
+    name: 'HeyGen',
+    description: 'Connect your HeyGen account for AI video avatars.',
+    permissions: [
+      { title: 'Create avatars', description: 'Generate AI sales avatars from photos.' },
+      { title: 'Generate videos', description: 'Create personalized outreach videos at scale.' },
+    ],
+    brandColor: 'purple',
+    iconBgColor: 'bg-purple-50 dark:bg-purple-900/20',
+    iconBorderColor: 'border-purple-100 dark:border-purple-800/40',
+    fallbackIcon: <Video className="w-6 h-6 text-purple-600 dark:text-purple-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'elevenlabs',
+    name: 'ElevenLabs',
+    description: 'Voice cloning and text-to-speech for personalized audio outreach.',
+    permissions: [
+      { title: 'Clone voices', description: 'Create instant voice clones from audio samples.' },
+      { title: 'Generate audio', description: 'Text-to-speech with cloned or stock voices.' },
+    ],
+    brandColor: 'indigo',
+    iconBgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
+    iconBorderColor: 'border-indigo-100 dark:border-indigo-800/40',
+    fallbackIcon: <Mic className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'fal-ai',
+    name: 'fal.ai',
+    description: 'Generate AI videos with Kling, Veo, Wan models.',
+    permissions: [
+      { title: 'Generate videos', description: 'Create AI videos using Kling, Veo, and Wan models.' },
+      { title: 'Use platform or own credits', description: 'Run video generation via platform key or your own fal.ai account.' },
+    ],
+    brandColor: 'violet',
+    iconBgColor: 'bg-violet-50 dark:bg-violet-900/20',
+    iconBorderColor: 'border-violet-100 dark:border-violet-800/40',
+    fallbackIcon: <Video className="w-6 h-6 text-violet-600 dark:text-violet-400" />,
+    isBuilt: true,
+  },
+  {
     id: 'apify',
     name: 'Apify',
     description: 'Run any web scraping actor from the Apify marketplace.',
@@ -539,6 +616,21 @@ const builtIntegrations: IntegrationConfig[] = [
     iconBgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
     iconBorderColor: 'border-emerald-100 dark:border-emerald-800/40',
     fallbackIcon: <Bot className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    description: 'Receive leads from LinkedIn Lead Gen Forms and Events.',
+    permissions: [
+      { title: 'Lead ingestion', description: 'Automatically receive and process LinkedIn leads.' },
+      { title: 'Auto-response', description: 'AI-drafted emails sent to new leads for approval.' },
+      { title: 'Contact matching', description: 'Match leads to existing contacts and companies.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    iconBorderColor: 'border-blue-100 dark:border-blue-800/40',
+    fallbackIcon: <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />,
     isBuilt: true,
   },
 ];
@@ -674,12 +766,23 @@ export default function Integrations() {
 
   // Integration states
   const {
-    isConnected: googleConnected,
     status: googleStatus,
     isLoading: googleLoading,
     checkConnection: checkGoogleConnection,
-    connect: connectGoogle,
   } = useGoogleIntegration();
+
+  // Nylas calendar connection status
+  const nylasCalendarConnected = useIntegrationStore(state => state.google.nylasCalendarConnected);
+
+  // Microsoft 365
+  const {
+    isConnected: microsoftConnected,
+    status: microsoftStatus,
+    isLoading: microsoftLoading,
+    checkConnection: checkMicrosoftConnection,
+    connect: connectMicrosoft,
+    disconnect: disconnectMicrosoft,
+  } = useMicrosoftIntegration();
 
   const {
     isConnected: fathomConnected,
@@ -736,6 +839,26 @@ export default function Integrations() {
     loading: apifyLoading,
   } = useApifyIntegration();
 
+  const {
+    isConnected: linkedinConnected,
+    loading: linkedinLoading,
+  } = useLinkedInIntegration();
+
+  const {
+    isConnected: heygenConnected,
+    loading: heygenLoading,
+  } = useHeyGenIntegration();
+
+  const {
+    isConnected: elevenlabsConnected,
+    loading: elevenlabsLoading,
+  } = useElevenLabsIntegration();
+
+  const {
+    isConfigured: falConfigured,
+    isLoading: falLoading,
+  } = useFalIntegration();
+
   // Modal states
   const [activeConnectModal, setActiveConnectModal] = useState<string | null>(null);
   const [activeConfigModal, setActiveConfigModal] = useState<string | null>(null);
@@ -772,6 +895,18 @@ export default function Integrations() {
       const attioErr = searchParams.get('attio_error');
       toast.error(`Failed to connect Attio: ${attioErr}`);
       window.history.replaceState({}, '', '/integrations');
+    } else if (searchParams.get('provider') === 'microsoft' && searchParams.get('status') === 'connected') {
+      toast.success('Microsoft 365 connected successfully!', {
+        description: `Connected as ${searchParams.get('email') || 'your Microsoft account'}.`,
+      });
+      checkMicrosoftConnection();
+      window.history.replaceState({}, '', '/integrations');
+    } else if (searchParams.get('nylas_status') === 'connected') {
+      toast.success('Calendar connected!', {
+        description: 'Nylas Calendar is now synced with your Google account.',
+      });
+      checkGoogleConnection();
+      window.history.replaceState({}, '', '/integrations');
     } else if (fathomStatus === 'connected') {
       toast.success('Fathom connected successfully!', {
         description: 'Your Fathom account has been connected. Starting initial sync...',
@@ -781,11 +916,13 @@ export default function Integrations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]); // Only depend on searchParams, not checkGoogleConnection
 
-  // Check integration status on mount
+  // Check Google integration status on mount
   useEffect(() => {
     checkGoogleConnection();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount to avoid infinite loop
+
+  // Lazy-load Microsoft check: only when user interacts with Microsoft card or returns from Microsoft OAuth
 
   // Get integration status
   const getIntegrationStatus = (integrationId: string): IntegrationStatus => {
@@ -793,7 +930,12 @@ export default function Integrations() {
       case 'google-workspace':
         if (googleStatus === 'error') return 'error';
         if (googleStatus === 'refreshing') return 'syncing';
-        return googleConnected ? 'active' : 'inactive';
+        // Calendar via Nylas — connected means Nylas grant is active
+        return nylasCalendarConnected ? 'active' : 'inactive';
+      case 'microsoft-365':
+        if (microsoftStatus === 'error') return 'error';
+        if (microsoftStatus === 'refreshing') return 'syncing';
+        return microsoftConnected ? 'active' : 'inactive';
       case 'fathom':
         // If we're connected, always show Active even if there was a non-fatal error
         // (e.g. user clicked Connect again and the Edge Function returned 400 "already connected").
@@ -830,19 +972,32 @@ export default function Integrations() {
         return instantlyConnected ? 'active' : 'inactive';
       case 'apify':
         return apifyConnected ? 'active' : 'inactive';
+      case 'linkedin':
+        return linkedinConnected ? 'active' : 'inactive';
+      case 'heygen':
+        return heygenConnected ? 'active' : 'inactive';
+      case 'elevenlabs':
+        return elevenlabsConnected ? 'active' : 'inactive';
+      case 'fal-ai':
+        return falConfigured ? 'active' : 'inactive';
       default:
         return 'coming_soon';
     }
   };
 
   // Handle card action
-  const handleCardAction = (integrationId: string, isBuilt: boolean = false) => {
+  const handleCardAction = async (integrationId: string, isBuilt: boolean = false) => {
     if (!isBuilt) return; // Don't handle clicks on coming soon integrations
+
+    // Lazy-load Microsoft status when user clicks the Microsoft card
+    if (integrationId === 'microsoft-365') {
+      await checkMicrosoftConnection();
+    }
 
     const status = getIntegrationStatus(integrationId);
 
     if (status === 'active' || status === 'syncing') {
-      // Meeting recorders navigate to dedicated settings pages when connected
+      // Integrations with dedicated settings pages navigate there when connected
       if (integrationId === 'fathom') {
         navigate('/settings/integrations/fathom');
         return;
@@ -853,6 +1008,14 @@ export default function Integrations() {
       }
       if (integrationId === '60-notetaker') {
         navigate('/meetings/recordings/settings');
+        return;
+      }
+      if (integrationId === 'slack') {
+        navigate('/settings/integrations/slack');
+        return;
+      }
+      if (integrationId === 'justcall') {
+        navigate('/settings/integrations/justcall');
         return;
       }
       // Other integrations use config modals
@@ -888,6 +1051,22 @@ export default function Integrations() {
         setActiveConfigModal('apify');
         return;
       }
+      if (integrationId === 'linkedin') {
+        setActiveConfigModal('linkedin');
+        return;
+      }
+      if (integrationId === 'elevenlabs') {
+        setActiveConfigModal('elevenlabs');
+        return;
+      }
+      if (integrationId === 'heygen') {
+        setActiveConfigModal('heygen');
+        return;
+      }
+      if (integrationId === 'fal-ai') {
+        setActiveConfigModal('fal-ai');
+        return;
+      }
       // 60 Notetaker goes straight to config modal (handles its own enable flow)
       if (integrationId === '60-notetaker') {
         setActiveConfigModal('60-notetaker');
@@ -902,14 +1081,26 @@ export default function Integrations() {
     setIsConnecting(true);
     try {
       switch (integrationId) {
-        case 'google-workspace':
-          const authUrl = await connectGoogle();
+        case 'google-workspace': {
+          // Route directly to Nylas for calendar access (no direct Google Cloud app needed)
+          const { connectNylas } = useIntegrationStore.getState();
+          const authUrl = await connectNylas();
           if (authUrl) {
             window.location.href = authUrl;
           } else {
             toast.error('Failed to get authentication URL');
           }
           break;
+        }
+        case 'microsoft-365': {
+          const msAuthUrl = await connectMicrosoft();
+          if (msAuthUrl) {
+            window.location.href = msAuthUrl;
+          } else {
+            toast.error('Failed to get Microsoft authentication URL');
+          }
+          break;
+        }
         case 'fathom':
           // connectFathom returns whether initiation succeeded (popup opened)
           if (await connectFathom()) {
@@ -960,6 +1151,7 @@ export default function Integrations() {
   const builtActionLoadingById: Record<string, boolean> = useMemo(
     () => ({
       'google-workspace': googleLoading,
+      'microsoft-365': microsoftLoading,
       fathom: fathomLoading,
       slack: slackLoading,
       justcall: justcallLoading,
@@ -972,8 +1164,10 @@ export default function Integrations() {
       explorium: exploriumLoading,
       instantly: instantlyLoading,
       apify: apifyLoading,
+      linkedin: linkedinLoading,
+      'fal-ai': falLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading, linkedinLoading, falLoading]
   );
 
   // Preload logo.dev URLs on page load to prevent any visible swap/flicker.
@@ -1012,14 +1206,17 @@ export default function Integrations() {
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Integrations</h1>
               <HelpPanel docSlug="integrations-overview" tooltip="Integrations help" />
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Connect your favorite tools to supercharge your sales workflow.
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Connect your favorite tools to supercharge your sales workflow.
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto">
+      <div data-tour="integrations-grid" className="max-w-7xl mx-auto">
         {/* Connected Integrations */}
         <div className="mb-12">
           <div className="mb-4">
@@ -1033,17 +1230,18 @@ export default function Integrations() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {builtIntegrations
               .filter((integration) => (integration.id === 'hubspot' ? hubspotEnabled : true))
-              .map((integration) => (
-                <IntegrationCardWithLogo
-                  key={integration.id}
-                  config={integration}
-                  isBuilt={true}
-                  status={getIntegrationStatus(integration.id)}
-                  onAction={() => handleCardAction(integration.id, true)}
-                  actionLoading={builtActionLoadingById[integration.id]}
-                  sixtyLogoUrl={sixtyLogoUrl}
-                />
-              ))}
+              .map((integration) => {
+                return (
+                  <IntegrationCardWithLogo
+                    config={integration}
+                    isBuilt={true}
+                    status={getIntegrationStatus(integration.id)}
+                    onAction={() => handleCardAction(integration.id, true)}
+                    actionLoading={builtActionLoadingById[integration.id]}
+                    sixtyLogoUrl={sixtyLogoUrl}
+                  />
+                );
+              })}
           </div>
         </div>
 
@@ -1151,6 +1349,22 @@ export default function Integrations() {
       />
       <ApifyConfigModal
         open={activeConfigModal === 'apify'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <LinkedInConfigModal
+        open={activeConfigModal === 'linkedin'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <HeyGenConfigModal
+        open={activeConfigModal === 'heygen'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <ElevenLabsConfigModal
+        open={activeConfigModal === 'elevenlabs'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <FalConfigModal
+        open={activeConfigModal === 'fal-ai'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
     </div>

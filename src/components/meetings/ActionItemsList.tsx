@@ -46,8 +46,9 @@ export function ActionItemsList({ actionItems, meetingId, onTasksCreated }: Acti
 
     setIsConverting(true)
     try {
-      const { data, error } = await supabase.functions.invoke('create-task-unified', {
+      const { data, error } = await supabase.functions.invoke('create-router', {
         body: {
+          action: 'task_unified',
           mode: 'manual',
           action_item_ids: Array.from(selectedItems),
           source: 'action_item'

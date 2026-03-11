@@ -1,8 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
+
+
 
 export type TicketCategory = 'bug' | 'feature_request' | 'billing' | 'how_to' | 'other';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -18,6 +21,9 @@ export interface SupportTicket {
   priority: TicketPriority;
   status: TicketStatus;
   assigned_to: string | null;
+  first_response_at: string | null;
+  sla_response_hours: number | null;
+  sla_breached: boolean;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
@@ -42,6 +48,7 @@ export function useSupportTickets(statusFilter: TicketStatusFilter = 'all', cate
       let query = supabase
         .from('support_tickets')
         .select('id, org_id, user_id, subject, description, category, priority, status, assigned_to, created_at, updated_at, resolved_at')
+        .eq('user_id', user!.id)
         .order('created_at', { ascending: false });
 
       if (statusFilter === 'open') {
@@ -60,6 +67,68 @@ export function useSupportTickets(statusFilter: TicketStatusFilter = 'all', cate
     },
     enabled: !!user?.id,
   });
+}
+
+/**
+ * Subscribe to realtime changes on support_tickets for the current user.
+ * Invalidates ticket queries when tickets are inserted or updated.
+ */
+export function useSupportTicketsRealtime() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`support-tickets:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'support_tickets',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['support-tickets'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
+}
+
+/**
+ * Subscribe to realtime changes on ALL support_tickets (for admin views).
+ * Invalidates admin ticket queries on any change.
+ */
+export function useAdminTicketsRealtime() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-support-tickets')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'support_tickets',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['platform-admin-tickets'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 }
 
 export function useCreateSupportTicket() {
@@ -82,17 +151,20 @@ export function useCreateSupportTicket() {
           priority: payload.priority,
           status: 'open',
         })
-        .select('id, subject')
+        .select('id, subject, description')
         .single();
 
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['support-tickets'] });
       toast.success(`Ticket created — #${data.id.slice(0, 8).toUpperCase()}`, {
         description: data.subject,
       });
+
+      // Email/Slack/in-app notifications are handled by the DB trigger on support_tickets
+      // which fires the support-ticket-notification edge function automatically.
     },
     onError: (error: Error) => {
       toast.error('Failed to create ticket', { description: error.message });

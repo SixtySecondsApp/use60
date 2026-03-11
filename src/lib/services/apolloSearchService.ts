@@ -150,7 +150,7 @@ export const apolloSearchService = {
     // Use raw fetch to bypass supabase-js middleware and detect redirects
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY
-    const url = `${supabaseUrl}/functions/v1/apollo-search`
+    const url = `${supabaseUrl}/functions/v1/enrichment-apollo`
 
     console.log('[apolloSearchService] POST to:', url)
 
@@ -162,7 +162,7 @@ export const apolloSearchService = {
         'Authorization': `Bearer ${token}`,
         'apikey': anonKey,
       },
-      body: JSON.stringify({ ...params, _auth_token: token }),
+      body: JSON.stringify({ action: 'search', ...params, _auth_token: token }),
     })
 
     console.log('[apolloSearchService] Response:', response.status, response.redirected ? 'REDIRECTED' : 'direct')

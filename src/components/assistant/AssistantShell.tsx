@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import type { RichInputPayload, EntityReference } from '@/lib/types/entitySearch';
+import { useCreditGatedAction } from '@/lib/hooks/useCreditGatedAction';
 
 type AssistantShellMode = 'overlay' | 'page';
 
@@ -44,6 +45,7 @@ interface AssistantShellProps {
 
 export function AssistantShell({ mode, onOpenQuickAdd, emptyComponent, apiContentTransform, phaseActions, onPhaseAction, phaseComponent, messageBadge }: AssistantShellProps) {
   const { messages, isLoading, sendMessage: rawSendMessage, cancelRequest, autonomousMode } = useCopilot();
+  const { execute: executeCreditGated } = useCreditGatedAction('copilot_chat', 1);
   // Wrap sendMessage to inject apiContent when a transform is provided.
   // If the caller already set apiContent (e.g. handleStart, handleApprove),
   // pass it through as-is. Otherwise apply the transform.
@@ -155,20 +157,23 @@ export function AssistantShell({ mode, onOpenQuickAdd, emptyComponent, apiConten
   // ---------------------------------------------------------------------------
   const handleSend = () => {
     if (!inputValue.trim() || isLoading) return;
-    sendMessage(inputValue);
+    const text = inputValue;
     setInputValue('');
+    executeCreditGated(() => sendMessage(text));
   };
 
   /** Handle submit from the RichCopilotInput */
   const handleRichSubmit = useCallback((payload: RichInputPayload) => {
     if (isLoading) return;
-    // Send message with entity metadata — CopilotContext will resolve context
-    sendMessage(payload.text, {
-      entities: payload.entities,
-      skillCommand: payload.skillCommand,
-    } as any);
     richInputRef.current?.clear();
-  }, [isLoading, sendMessage]);
+    // Send message with entity metadata — CopilotContext will resolve context
+    executeCreditGated(() =>
+      sendMessage(payload.text, {
+        entities: payload.entities,
+        skillCommand: payload.skillCommand,
+      } as any)
+    );
+  }, [isLoading, sendMessage, executeCreditGated]);
 
   /** Entity selected from @ mention dropdown */
   const handleEntitySelect = useCallback((entity: EntityReference) => {

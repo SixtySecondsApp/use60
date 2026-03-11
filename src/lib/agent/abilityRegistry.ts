@@ -9,6 +9,9 @@ import {
   Activity, Brain, Calendar, Mail, FileText, BarChart3,
   GraduationCap, Send, MessageSquare, Zap, Users, Clock,
   Bell, CheckSquare, ShieldAlert, Sparkles, TrendingUp,
+  AlertTriangle, Ghost, HeartPulse, Lightbulb, GitMerge,
+  Brush, BookOpen, Thermometer, RefreshCcw, Radio,
+  Timer, Ratio, Link2, UserSearch,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -270,6 +273,47 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     requiredIntegrations: [
       { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
       { integrationId: 'fathom', name: 'Meeting Recording', reason: 'Recording access for transcription', connectUrl: '/settings/integrations' },
+    ],
+  },
+
+  {
+    id: 'overdue-deal-surfacing',
+    name: 'Overdue Deal Surfacing',
+    description: 'Scans pipeline for deals past their close date, ranks by value and days overdue, and delivers a daily digest with recommended actions — extend date, escalate, or close as lost.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: AlertTriangle,
+    gradient: 'from-orange-500 to-red-600',
+    eventType: 'overdue_deal_scan',
+    triggerType: 'cron',
+    backendType: 'v1-simulate',
+    stepCount: 1,
+    hasApproval: false,
+    status: 'active',
+    skillKey: 'deal-slippage-diagnosis',
+    defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'ghost-deal-alerting',
+    name: 'Ghost Deal Alert',
+    description: 'Monitors deals with high ghost probability (70%+) — no replies, missed meetings, or fading engagement. Surfaces ghosted deals with re-engagement strategies before they go cold.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: Ghost,
+    gradient: 'from-violet-500 to-purple-600',
+    eventType: 'ghost_deal_scan',
+    triggerType: 'cron',
+    backendType: 'v1-simulate',
+    stepCount: 1,
+    hasApproval: false,
+    status: 'active',
+    skillKey: 'deal-reengagement-intervention',
+    defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
     ],
   },
 
@@ -556,6 +600,238 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
       { integrationId: 'slack', name: 'Slack', reason: 'Required for notifications', connectUrl: '/settings/integrations/slack' },
     ],
   },
+
+  // ── Proactive Sales Teammate (PST) ──────────────────────────────────────
+  {
+    id: 'deal-heartbeat',
+    name: 'Deal Heartbeat',
+    description: 'Always-on deal scanner that runs nightly, on stage changes, and after meetings. Detects 8 observation categories: stale deals, missing next steps, follow-up gaps, single-threaded deals, stage regression, and more.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: HeartPulse,
+    gradient: 'from-red-500 to-rose-600',
+    eventType: 'deal_heartbeat_scan',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 3,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Delivers overnight findings in morning brief', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'deal-improvement-suggestions',
+    name: 'Deal Improvement Suggestions',
+    description: 'Proactive coaching for every deal. Generates tagged suggestions — MULTI_THREAD, URGENCY, PROOF, COMPETITOR, EXECUTIVE_SPONSOR, NEXT_STEP — based on deal context, contacts, and meeting history.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: Lightbulb,
+    gradient: 'from-cyan-500 to-teal-600',
+    eventType: 'deal_heartbeat_scan',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 2,
+    hasApproval: false,
+    status: 'active',
+    skillKey: 'deal-next-best-actions',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Delivers suggestions in morning brief', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'cross-deal-conflict-detection',
+    name: 'Cross-Deal Conflict Detection',
+    description: 'Catches conflicts before they become problems. Detects contacts appearing in 2+ active deals and companies with deals from different reps. HIGH severity for same-week overlap.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: GitMerge,
+    gradient: 'from-pink-500 to-fuchsia-600',
+    eventType: 'deal_heartbeat_scan',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 2,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Surfaces conflicts in morning brief', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'pipeline-hygiene-digest',
+    name: 'Pipeline Hygiene Digest',
+    description: 'Weekly Monday cleanup with 5 hygiene categories: overdue tasks, stuck-in-stage (30+ days), no activity (14+ days), past close date, and ghost risk. One-tap actions: Snooze, Re-engage, Draft Follow-up, Close as Lost.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: Brush,
+    gradient: 'from-teal-500 to-emerald-600',
+    eventType: 'pipeline_hygiene_digest',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 2,
+    hasApproval: true,
+    status: 'active',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Delivers weekly digest with action buttons', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'sales-learning-loop',
+    name: 'Sales Learning Loop',
+    description: 'Learns your editing preferences from every draft you touch. After 5+ consistent edits, stores preferences like shorter_emails, casual_greeting, removes_ps_line. Feeds into future draft generation for increasingly accurate output.',
+    stage: 'coaching',
+    useCase: 'coaching-insights',
+    icon: BookOpen,
+    gradient: 'from-violet-500 to-purple-600',
+    eventType: 'learning_preference_extract',
+    triggerType: 'event',
+    backendType: 'cron-job',
+    stepCount: 2,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['in-app'],
+    requiredIntegrations: [],
+  },
+
+  // ── Missing Backend Capabilities (audit gap fill) ───────────────────────
+  {
+    id: 'deal-temperature-alert',
+    name: 'Deal Temperature Alerts',
+    description: 'Real-time alerts when deal temperature crosses thresholds — heating up (60+) or cooling down (30-). Includes 48h cooldown to prevent alert fatigue and contextual signal summaries.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: Thermometer,
+    gradient: 'from-orange-500 to-red-600',
+    eventType: 'deal_temperature_alert',
+    triggerType: 'event',
+    backendType: 'orchestrator',
+    stepCount: 2,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Delivers temperature alerts', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'reengagement-trigger',
+    name: 'Re-engagement Signal Pipeline',
+    description: 'Scans for re-engagement signals (job changes, funding, news mentions), scores relevance, drafts outreach, and presents via Slack HITL approval before sending.',
+    stage: 'outreach',
+    useCase: 'pipeline-health',
+    icon: RefreshCcw,
+    gradient: 'from-emerald-500 to-green-600',
+    eventType: 'reengagement_trigger',
+    triggerType: 'cron',
+    backendType: 'orchestrator',
+    stepCount: 4,
+    hasApproval: true,
+    status: 'active',
+    defaultChannels: ['slack', 'email', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'HITL approval for re-engagement', connectUrl: '/settings/integrations/slack' },
+    ],
+  },
+  {
+    id: 'email-signal-alert',
+    name: 'Email Signal Alerts',
+    description: 'Detects 12 signal types from inbound emails — meeting requests, pricing questions, buying signals, objections, competitor mentions, introductions, silence, fast replies, OOO, and more. Rate-limited to 5/hour with digest mode.',
+    stage: 'outreach',
+    useCase: 'pipeline-health',
+    icon: Radio,
+    gradient: 'from-blue-500 to-indigo-600',
+    eventType: 'email_signal_alert',
+    triggerType: 'event',
+    backendType: 'orchestrator',
+    stepCount: 2,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'slack', name: 'Slack', reason: 'Delivers signal alerts', connectUrl: '/settings/integrations/slack' },
+      { integrationId: 'google-workspace', name: 'Gmail', reason: 'Email access for signal detection', connectUrl: '/settings/integrations/google-workspace' },
+    ],
+  },
+  {
+    id: 'reply-gap-detection',
+    name: 'Reply Gap Detection',
+    description: 'Detects missing or delayed reply patterns in email threads. Surfaces threads where prospects are waiting for your response, ranked by deal value and wait time.',
+    stage: 'outreach',
+    useCase: 'coaching-insights',
+    icon: Timer,
+    gradient: 'from-amber-500 to-orange-600',
+    eventType: 'reply_gap_detection',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 1,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['slack', 'in-app'],
+    requiredIntegrations: [
+      { integrationId: 'google-workspace', name: 'Gmail', reason: 'Email access for reply analysis', connectUrl: '/settings/integrations/google-workspace' },
+    ],
+  },
+  {
+    id: 'email-ratio-tracking',
+    name: 'Email Ratio Tracking',
+    description: 'Calculates daily sent/received email ratios per rep. Spots trends in responsiveness and engagement levels. Feeds into coaching insights.',
+    stage: 'coaching',
+    useCase: 'coaching-insights',
+    icon: Ratio,
+    gradient: 'from-sky-500 to-cyan-600',
+    eventType: 'sent_received_ratio',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 1,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['in-app'],
+    requiredIntegrations: [
+      { integrationId: 'google-workspace', name: 'Gmail', reason: 'Email access for ratio calculation', connectUrl: '/settings/integrations/google-workspace' },
+    ],
+  },
+  {
+    id: 'document-linking',
+    name: 'Document Linking',
+    description: 'Automatically links documents (Google Drive, Slack files) to deals, contacts, and meetings. Builds a knowledge graph of shared materials per deal.',
+    stage: 'pipeline',
+    useCase: 'pipeline-health',
+    icon: Link2,
+    gradient: 'from-slate-500 to-gray-600',
+    eventType: 'document_linking',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 1,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['in-app'],
+    requiredIntegrations: [
+      { integrationId: 'google-workspace', name: 'Google Drive', reason: 'Document access for linking', connectUrl: '/settings/integrations/google-workspace' },
+    ],
+  },
+  {
+    id: 'attendee-enrichment',
+    name: 'Attendee Enrichment',
+    description: 'Enriches meeting attendee data — names, roles, company affiliations, LinkedIn profiles — from calendar events. Runs every 15 minutes for new meetings.',
+    stage: 'pre-meeting',
+    useCase: 'meeting-prep',
+    icon: UserSearch,
+    gradient: 'from-indigo-500 to-violet-600',
+    eventType: 'attendee_enrichment',
+    triggerType: 'cron',
+    backendType: 'cron-job',
+    stepCount: 1,
+    hasApproval: false,
+    status: 'active',
+    defaultChannels: ['in-app'],
+    requiredIntegrations: [
+      { integrationId: 'google-workspace', name: 'Google Calendar', reason: 'Calendar access for attendee data', connectUrl: '/settings/integrations/google-workspace' },
+    ],
+  },
 ];
 
 // =============================================================================
@@ -611,6 +887,17 @@ export const SKILL_DISPLAY_NAMES: Record<string, string> = {
   'score-deal-risks': 'Score Deal Risks',
   'generate-risk-alerts': 'Generate Risk Alerts',
   'deliver-risk-slack': 'Deliver Risk Slack',
+  // deal_heartbeat_scan (PST)
+  'scan-deal-observations': 'Scan Deal Observations',
+  'generate-improvement-suggestions': 'Generate Improvement Suggestions',
+  'detect-cross-deal-conflicts': 'Detect Cross-Deal Conflicts',
+  'deliver-morning-brief': 'Deliver to Morning Brief',
+  // pipeline_hygiene_digest (PST)
+  'scan-stale-pipeline': 'Scan Stale Pipeline',
+  'deliver-hygiene-digest': 'Deliver Hygiene Digest',
+  // learning_preference_extract (PST)
+  'extract-edit-preferences': 'Extract Editing Preferences',
+  'update-draft-prompts': 'Update Draft Generation Prompts',
 };
 
 /** Step order per event type — mirrors EVENT_SEQUENCES in eventSequences.ts */
@@ -648,6 +935,16 @@ export const SEQUENCE_STEPS: Record<string, string[]> = {
   deal_risk_scan: [
     'scan-active-deals', 'score-deal-risks',
     'generate-risk-alerts', 'deliver-risk-slack',
+  ],
+  deal_heartbeat_scan: [
+    'scan-deal-observations', 'generate-improvement-suggestions',
+    'detect-cross-deal-conflicts', 'deliver-morning-brief',
+  ],
+  pipeline_hygiene_digest: [
+    'scan-stale-pipeline', 'deliver-hygiene-digest',
+  ],
+  learning_preference_extract: [
+    'extract-edit-preferences', 'update-draft-prompts',
   ],
 };
 
@@ -687,7 +984,18 @@ export const EVENT_TYPE_TO_SEQUENCE_TYPE: Record<string, string> = {
   'email_received': 'email_received',
   'proposal_generation': 'proposal_generation',
   'calendar_find_times': 'calendar_find_times',
-  // V1 abilities and manual triggers have no mapping (localStorage-only)
+  // Proactive Sales Teammate (PST)
+  'deal_heartbeat_scan': 'deal_heartbeat_scan',
+  'pipeline_hygiene_digest': 'pipeline_hygiene_digest',
+  'learning_preference_extract': 'learning_preference_extract',
+  // Missing backend capabilities (audit gap fill)
+  'deal_temperature_alert': 'deal_temperature_alert',
+  'reengagement_trigger': 'reengagement_trigger',
+  'email_signal_alert': 'email_signal_alert',
+  'reply_gap_detection': 'reply_gap_detection',
+  'sent_received_ratio': 'sent_received_ratio',
+  'document_linking': 'document_linking',
+  'attendee_enrichment': 'attendee_enrichment',
 };
 
 // =============================================================================
@@ -728,7 +1036,7 @@ export function getSequenceTypeForEventType(eventType: string): string | undefin
  */
 export function getRequiredEntityType(eventType: string): 'meeting' | 'deal' | null {
   const meetingTypes = new Set(['pre_meeting_90min', 'meeting_ended']);
-  const dealTypes = new Set(['deal_risk_scan', 'stale_deal_revival', 'proposal_generation']);
+  const dealTypes = new Set(['deal_risk_scan', 'stale_deal_revival', 'proposal_generation', 'overdue_deal_scan', 'ghost_deal_scan']);
   if (meetingTypes.has(eventType)) return 'meeting';
   if (dealTypes.has(eventType)) return 'deal';
   return null;

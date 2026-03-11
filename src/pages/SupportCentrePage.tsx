@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, MessageSquare, Ticket, ChevronRight, Zap, BookOpen, HelpCircle } from 'lucide-react';
+import { Search, MessageSquare, Ticket, ChevronRight, Zap, BookOpen, HelpCircle, ArrowLeft } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SupportAIChat } from '@/components/support/SupportAIChat';
 import { TicketList } from '@/components/support/TicketList';
 import { CreateTicketForm } from '@/components/support/CreateTicketForm';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useUserProfileById } from '@/lib/hooks/useUserProfile';
+import { SupportAppDownload } from '@/components/support/SupportAppDownload';
+
 
 const SUGGESTED_QUESTIONS = [
   'How do I connect my calendar?',
@@ -23,6 +27,9 @@ export default function SupportCentrePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [aiChatQuery, setAiChatQuery] = useState('');
   const [showCreateTicket, setShowCreateTicket] = useState(false);
+
+  const { user } = useAuth();
+  const { data: profile } = useUserProfileById(user?.id);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -43,6 +50,13 @@ export default function SupportCentrePage() {
       {/* Search Hero */}
       <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 dark:from-blue-900 dark:via-blue-800 dark:to-indigo-900 px-6 py-12">
         <div className="max-w-2xl mx-auto text-center">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1.5 text-sm text-blue-200 hover:text-white transition-colors mb-4"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
           <h2 className="text-2xl font-bold text-white mb-2">How can we help?</h2>
           <p className="text-blue-200 mb-6 text-sm">
             Search our docs or ask the AI assistant anything about 60
@@ -118,6 +132,11 @@ export default function SupportCentrePage() {
             </div>
             <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-orange-500 dark:group-hover:text-orange-400 mt-0.5 shrink-0 transition-colors" />
           </div>
+        </div>
+
+        {/* Admin: Desktop App Download */}
+        <div className="mt-3">
+          <SupportAppDownload isAdmin={profile?.is_admin ?? false} />
         </div>
       </div>
 

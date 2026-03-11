@@ -31,6 +31,8 @@ import {
   Shield,
   MoreHorizontal,
   Inbox,
+  Play,
+  Columns,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -42,6 +44,7 @@ import { EditEnrichmentModal } from '@/components/ops/EditEnrichmentModal';
 import { EditColumnSettingsModal } from '@/components/ops/EditColumnSettingsModal';
 import { EditApolloSettingsModal } from '@/components/ops/EditApolloSettingsModal';
 import { EditInstantlySettingsModal } from '@/components/ops/EditInstantlySettingsModal';
+import { EditHeyGenVideoSettingsModal } from '@/components/ops/EditHeyGenVideoSettingsModal';
 import { EditEmailGenerationModal, type EmailGenerationConfig } from '@/components/ops/EditEmailGenerationModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
@@ -168,6 +171,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
   // ---- Local state ----
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [showAddColumn, setShowAddColumn] = useState(false);
   const [activeColumnMenu, setActiveColumnMenu] = useState<{
     columnId: string;
@@ -203,6 +207,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [editButtonColumn, setEditButtonColumn] = useState<OpsTableColumn | null>(null);
   const [editApolloColumn, setEditApolloColumn] = useState<OpsTableColumn | null>(null);
   const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
+  const [editHeyGenColumn, setEditHeyGenColumn] = useState<OpsTableColumn | null>(null);
   const [createCampaignFromStepColumn, setCreateCampaignFromStepColumn] = useState<OpsTableColumn | null>(null);
   const [editEmailGenColumn, setEditEmailGenColumn] = useState<OpsTableColumn | null>(null);
   const [scheduleDialogColumn, setScheduleDialogColumn] = useState<string | null>(null);
@@ -239,6 +244,12 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [isLoadingLists, setIsLoadingLists] = useState(false);
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
+
+  // ---- Run All Pipeline ----
+  const [isRunningPipeline, setIsRunningPipeline] = useState(false);
+  const [pipelineProgress, setPipelineProgress] = useState('');
+  const [pipelineBannerDismissed, setPipelineBannerDismissed] = useState(false);
+  const [viewPromptText, setViewPromptText] = useState<string | null>(null);
 
   // ---- Campaign wizard ----
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
@@ -570,6 +581,90 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     });
   }, [tableData?.rows, normalizedSorts]);
 
+  // ---- Run All Pipeline handler ----
+  const handleRunAllPipeline = useCallback(async () => {
+    if (!tableId || !rows.length || !columns.length) return;
+
+    // Find button columns with run_prompt actions, ordered by position
+    const promptButtonCols = columns
+      .filter((c) => (c.column_type === 'button' || c.column_type === 'action') && c.action_config)
+      .filter((c) => {
+        const cfg = c.action_config as any;
+        return cfg?.actions?.some((a: any) => a.type === 'run_prompt');
+      })
+      .sort((a, b) => a.position - b.position);
+
+    if (promptButtonCols.length === 0) {
+      toast.error('No AI prompt buttons found in this table');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Run AI pipeline on ${rows.length} rows?\n\n${promptButtonCols.map((c, i) => `Step ${i + 1}: ${(c.action_config as any)?.label || c.label}`).join('\n')}`
+    );
+    if (!confirmed) return;
+
+    setIsRunningPipeline(true);
+
+    try {
+      for (let stepIdx = 0; stepIdx < promptButtonCols.length; stepIdx++) {
+        const col = promptButtonCols[stepIdx];
+        const buttonConfig = col.action_config as any;
+        const promptAction = buttonConfig?.actions?.find((a: any) => a.type === 'run_prompt');
+        if (!promptAction) continue;
+
+        const outputKey = promptAction.config?.output_column_key;
+
+        for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+          const row = rows[rowIdx];
+          const rowCellValues: Record<string, string> = {};
+          if (row.cells) {
+            for (const [key, c] of Object.entries(row.cells)) {
+              if ((c as any).value) rowCellValues[key] = (c as any).value;
+            }
+          }
+
+          // Skip if output already has a value
+          if (outputKey && rowCellValues[outputKey]) continue;
+
+          // Check condition
+          if (buttonConfig.condition) {
+            const cond = buttonConfig.condition;
+            const cellVal = rowCellValues[cond.column_key] ?? '';
+            let condMet = true;
+            switch (cond.operator) {
+              case 'equals': condMet = cellVal === cond.value; break;
+              case 'not_equals': condMet = cellVal !== cond.value; break;
+              case 'contains': condMet = cellVal.includes(cond.value ?? ''); break;
+              case 'is_empty': condMet = !cellVal; break;
+              case 'is_not_empty': condMet = !!cellVal; break;
+            }
+            if (!condMet) continue;
+          }
+
+          setPipelineProgress(`Step ${stepIdx + 1}/${promptButtonCols.length} — Row ${rowIdx + 1}/${rows.length}`);
+
+          try {
+            const { data, error } = await supabase.functions.invoke('run-prompt', {
+              body: { table_id: tableId, row_id: row.id, action_config: promptAction.config },
+            });
+            if (error) console.error(`Pipeline error row ${rowIdx + 1}:`, error);
+          } catch (err) {
+            console.error(`Pipeline error row ${rowIdx + 1}:`, err);
+          }
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+      toast.success('Pipeline complete');
+    } catch (err: any) {
+      toast.error(err.message || 'Pipeline failed');
+    } finally {
+      setIsRunningPipeline(false);
+      setPipelineProgress('');
+    }
+  }, [tableId, rows, columns, queryClient]);
+
   // ---- Integration polling ----
   useIntegrationPolling(tableId, columns, rows);
 
@@ -584,9 +679,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       searchParams.delete('action');
       setSearchParams(searchParams, { replace: true });
     } else if (action === 'export') {
-      // Trigger CSV export
-      const visibleCols = columns.filter((c) => c.is_visible);
-      OpsTableService.generateCSVExport(rows, visibleCols, table.name || 'export');
+      // Trigger CSV export — include ALL columns (visible + hidden), exclude action buttons
+      const exportCols = columns.filter((c) => c.column_type !== 'action');
+      OpsTableService.generateCSVExport(rows, exportCols, table.name || 'export');
       toast.success(`Exported ${rows.length} rows to CSV`);
       searchParams.delete('action');
       setSearchParams(searchParams, { replace: true });
@@ -740,12 +835,13 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           const { data: sessionData } = await supabase.auth.getSession();
           const token = sessionData.session?.access_token;
           if (token) {
-            const resp = await supabase.functions.invoke('populate-hubspot-column', {
+            const resp = await supabase.functions.invoke('populate-router', {
               headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
+                action: 'hubspot_column',
                 table_id: tableId,
                 column_id: column.id,
                 property_name: hubspotPropertyName,
@@ -908,8 +1004,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         })
       );
       // Then call the edge function to regenerate
-      const { error } = await supabase.functions.invoke('generate-email-sequence', {
+      const { error } = await supabase.functions.invoke('generate-router', {
         body: {
+          action: 'email_sequence',
           table_id: tableId,
           sequence_config: {
             num_steps: config.num_steps,
@@ -968,6 +1065,21 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     onError: () => toast.error('Failed to hide column'),
   });
 
+  const toggleAllColumnsMutation = useMutation({
+    mutationFn: async (showAll: boolean) => {
+      const hiddenCols = columns.filter(c => c.is_visible !== showAll);
+      await Promise.all(
+        hiddenCols.map(c => tableService.updateColumn(c.id, { isVisible: showAll }))
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+    },
+    onError: () => toast.error('Failed to toggle columns'),
+  });
+
+  const hiddenColumnCount = columns.filter(c => !c.is_visible).length;
+
   const deleteColumnMutation = useMutation({
     mutationFn: (columnId: string) => tableService.removeColumn(columnId),
     onSuccess: () => {
@@ -980,8 +1092,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
   const pushToHubSpotMutation = useMutation({
     mutationFn: async (config: HubSpotPushConfig) => {
-      const { data, error } = await supabase.functions.invoke('push-to-hubspot', {
-        body: { table_id: tableId, row_ids: Array.from(selectedRows), config },
+      const { data, error } = await supabase.functions.invoke('crm-push', {
+        body: { action: 'to_hubspot', table_id: tableId, row_ids: Array.from(selectedRows), config },
       });
       if (error) throw error;
       return data;
@@ -1002,8 +1114,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     if (!table) return;
     setIsLoadingLists(true);
     try {
-      const { data, error } = await supabase.functions.invoke('hubspot-admin', {
-        body: { action: 'get_lists', org_id: table.organization_id },
+      const { data, error } = await supabase.functions.invoke('crm-admin-router', {
+        body: { action: 'hubspot_admin', sub_action: 'get_lists', org_id: table.organization_id },
       });
       if (error) throw error;
       const lists = (data?.lists ?? []).map((l: any) => ({
@@ -1023,9 +1135,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const createHubSpotListMutation = useMutation({
     mutationFn: async (config: { listName: string; scope: 'all' | 'selected'; linkList: boolean }) => {
       const rowIds = config.scope === 'selected' ? Array.from(selectedRows) : undefined;
-      const { data, error } = await supabase.functions.invoke('hubspot-list-ops', {
+      const { data, error } = await supabase.functions.invoke('crm-admin-router', {
         body: {
-          action: 'create_list_from_table',
+          action: 'hubspot_list_ops',
+          sub_action: 'create_list_from_table',
           table_id: tableId,
           list_name: config.listName,
           row_ids: rowIds,
@@ -1112,9 +1225,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         (table?.source_query as any)?.sync_direction === 'bidirectional';
       const listId = (table?.source_query as any)?.list_id;
       if (isBidirectional && listId && sourceIds.length > 0) {
-        supabase.functions.invoke('hubspot-list-ops', {
+        supabase.functions.invoke('crm-admin-router', {
           body: {
-            action: 'remove_from_list',
+            action: 'hubspot_list_ops',
+            sub_action: 'remove_from_list',
             list_id: listId,
             contact_ids: sourceIds,
             org_id: table?.organization_id,
@@ -1298,8 +1412,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     if (!tableId) return;
     setNlQueryLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
+      const { data, error } = await supabase.functions.invoke('ops-table-router', {
         body: {
+          action: 'ai_query',
           tableId,
           query,
           columns: columns.map((c) => ({
@@ -1383,8 +1498,22 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             }
           }
 
-          // Set cell to pending
+          // Set cell to pending + optimistic update for instant spinner
           cellEditMutation.mutate({ rowId, columnId: col.id, value: 'pending', cellId: cell?.id });
+          queryClient.setQueryData(['ops-table-data', tableId], (prev: any) => {
+            if (!prev?.rows) return prev;
+            return {
+              ...prev,
+              rows: prev.rows.map((r: any) =>
+                r.id === rowId
+                  ? { ...r, cells: { ...r.cells, [columnKey]: { ...r.cells[columnKey], status: 'pending' } } }
+                  : r,
+              ),
+            };
+          });
+
+          const actionLabel = buttonConfig.label || col.label || 'Action';
+          toast.info(`Running: ${actionLabel}...`);
 
           executeButton.mutate(
             {
@@ -1400,9 +1529,24 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             {
               onSuccess: () => {
                 cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+                // Re-evaluate any formula columns that reference the output column
+                const outputKeys = new Set(
+                  (buttonConfig.actions ?? [])
+                    .filter((a: any) => a.type === 'run_prompt' && a.config?.output_column_key)
+                    .map((a: any) => a.config.output_column_key),
+                );
+                if (outputKeys.size > 0) {
+                  columns
+                    .filter((c) => c.column_type === 'formula' && c.formula_expression)
+                    .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)))
+                    .forEach((c) => recalcFormulaMutation.mutate(c.id));
+                }
+                queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+                toast.success(`Done: ${actionLabel}`);
               },
               onError: () => {
                 cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
+                toast.error(`Failed: ${actionLabel}`);
               },
             },
           );
@@ -1507,7 +1651,11 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                 {
                   onSuccess: (data: any) => {
                     const count = data?.pushed_count ?? 0;
-                    cellEditMutation.mutate({ rowId, columnId: col.id, value: count > 0 ? 'complete' : 'skipped', cellId: cell?.id });
+                    const campaignUrl = data?.campaign_url;
+                    const cellValue = count > 0
+                      ? (campaignUrl ? `complete::${campaignUrl}` : 'complete')
+                      : 'skipped';
+                    cellEditMutation.mutate({ rowId, columnId: col.id, value: cellValue, cellId: cell?.id });
                     if (count > 0) {
                       toast.success('Lead pushed to Instantly');
                     }
@@ -1705,8 +1853,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         }
 
         // Call the AI query edge function — handles both existing columns and empty tables
-        const { data, error } = await supabase.functions.invoke('ops-table-ai-query', {
+        const { data, error } = await supabase.functions.invoke('ops-table-router', {
           body: {
+            action: 'ai_query',
             tableId,
             query: submittedQuery,
             columns: effectiveColumns.map((c) => ({
@@ -1892,9 +2041,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             setTransformPreviewData(null);
             // Get preview
             const { data: previewData, error: previewErr } = await supabase.functions.invoke(
-              'ops-table-transform-column',
+              'ops-table-router',
               {
                 body: {
+                  action: 'transform_column',
                   tableId,
                   columnKey: colKey,
                   transformPrompt: result.transformPrompt as string,
@@ -2019,7 +2169,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             }
             const exportCols = (result.columns as string[])
               ? columns.filter((c) => (result.columns as string[]).includes(c.key))
-              : columns.filter((c) => c.is_visible);
+              : columns.filter((c) => c.column_type !== 'action');
             OpsTableService.generateCSVExport(
               exportRows,
               exportCols,
@@ -2191,8 +2341,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     if (!transformPreviewData || !tableId) return;
     setIsTransformExecuting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('ops-table-transform-column', {
+      const { data, error } = await supabase.functions.invoke('ops-table-router', {
         body: {
+          action: 'transform_column',
           tableId,
           columnKey: transformPreviewData.columnKey,
           transformPrompt: transformPreviewData.transformPrompt,
@@ -2346,7 +2497,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   // ---- Render ----
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-y-auto">
       {/* Top section: back nav + query bar + metadata */}
       <div className={`shrink-0 border-b border-gray-800 bg-gray-950 px-6 ${isFullscreen ? 'pb-3 pt-3' : 'pb-4 pt-5'}`}>
         {/* Back button — hidden in fullscreen and embedded mode */}
@@ -2604,6 +2755,53 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Enriching
               </div>
+            )}
+            {/* Toggle hidden columns */}
+            {hiddenColumnCount > 0 && (
+              <button
+                onClick={() => toggleAllColumnsMutation.mutate(true)}
+                disabled={toggleAllColumnsMutation.isPending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white disabled:opacity-50"
+              >
+                {toggleAllColumnsMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Columns className="h-3.5 w-3.5" />
+                )}
+                Show all ({hiddenColumnCount})
+              </button>
+            )}
+            {hiddenColumnCount === 0 && columns.filter(c => c.column_type === 'formula').length > 5 && (
+              <button
+                onClick={() => {
+                  const toHide = columns.filter(c => c.column_type === 'formula');
+                  if (toHide.length > 0) {
+                    Promise.all(toHide.map(c => tableService.updateColumn(c.id, { isVisible: false })))
+                      .then(() => queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] }))
+                      .catch(() => toast.error('Failed to hide columns'));
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+              >
+                <Columns className="h-3.5 w-3.5" />
+                Compact view
+              </button>
+            )}
+            {/* Run All Pipeline */}
+            {columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
+              <button
+                onClick={handleRunAllPipeline}
+                disabled={isRunningPipeline}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-900/40 hover:text-emerald-200 disabled:opacity-50"
+                title={pipelineProgress || 'Run AI pipeline on all rows'}
+              >
+                {isRunningPipeline ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+                {isRunningPipeline ? pipelineProgress || 'Running...' : 'Run All'}
+              </button>
             )}
             {/* Add Row */}
             <button
@@ -2944,9 +3142,19 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       {/* Table area */}
       {activeTab === 'data' && (
         <div
-          className="flex-1 min-h-0 min-w-0 overflow-hidden px-6 py-4"
+          className="flex-1 min-h-[50vh] min-w-0 overflow-hidden px-6 pt-4 pb-16"
           style={{ '--ops-table-max-height': isFullscreen ? 'calc(100vh - 90px)' : 'calc(100vh - 220px)' } as React.CSSProperties}
         >
+          {/* Pipeline info banner */}
+          {!pipelineBannerDismissed && columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
+            <div className="mb-3 flex items-center gap-3 rounded-lg border border-violet-700/30 bg-violet-900/10 px-4 py-2.5 text-xs text-violet-300">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span>This table has AI pipeline steps. Click action buttons to process rows, or use <strong>Run All</strong> to process everything. Edit prompts via column header menu.</span>
+              <button onClick={() => setPipelineBannerDismissed(true)} className="ml-auto shrink-0 text-violet-400 hover:text-violet-200">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           <OpsTable
             tableId={tableId}
             columns={columns}
@@ -2994,6 +3202,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               if (Object.keys(instantlySummary).length === 0) return summaryConfig ?? null;
               return { ...instantlySummary, ...(summaryConfig ?? {}) };
             })()}
+            onRowExpand={(rowId) => setExpandedRowId(rowId)}
           />
         </div>
       )}
@@ -3182,14 +3391,26 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           onEditFormula={activeColumn.column_type === 'formula' ? () => {
             setEditFormulaColumn(activeColumn);
           } : undefined}
-          onEditButton={activeColumn.column_type === 'button' ? () => {
+          onEditButton={(activeColumn.column_type === 'button' || activeColumn.column_type === 'action') ? () => {
             setEditButtonColumn(activeColumn);
+          } : undefined}
+          onViewPrompt={(activeColumn.column_type === 'button' || activeColumn.column_type === 'action') ? () => {
+            const config = activeColumn.action_config as any;
+            const prompt = config?.actions?.find((a: any) => a.type === 'run_prompt')?.config?.system_prompt;
+            if (prompt) {
+              setViewPromptText(prompt);
+            } else {
+              toast.info('No AI prompt configured for this column');
+            }
           } : undefined}
           onEditApollo={(activeColumn.column_type === 'apollo_property' || activeColumn.column_type === 'apollo_org_property') ? () => {
             setEditApolloColumn(activeColumn);
           } : undefined}
           onEditInstantly={activeColumn.column_type === 'instantly' ? () => {
             setEditInstantlyColumn(activeColumn);
+          } : undefined}
+          onEditHeygen={activeColumn.column_type === 'heygen_video' ? () => {
+            setEditHeyGenColumn(activeColumn);
           } : undefined}
           onEditEmailGeneration={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
             setEditEmailGenColumn(activeColumn);
@@ -3346,6 +3567,26 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         />
       )}
 
+      {/* View Prompt Dialog */}
+      {viewPromptText && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setViewPromptText(null)}>
+          <div className="relative max-w-2xl w-full mx-4 max-h-[70vh] overflow-auto rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-violet-400" />
+                System Prompt
+              </h3>
+              <button onClick={() => setViewPromptText(null)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap text-xs text-zinc-300 font-mono leading-relaxed bg-zinc-800/50 rounded-lg p-4 border border-zinc-700/50">
+              {viewPromptText}
+            </pre>
+          </div>
+        </div>
+      )}
+
       {/* Edit Apollo Settings Modal */}
       {editApolloColumn && (
         <EditApolloSettingsModal
@@ -3471,6 +3712,26 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           columnLabel={editInstantlyColumn.label}
           currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
           orgId={table?.organization_id}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        />
+      )}
+
+      {/* Edit HeyGen Video Settings Modal */}
+      {editHeyGenColumn && (
+        <EditHeyGenVideoSettingsModal
+          isOpen={!!editHeyGenColumn}
+          onClose={() => setEditHeyGenColumn(null)}
+          onSave={async (config) => {
+            try {
+              await tableService.updateColumn(editHeyGenColumn.id, { integrationConfig: config });
+              queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+              toast.success('Video settings updated');
+            } catch {
+              toast.error('Failed to update video settings');
+            }
+          }}
+          columnLabel={editHeyGenColumn.label}
+          currentConfig={(editHeyGenColumn.integration_config as any) ?? undefined}
           existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
         />
       )}
@@ -3673,8 +3934,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               return;
             }
 
-            const { data, error } = await supabase.functions.invoke('push-to-instantly', {
+            const { data, error } = await supabase.functions.invoke('crm-push', {
               body: {
+                action: 'to_instantly',
                 table_id: tableId,
                 campaign_id: campaignId,
                 row_ids: Array.from(selectedRows),
@@ -3709,6 +3971,86 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         }}
         onPushToHubSpot={() => { setShowHubSpotPush(true); fetchHubSpotLists(); }}
         onPushToAttio={() => setShowAttioPush(true)}
+        onExportCSV={async () => {
+          const selectedRowData = rows.filter((r) => selectedRows.has(r.id));
+          const allExportCols = columns.filter((c) => c.column_type !== 'action');
+          const toastId = toast.loading('Building CSV with encoded tags...');
+
+          try {
+            // 1. Get current user's Slack ID
+            let slackUserId = '';
+            if (currentUserId && table?.organization_id) {
+              const { data: slackMapping } = await supabase
+                .from('slack_user_mappings')
+                .select('slack_user_id')
+                .eq('org_id', table.organization_id)
+                .eq('sixty_user_id', currentUserId)
+                .limit(1)
+                .maybeSingle();
+              slackUserId = slackMapping?.slack_user_id ?? '';
+            }
+
+            // 2. Collect all contact_ids from rows to batch-fetch emails
+            const contactIdSet = new Set<string>();
+            for (const row of selectedRowData) {
+              const contactId = row.cells['contact_id']?.value;
+              if (contactId) contactIdSet.add(contactId);
+            }
+            const contactEmailMap = new Map<string, string>();
+            if (contactIdSet.size > 0) {
+              const { data: contacts } = await supabase
+                .from('contacts')
+                .select('id, email')
+                .in('id', Array.from(contactIdSet));
+              for (const c of contacts ?? []) {
+                if (c.email) contactEmailMap.set(c.id, c.email);
+              }
+            }
+
+            // 3. Build raw tag strings per row
+            const CAMPAIGN_ID = '15000_C3.5_PS_V1_';
+            const encodedTagsMap = new Map<string, string>();
+            const rawTagsMap = new Map<string, string>();
+            const orderedRowIds: string[] = [];
+
+            for (const row of selectedRowData) {
+              const firstName = row.cells['first_name']?.value ?? '';
+              const lastName = row.cells['last_name']?.value ?? '';
+              const contactId = row.cells['contact_id']?.value ?? '';
+              const email = contactEmailMap.get(contactId) ?? row.cells['email']?.value ?? '';
+
+              const rawTags = `tag1=${firstName}&tag2=${lastName}&tag3=${email}&tag4=${slackUserId}&tag5=${CAMPAIGN_ID}&rca=${firstName}&rtr-intro-client-name=${firstName}&rtr-client-name=${firstName}`;
+              rawTagsMap.set(row.id, rawTags);
+              orderedRowIds.push(row.id);
+            }
+
+            // 4. Encode all tags via edge function (avoids CORS)
+            try {
+              const token = await getSupabaseAuthToken();
+              const { data: encodeResult, error: encodeErr } = await supabase.functions.invoke('encode-tags', {
+                body: { tags: orderedRowIds.map((id) => rawTagsMap.get(id)!) },
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+              });
+              if (!encodeErr && encodeResult?.encoded) {
+                for (let i = 0; i < orderedRowIds.length; i++) {
+                  encodedTagsMap.set(orderedRowIds[i], encodeResult.encoded[i] ?? '');
+                }
+              }
+            } catch (encErr) {
+              console.error('[encode-tags] Failed:', encErr);
+            }
+
+            // 5. Export CSV with extra columns
+            OpsTableService.generateCSVExport(selectedRowData, allExportCols, table?.name || 'export', [
+              { label: 'Campaign ID', value: CAMPAIGN_ID },
+              { label: 'Tags', value: (row) => rawTagsMap.get(row.id) ?? '' },
+              { label: 'Encoded Tags', value: (row) => encodedTagsMap.get(row.id) ?? '' },
+            ]);
+            toast.success(`Exported ${selectedRowData.length} rows`, { id: toastId });
+          } catch (err: any) {
+            toast.error(err?.message ?? 'Export failed', { id: toastId });
+          }
+        }}
         onReEnrich={() => {
           const enrichCols = columns.filter((c) => c.is_enrichment);
           if (enrichCols.length === 0) return toast.info('No enrichment columns');
@@ -3901,6 +4243,43 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             ) : (
               <WorkflowList tableId={tableId!} onEdit={() => setShowWorkflowBuilder(true)} />
             )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Row Detail Panel */}
+      <Sheet open={!!expandedRowId} onOpenChange={(open) => !open && setExpandedRowId(null)}>
+        <SheetContent className="w-[520px] sm:w-[560px] overflow-y-auto !top-16 !h-[calc(100vh-4rem)] !p-0 border-l border-white/[0.06] bg-gray-950">
+          <SheetHeader className="border-b border-white/[0.06] px-6 pt-6 pb-5">
+            <SheetTitle className="text-base font-semibold text-gray-100">Row Details</SheetTitle>
+          </SheetHeader>
+          <div className="px-6 py-4 space-y-3">
+            {(() => {
+              const row = rows.find(r => r.id === expandedRowId);
+              if (!row) return <p className="text-sm text-gray-500">Row not found</p>;
+              return columns.map(col => {
+                const cellValue = row.cells[col.key]?.value;
+                if (cellValue === null || cellValue === undefined || cellValue === '') return null;
+                const isJson = typeof cellValue === 'string' && (cellValue.startsWith('{') || cellValue.startsWith('['));
+                return (
+                  <div key={col.id} className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{col.label}</span>
+                      {!col.is_visible && (
+                        <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-500">hidden</span>
+                      )}
+                    </div>
+                    {isJson ? (
+                      <pre className="whitespace-pre-wrap text-xs text-gray-300 font-mono leading-relaxed max-h-80 overflow-auto">{
+                        (() => { try { return JSON.stringify(JSON.parse(cellValue), null, 2); } catch { return cellValue; } })()
+                      }</pre>
+                    ) : (
+                      <p className="text-sm text-gray-200 whitespace-pre-wrap">{cellValue}</p>
+                    )}
+                  </div>
+                );
+              }).filter(Boolean);
+            })()}
           </div>
         </SheetContent>
       </Sheet>

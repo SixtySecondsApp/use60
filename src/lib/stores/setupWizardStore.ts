@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/clientV2';
+import { useTourStore } from '@/lib/stores/tourStore';
 
 export type SetupStep = 'calendar' | 'notetaker' | 'crm' | 'followups' | 'test';
 
@@ -68,6 +69,10 @@ export const useSetupWizardStore = create<SetupWizardState>((set, get) => ({
   hasFetched: false,
 
   openWizard: () => {
+    // Don't open the wizard while the product tour is running — the tour
+    // explicitly opens it at the end via handleTourEnd.
+    if (useTourStore.getState().isTourActive) return;
+
     const state = get();
     const anyCompleted = SETUP_STEPS.some(s => state.steps[s].completed);
     set({ isOpen: true, showWelcome: !anyCompleted });
@@ -124,11 +129,11 @@ export const useSetupWizardStore = create<SetupWizardState>((set, get) => ({
 
   completeStep: async (userId, orgId, step) => {
     try {
-      const { data, error } = await (supabase.rpc as any)('complete_setup_wizard_step', {
+      const { data, error } = await supabase.rpc('complete_setup_wizard_step', {
         p_user_id: userId,
         p_org_id: orgId,
         p_step: step,
-      });
+      } as any);
 
       if (error) {
         console.error('Failed to complete setup wizard step:', error);

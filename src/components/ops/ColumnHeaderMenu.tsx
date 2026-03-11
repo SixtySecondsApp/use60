@@ -38,9 +38,11 @@ interface ColumnHeaderMenuProps {
   onEditButton?: () => void;
   onEditApollo?: () => void;
   onEditInstantly?: () => void;
+  onEditHeygen?: () => void;
   onEditEmailGeneration?: () => void;
   onRegenerateEmails?: () => void;
   onCreateCampaignFromSteps?: () => void;
+  onViewPrompt?: () => void;
   onRefreshAll?: () => void;
   isAutoEnrichEnabled?: boolean;
   onToggleAutoEnrich?: () => void;
@@ -69,9 +71,11 @@ export function ColumnHeaderMenu({
   onEditButton,
   onEditApollo,
   onEditInstantly,
+  onEditHeygen,
   onEditEmailGeneration,
   onRegenerateEmails,
   onCreateCampaignFromSteps,
+  onViewPrompt,
   onRefreshAll,
   isAutoEnrichEnabled,
   onToggleAutoEnrich,
@@ -383,13 +387,37 @@ export function ColumnHeaderMenu({
         />
       )}
 
+      {/* Edit HeyGen Video settings */}
+      {column.column_type === 'heygen_video' && onEditHeygen && (
+        <MenuItem
+          icon={<Settings className="h-4 w-4" />}
+          label="Edit video settings"
+          onClick={() => {
+            onEditHeygen();
+            onClose();
+          }}
+        />
+      )}
+
       {/* Edit button config (button columns only) */}
-      {column.column_type === 'button' && onEditButton && (
+      {(column.column_type === 'button' || column.column_type === 'action') && onEditButton && (
         <MenuItem
           icon={<Settings className="h-4 w-4" />}
           label="Edit button"
           onClick={() => {
             onEditButton();
+            onClose();
+          }}
+        />
+      )}
+
+      {/* View prompt (action columns with run_prompt) */}
+      {(column.column_type === 'button' || column.column_type === 'action') && onViewPrompt && (
+        <MenuItem
+          icon={<Sparkles className="h-4 w-4" />}
+          label="View prompt"
+          onClick={() => {
+            onViewPrompt();
             onClose();
           }}
         />

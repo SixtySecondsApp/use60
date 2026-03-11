@@ -29,6 +29,7 @@ import {
   useUpdateTicketStatus,
 } from '@/lib/hooks/useSupportTickets';
 import { TicketDetail } from '@/components/support/TicketDetail';
+import { SupportAppDownload } from '@/components/support/SupportAppDownload';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -139,12 +140,13 @@ function useAgentNames(userIds: string[]): AgentMap {
       if (userIds.length === 0) return {};
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, display_name, full_name, email')
+        .select('id, first_name, last_name, email')
         .in('id', userIds);
       if (error) throw error;
       const map: AgentMap = {};
       for (const profile of data ?? []) {
-        map[profile.id] = profile.display_name || profile.full_name || profile.email || 'Agent';
+        const name = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
+        map[profile.id] = name || profile.email || 'Agent';
       }
       return map;
     },
@@ -330,6 +332,9 @@ export default function SupportTicketsPage() {
         </p>
       </div>
 
+      {/* Support app download (admin only) */}
+      <SupportAppDownload isAdmin />
+
       {/* Summary stats */}
       <div className="grid grid-cols-4 gap-3">
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
@@ -512,7 +517,7 @@ export default function SupportTicketsPage() {
       </div>
 
       {openTicket && (
-        <TicketDetail ticket={openTicket} open={!!openTicket} onClose={handleCloseTicket} />
+        <TicketDetail ticket={openTicket} open={!!openTicket} onClose={handleCloseTicket} isAdmin />
       )}
     </div>
   );

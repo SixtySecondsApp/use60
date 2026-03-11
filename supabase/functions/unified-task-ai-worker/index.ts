@@ -6,6 +6,7 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -98,6 +99,15 @@ serve(async (req) => {
       }
 
       const claudeData = await claudeResponse.json();
+      // Log AI cost event (fire-and-forget)
+      if (claudeData.usage && userId) {
+        logAICostEvent(
+          supabase, userId, null,
+          'anthropic', 'claude-haiku-4-5-20251001',
+          claudeData.usage.input_tokens || 0, claudeData.usage.output_tokens || 0,
+          'task_canvas_refine',
+        ).catch((e: unknown) => console.warn('[unified-task-ai-worker] refine cost log error:', e));
+      }
       const refinedContent = claudeData.content?.[0]?.text || current_content;
 
       return jsonResponse({ content: refinedContent }, req);
@@ -286,7 +296,8 @@ serve(async (req) => {
 
 async function callClaude(
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  costCtx?: { supabase: any; userId: string; orgId: string | null; feature?: string },
 ): Promise<string> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!apiKey) {
@@ -323,6 +334,16 @@ async function callClaude(
 
     if (!data.content || !data.content[0] || !data.content[0].text) {
       throw new Error('Invalid response from Claude API');
+    }
+
+    // Log AI cost event (fire-and-forget)
+    if (costCtx?.supabase && data.usage) {
+      logAICostEvent(
+        costCtx.supabase, costCtx.userId, costCtx.orgId,
+        'anthropic', 'claude-haiku-4-5-20251001',
+        data.usage.input_tokens || 0, data.usage.output_tokens || 0,
+        costCtx.feature || 'task_ai_worker',
+      ).catch((e: unknown) => console.warn('[unified-task-ai-worker] callClaude cost log error:', e));
     }
 
     return data.content[0].text;

@@ -23,7 +23,7 @@ import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useLandingBuilderWorkspace } from '@/lib/hooks/useLandingBuilderWorkspace';
 import { CopyPicker, parseCopySections } from './CopyPicker';
-import { PHASE_AGENT_MAP, AGENT_BADGES, type LandingResearchData, type LandingSection, type BrandConfig } from './types';
+import { PHASE_AGENT_MAP, AGENT_BADGES, type LandingResearchData, type LandingSection, type BrandConfig, type SeoConfig, generateDefaultSeo } from './types';
 import { useLandingResearch } from '@/lib/hooks/useLandingResearch';
 import { STRATEGIST_SYSTEM_PROMPT } from './agents/strategistAgent';
 import { COPYWRITER_SYSTEM_PROMPT } from './agents/copywriterAgent';
@@ -33,12 +33,18 @@ import { AssetGenerationQueue } from './assetQueue';
 import { AssemblyPreview } from './AssemblyPreview';
 import { LandingEditorPanel } from './LandingEditorPanel';
 import { FloatingChatBar, type ChatOverlayState } from './FloatingChatBar';
+import { PublishModal } from './PublishModal';
+import { SeoSettingsPanel } from './SeoSettingsPanel';
 import type { ModelTier } from './IntelligenceToggle';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Globe, Settings } from 'lucide-react';
 import type { WorkspacePhaseKey } from '@/lib/services/landingBuilderWorkspaceService';
 import type { FactProfile } from '@/lib/types/factProfile';
 import type { ProductProfile } from '@/lib/types/productProfile';
+import type { LandingTemplate } from './templates';
+import { ImageCropModal } from './ImageCropModal';
+import { landingAssetService } from '@/lib/services/landingAssetService';
 
 
 /**
@@ -351,6 +357,11 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
   const [modelTier, setModelTier] = useState<ModelTier>('balanced');
   // Divider toggle — defaults true, persisted in workspace visuals
   const [showDividers, setShowDividers] = useState(true);
+  // Publish modal state
+  const [publishModalOpen, setPublishModalOpen] = useState(false);
+  // SEO settings panel state (US-022)
+  const [seoSettingsOpen, setSeoSettingsOpen] = useState(false);
+  const [seoConfig, setSeoConfig] = useState<SeoConfig | null>(null);
 
   // Sync phase from workspace on load
   React.useEffect(() => {
@@ -437,6 +448,11 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     if (vis.show_dividers !== undefined) {
       setShowDividers(vis.show_dividers !== false);
     }
+
+    // Restore SEO config from workspace visuals (US-022)
+    if (vis.seo_config && typeof vis.seo_config === 'object') {
+      setSeoConfig(vis.seo_config as SeoConfig);
+    }
   }, [workspace, isAssemblyMode]);
 
   // Persist assembly sections to workspace (debounced) for session recovery
@@ -519,6 +535,55 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     assetQueueRef.current = null;
     resetResearch();
   }, [startNewChat, setConversationId, resetResearch]);
+
+  // Template selection — skip Strategy & Copy phases, jump straight to Assembly
+  const handleSelectTemplate = useCallback((template: LandingTemplate) => {
+    // Generate fresh UUIDs for all sections to avoid ID conflicts
+    const freshSections = template.sections.map((section) => ({
+      ...section,
+      id: crypto.randomUUID(),
+    }));
+
+    setAssemblySections(freshSections);
+    setAssemblyBrandConfig(template.brandConfig);
+    setIsAssemblyMode(true);
+    setCurrentPhase(2); // Assembly phase
+
+    // Persist sections to workspace for session recovery
+    if (conversationId) {
+      updateSections(freshSections);
+
+      // Mark strategy & copy as skipped, assembly as active
+      const phaseStatus: Record<string, string> = {
+        '0': 'skipped',
+        '1': 'skipped',
+        '2': 'active',
+      };
+      advancePhase({ nextPhase: 2, phaseStatus });
+
+      // Store brand config in visuals
+      updatePhaseOutput({
+        phase: 'visuals',
+        output: {
+          palette: {
+            primary: template.brandConfig.primary_color,
+            secondary: template.brandConfig.secondary_color,
+            accent: template.brandConfig.accent_color,
+            background: template.brandConfig.bg_color,
+            text: template.brandConfig.text_color,
+          },
+          typography: {
+            heading: template.brandConfig.font_heading,
+            body: template.brandConfig.font_body,
+          },
+          show_dividers: template.brandConfig.show_dividers ?? true,
+          template_id: template.id,
+        },
+      });
+    }
+
+    toast.success(`Template "${template.name}" loaded — customize in the editor`);
+  }, [conversationId, updateSections, advancePhase, updatePhaseOutput]);
 
   // Agent system prompts by phase
   const agentSystemPrompts: Record<number, string> = useMemo(() => ({
@@ -888,6 +953,99 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     ));
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Image upload + crop (US-016, US-017)
+  // ---------------------------------------------------------------------------
+
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageUrl, setCropImageUrl] = useState('');
+  const [cropSectionId, setCropSectionId] = useState<string | null>(null);
+
+  /** Upload a file for a section. Returns the public URL. Optionally opens crop modal. */
+  const handleUploadAsset = useCallback(async (sectionId: string, file: File): Promise<string> => {
+    const orgId = activeOrgId ?? 'unknown';
+    const sessionId = conversationId ?? 'unknown';
+
+    try {
+      const publicUrl = await landingAssetService.uploadImage(file, orgId, sessionId);
+
+      // Update section with the new image URL
+      setAssemblySections(prev => prev.map(s =>
+        s.id === sectionId ? { ...s, image_url: publicUrl, image_status: 'complete' as const } : s
+      ));
+
+      toast.success('Image uploaded');
+
+      // Open crop modal for the uploaded image
+      setCropSectionId(sectionId);
+      setCropImageUrl(publicUrl);
+      setCropModalOpen(true);
+
+      return publicUrl;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      toast.error(message);
+      throw err;
+    }
+  }, [activeOrgId, conversationId]);
+
+  /** Open crop modal for an existing section image */
+  const handleCropAsset = useCallback((sectionId: string) => {
+    const section = assemblySections.find(s => s.id === sectionId);
+    if (!section?.image_url) return;
+
+    setCropSectionId(sectionId);
+    setCropImageUrl(section.image_url);
+    setCropModalOpen(true);
+  }, [assemblySections]);
+
+  /** Apply crop: upload cropped blob, update section */
+  const handleCropApply = useCallback(async (croppedBlob: Blob) => {
+    if (!cropSectionId) return;
+
+    const orgId = activeOrgId ?? 'unknown';
+    const sessionId = conversationId ?? 'unknown';
+    const file = new File([croppedBlob], 'cropped.png', { type: 'image/png' });
+
+    try {
+      const publicUrl = await landingAssetService.uploadImage(file, orgId, sessionId);
+      setAssemblySections(prev => prev.map(s =>
+        s.id === cropSectionId ? { ...s, image_url: publicUrl, image_status: 'complete' as const } : s
+      ));
+      toast.success('Image cropped and saved');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save cropped image';
+      toast.error(message);
+    }
+
+    setCropModalOpen(false);
+    setCropSectionId(null);
+    setCropImageUrl('');
+  }, [cropSectionId, activeOrgId, conversationId]);
+
+  /** Skip crop — use original image as-is */
+  const handleCropSkip = useCallback(() => {
+    setCropModalOpen(false);
+    setCropSectionId(null);
+    setCropImageUrl('');
+  }, []);
+
+  // Open SEO settings panel — initialise defaults from sections if first time (US-022)
+  const handleOpenSeoSettings = useCallback(() => {
+    if (!seoConfig) {
+      setSeoConfig(generateDefaultSeo(assemblySections));
+    }
+    setSeoSettingsOpen(true);
+  }, [seoConfig, assemblySections]);
+
+  // Update SEO config and persist to workspace visuals (US-022)
+  const handleUpdateSeoConfig = useCallback((updated: SeoConfig) => {
+    setSeoConfig(updated);
+    // Persist alongside existing visuals JSONB
+    const existingVisuals = (workspace?.visuals ?? {}) as Record<string, unknown>;
+    updatePhaseOutput({ phase: 'visuals', output: { ...existingVisuals, seo_config: updated } });
+  }, [workspace, updatePhaseOutput]);
+
   // Dynamic preview padding based on chat overlay state
   const previewPadding = chatOverlayState === 'collapsed'
     ? 'pb-20'
@@ -910,7 +1068,30 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
             onToggleDividers={handleToggleDividers}
             onSectionUpdate={handleInlineSectionUpdate}
             onRegenerateAsset={handleRegenerateAsset}
+            onUploadAsset={handleUploadAsset}
           />
+
+          {/* Toolbar overlay — Publish + Page Settings */}
+          <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPublishModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors"
+              title="Publish landing page"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Publish</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenSeoSettings}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-white/10 shadow-sm transition-colors backdrop-blur-sm"
+              title="Page Settings (SEO & Analytics)"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Page Settings</span>
+            </button>
+          </div>
 
           {/* Floating chat bar — centered within preview area */}
           <FloatingChatBar
@@ -936,10 +1117,42 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
             sections={assemblySections}
             onSectionsChange={setAssemblySections}
             onRegenerateAsset={handleRegenerateAsset}
+            onUploadAsset={handleUploadAsset}
+            onCropAsset={handleCropAsset}
             selectedSectionId={highlightSectionId}
             onSelectSection={(id) => setHighlightSectionId(id)}
           />
         </div>
+
+        {/* Publish modal */}
+        <PublishModal
+          open={publishModalOpen}
+          onClose={() => setPublishModalOpen(false)}
+          sessionId={conversationId}
+          orgId={activeOrgId ?? ''}
+          userId={userId ?? ''}
+          sections={assemblySections}
+          brandConfig={assemblyBrandConfig}
+          companyName={orgProfile?.research_data?.company_overview?.name || orgProfile?.company_name || undefined}
+          seoConfig={seoConfig ?? undefined}
+        />
+
+        {/* SEO & Analytics settings panel (US-022) */}
+        <SeoSettingsPanel
+          open={seoSettingsOpen}
+          onClose={() => setSeoSettingsOpen(false)}
+          seoConfig={seoConfig ?? generateDefaultSeo(assemblySections)}
+          onUpdate={handleUpdateSeoConfig}
+        />
+
+        {/* Image crop modal (US-017) */}
+        <ImageCropModal
+          open={cropModalOpen}
+          imageUrl={cropImageUrl}
+          onCrop={handleCropApply}
+          onSkip={handleCropSkip}
+          onClose={handleCropSkip}
+        />
       </div>
     );
   }
@@ -966,6 +1179,7 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
           emptyComponent={
             <LandingBuilderEmpty
               onStart={handleStart}
+              onSelectTemplate={handleSelectTemplate}
               companyName={orgProfile?.research_data?.company_overview?.name || orgProfile?.company_name || undefined}
               companyDescription={orgProfile?.research_data?.company_overview?.description || undefined}
               productName={products?.[0]?.name || orgProfile?.research_data?.products_services?.products?.[0] || undefined}

@@ -486,8 +486,9 @@ export class SequenceOrchestrator {
 
     try {
       // Call edge function to execute skill
-      const { data, error } = await this.config.supabase.functions.invoke('api-skill-execute', {
+      const { data, error } = await this.config.supabase.functions.invoke('api-services-router', {
         body: {
+          action: 'skill_execute',
           skill_key: skillKey,
           context,
           organization_id: this.config.organizationId,

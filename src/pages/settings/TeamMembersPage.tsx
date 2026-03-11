@@ -562,14 +562,15 @@ export default function TeamMembersPage() {
         .eq('id', activeOrgId)
         .single();
 
-      // Call send-removal-email edge function
-      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-removal-email`, {
+      // Call send-router edge function (removal_email action)
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
         body: JSON.stringify({
+          action: 'removal_email',
           user_id: memberToRemove.user_id,
           org_id: activeOrgId,
           org_name: orgData?.name || 'the organization',
@@ -762,7 +763,16 @@ export default function TeamMembersPage() {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-[#37bd7e]" />
               Invite Team Members
+              <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-auto">
+                {members.filter(m => m.member_status !== 'removed').length + invitations.length} / 20 seats used
+              </span>
             </h2>
+            {members.filter(m => m.member_status !== 'removed').length + invitations.length >= 20 && (
+              <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>Organization limit of 20 members reached. Remove existing members or revoke pending invitations to invite more.</span>
+              </div>
+            )}
             <form onSubmit={handleSendInvite} className="flex gap-3">
               <div className="flex-1 relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 dark:text-gray-400" />

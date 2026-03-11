@@ -77,9 +77,10 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
 
     const name = inviterName || 'A team member';
 
-    // Call send-organization-invitation edge function with dark-themed template
-    const { error } = await supabase.functions.invoke('send-organization-invitation', {
+    // Call send-router edge function with dark-themed template
+    const { error } = await supabase.functions.invoke('send-router', {
       body: {
+        action: 'organization_invitation',
         to_email: invitation.email,
         to_name: inviteeName,
         organization_name: organizationName,
@@ -131,6 +132,28 @@ export async function createInvitation({
       return { data: null, error: 'You do not have permission to invite members to this organization' };
     }
 
+    // Enforce 20-member invite limit
+    const MAX_MEMBERS = 20;
+    const { count: memberCount } = await supabase
+      .from('organization_memberships')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', orgId);
+
+    const { count: pendingInviteCount } = await supabase
+      .from('organization_invitations')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .is('accepted_at', null)
+      .gt('expires_at', new Date().toISOString());
+
+    const totalCount = (memberCount || 0) + (pendingInviteCount || 0);
+    if (totalCount >= MAX_MEMBERS) {
+      return {
+        data: null,
+        error: `Organization has reached the maximum of ${MAX_MEMBERS} members. Remove existing members or revoke pending invitations to invite more.`,
+      };
+    }
+
     // Check if user already exists and is a member
     const { data: profileData } = await supabase
       .from('profiles')
@@ -170,7 +193,7 @@ export async function createInvitation({
 
       // If invitation hasn't expired, reuse and regenerate token for security
       if (existingExpiry > now) {
-        logger.log('[InvitationService] Reusing pending invitation and regenerating token:', existingInvite.id);
+        logger.log('[InvitationService] Reusing pending invitation and regenerating token:', existingInvite.id, '| Previous role:', existingInvite.role, '| New role:', role);
 
         // Update with new token, role, and 7-day expiration
         const { data: updatedInvite, error: updateError } = await supabase
@@ -184,7 +207,7 @@ export async function createInvitation({
             role, // Update role in case it changed from the original invite
           } as any)
           .eq('id', existingInvite.id)
-          .select()
+          .select('id, org_id, email, role, token, expires_at, accepted_at, created_at')
           .single();
 
         if (updateError) {
@@ -193,6 +216,7 @@ export async function createInvitation({
         }
 
         const invitationData = updatedInvite as unknown as Invitation;
+        logger.log('[InvitationService] Invitation updated — confirmed role in DB:', invitationData?.role);
 
         // Send invitation email with new token
         const { data: { user } } = await supabase.auth.getUser();
@@ -370,13 +394,13 @@ export async function getInvitationByToken(
 
     if (supabaseUrl && supabaseAnonKey) {
       try {
-        const edgeRes = await fetch(`${supabaseUrl}/functions/v1/get-invitation-by-token`, {
+        const edgeRes = await fetch(`${supabaseUrl}/functions/v1/get-router`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${supabaseAnonKey}`,
           },
-          body: JSON.stringify({ token }),
+          body: JSON.stringify({ action: 'invitation_by_token', token }),
         });
 
         if (edgeRes.ok) {

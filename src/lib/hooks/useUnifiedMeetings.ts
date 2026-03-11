@@ -41,14 +41,13 @@ export interface UnifiedMeetingsFilters {
   coachingCategory: 'all' | 'excellent' | 'good' | 'needs-work'
 }
 
-const ITEMS_PER_PAGE = 30
 const MAX_FETCH_PER_SOURCE = 200
 
 // ============================================================================
 // Hook
 // ============================================================================
 
-export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage: number) {
+export function useUnifiedMeetings(filters: UnifiedMeetingsFilters) {
   const { user } = useAuth()
   const { activeOrgId } = useOrg()
   const { syncState, isConnected, isSyncing, triggerSync } = useFathomIntegration()
@@ -61,9 +60,12 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
   const [meetingsCount, setMeetingsCount] = useState(0)
   const [meetingsLoading, setMeetingsLoading] = useState(true)
   const [meetingsError, setMeetingsError] = useState<string | null>(null)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
 
   // Auto-sync ref
   const autoSyncAttemptedRef = useRef(false)
+  // Stable ref for fetchMeetings — used by realtime INSERT handler to avoid dep array churn
+  const fetchMeetingsRef = useRef<() => void>(() => {})
 
   // Skip meetings fetch if source filter is 60_notetaker only
   const shouldFetchMeetings = filters.sourceFilter !== '60_notetaker'
@@ -71,7 +73,7 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
   const shouldFetchRecordings = filters.sourceFilter === 'all' || filters.sourceFilter === '60_notetaker'
 
   // Recordings (from recordings table via useRecordings hook)
-  const fetchLimit = Math.min(currentPage * ITEMS_PER_PAGE, MAX_FETCH_PER_SOURCE)
+  const fetchLimit = MAX_FETCH_PER_SOURCE
   const { recordings, total: recordingsCount, isLoading: recordingsLoading } = useRecordings(
     shouldFetchRecordings
       ? {
@@ -100,7 +102,10 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
       return
     }
 
-    setMeetingsLoading(true)
+    // Only show skeleton on initial load — background refreshes keep stale data visible
+    if (!hasLoadedOnce) {
+      setMeetingsLoading(true)
+    }
     setMeetingsError(null)
     try {
       // Count query
@@ -130,7 +135,7 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
       setMeetingsCount(count || 0)
 
       // Data query with overfetch for cross-table pagination
-      const limit = Math.min(currentPage * ITEMS_PER_PAGE, MAX_FETCH_PER_SOURCE)
+      const limit = MAX_FETCH_PER_SOURCE
 
       const queryBase = supabase
         .from('meetings')
@@ -138,7 +143,8 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
           *,
           company:companies!meetings_company_id_fkey(name, domain),
           action_items:meeting_action_items(completed),
-          tasks!tasks_meeting_id_fkey(status)
+          tasks!tasks_meeting_id_fkey(status),
+          meeting_attendees(name)
         `)
         .neq('source_type', '60_notetaker')
         .order(filters.sortField === 'title' ? 'title' : filters.sortField, { ascending: filters.sortDirection === 'asc' })
@@ -185,13 +191,14 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
       })) as MeetingRow[]
 
       setMeetings(meetingsData)
+      if (!hasLoadedOnce) setHasLoadedOnce(true)
     } catch (error: any) {
       console.error('Error fetching meetings:', error)
       setMeetingsError(error?.message || 'Failed to load meetings')
     } finally {
       setMeetingsLoading(false)
     }
-  }, [user, activeOrgId, currentPage, filters.scope, filters.sortField, filters.sortDirection, filters.dateRange, filters.selectedRepId, filters.sourceFilter, shouldFetchMeetings])
+  }, [user, activeOrgId, filters.scope, filters.sortField, filters.sortDirection, filters.dateRange, filters.selectedRepId, filters.sourceFilter, shouldFetchMeetings])
 
   // Trigger fetch when deps change
   useEffect(() => {
@@ -252,6 +259,22 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
                 : m
             )
           )
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'meetings',
+          filter: `org_id=eq.${activeOrgId}`,
+        },
+        (payload) => {
+          const inserted = payload.new as any
+          // 60 Notetaker meetings are shown via the recordings table, skip here
+          if (inserted.source_type === '60_notetaker') return
+          // Silent refetch — hasLoadedOnce ensures no skeleton flash
+          fetchMeetingsRef.current()
         }
       )
       .subscribe()
@@ -370,20 +393,7 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
     return items
   }, [unified, debouncedSearchQuery, filters.platformFilter, filters.durationBucket, filters.sentimentCategory, filters.coachingCategory, filters.sortField, filters.sortDirection])
 
-  // Pagination
-  const totalCount = useMemo(() => {
-    if (filters.sourceFilter === '60_notetaker') return recordingsCount
-    if (filters.sourceFilter !== 'all') return meetingsCount
-    return meetingsCount + recordingsCount
-  }, [meetingsCount, recordingsCount, filters.sourceFilter])
-
-  const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE
-    const end = start + ITEMS_PER_PAGE
-    return filtered.slice(start, end)
-  }, [filtered, currentPage])
-
-  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE)
+  const totalCount = filtered.length
 
   // ========================================================================
   // Stats
@@ -431,12 +441,13 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters, currentPage:
 
   return {
     // Data
-    items: paginatedItems,
-    allFilteredItems: filtered,
-    totalCount: filtered.length,
-    totalPages,
+    items: filtered,
+    totalCount,
     stats,
-    isLoading: meetingsLoading || recordingsLoading,
+    // Initial load: show skeleton only when we have NO data yet
+    isLoading: (meetingsLoading && !hasLoadedOnce) || (recordingsLoading && recordings.length === 0),
+    // Background refresh: data is visible, subtle indicator shown
+    isRefetching: hasLoadedOnce && meetingsLoading,
     error: meetingsError,
 
     // Search

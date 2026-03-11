@@ -58,7 +58,7 @@ function HeatmapSkeleton() {
                 <Skeleton className="h-full w-5 rounded justify-self-end" />
                 {/* 7 day cells — aspect-square matches the real ActivityHeatmapCell */}
                 {Array.from({ length: 7 }).map((_, d) => (
-                  <Skeleton key={d} className="aspect-square w-full rounded" />
+                  <Skeleton key={d} className="aspect-square w-full rounded-lg" />
                 ))}
               </React.Fragment>
             ))}

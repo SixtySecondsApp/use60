@@ -865,13 +865,13 @@ async function executeToolCall(
 
     case 'query_credit_usage': {
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-      const result = await fetch(`${supabaseUrl}/functions/v1/get-credit-usage-summary`, {
+      const result = await fetch(`${supabaseUrl}/functions/v1/get-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': userAuthToken ? `Bearer ${userAuthToken}` : '',
         },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ action: 'credit_usage_summary', ...input }),
       });
       const data = await result.json();
       return data;

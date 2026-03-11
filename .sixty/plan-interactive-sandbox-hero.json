@@ -1,0 +1,940 @@
+{
+  "feature": {
+    "id": "sandbox-hero",
+    "name": "Interactive Sandbox Hero — Personalized App Demo",
+    "status": "pending",
+    "consultReport": ".sixty/consult/interactive-sandbox-hero.md",
+    "strategyDocs": [
+      "website-strategy/website_brief.md",
+      "website-strategy/style_guide.md"
+    ],
+    "createdAt": "2026-03-04"
+  },
+
+  "summary": "Build a pixel-perfect interactive sandbox of the full 60 app as the website hero. Two entry points: homepage (URL input → research → sandbox) and campaign links (/t/{code} → instant personalized sandbox). Maximum personalization — visitor's company as a deal, their contacts as stakeholders, AI-drafted email to them. Full app chrome with clickable navigation.",
+
+  "phases": [
+    {
+      "id": 1,
+      "name": "Sandbox Shell",
+      "description": "Build the app chrome replica — sidebar, topbar, internal router, data provider",
+      "stories": ["SBX-001", "SBX-002", "SBX-003", "SBX-004"]
+    },
+    {
+      "id": 2,
+      "name": "Core Views",
+      "description": "Build the 5 key interactive views: Pipeline, Dashboard, Meeting Prep, Email Draft, Contacts",
+      "stories": ["SBX-005", "SBX-006", "SBX-007", "SBX-008", "SBX-009"]
+    },
+    {
+      "id": 3,
+      "name": "Personalization Engine",
+      "description": "Transform research data into full app dataset with AI-generated content",
+      "stories": ["SBX-010", "SBX-011", "SBX-012"]
+    },
+    {
+      "id": 4,
+      "name": "Homepage Integration",
+      "description": "Wire sandbox into homepage flow: URL input → research → sandbox transition",
+      "stories": ["SBX-013", "SBX-014"]
+    },
+    {
+      "id": 5,
+      "name": "/t/{code} Campaign System",
+      "description": "Database, routes, pre-enrichment pipeline, and instant sandbox loading for campaign links",
+      "stories": ["SBX-015", "SBX-016", "SBX-017", "SBX-018"]
+    },
+    {
+      "id": 6,
+      "name": "Interactive Copilot",
+      "description": "Command center / Quick Add demo with simulated AI responses",
+      "stories": ["SBX-019", "SBX-020"]
+    },
+    {
+      "id": 7,
+      "name": "Tracking & Alerts",
+      "description": "Engagement scoring, Slack webhook alerts, and lead pipeline integration",
+      "stories": ["SBX-021", "SBX-022", "SBX-023"]
+    },
+    {
+      "id": 8,
+      "name": "Polish & Performance",
+      "description": "Lazy loading, animation optimization, mobile responsiveness, guided tour",
+      "stories": ["SBX-024", "SBX-025"]
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "SBX-001",
+      "feature": "sandbox-hero",
+      "title": "Create SandboxDataProvider context and mock data types",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "acceptance": [
+        "SandboxDataProvider React context created at packages/landing/src/sandbox/data/SandboxDataProvider.tsx",
+        "TypeScript interfaces for SandboxDeal, SandboxContact, SandboxMeeting, SandboxActivity, SandboxKPI",
+        "Context provides: deals[], contacts[], meetings[], activities[], kpis, currentUser, currentOrg",
+        "Default mock dataset with 5 deals, 12 contacts, 4 meetings, 20 activities, and KPI metrics",
+        "Context consumed via useSandboxData() hook"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/data/SandboxDataProvider.tsx",
+        "packages/landing/src/sandbox/data/sandboxTypes.ts",
+        "packages/landing/src/sandbox/data/defaultMockData.ts",
+        "packages/landing/src/sandbox/data/useSandboxData.ts"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": ["packages/landing/src/lib/utils/mockDataUtils.ts"],
+        "schema": []
+      },
+      "blocks": ["SBX-002", "SBX-003", "SBX-004", "SBX-005", "SBX-006", "SBX-007", "SBX-008", "SBX-009"],
+      "parallelWith": [],
+      "designRef": "website-strategy/style_guide.md",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-002",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxSidebar — faithful replica of app sidebar navigation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "acceptance": [
+        "SandboxSidebar.tsx renders at ~240px width with collapse toggle",
+        "Navigation items match real app: Dashboard, Pipeline, Contacts, Companies, Meetings, Calls, Email",
+        "Each nav item has Lucide icon, label, and active state with violet accent",
+        "Clicking nav items updates sandbox internal view (via callback prop)",
+        "Matches app design: bg-gray-950 background, border-gray-800 right border, Inter font",
+        "Bottom section shows mock user avatar + org name"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/SandboxSidebar.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SBX-004"],
+      "parallelWith": ["SBX-003"],
+      "designRef": "src/components/AppLayout.tsx",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-003",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxTopbar — logo, notifications, and user menu",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "acceptance": [
+        "SandboxTopbar.tsx renders 64px fixed height bar",
+        "Left: 60 logo (text) matching app branding",
+        "Right: notification bell (with dot indicator), search icon, user avatar dropdown",
+        "Notification bell shows mock count badge (3)",
+        "Matches app design: bg-gray-950, border-b border-gray-800, backdrop-blur-md",
+        "User dropdown shows demo user name + 'Demo Mode' badge"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/SandboxTopbar.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SBX-004"],
+      "parallelWith": ["SBX-002"],
+      "designRef": "src/components/AppLayout.tsx",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-004",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxApp shell — compose sidebar + topbar + content area with view router",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "acceptance": [
+        "SandboxApp.tsx composes SandboxTopbar + SandboxSidebar + main content area",
+        "Internal view state managed by useState (not React Router)",
+        "Views: 'dashboard' | 'pipeline' | 'contacts' | 'meetings' | 'email' | 'copilot'",
+        "Sidebar nav clicks switch the active view with Framer Motion crossfade transition",
+        "Main content area has proper layout: pl-[240px] pt-16 (sidebar + topbar offset)",
+        "Wrapped in SandboxDataProvider",
+        "Renders at fixed aspect ratio (16:10) with browser-chrome frame on desktop, full-width on mobile"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/SandboxRouter.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-002", "SBX-003"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SBX-013"],
+      "parallelWith": [],
+      "designRef": "src/components/AppLayout.tsx",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-005",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxPipeline — Kanban board with deal cards",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "SandboxPipeline.tsx renders a horizontal Kanban with 4-5 stage columns",
+        "Columns: Lead, Qualified, Proposal, Negotiation, Closed Won",
+        "Each column has 1-3 SandboxDealCard components",
+        "Deal cards show: company avatar (gradient fallback), company name, deal value, owner initials, health indicator",
+        "Visitor's company highlighted with violet border glow + 'Your company' badge",
+        "Cards are visually draggable (cursor: grab) but don't actually reorder",
+        "Matches app Pipeline design: bg-gray-900 cards, rounded-xl, health bar colors"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxPipeline.tsx",
+        "packages/landing/src/sandbox/components/SandboxDealCard.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SBX-006", "SBX-007", "SBX-008", "SBX-009"],
+      "designRef": "src/components/Pipeline/Pipeline.tsx",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-006",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxDashboard — KPI cards, activity feed, and sales chart",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "SandboxDashboard.tsx renders a metrics overview page",
+        "Top row: 4 KPI cards (Meetings This Week, Deals in Pipeline, Revenue Pipeline, Follow-ups Pending)",
+        "Each KPI shows value, trend arrow (up/down), and percentage change",
+        "Activity feed section: 5-8 recent activities (calls, emails, meetings) with timestamps",
+        "Optional: simple bar/line chart for weekly activity (CSS-only or lightweight SVG, no Recharts)",
+        "Matches app Dashboard design system"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxDashboard.tsx",
+        "packages/landing/src/sandbox/components/SandboxKPICard.tsx",
+        "packages/landing/src/sandbox/components/SandboxActivityFeed.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SBX-005", "SBX-007", "SBX-008", "SBX-009"],
+      "designRef": "src/pages/Dashboard.tsx",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-007",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxMeetingPrep — AI-generated meeting preparation doc",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "SandboxMeetingPrep.tsx renders a meeting prep view for a hypothetical call with the visitor's company",
+        "Header: meeting title, date/time, attendee avatars",
+        "Sections: Company Overview, Talking Points (3-5), Risk Signals, Questions to Ask, Deal Context",
+        "Each section has an icon header and content with bullet points",
+        "Content is personalized from SandboxDataProvider (company name, industry, contacts)",
+        "Matches app meeting intelligence design patterns"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxMeetingPrep.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SBX-005", "SBX-006", "SBX-008", "SBX-009"],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-008",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxEmailDraft — AI-generated follow-up email composer",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "SandboxEmailDraft.tsx renders an email composition view",
+        "To: field pre-filled with visitor's name/email (from sandbox data)",
+        "Subject: contextual follow-up subject line",
+        "Body: AI-style drafted email with greeting, body paragraphs, sign-off",
+        "Email content references the visitor's company, recent meeting context, and next steps",
+        "Action buttons: Send, Edit, Regenerate (visual only, no real action)",
+        "Side panel: 'Why this email' showing AI reasoning context"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxEmailDraft.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SBX-005", "SBX-006", "SBX-007", "SBX-009"],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-009",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxContacts — contact list with relationship signals",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "acceptance": [
+        "SandboxContacts.tsx renders a contact list/table view",
+        "Columns: Avatar, Name, Title, Company, Engagement Level, Last Interaction",
+        "8-12 contacts displayed, visitor's company contacts grouped at top",
+        "Engagement level shown as colored badges (Hot, Warm, Cold)",
+        "Click a contact row to show a detail side panel with contact info + interaction timeline",
+        "Matches app contact list design patterns"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxContacts.tsx",
+        "packages/landing/src/sandbox/components/SandboxContactDetail.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SBX-005", "SBX-006", "SBX-007", "SBX-008"],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-010",
+      "feature": "sandbox-hero",
+      "title": "Build generatePersonalizedData — transform ResearchData into full sandbox dataset",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "acceptance": [
+        "generatePersonalizedData() function in packages/landing/src/sandbox/data/generatePersonalizedData.ts",
+        "Takes ResearchData (from useDemoResearch) + optional visitor info (name, email)",
+        "Returns complete SandboxData object: deals, contacts, meetings, activities, kpis",
+        "Visitor's company is always Deal #1 in 'Proposal' stage with $50-200K value (based on company size)",
+        "Generates 3-4 additional realistic deals as pipeline context",
+        "Creates 3-5 contacts from the visitor's company (from research data contacts/team)",
+        "Meeting prep content derived from research company overview + competitive landscape",
+        "Email draft personalized with visitor's name and company context"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/data/generatePersonalizedData.ts"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": ["packages/landing/src/demo/useDemoResearch.ts"],
+        "schema": []
+      },
+      "blocks": ["SBX-013"],
+      "parallelWith": ["SBX-011", "SBX-012"],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-011",
+      "feature": "sandbox-hero",
+      "title": "Build AI content generation for personalized email and meeting prep",
+      "type": "backend",
+      "status": "pending",
+      "priority": 5,
+      "acceptance": [
+        "Edge function sandbox-personalize at supabase/functions/sandbox-personalize/index.ts",
+        "POST endpoint accepting: company_name, domain, visitor_name, visitor_title, research_summary",
+        "Returns: { email_draft, meeting_prep, talking_points }",
+        "Uses Gemini Flash for fast generation (< 3s response time)",
+        "Email draft: warm, professional follow-up referencing their company's specifics",
+        "Meeting prep: 5 talking points, 3 risk signals, 3 questions to ask",
+        "Proper CORS headers via getCorsHeaders(req), no JWT required (public endpoint)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/sandbox-personalize/index.ts"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": ["supabase/functions/_shared/corsHelper.ts"],
+        "schema": []
+      },
+      "blocks": ["SBX-013"],
+      "parallelWith": ["SBX-010", "SBX-012"],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-012",
+      "feature": "sandbox-hero",
+      "title": "Build animated sandbox entrance — research-to-app morph transition",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "acceptance": [
+        "SandboxEntrance.tsx handles the transition from research phase to sandbox",
+        "Animation: Agent research cards morph/collapse into the sidebar, topbar assembles from top",
+        "Content area fades in with staggered children (dashboard view by default)",
+        "Total transition duration: 1.5-2s with spring physics",
+        "Framer Motion AnimatePresence for smooth mount/unmount",
+        "Falls back to simple fade-in if prefers-reduced-motion is set"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/SandboxEntrance.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SBX-013"],
+      "parallelWith": ["SBX-010", "SBX-011"],
+      "designRef": "website-strategy/style_guide.md",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-013",
+      "feature": "sandbox-hero",
+      "title": "Wire sandbox into homepage flow — URL input → research → sandbox",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "acceptance": [
+        "LandingPage.tsx updated: after research completes, transitions to SandboxApp instead of ProductShowcase",
+        "Flow: Hero URL input → AgentResearch animation → SandboxEntrance → SandboxApp",
+        "generatePersonalizedData() called with research results to populate sandbox",
+        "sandbox-personalize edge function called in parallel for email/meeting content",
+        "Back button or 'Exit demo' returns to homepage hero",
+        "Sandbox renders in a contained section (not full-page takeover) with browser-chrome frame",
+        "Existing demo-v2 flow preserved as fallback route at /demo-v2"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/pages/LandingPage.tsx",
+        "packages/landing/src/sandbox/SandboxExperience.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-004", "SBX-010", "SBX-011", "SBX-012"],
+        "files": ["packages/landing/src/demo/useDemoResearch.ts"],
+        "schema": []
+      },
+      "blocks": ["SBX-014"],
+      "parallelWith": [],
+      "designRef": "website-strategy/website_brief.md",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-014",
+      "feature": "sandbox-hero",
+      "title": "Add guided tour overlay with feature callouts",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 7,
+      "acceptance": [
+        "SandboxTour.tsx provides a step-by-step guided highlight overlay",
+        "5 tour stops: Dashboard → Pipeline (their company deal) → Meeting Prep → Email Draft → Copilot",
+        "Each stop: spotlight (dim surrounding), tooltip with description, Next/Skip buttons",
+        "Tour auto-advances after 5s idle or on click",
+        "Tour state persisted so returning visitors don't re-see it",
+        "Dismissable at any point, sandbox remains fully interactive after"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/components/SandboxTour.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-013"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-015",
+      "feature": "sandbox-hero",
+      "title": "Create campaign_links table migration and RLS policies",
+      "type": "schema",
+      "status": "pending",
+      "priority": 8,
+      "acceptance": [
+        "Migration creates campaign_links table with: code (PK), email, domain, first_name, last_name, company_name, enrichment (JSONB), campaign_id, org_id (FK), created_at, expires_at, first_visit, visit_count, engagement (JSONB), score",
+        "Index on code column for fast lookups",
+        "Index on org_id + campaign_id for listing",
+        "RLS: org members can read/write their own campaign links",
+        "RLS: anonymous users can read by code (for /t/{code} resolution)",
+        "TTL default: 30 days from creation"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/migrations/20260305000001_create_campaign_links.sql"
+      ],
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SBX-016", "SBX-017", "SBX-018"],
+      "parallelWith": [],
+      "designRef": "website-strategy/website_brief.md",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-016",
+      "feature": "sandbox-hero",
+      "title": "Build /t/:code route and campaign link resolver",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 9,
+      "acceptance": [
+        "New route /t/:code added to packages/landing/src/App.tsx",
+        "CampaignLanding.tsx page component resolves code via Supabase query",
+        "On valid code: loads enrichment data, increments visit_count, sets first_visit if null",
+        "Passes enrichment data to generatePersonalizedData() → SandboxApp",
+        "Welcome header: 'Hey {first_name}, here's what 60 would do for {company_name}'",
+        "On invalid/expired code: redirect to homepage with toast message",
+        "Page view tracked with campaign_id as utm_campaign"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/App.tsx",
+        "packages/landing/src/pages/CampaignLanding.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-015", "SBX-013"],
+        "files": [],
+        "schema": ["campaign_links"]
+      },
+      "blocks": [],
+      "parallelWith": ["SBX-017"],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-017",
+      "feature": "sandbox-hero",
+      "title": "Build pre-enrichment edge function for batch campaign link generation",
+      "type": "backend",
+      "status": "pending",
+      "priority": 9,
+      "acceptance": [
+        "Edge function campaign-enrich at supabase/functions/campaign-enrich/index.ts",
+        "POST endpoint accepting: contacts[] (email, first_name, last_name, company_name), campaign_id, org_id",
+        "For each contact: extract domain → call landing-research (Gemini + Exa) → generate 6-char code",
+        "Code generation: crypto.randomBytes(6) base62 encoded, collision-checked",
+        "Store results in campaign_links table with enrichment JSONB",
+        "Rate limited: max 10 concurrent enrichments",
+        "Returns: Array of { email, code, link } for campaign integration",
+        "JWT-protected (org members only)"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/campaign-enrich/index.ts"
+      ],
+      "dependencies": {
+        "stories": ["SBX-015"],
+        "files": [
+          "supabase/functions/landing-research/index.ts",
+          "supabase/functions/_shared/corsHelper.ts"
+        ],
+        "schema": ["campaign_links"]
+      },
+      "blocks": ["SBX-018"],
+      "parallelWith": ["SBX-016"],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-018",
+      "feature": "sandbox-hero",
+      "title": "Build campaign management UI — create links, upload contacts, view analytics",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 10,
+      "acceptance": [
+        "CampaignManager component accessible from main app settings or tools",
+        "Create campaign: name, upload CSV (email, first_name, last_name, company_name)",
+        "Trigger batch enrichment via campaign-enrich edge function",
+        "Progress display: X/Y contacts enriched with status indicators",
+        "Results table: contact name, company, generated link (copy button), enrichment status",
+        "Export links as CSV for email campaign tools (Instantly, etc.)",
+        "Basic analytics: visit count, avg engagement score per campaign"
+      ],
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+      "files": [
+        "src/pages/campaigns/CampaignManager.tsx",
+        "src/pages/campaigns/CampaignDetail.tsx",
+        "src/lib/hooks/useCampaignLinks.ts"
+      ],
+      "dependencies": {
+        "stories": ["SBX-017"],
+        "files": [],
+        "schema": ["campaign_links"]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-019",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxCopilot — command center with simulated AI interaction",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "acceptance": [
+        "SandboxCopilot.tsx renders a command center overlay (triggered by sidebar Copilot nav or Cmd+K)",
+        "Chat-style interface with message bubbles",
+        "Pre-loaded conversation: user asks 'Prepare for my meeting with {company}' → AI responds with prep",
+        "Typing animation for AI responses (30-50ms per character)",
+        "Response includes: meeting context, talking points, risk signals (from sandbox data)",
+        "Input field allows typing (visual only) with suggested prompts below"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/views/SandboxCopilot.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-001"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": ["SBX-020"],
+      "parallelWith": [],
+      "designRef": "src/components/command-center/CommandCenter.tsx",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-020",
+      "feature": "sandbox-hero",
+      "title": "Build SandboxQuickAdd — modal with AI cascade animation",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 11,
+      "acceptance": [
+        "SandboxQuickAdd.tsx renders a Quick Add modal matching the app's pattern",
+        "Auto-plays a demo sequence: user types command → AI processes in steps",
+        "4-step cascade: Search meetings → Pull deal context → Research contacts → Generate prep doc",
+        "Each step: loading spinner → green checkmark, staggered 600ms",
+        "Spring animation for modal entry (y: 100% → 0, damping: 30, stiffness: 300)",
+        "Result card appears below with meeting prep summary",
+        "Triggerable from SandboxTopbar search icon or keyboard shortcut indicator"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/components/SandboxQuickAdd.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-019"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "designRef": "src/components/quick-add/QuickAdd.tsx",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-021",
+      "feature": "sandbox-hero",
+      "title": "Build sandbox interaction tracking and engagement scoring",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 12,
+      "acceptance": [
+        "useSandboxTracking() hook tracks all sandbox interactions",
+        "Events tracked: view_switch, deal_card_click, contact_click, email_view, copilot_open, time_per_view",
+        "Each event has a weight (from website_brief.md scoring table)",
+        "Running engagement score computed and stored in localStorage",
+        "For /t/{code} visitors: engagement JSONB and score updated on campaign_links row",
+        "Edge function sandbox-track for fire-and-forget event storage"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/hooks/useSandboxTracking.ts",
+        "supabase/functions/sandbox-track/index.ts"
+      ],
+      "dependencies": {
+        "stories": ["SBX-013"],
+        "files": ["packages/landing/src/lib/pageViewTracker.ts"],
+        "schema": []
+      },
+      "blocks": ["SBX-022"],
+      "parallelWith": ["SBX-023"],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-022",
+      "feature": "sandbox-hero",
+      "title": "Build Slack webhook alerts for hot sandbox leads",
+      "type": "backend",
+      "status": "pending",
+      "priority": 13,
+      "acceptance": [
+        "Edge function sandbox-alert at supabase/functions/sandbox-alert/index.ts",
+        "Triggered when engagement score crosses 'Hot' threshold (51+)",
+        "Slack message format: visitor name, company, score, time on site, top interests, demo completion %",
+        "Includes action links: View in 60, Send follow-up",
+        "Debounced: max 1 alert per visitor per 24h",
+        "Configurable Slack webhook URL via org settings or env var"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "supabase/functions/sandbox-alert/index.ts"
+      ],
+      "dependencies": {
+        "stories": ["SBX-021"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "designRef": "website-strategy/website_brief.md",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-023",
+      "feature": "sandbox-hero",
+      "title": "Build lead pipeline integration — sandbox visitors become leads in 60",
+      "type": "backend",
+      "status": "pending",
+      "priority": 12,
+      "acceptance": [
+        "When a sandbox visitor signs up, their enrichment data seeds into their 60 account",
+        "Company from research becomes a real company record",
+        "Contacts from enrichment become real contact records",
+        "Demo deal becomes a real deal in their pipeline",
+        "Meeting prep and email draft preserved as starting content",
+        "Signup form pre-fills email (from /t/{code} data or partial signup tracking)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/SandboxSignup.tsx",
+        "supabase/functions/sandbox-seed-account/index.ts"
+      ],
+      "dependencies": {
+        "stories": ["SBX-013"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SBX-021"],
+      "designRef": null,
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-024",
+      "feature": "sandbox-hero",
+      "title": "Performance optimization — lazy loading, code splitting, and animation budgets",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 14,
+      "acceptance": [
+        "Sandbox components lazy-loaded via React.lazy() — not in initial bundle",
+        "Vite manual chunk: 'sandbox' chunk separated from main landing page code",
+        "Sandbox chunk budget: < 150KB gzipped total",
+        "LCP stays < 1.5s (hero renders before sandbox loads)",
+        "Framer Motion animations use transform + opacity only (GPU-accelerated)",
+        "prefers-reduced-motion: all animations instant, no spring physics",
+        "Below-fold sections intersection-observer lazy-initialized"
+      ],
+      "estimatedMinutes": 20,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/vite.config.ts",
+        "packages/landing/src/sandbox/SandboxApp.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-013"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SBX-025"],
+      "designRef": "website-strategy/style_guide.md",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    },
+    {
+      "id": "SBX-025",
+      "feature": "sandbox-hero",
+      "title": "Mobile-responsive sandbox and touch gesture support",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 14,
+      "acceptance": [
+        "Sandbox renders correctly on mobile (< 768px): sidebar collapses to bottom tab bar",
+        "Topbar simplified on mobile: logo + hamburger menu",
+        "Pipeline view: horizontal scroll with snap points on mobile",
+        "Dashboard: single-column KPI cards stack",
+        "Touch gestures: swipe between views, pull-down to return to hero",
+        "All touch targets minimum 44px",
+        "Simplified animations on mobile (fewer staggers, shorter durations)"
+      ],
+      "estimatedMinutes": 25,
+      "actualMinutes": null,
+      "files": [
+        "packages/landing/src/sandbox/SandboxApp.tsx",
+        "packages/landing/src/sandbox/SandboxSidebar.tsx",
+        "packages/landing/src/sandbox/views/SandboxPipeline.tsx",
+        "packages/landing/src/sandbox/views/SandboxDashboard.tsx"
+      ],
+      "dependencies": {
+        "stories": ["SBX-013"],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["SBX-024"],
+      "designRef": "website-strategy/style_guide.md",
+      "ticketId": null,
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 25,
+    "completedStories": 0,
+    "currentPhase": null,
+    "lastUpdated": "2026-03-04T22:30:00Z",
+    "estimatedTotalMinutes": 625,
+    "parallelGroups": [
+      {
+        "group": ["SBX-002", "SBX-003"],
+        "reason": "Sidebar and Topbar are independent components",
+        "timeSaved": "20min"
+      },
+      {
+        "group": ["SBX-005", "SBX-006", "SBX-007", "SBX-008", "SBX-009"],
+        "reason": "All 5 views only depend on SBX-001 (data provider), no overlap",
+        "timeSaved": "100min"
+      },
+      {
+        "group": ["SBX-010", "SBX-011", "SBX-012"],
+        "reason": "Data transform, edge function, and entrance animation are independent",
+        "timeSaved": "50min"
+      },
+      {
+        "group": ["SBX-016", "SBX-017"],
+        "reason": "Route resolver and enrichment function both depend on schema but not each other",
+        "timeSaved": "25min"
+      },
+      {
+        "group": ["SBX-024", "SBX-025"],
+        "reason": "Performance and mobile optimization are independent concerns",
+        "timeSaved": "20min"
+      }
+    ],
+    "mvpStories": ["SBX-001", "SBX-002", "SBX-003", "SBX-004", "SBX-005", "SBX-006", "SBX-007", "SBX-008", "SBX-009", "SBX-010", "SBX-011", "SBX-012", "SBX-013", "SBX-014"],
+    "mvpEstimateMinutes": 360
+  }
+}

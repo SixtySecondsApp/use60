@@ -404,8 +404,9 @@ export async function executeImport(
   mappings: Record<string, string>,
   options: ImportOptions
 ): Promise<ImportResult> {
-  const { data, error } = await supabase.functions.invoke('import-leads-generic', {
+  const { data, error } = await supabase.functions.invoke('import-router', {
     body: {
+      action: 'leads_generic',
       rows,
       mappings,
       options,

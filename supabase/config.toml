@@ -11,6 +11,11 @@
 # Development branch uses connection pooler for better performance
 pooler = { enabled = true, port = 6543, pool_mode = "transaction" }
 
+[functions.seed-demo-data]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/seed-demo-data/index.ts"
+
 [functions.process-single-activity]
 enabled = true
 verify_jwt = true
@@ -22,14 +27,14 @@ entrypoint = "./functions/process-single-activity/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/process-single-activity/*.html" ]
 
-[functions.savvycal-leads-webhook]
+# Consolidated webhook routers
+[functions.webhook-crm]
 verify_jwt = false
 
-# JustCall integration (webhooks + OAuth callback must accept non-JWT requests)
-[functions.justcall-webhook]
+[functions.webhook-integrations]
 verify_jwt = false
 
-[functions.justcall-oauth-callback]
+[functions.webhook-leads]
 verify_jwt = false
 
 # Audio proxy is consumed by <audio> tags (Range requests) so we allow token via query string
@@ -52,7 +57,11 @@ verify_jwt = false
 [functions.hubspot-oauth-callback]
 verify_jwt = false
 
-[functions.hubspot-webhook]
+# LinkedIn integration (OAuth callback + lead webhooks must accept non-JWT requests)
+[functions.linkedin-oauth-callback]
+verify_jwt = false
+
+[functions.webhook-linkedin]
 verify_jwt = false
 
 # Health check endpoint - public access for monitoring services
@@ -91,17 +100,10 @@ verify_jwt = false
 [functions.slack-list-channels]
 verify_jwt = false
 
-[functions.slack-test-message]
-verify_jwt = false
-
 [functions.slack-self-map]
 verify_jwt = false
 
 [functions.slack-refresh-user-channels]
-verify_jwt = false
-
-# HITL test endpoint - for testing approval flows
-[functions.test-hitl]
 verify_jwt = false
 
 # Fireflies integration - we handle auth manually inside the function
@@ -176,9 +178,8 @@ verify_jwt = false
 [functions.process-recording]
 verify_jwt = false
 
-# Poll stuck bots - fallback for missed MeetingBaaS webhooks
-# Called internally or via cron, uses service role key for auth
-[functions.poll-stuck-bots]
+# Consolidated poll scheduler - routes to poll-type-specific handlers
+[functions.poll-scheduler]
 verify_jwt = false
 
 # MeetingBaaS Connect Calendar - called from frontend with user JWT
@@ -207,9 +208,12 @@ verify_jwt = false
 [functions.hubspot-admin]
 verify_jwt = false
 
-# OAuth initiate functions - called from browser to start OAuth flows
-# Handle auth internally (CORS preflight needs to work)
-[functions.google-oauth-initiate]
+# Consolidated OAuth initiate - routes to provider-specific handlers
+[functions.oauth-initiate]
+verify_jwt = false
+
+# Consolidated OAuth token refresh - routes to provider-specific handlers
+[functions.oauth-token-refresh]
 verify_jwt = false
 
 # Google OAuth callback - public GET endpoint, Google redirects here with auth code
@@ -217,23 +221,13 @@ verify_jwt = false
 [functions.google-oauth-callback]
 verify_jwt = false
 
-# Google OAuth callback (public variant) - handles both GET redirect and POST exchange
-[functions.google-oauth-callback-public]
-verify_jwt = false
-
 # OAuth exchange function - exchanges code for tokens
 # Called from browser with user JWT, handles auth manually (CORS preflight needs to work)
 [functions.google-oauth-exchange]
 verify_jwt = false
 
-[functions.hubspot-oauth-initiate]
-verify_jwt = false
-
 # Fathom integration - called from browser, handle auth internally
 # OAuth initiate/callback + sync/disconnect + user mapping
-[functions.fathom-oauth-initiate]
-verify_jwt = false
-
 [functions.fathom-oauth-callback]
 verify_jwt = false
 
@@ -252,14 +246,12 @@ verify_jwt = false
 [functions.fetch-transcript]
 verify_jwt = false
 
-[functions.backfill-transcripts]
+# Consolidated backfill runner - routes to backfill-type-specific handlers
+[functions.backfill-runner]
 verify_jwt = false
 
-# Thumbnail generation - called internally by fathom-sync and backfill-thumbnails
+# Thumbnail generation - called internally by fathom-sync and backfill-runner
 [functions.generate-video-thumbnail-v2]
-verify_jwt = false
-
-[functions.backfill-thumbnails]
 verify_jwt = false
 
 # Analytics web vitals - called from browser, no auth needed for telemetry
@@ -282,14 +274,28 @@ verify_jwt = false
 [functions.validate-waitlist-token]
 verify_jwt = false
 
+# Generate test user magic link - called from admin panel with user JWT
+# Admin auth handled manually inside the function (CORS preflight needs to work)
+[functions.generate-test-user-link]
+verify_jwt = false
+
+# Validate test user magic link - public endpoint for test user signup
+# No auth needed - validates token from database
+[functions.validate-test-user-link]
+verify_jwt = false
+
+# Complete test user signup - public endpoint for test user account creation
+# Token-based auth - creates user, org membership, grants credits
+[functions.complete-test-user-signup]
+verify_jwt = false
+
 # Delete organization - called from admin panel with user JWT
 # We handle auth verification manually inside the function (admin check)
 [functions.delete-organization]
 verify_jwt = false
 
-# Cleanup incomplete onboarding - scheduled/manual cleanup of abandoned org records
-# Called by pg_cron or admin trigger with CRON_SECRET or service role key
-[functions.cleanup-incomplete-onboarding]
+# Consolidated cleanup scheduler - routes to cleanup-task-specific handlers
+[functions.cleanup-scheduler]
 verify_jwt = false
 
 # Save organization skills - called from browser during onboarding
@@ -305,11 +311,6 @@ verify_jwt = false
 # Deep enrich organization - called from browser during onboarding and settings
 # Uses service role key internally, handles auth manually
 [functions.deep-enrich-organization]
-verify_jwt = false
-
-# Exa abilities demo - called directly from browser (CORS preflight must pass)
-# Auth is enforced manually inside the function via supabase.auth.getUser()
-[functions.exa-abilities-demo]
 verify_jwt = false
 
 # Meeting Analytics cron - triggered by pg_cron for scheduled reports
@@ -364,6 +365,23 @@ verify_jwt = false
 # Meeting structured summary - called from browser with user JWT
 # Uses service role internally; CORS handled in function
 [functions.meeting-process-structured-summary]
+verify_jwt = false
+
+# Instant Replay orchestrator - called from browser during onboarding "wow moment"
+# SSE streaming; handles user JWT auth internally (staging ES256 JWT issue)
+[functions.instant-replay]
+verify_jwt = false
+
+# Stripe webhook - receives payment events from Stripe using HMAC signatures
+# Stripe does not send Supabase JWTs; signature is verified inside the function
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stripe-webhook/index.ts"
+
+# Support ticket email - called from browser after ticket creation (CORS preflight must pass)
+# Handles auth internally; verify_jwt = false avoids ES256 JWT issue on staging
+[functions.send-support-ticket-email]
 verify_jwt = false
 
 # Explorium B2B data platform — match (free), search, enrich

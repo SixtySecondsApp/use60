@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils';
 // Types
 // ============================================================================
 
-export type DatePreset = '7d' | '30d' | '90d' | 'month' | 'custom';
+export type DatePreset = 'all' | '7d' | '30d' | '90d' | 'month' | 'custom';
 
 export interface DateRange {
   start: Date;
@@ -93,6 +93,7 @@ export function useDateRangeFilter(defaultPreset: DatePreset = 'month'): UseDate
   }, []);
 
   const period = useMemo(() => {
+    if (datePreset === 'all') return 365;
     if (datePreset === '7d') return 7;
     if (datePreset === '90d') return 90;
     if (datePreset === 'month') {
@@ -112,6 +113,7 @@ export function useDateRangeFilter(defaultPreset: DatePreset = 'month'): UseDate
   }, [datePreset, calendarStart, calendarEnd, currentMonth]);
 
   const dateRange = useMemo<DateRange | undefined>(() => {
+    if (datePreset === 'all') return undefined;
     if (datePreset === 'month') {
       return { start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) };
     }
@@ -149,7 +151,11 @@ export function useDateRangeFilter(defaultPreset: DatePreset = 'month'): UseDate
 
   const handlePresetClick = useCallback((preset: DatePreset) => {
     setDatePreset(preset);
-    if (preset === 'month') {
+    if (preset === 'all') {
+      setCalendarStart(null);
+      setCalendarEnd(null);
+      setIsDatePickerOpenRaw(false);
+    } else if (preset === 'month') {
       // Reset to current calendar month when switching to month mode
       setCurrentMonth(startOfMonth(new Date()));
       setCalendarStart(null);
@@ -189,6 +195,7 @@ export function useDateRangeFilter(defaultPreset: DatePreset = 'month'): UseDate
   }, [defaultPreset]);
 
   const dateDisplayText = useMemo(() => {
+    if (datePreset === 'all') return 'All time';
     if (datePreset === 'month') {
       return format(currentMonth, 'MMMM yyyy');
     }

@@ -6,6 +6,7 @@ import { useHubSpotIntegration } from '@/lib/hooks/useHubSpotIntegration';
 import { useAttioIntegration } from '@/lib/hooks/useAttioIntegration';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
+import { useOrg } from '@/lib/contexts/OrgContext';
 
 const PENDING_OAUTH_KEY = 'setupWizard:pendingOAuth';
 
@@ -13,6 +14,7 @@ export function useSetupWizard() {
   const store = useSetupWizardStore();
   const { user } = useAuth();
   const { activeOrgId } = useOrgStore();
+  const { userRole } = useOrg();
 
   const google = useGoogleIntegration();
   const notetaker = useNotetakerIntegration();
@@ -21,15 +23,21 @@ export function useSetupWizard() {
 
   const oauthReturnHandled = useRef(false);
 
-  // Fetch progress on mount
+  // Invited members (role='member') share org credits and must not see the
+  // Setup wizard, which grants credits per step (sybil attack vector).
+  const isInvitedMember = userRole === 'member';
+
+  // Fetch progress on mount — skip for invited members
   useEffect(() => {
+    if (isInvitedMember) return;
     if (user?.id && activeOrgId && !store.hasFetched && !store.isLoading) {
       store.fetchProgress(user.id, activeOrgId);
     }
-  }, [user?.id, activeOrgId, store.hasFetched, store.isLoading]);
+  }, [user?.id, activeOrgId, store.hasFetched, store.isLoading, isInvitedMember]);
 
   // Handle OAuth return — re-open wizard and complete the step that initiated OAuth
   useEffect(() => {
+    if (isInvitedMember) return;
     const pendingStep = localStorage.getItem(PENDING_OAUTH_KEY) as SetupStep | null;
     if (!pendingStep || !user?.id || !activeOrgId || !store.hasFetched || oauthReturnHandled.current) return;
 
@@ -47,14 +55,15 @@ export function useSetupWizard() {
     store.openWizard();
     store.setCurrentStep(pendingStep);
     store.completeStep(user.id, activeOrgId, pendingStep);
-  }, [user?.id, activeOrgId, store.hasFetched, google.isConnected, hubspot.isConnected, attio.isConnected]);
+  }, [user?.id, activeOrgId, store.hasFetched, google.isConnected, hubspot.isConnected, attio.isConnected, isInvitedMember]);
 
   const completedCount = useMemo(
     () => SETUP_STEPS.filter(s => store.steps[s].completed).length,
     [store.steps]
   );
 
-  const shouldShowIndicator = store.hasFetched && !store.allCompleted;
+  // Invited members never see the setup wizard indicator
+  const shouldShowIndicator = !isInvitedMember && store.hasFetched && !store.allCompleted;
 
   const nextIncompleteStep: SetupStep | null = useMemo(
     () => SETUP_STEPS.find(s => !store.steps[s].completed) || null,
@@ -66,6 +75,7 @@ export function useSetupWizard() {
     completedCount,
     totalSteps: SETUP_STEPS.length,
     shouldShowIndicator,
+    isInvitedMember,
     nextIncompleteStep,
     google,
     notetaker,

@@ -13,7 +13,7 @@
  */
 
 import { useState } from 'react';
-import { BrainCircuit, Edit3, Loader2, Mail, Save, Send, User, X } from 'lucide-react';
+import { BrainCircuit, Edit3, FileText, Loader2, Mail, RefreshCw, Save, Send, ThumbsUp, User, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,13 +31,19 @@ export interface CCEmailPanelProps {
   isSaving: boolean;
   onApproveAndSend?: (payload: { to: string; subject: string; body_html: string }) => void;
   isSending?: boolean;
+  onSaveAsDraft?: (payload: { to: string; subject: string; body_html: string }) => void;
+  isSavingDraft?: boolean;
+  onGoodSuggestion?: () => void;
+  isMarkingGood?: boolean;
+  onRegenerate?: (feedback: string) => void;
+  isRegenerating?: boolean;
 }
 
 // ============================================================================
 // Main CCEmailPanel
 // ============================================================================
 
-export function CCEmailPanel({ item, onSave, isSaving, onApproveAndSend, isSending = false }: CCEmailPanelProps) {
+export function CCEmailPanel({ item, onSave, isSaving, onApproveAndSend, isSending = false, onSaveAsDraft, isSavingDraft = false, onGoodSuggestion, isMarkingGood = false, onRegenerate, isRegenerating = false }: CCEmailPanelProps) {
   // All drafted_action fields accessed with optional chaining + type guards since JSONB is untyped
   const action = (item.drafted_action ?? {}) as Record<string, unknown>;
 
@@ -62,6 +68,7 @@ export function CCEmailPanel({ item, onSave, isSaving, onApproveAndSend, isSendi
   const [isEditing, setIsEditing] = useState(false);
   const [editedSubject, setEditedSubject] = useState(initialSubject);
   const [editedBody, setEditedBody] = useState(bodyHtml);
+  const [feedbackText, setFeedbackText] = useState('');
 
   const handleEdit = () => {
     // Reset to current saved values before entering edit mode
@@ -90,10 +97,7 @@ export function CCEmailPanel({ item, onSave, isSaving, onApproveAndSend, isSendi
     }
   };
 
-  const handleApproveAndSend = () => {
-    if (!onApproveAndSend) return;
-
-    // If in edit mode, persist edits first before sending
+  const getResolvedPayload = () => {
     if (isEditing) {
       onSave({
         ...action,
@@ -104,12 +108,21 @@ export function CCEmailPanel({ item, onSave, isSaving, onApproveAndSend, isSendi
       setIsEditing(false);
     }
 
-    const resolvedSubject = isEditing ? editedSubject : String(action?.subject ?? '');
-    const resolvedBodyHtml = isEditing
-      ? editedBody
-      : String(action?.body_html ?? action?.body ?? '');
+    return {
+      to,
+      subject: isEditing ? editedSubject : String(action?.subject ?? ''),
+      body_html: isEditing ? editedBody : String(action?.body_html ?? action?.body ?? ''),
+    };
+  };
 
-    onApproveAndSend({ to, subject: resolvedSubject, body_html: resolvedBodyHtml });
+  const handleApproveAndSend = () => {
+    if (!onApproveAndSend) return;
+    onApproveAndSend(getResolvedPayload());
+  };
+
+  const handleSaveAsDraft = () => {
+    if (!onSaveAsDraft) return;
+    onSaveAsDraft(getResolvedPayload());
   };
 
   // ============================================================================
@@ -224,22 +237,102 @@ export function CCEmailPanel({ item, onSave, isSaving, onApproveAndSend, isSendi
         </div>
       </div>
 
-      {/* ---- Approve & Send row ---- */}
-      {onApproveAndSend && (
-        <div className="flex items-center gap-2 pt-1">
-          <Button
-            size="sm"
-            className="h-8 px-4 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-            onClick={handleApproveAndSend}
-            disabled={isSending}
-          >
-            {isSending ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Send className="h-3 w-3" />
-            )}
-            Approve &amp; Send
-          </Button>
+      {/* ---- Action buttons row ---- */}
+      {(onApproveAndSend || onSaveAsDraft || onGoodSuggestion) && (
+        <div className="flex items-center gap-2 pt-1 flex-wrap">
+          {onApproveAndSend && (
+            <Button
+              size="sm"
+              className="h-8 px-4 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+              onClick={handleApproveAndSend}
+              disabled={isSending || isSavingDraft}
+            >
+              {isSending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Send className="h-3 w-3" />
+              )}
+              Send Now
+            </Button>
+          )}
+          {onSaveAsDraft && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-4 text-xs gap-1.5"
+              onClick={handleSaveAsDraft}
+              disabled={isSending || isSavingDraft}
+            >
+              {isSavingDraft ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <FileText className="h-3 w-3" />
+              )}
+              Save as Draft
+            </Button>
+          )}
+          {onGoodSuggestion && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 px-3 text-xs gap-1.5 text-slate-500 hover:text-emerald-600 dark:text-gray-400"
+              onClick={onGoodSuggestion}
+              disabled={isMarkingGood}
+            >
+              {isMarkingGood ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <ThumbsUp className="h-3 w-3" />
+              )}
+              Good Suggestion
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* ---- Regenerate with feedback ---- */}
+      {onRegenerate && (
+        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700/30 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+            <RefreshCw className="h-3.5 w-3.5" />
+            Teach the AI
+          </div>
+          <p className="text-xs text-amber-600 dark:text-amber-500">
+            Tell the AI what to change and it will rewrite the email. Your feedback trains future drafts too.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              placeholder="e.g. Don't use emdashes, shorter sentences, more casual tone..."
+              className="h-8 text-xs flex-1 bg-white dark:bg-gray-800 border-amber-200 dark:border-amber-700/40"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && feedbackText.trim() && !isRegenerating) {
+                  onRegenerate(feedbackText.trim());
+                  setFeedbackText('');
+                }
+              }}
+              disabled={isRegenerating}
+            />
+            <Button
+              size="sm"
+              className="h-8 px-3 text-xs gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => {
+                if (feedbackText.trim()) {
+                  onRegenerate(feedbackText.trim());
+                  setFeedbackText('');
+                }
+              }}
+              disabled={!feedbackText.trim() || isRegenerating}
+            >
+              {isRegenerating ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              Regenerate
+            </Button>
+          </div>
         </div>
       )}
 

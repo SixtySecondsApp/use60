@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { enrichContact, enrichCompany, type EnrichmentResult } from '@/lib/services/geminiEnrichmentService';
 import type { Contact, Company } from '@/lib/database/models';
+import { useCreditGatedAction } from '@/lib/hooks/useCreditGatedAction';
 
 interface EnrichButtonProps {
   type: 'contact' | 'company';
@@ -20,8 +21,11 @@ interface EnrichButtonProps {
  */
 export function EnrichButton({ type, record, onEnriched, className }: EnrichButtonProps) {
   const [isEnriching, setIsEnriching] = useState(false);
+  const actionName = type === 'contact' ? 'contact_enrichment' : 'company_enrichment';
+  const { execute: executeEnrichGated } = useCreditGatedAction(actionName, 3);
 
   const handleEnrich = async () => {
+    await executeEnrichGated(async () => {
     setIsEnriching(true);
 
     try {
@@ -42,7 +46,7 @@ export function EnrichButton({ type, record, onEnriched, className }: EnrichButt
               : undefined,
           }
         );
-        
+
         if (onEnriched) {
           onEnriched(result.data);
         }
@@ -64,6 +68,7 @@ export function EnrichButton({ type, record, onEnriched, className }: EnrichButt
     } finally {
       setIsEnriching(false);
     }
+    });
   };
 
   return (

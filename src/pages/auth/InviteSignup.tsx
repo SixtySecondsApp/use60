@@ -99,6 +99,30 @@ export default function InviteSignup() {
         return;
       }
 
+      // Backfill profile names if provided (existing users may have empty names)
+      if (formData.firstName.trim() || formData.lastName.trim()) {
+        try {
+          const userId = session.user.id;
+          await supabase.auth.updateUser({
+            data: {
+              first_name: formData.firstName.trim(),
+              last_name: formData.lastName.trim(),
+              full_name: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
+            },
+          });
+          await supabase
+            .from('profiles')
+            .update({
+              first_name: formData.firstName.trim(),
+              last_name: formData.lastName.trim(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', userId);
+        } catch (profileErr) {
+          console.warn('[InviteSignup] Failed to update profile names on sign-in:', profileErr);
+        }
+      }
+
       // Complete the invite signup (create membership, mark onboarding complete)
       const result = await completeInviteSignup(token);
 
@@ -145,13 +169,23 @@ export default function InviteSignup() {
       return handleSignIn(e);
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
+    if (formData.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
       return;
     }
 
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    // Password strength validation
+    if (!/[A-Z]/.test(formData.password)) {
+      toast.error('Password must include at least one uppercase letter');
+      return;
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>_\-+=[\]\\/~`]/.test(formData.password)) {
+      toast.error('Password must include at least one special character');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('Passwords do not match');
       return;
     }
 
@@ -341,7 +375,7 @@ export default function InviteSignup() {
             </motion.div>
             <h1 className="text-2xl font-bold text-white mb-4">Welcome to the team!</h1>
             <p className="text-gray-400 mb-6">
-              You're now a member of{' '}
+              You&apos;re now a member of{' '}
               <span className="text-white font-medium">
                 {invitation?.organization?.name || 'the organization'}
               </span>
@@ -374,7 +408,7 @@ export default function InviteSignup() {
             </motion.div>
             <h1 className="text-2xl font-bold text-white mb-4">Check Your Email!</h1>
             <p className="text-gray-400 mb-2">
-              Your account has been created and you've been added to{' '}
+              Your account has been created and you&apos;ve been added to{' '}
               <span className="text-white font-medium">
                 {invitation?.organization?.name || 'the organization'}
               </span>
@@ -427,7 +461,7 @@ export default function InviteSignup() {
             <p className="text-gray-400">
               {formMode === 'signin'
                 ? 'You already have an account. Sign in to accept the invitation.'
-                : <>You've been invited to join{' '}
+                : <>You&apos;ve been invited to join{' '}
                     <span className="text-white font-medium">
                       {invitation?.organization?.name || 'an organization'}
                     </span>
@@ -452,42 +486,42 @@ export default function InviteSignup() {
               <p className="text-xs text-gray-500">Email verified from your invitation</p>
             </div>
 
-            {/* First and Last Name - only shown in signup mode */}
-            {formMode === 'signup' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-400">First Name</label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      required
-                      value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
-                      placeholder="Sarah"
-                      disabled={status !== 'ready'}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-400">Last Name</label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      required
-                      value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
-                      placeholder="Johnson"
-                      disabled={status !== 'ready'}
-                    />
-                  </div>
+            {/* First and Last Name - shown in both modes so existing users can fill in missing names */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-400">First Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    required={formMode === 'signup'}
+                    maxLength={50}
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
+                    placeholder="Sarah"
+                    disabled={status !== 'ready'}
+                  />
                 </div>
               </div>
-            )}
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-400">Last Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    required={formMode === 'signup'}
+                    maxLength={50}
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
+                    placeholder="Johnson"
+                    disabled={status !== 'ready'}
+                  />
+                </div>
+              </div>
+            </div>
 
             {/* Password */}
             <div className="space-y-2">
@@ -497,7 +531,7 @@ export default function InviteSignup() {
                 <input
                   type="password"
                   required
-                  minLength={formMode === 'signup' ? 6 : 1}
+                  minLength={formMode === 'signup' ? 8 : 1}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
@@ -506,7 +540,7 @@ export default function InviteSignup() {
                 />
               </div>
               {formMode === 'signup' && (
-                <p className="text-xs text-gray-500">Minimum 6 characters</p>
+                <p className="text-xs text-gray-500">Min 8 chars, 1 uppercase, 1 special character</p>
               )}
             </div>
 
@@ -519,7 +553,7 @@ export default function InviteSignup() {
                   <input
                     type="password"
                     required
-                    minLength={6}
+                    minLength={8}
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                     className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
@@ -570,7 +604,7 @@ export default function InviteSignup() {
               </>
             ) : (
               <>
-                Don't have an account?{' '}
+                Don&apos;t have an account?{' '}
                 <button
                   type="button"
                   onClick={() => {

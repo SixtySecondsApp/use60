@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -11,6 +11,7 @@ import { useMeetingIntelligence } from '@/lib/hooks/useMeetingIntelligence';
 import { format } from 'date-fns';
 import { useDateRangeFilter, DateRangeFilter } from '@/components/ui/DateRangeFilter';
 import type { TimePeriod } from '@/lib/hooks/useTeamAnalytics';
+import { useTourStore } from '@/lib/stores/tourStore';
 
 import { SearchHero } from '@/components/meeting-analytics/SearchHero';
 import { DashboardTab } from '@/components/meeting-analytics/DashboardTab';
@@ -18,11 +19,12 @@ import { TranscriptsTab } from '@/components/meeting-analytics/TranscriptsTab';
 import { InsightsTab } from '@/components/meeting-analytics/InsightsTab';
 import { ReportsTab } from '@/components/meeting-analytics/ReportsTab';
 import { TranscriptDetailSheet } from '@/components/meeting-analytics/TranscriptDetailSheet';
+import { HelpPanel } from '@/components/docs/HelpPanel';
 
 const tabs = [
   { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { value: 'transcripts', label: 'Transcripts', icon: FileText },
-  { value: 'insights', label: 'Insights', icon: Wand2 },
+  { value: 'performance', label: 'Performance', icon: Wand2 },
   { value: 'reports', label: 'Reports', icon: ClipboardList },
 ] as const;
 
@@ -95,6 +97,15 @@ export default function MeetingAnalyticsPage() {
 
   const activeTab = searchParams.get('tab') || 'dashboard';
 
+  // Tour-awareness: reset to dashboard tab when the tour is on this page
+  // (steps 8–10) so SearchHero and insights-dashboard are in the DOM.
+  const { isTourActive, currentTourStep } = useTourStore();
+  useEffect(() => {
+    if (isTourActive && currentTourStep >= 8 && currentTourStep <= 10 && activeTab !== 'dashboard') {
+      setSearchParams({ tab: 'dashboard' });
+    }
+  }, [isTourActive, currentTourStep, activeTab, setSearchParams]);
+
   // Date range state (shared across tabs) — must be above early return to respect Rules of Hooks
   const dateFilter = useDateRangeFilter();
   const period = dateFilter.period as TimePeriod;
@@ -130,7 +141,7 @@ export default function MeetingAnalyticsPage() {
       className="min-h-screen text-gray-900 dark:text-gray-100"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Header - Intelligence page pattern */}
+        {/* Header - Insights page pattern */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -141,14 +152,14 @@ export default function MeetingAnalyticsPage() {
               <Sparkles className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">
-                <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-100 dark:to-white bg-clip-text text-transparent">
-                  Meeting
-                </span>{' '}
-                <span className="bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 bg-clip-text text-transparent">
-                  Analytics
-                </span>
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-bold">
+                  <span className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-100 dark:to-white bg-clip-text text-transparent">
+                    Insights
+                  </span>
+                </h1>
+                <HelpPanel docSlug="insights-overview" tooltip="Insights help" />
+              </div>
               <div className="flex items-center gap-2 mt-1">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -239,7 +250,7 @@ export default function MeetingAnalyticsPage() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <div className="mb-4 sm:mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <TabsList className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl p-1 shadow-sm">
+            <TabsList data-tour="analytics-tabs" className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-xl border border-gray-200/50 dark:border-gray-700/30 rounded-xl p-1 shadow-sm">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -284,14 +295,16 @@ export default function MeetingAnalyticsPage() {
               transition={{ duration: 0.2 }}
             >
               <TabsContent value="dashboard" className="mt-0">
-                <DashboardTab period={period} dateRange={dateRange} />
+                <div data-tour="insights-dashboard">
+                  <DashboardTab period={period} dateRange={dateRange} />
+                </div>
               </TabsContent>
 
               <TabsContent value="transcripts" className="mt-0">
                 <TranscriptsTab period={period} dateRange={dateRange} />
               </TabsContent>
 
-              <TabsContent value="insights" className="mt-0">
+              <TabsContent value="performance" className="mt-0">
                 <InsightsTab period={period} dateRange={dateRange} />
               </TabsContent>
 

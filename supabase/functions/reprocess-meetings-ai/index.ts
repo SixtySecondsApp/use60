@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4"
 import { analyzeTranscriptWithClaude, deduplicateActionItems, type TranscriptAnalysis } from '../fathom-sync/aiAnalysis.ts'
 import { captureException } from '../_shared/sentryEdge.ts'
+import { runFullMeetingAnalysisPipeline } from '../_shared/meetingAnalysisPipeline.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -126,6 +127,23 @@ serve(async (req) => {
           }
         }
 
+        // Look up org_id before analysis so we can pass it for cost tracking and
+        // call-type classification, and also so it's ready for the downstream pipeline.
+        let orgId: string | null = null
+        try {
+          const { data: membership } = await supabase
+            .from('organization_memberships')
+            .select('org_id')
+            .eq('user_id', meeting.owner_user_id)
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+
+          orgId = membership?.org_id ?? null
+        } catch (orgLookupErr) {
+          console.warn(`[reprocess-meetings-ai] Could not look up org for user ${meeting.owner_user_id}:`, orgLookupErr instanceof Error ? orgLookupErr.message : String(orgLookupErr))
+        }
+
         // Analyze transcript with Claude (with extraction rules - Phase 6.3)
         // ALWAYS run AI analysis to update meeting metrics (coach_rating, sentiment, etc.)
         const analysis: TranscriptAnalysis = await analyzeTranscriptWithClaude(
@@ -137,7 +155,8 @@ serve(async (req) => {
             owner_email: null, // Not needed for analysis
           },
           supabase,
-          meeting.owner_user_id
+          meeting.owner_user_id,
+          orgId ?? undefined
         )
         // Build update object with ALL AI metrics including coaching insights
         const updateData: Record<string, any> = {
@@ -212,6 +231,30 @@ serve(async (req) => {
         }
 
         processedCount++
+
+        // Run downstream pipeline steps (structured summary, scorecard, Gemini index).
+        // Basic analysis was already done above and sentiment_score is now set in the DB.
+        // Do NOT pass force — the pipeline's natural skip logic (sentiment_score !== null)
+        // will prevent a second basic analysis pass, avoiding double credit charges.
+        // orgId was already resolved before the analysis call above.
+        try {
+          if (orgId) {
+            // Await the downstream pipeline so the response reflects full completion.
+            // The pipeline detects sentiment_score is set and skips basic analysis,
+            // so only structured summary, scorecard, and index queue run here.
+            await runFullMeetingAnalysisPipeline(
+              supabase,
+              meeting.id,
+              orgId,
+              meeting.owner_user_id
+            )
+          } else {
+            console.warn(`[reprocess-meetings-ai] No org_id found for user ${meeting.owner_user_id} — skipping downstream pipeline`)
+          }
+        } catch (pipelineErr) {
+          const pipelineMsg = pipelineErr instanceof Error ? pipelineErr.message : 'Unknown pipeline error'
+          console.warn(`[reprocess-meetings-ai] Downstream pipeline error for meeting ${meeting.id} (non-fatal):`, pipelineMsg)
+        }
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'

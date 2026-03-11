@@ -39,6 +39,7 @@ import {
   useApproveEmailAction,
   useRejectEmailAction,
 } from '@/lib/hooks/useEmailActions';
+import { useCreditGatedAction } from '@/lib/hooks/useCreditGatedAction';
 import { formatDistanceToNow } from 'date-fns';
 
 // Helper to extract domain from email
@@ -124,6 +125,7 @@ export default function EmailActionCenter() {
   const approveMutation = useApproveEmailAction();
   const rejectMutation = useRejectEmailAction();
 
+  const { execute: executeFollowUpGated } = useCreditGatedAction('follow_up_email', 5);
   const [editedContent, setEditedContent] = useState<{
     to: string;
     subject: string;
@@ -169,24 +171,26 @@ export default function EmailActionCenter() {
     if (!selectedAction) return;
 
     const content = isEditing && editedContent ? editedContent : undefined;
-    
-    // Immediately add to dismissed set for instant UI feedback
-    setDismissedIds(prev => new Set(prev).add(selectedAction.id));
-    navigate('/email-actions');
-    setIsEditing(false);
-    setEditedContent(null);
-    
-    // Then persist to database
-    try {
-      await approveMutation.mutateAsync({ emailAction: selectedAction, editedContent: content });
-    } catch (error) {
-      // Rollback on error
-      setDismissedIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(selectedAction.id);
-        return newSet;
-      });
-    }
+
+    await executeFollowUpGated(async () => {
+      // Immediately add to dismissed set for instant UI feedback
+      setDismissedIds(prev => new Set(prev).add(selectedAction.id));
+      navigate('/email-actions');
+      setIsEditing(false);
+      setEditedContent(null);
+
+      // Then persist to database
+      try {
+        await approveMutation.mutateAsync({ emailAction: selectedAction, editedContent: content });
+      } catch (error) {
+        // Rollback on error
+        setDismissedIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(selectedAction.id);
+          return newSet;
+        });
+      }
+    });
   };
 
   const handleReject = async () => {

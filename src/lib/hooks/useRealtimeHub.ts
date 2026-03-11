@@ -50,7 +50,6 @@ const TABLE_GROUPS = {
     'deals',
     'tasks',
     'notifications',
-    'user_notifications',
     'command_centre_items',
   ],
   // MEDIUM priority - important but less frequent
@@ -172,12 +171,6 @@ export function useRealtimeHub() {
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
-        table: 'user_notifications',
-        filter: `user_id=eq.${userId}`,
-      }, (payload) => notifySubscribers('user_notifications', payload))
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
         table: 'command_centre_items',
         filter: `user_id=eq.${userId}`,
       }, (payload) => notifySubscribers('command_centre_items', payload))
@@ -238,9 +231,9 @@ export function useRealtimeHub() {
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
-        table: 'user_notifications',
+        table: 'notifications',
         filter: `user_id=eq.${userId}`,
-      }, (payload) => notifySubscribers('user_notifications', payload))
+      }, (payload) => notifySubscribers('notifications', payload))
       // Also listen for critical deal alerts that might need attention
       .on('postgres_changes', {
         event: 'INSERT',

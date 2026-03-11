@@ -80,8 +80,11 @@ export async function getModelById(modelId: string): Promise<AIModel | null> {
 export async function syncModelsFromProviders(provider?: AIProvider): Promise<SyncResponse> {
   const params = provider ? `?provider=${provider}` : '';
 
-  const { data, error } = await supabase.functions.invoke('sync-ai-models' + params, {
-    method: 'POST',
+  const { data, error } = await supabase.functions.invoke('sync-jobs-router', {
+    body: {
+      action: 'ai_models',
+      ...(provider ? { provider } : {}),
+    },
   });
 
   if (error) {

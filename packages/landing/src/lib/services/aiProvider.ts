@@ -796,6 +796,7 @@ export class AIProviderService {
           // Test with a simple completion using available Gemini models
           // Try models in order: 2.5 Flash (stable), 3 Pro Preview, 2.5 Pro Preview, 1.5 Flash (fallback)
           const modelsToTry = [
+            'gemini-3.1-flash-lite-preview',
             'gemini-2.5-flash',
             'gemini-3-pro-preview',
             'gemini-2.5-pro-preview-03-25',
@@ -928,7 +929,7 @@ export class AIProviderService {
         modelProvider: provider as any,
         model: provider === 'openai' ? 'gpt-3.5-turbo' : 
                provider === 'anthropic' ? 'claude-3-haiku-20240307' : 
-               provider === 'gemini' ? 'gemini-2.5-flash' :
+               provider === 'gemini' ? 'gemini-3.1-flash-lite-preview' :
                'openai/gpt-3.5-turbo',
         systemPrompt: 'You are a test assistant.',
         userPrompt: 'Say "API key is valid" if you can read this.',
@@ -1216,7 +1217,8 @@ export class AIProviderService {
     const apiKey = this.apiKeys.get('gemini');
     if (!apiKey) {
       return [
-        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Recommended)' },
+        { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite (Recommended)' },
+        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
         { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
         { value: 'gemini-2.5-pro-preview-03-25', label: 'Gemini 2.5 Pro Preview' },
         { value: 'gemini-1.5-pro-latest', label: 'Gemini 1.5 Pro' },
@@ -1244,6 +1246,8 @@ export class AIProviderService {
 
       // Sort models to prioritize Gemini 3 Pro Preview, then 2.5 Flash, then 2.5 Pro, then 1.5, then others
       const sortedModels = models.sort((a, b) => {
+        const aIs31FlashLite = a.value.includes('gemini-3.1-flash-lite-preview') ? 6 : 0;
+        const bIs31FlashLite = b.value.includes('gemini-3.1-flash-lite-preview') ? 6 : 0;
         const aIs3Pro = a.value.includes('gemini-3-pro') ? 5 : 0;
         const bIs3Pro = b.value.includes('gemini-3-pro') ? 5 : 0;
         const aIs25Flash = a.value.includes('gemini-2.5-flash') && !a.value.includes('preview') ? 4 : 0;
@@ -1254,16 +1258,17 @@ export class AIProviderService {
         const bIs15Pro = b.value.includes('gemini-1.5-pro') ? 2 : 0;
         const aIs15Flash = a.value.includes('gemini-1.5-flash') ? 1 : 0;
         const bIs15Flash = b.value.includes('gemini-1.5-flash') ? 1 : 0;
-        
-        const aScore = aIs3Pro || aIs25Flash || aIs25Pro || aIs15Pro || aIs15Flash;
-        const bScore = bIs3Pro || bIs25Flash || bIs25Pro || bIs15Pro || bIs15Flash;
+
+        const aScore = aIs31FlashLite || aIs3Pro || aIs25Flash || aIs25Pro || aIs15Pro || aIs15Flash;
+        const bScore = bIs31FlashLite || bIs3Pro || bIs25Flash || bIs25Pro || bIs15Pro || bIs15Flash;
         
         if (aScore !== bScore) return bScore - aScore;
         return a.value.localeCompare(b.value);
       });
 
       const result = sortedModels.length > 0 ? sortedModels : [
-        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Recommended)' },
+        { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite (Recommended)' },
+        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
         { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
         { value: 'gemini-2.5-pro-preview-03-25', label: 'Gemini 2.5 Pro Preview' },
         { value: 'gemini-1.5-pro-latest', label: 'Gemini 1.5 Pro' },
@@ -1280,7 +1285,8 @@ export class AIProviderService {
       return result;
     } catch (error) {
       return [
-        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Recommended)' },
+        { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite (Recommended)' },
+        { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
         { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
         { value: 'gemini-2.5-pro-preview-03-25', label: 'Gemini 2.5 Pro Preview' },
         { value: 'gemini-1.5-pro-latest', label: 'Gemini 1.5 Pro' },

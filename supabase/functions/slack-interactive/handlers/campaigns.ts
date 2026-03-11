@@ -29,13 +29,14 @@ export async function handleCampaignAction(ctx: CampaignActionContext): Promise<
   if (action === 'draft' && parts[2] === 'response') {
     const replyId = parts.slice(3).join('_');
     // Trigger draft response via orchestrator
-    await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+    await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         type: 'email_received',
         source: 'slack:button',
         org_id: ctx.orgId,

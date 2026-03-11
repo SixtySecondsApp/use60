@@ -19,13 +19,13 @@ async function ensureTranscriptAvailable(supabaseClient: any, authHeader: string
     const functionsBase = Deno.env.get('SUPABASE_URL')
     if (!functionsBase) return
 
-    const res = await fetch(`${functionsBase}/functions/v1/fetch-transcript`, {
+    const res = await fetch(`${functionsBase}/functions/v1/fetch-router`, {
       method: 'POST',
       headers: {
         'Authorization': authHeader,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ meetingId }),
+      body: JSON.stringify({ action: 'transcript', meetingId }),
     })
 
     // 200 OK or 202 Accepted are fine; otherwise just proceed

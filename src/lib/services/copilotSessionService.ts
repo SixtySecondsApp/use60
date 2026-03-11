@@ -28,7 +28,7 @@ const MODEL_MAX_CONTEXT: Record<string, number> = {
   'claude-haiku-4-5': 200000,
   'claude-sonnet-4-6': 200000,
   'claude-opus-4-6': 200000,
-  'gemini-2.5-flash': 1000000,
+  'gemini-3.1-flash-lite-preview': 1000000,
 };
 
 /** Default max context when model is unknown */
@@ -110,7 +110,7 @@ export class CopilotSessionService {
   }
 
   // ===========================================================================
-  // Main Session Management
+  // Conversation Management
   // ===========================================================================
 
   /**
@@ -230,6 +230,7 @@ export class CopilotSessionService {
         content: input.content,
         metadata: input.metadata || null,
         is_compacted: false,
+        created_at: new Date().toISOString(),
       })
       .select('id, conversation_id, role, content, metadata, is_compacted, created_at')
       .single();

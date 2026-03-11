@@ -1,5 +1,7 @@
 export type WarmthTier = 'hot' | 'warm' | 'cool' | 'cold';
 export type TrendingDirection = 'up' | 'down' | 'stable';
+export type ContactCategory = 'prospect' | 'client' | 'employee' | 'supplier' | 'partner' | 'investor' | 'other';
+export type ContactSource = 'app' | 'manual' | 'fathom_sync' | 'hubspot' | 'attio';
 
 export interface GraphCompany {
   id: string;
@@ -30,6 +32,8 @@ export interface GraphContact {
   company: string | null;
   company_id: string | null;
   owner_id: string | null;
+  category: ContactCategory;
+  source: ContactSource;
 
   // Warmth data (nullable — may not have scores yet)
   warmth_score: number | null;
@@ -56,4 +60,14 @@ export interface GraphNode extends GraphContact {
   y: number;
   radius: number; // Visual radius of the node
   angle: number;  // Radial angle from centre
+}
+
+/** Cluster of cold contacts grouped together on the outer ring */
+export interface ColdCluster {
+  id: string;           // synthetic id e.g. "cold-cluster-0"
+  contacts: GraphNode[];
+  x: number;
+  y: number;
+  radius: number;       // visual radius of the cluster node
+  angle: number;
 }

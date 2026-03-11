@@ -130,16 +130,17 @@ async function notifyAdmins(
   const notifications = members.map((m: { user_id: string }) => ({
     user_id: m.user_id,
     org_id: orgId,
-    type: 'credit_auto_topup',
     title,
     message,
+    type: 'warning',
+    category: 'system',
     action_url: actionUrl,
-    action_text: 'Manage Credits',
-    is_read: false,
+    metadata: { source: 'credit_auto_topup' },
+    read: false,
     created_at: new Date().toISOString(),
   }));
 
-  await supabase.from('user_notifications').insert(notifications);
+  await supabase.from('notifications').insert(notifications);
 }
 
 // ---------------------------------------------------------------------------

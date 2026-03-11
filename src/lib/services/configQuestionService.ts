@@ -1,8 +1,9 @@
 /**
- * configQuestionService — LEARN-UI-006
+ * Config Question Service — LEARN-UI-005
  *
- * Handles fetching pending agent_config_questions and submitting answers
- * via the answer-config-question edge function.
+ * Hooks for fetching pending and answered agent config questions
+ * from the `agent_config_questions` table. Used by TeachSixtySection,
+ * SalesMethodologySettings, InAppQuestionCard, and AnswerHistoryTimeline.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -13,258 +14,238 @@ import { supabase } from '@/lib/supabase/clientV2';
 // Types
 // ============================================================================
 
-export type QuestionStatus = 'pending' | 'asked' | 'answered' | 'skipped' | 'expired';
 export type QuestionCategory =
   | 'revenue_pipeline'
   | 'daily_rhythm'
   | 'agent_behaviour'
   | 'methodology'
   | 'signals';
-export type AnswerType = 'single_select' | 'multi_select' | 'free_text' | 'scale';
-export type DeliveryChannel = 'slack' | 'in_app';
 
-export interface QuestionOption {
-  label: string;
-  value: string;
-  description?: string;
-}
+export type QuestionStatus = 'pending' | 'asked' | 'answered' | 'skipped' | 'expired';
 
-export interface AgentConfigQuestion {
+export interface ConfigQuestion {
   id: string;
-  template_id: string;
   org_id: string;
   user_id: string | null;
-  status: QuestionStatus;
-  delivery_channel: DeliveryChannel;
-  answer_value: string | null;
-  asked_at: string | null;
-  answered_at: string | null;
-  skipped_at: string | null;
-  expires_at: string | null;
-  created_at: string;
-  // from template join
-  question_text: string;
-  category: QuestionCategory;
-  answer_type: AnswerType;
-  options: QuestionOption[] | null;
+  template_id: string | null;
   config_key: string;
+  category: QuestionCategory;
+  question: string;        // mapped from question_text
+  question_text: string;
   scope: 'org' | 'user';
-  priority: 'critical' | 'high' | 'medium' | 'low';
+  options: Array<{ label: string; value: string }> | null;
+  priority: number;
+  status: QuestionStatus;
+  answer_value: unknown | null;
+  answered_at: string | null;
+  created_at: string;
 }
 
-export interface SubmitAnswerPayload {
-  question_id: string;
-  answer_value: string;
-  answered_via?: 'in_app' | 'slack';
-}
-
-export interface SkipAnswerPayload {
-  question_id: string;
-  skip_reason?: string;
+export interface AnsweredQuestion extends ConfigQuestion {
+  answer_value: unknown;
+  answered_at: string;
 }
 
 // ============================================================================
 // Query keys
 // ============================================================================
 
-const QK = {
-  pendingQuestions: (orgId: string, userId?: string) =>
+const QUERY_KEYS = {
+  pending: (orgId: string, userId?: string) =>
     ['config-questions', 'pending', orgId, userId] as const,
-  allQuestions: (orgId: string, userId?: string) =>
-    ['config-questions', 'all', orgId, userId] as const,
+  answered: (orgId: string, userId?: string) =>
+    ['config-questions', 'answered', orgId, userId] as const,
+  completeness: (orgId: string, userId?: string) =>
+    ['config-completeness', orgId, userId] as const,
 };
 
 // ============================================================================
-// Fetch helpers
+// Mappers
 // ============================================================================
 
-async function fetchPendingQuestions(
-  orgId: string,
-  userId?: string
-): Promise<AgentConfigQuestion[]> {
-  // Join questions with templates to get question text, category, options etc.
-  const query = supabase
-    .from('agent_config_questions')
-    .select(
-      `id, template_id, org_id, user_id, status, delivery_channel,
-       answer_value, asked_at, answered_at, skipped_at, expires_at, created_at,
-       agent_config_question_templates (
-         question_text, category, answer_type, options, config_key, scope, priority
-       )`
-    )
-    .eq('org_id', orgId)
-    .eq('status', 'pending')
-    .order('created_at', { ascending: true });
-
-  if (userId) {
-    query.or(`user_id.eq.${userId},user_id.is.null`);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  return ((data as any[]) ?? []).map((row) => ({
-    id: row.id,
-    template_id: row.template_id,
-    org_id: row.org_id,
-    user_id: row.user_id,
-    status: row.status,
-    delivery_channel: row.delivery_channel,
-    answer_value: row.answer_value,
-    asked_at: row.asked_at,
-    answered_at: row.answered_at,
-    skipped_at: row.skipped_at,
-    expires_at: row.expires_at,
-    created_at: row.created_at,
-    question_text: row.agent_config_question_templates?.question_text ?? '',
-    category: row.agent_config_question_templates?.category ?? 'agent_behaviour',
-    answer_type: row.agent_config_question_templates?.answer_type ?? 'single_select',
-    options: row.agent_config_question_templates?.options ?? null,
-    config_key: row.agent_config_question_templates?.config_key ?? '',
-    scope: row.agent_config_question_templates?.scope ?? 'user',
-    priority: row.agent_config_question_templates?.priority ?? 'medium',
-  }));
-}
-
-async function fetchAllQuestions(
-  orgId: string,
-  userId?: string
-): Promise<AgentConfigQuestion[]> {
-  const query = supabase
-    .from('agent_config_questions')
-    .select(
-      `id, template_id, org_id, user_id, status, delivery_channel,
-       answer_value, asked_at, answered_at, skipped_at, expires_at, created_at,
-       agent_config_question_templates (
-         question_text, category, answer_type, options, config_key, scope, priority
-       )`
-    )
-    .eq('org_id', orgId)
-    .order('created_at', { ascending: false })
-    .limit(100);
-
-  if (userId) {
-    query.or(`user_id.eq.${userId},user_id.is.null`);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  return ((data as any[]) ?? []).map((row) => ({
-    id: row.id,
-    template_id: row.template_id,
-    org_id: row.org_id,
-    user_id: row.user_id,
-    status: row.status,
-    delivery_channel: row.delivery_channel,
-    answer_value: row.answer_value,
-    asked_at: row.asked_at,
-    answered_at: row.answered_at,
-    skipped_at: row.skipped_at,
-    expires_at: row.expires_at,
-    created_at: row.created_at,
-    question_text: row.agent_config_question_templates?.question_text ?? '',
-    category: row.agent_config_question_templates?.category ?? 'agent_behaviour',
-    answer_type: row.agent_config_question_templates?.answer_type ?? 'single_select',
-    options: row.agent_config_question_templates?.options ?? null,
-    config_key: row.agent_config_question_templates?.config_key ?? '',
-    scope: row.agent_config_question_templates?.scope ?? 'user',
-    priority: row.agent_config_question_templates?.priority ?? 'medium',
-  }));
+function mapRow(row: Record<string, unknown>): ConfigQuestion {
+  return {
+    id: row.id as string,
+    org_id: row.org_id as string,
+    user_id: (row.user_id as string) ?? null,
+    template_id: (row.template_id as string) ?? null,
+    config_key: row.config_key as string,
+    category: row.category as QuestionCategory,
+    question: row.question_text as string,
+    question_text: row.question_text as string,
+    scope: row.scope as 'org' | 'user',
+    options: row.options as Array<{ label: string; value: string }> | null,
+    priority: row.priority as number,
+    status: row.status as QuestionStatus,
+    answer_value: row.answer_value ?? null,
+    answered_at: (row.answered_at as string) ?? null,
+    created_at: row.created_at as string,
+  };
 }
 
 // ============================================================================
-// Hooks: queries
+// Hooks
 // ============================================================================
 
+/**
+ * Fetches pending (unanswered) config questions for an org/user.
+ * Returns questions with status='pending' ordered by priority ASC.
+ */
 export function usePendingConfigQuestions(orgId: string, userId?: string) {
-  return useQuery({
-    queryKey: QK.pendingQuestions(orgId, userId),
-    queryFn: () => fetchPendingQuestions(orgId, userId),
+  return useQuery<ConfigQuestion[]>({
+    queryKey: QUERY_KEYS.pending(orgId, userId),
+    queryFn: async () => {
+      // Fetch questions where status is pending, for this org
+      // Include both org-scoped (user_id IS NULL) and user-scoped questions
+      let query = supabase
+        .from('agent_config_questions')
+        .select(
+          'id, org_id, user_id, template_id, config_key, question_text, category, scope, options, priority, status, answer_value, answered_at, created_at'
+        )
+        .eq('org_id', orgId)
+        .eq('status', 'pending')
+        .order('priority', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      // Include org-scoped (user_id IS NULL) and user-scoped questions for this user
+      if (userId) {
+        query = query.or(`user_id.eq.${userId},user_id.is.null`);
+      } else {
+        query = query.is('user_id', null);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return (data ?? []).map(mapRow);
+    },
     enabled: !!orgId,
-    staleTime: 60 * 1000,
-    refetchOnWindowFocus: true,
+    staleTime: 2 * 60 * 1000, // 2 minutes
   });
 }
 
-export function useAllConfigQuestions(orgId: string, userId?: string) {
-  return useQuery({
-    queryKey: QK.allQuestions(orgId, userId),
-    queryFn: () => fetchAllQuestions(orgId, userId),
+/**
+ * Fetches answered config questions for the answer history timeline.
+ * Returns questions with status='answered', ordered by answered_at DESC.
+ */
+export function useAnsweredQuestions(orgId: string, userId?: string) {
+  return useQuery<AnsweredQuestion[]>({
+    queryKey: QUERY_KEYS.answered(orgId, userId),
+    queryFn: async () => {
+      let query = supabase
+        .from('agent_config_questions')
+        .select(
+          'id, org_id, user_id, template_id, config_key, question_text, category, scope, options, priority, status, answer_value, answered_at, created_at'
+        )
+        .eq('org_id', orgId)
+        .eq('status', 'answered')
+        .not('answered_at', 'is', null)
+        .order('answered_at', { ascending: false })
+        .limit(50);
+
+      if (userId) {
+        query = query.or(`user_id.eq.${userId},user_id.is.null`);
+      } else {
+        query = query.is('user_id', null);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      return (data ?? []).map(mapRow) as AnsweredQuestion[];
+    },
     enabled: !!orgId,
     staleTime: 2 * 60 * 1000,
   });
 }
 
-// ============================================================================
-// Hooks: mutations
-// ============================================================================
-
-export function useSubmitAnswer(orgId: string, userId?: string) {
-  const qc = useQueryClient();
+/**
+ * Mutation to answer a config question.
+ * Updates status to 'answered', sets answer_value and answered_at.
+ * Invalidates pending + answered + completeness queries on success.
+ */
+export function useAnswerQuestion() {
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: SubmitAnswerPayload) => {
-      const { data, error } = await supabase.functions.invoke('answer-config-question', {
-        body: {
-          question_id: payload.question_id,
-          answer_value: payload.answer_value,
-          answered_via: payload.answered_via ?? 'in_app',
-        },
-      });
+    mutationFn: async ({
+      questionId,
+      answerValue,
+      orgId,
+      userId,
+    }: {
+      questionId: string;
+      answerValue: unknown;
+      orgId: string;
+      userId?: string;
+    }) => {
+      const { data, error } = await supabase
+        .from('agent_config_questions')
+        .update({
+          status: 'answered' as const,
+          answer_value: answerValue,
+          answered_at: new Date().toISOString(),
+        })
+        .eq('id', questionId)
+        .eq('org_id', orgId)
+        .select('id, org_id, user_id, config_key, question_text, category, status, answer_value, answered_at')
+        .maybeSingle();
+
       if (error) throw error;
       return data;
     },
-    // Optimistic: mark question as answered immediately
-    onMutate: async (payload) => {
-      await qc.cancelQueries({ queryKey: QK.pendingQuestions(orgId, userId) });
-      const prev = qc.getQueryData<AgentConfigQuestion[]>(QK.pendingQuestions(orgId, userId));
-      qc.setQueryData<AgentConfigQuestion[]>(QK.pendingQuestions(orgId, userId), (old) =>
-        (old ?? []).filter((q) => q.id !== payload.question_id)
-      );
-      return { prev };
-    },
-    onError: (_err, _payload, ctx) => {
-      if (ctx?.prev) {
-        qc.setQueryData(QK.pendingQuestions(orgId, userId), ctx.prev);
-      }
-      toast.error('Failed to save answer. Please try again.');
-    },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.pending(variables.orgId, variables.userId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.answered(variables.orgId, variables.userId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.completeness(variables.orgId, variables.userId),
+      });
       toast.success('Answer saved');
-      qc.invalidateQueries({ queryKey: ['config-completeness'] });
-      qc.invalidateQueries({ queryKey: QK.allQuestions(orgId, userId) });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to save answer: ${error.message}`);
     },
   });
 }
 
-export function useSkipQuestion(orgId: string, userId?: string) {
-  const qc = useQueryClient();
+/**
+ * Mutation to skip a config question.
+ * Updates status to 'skipped'.
+ */
+export function useSkipQuestion() {
+  const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: SkipAnswerPayload) => {
+    mutationFn: async ({
+      questionId,
+      orgId,
+    }: {
+      questionId: string;
+      orgId: string;
+      userId?: string;
+    }) => {
       const { error } = await supabase
         .from('agent_config_questions')
-        .update({ status: 'skipped', skipped_at: new Date().toISOString() })
-        .eq('id', payload.question_id);
+        .update({ status: 'skipped' as const })
+        .eq('id', questionId)
+        .eq('org_id', orgId);
+
       if (error) throw error;
     },
-    onMutate: async (payload) => {
-      await qc.cancelQueries({ queryKey: QK.pendingQuestions(orgId, userId) });
-      const prev = qc.getQueryData<AgentConfigQuestion[]>(QK.pendingQuestions(orgId, userId));
-      qc.setQueryData<AgentConfigQuestion[]>(QK.pendingQuestions(orgId, userId), (old) =>
-        (old ?? []).filter((q) => q.id !== payload.question_id)
-      );
-      return { prev };
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.pending(variables.orgId, variables.userId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.completeness(variables.orgId, variables.userId),
+      });
     },
-    onError: (_err, _payload, ctx) => {
-      if (ctx?.prev) {
-        qc.setQueryData(QK.pendingQuestions(orgId, userId), ctx.prev);
-      }
-      toast.error('Failed to skip question.');
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QK.allQuestions(orgId, userId) });
+    onError: (error: Error) => {
+      toast.error(`Failed to skip question: ${error.message}`);
     },
   });
 }

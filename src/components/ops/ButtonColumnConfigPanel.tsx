@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { Plus, Trash2, GripVertical, ChevronDown, MousePointerClick } from 'lucide-react';
-import type { ButtonConfig, ButtonAction, ButtonActionType } from '@/lib/services/opsTableService';
+import type { ButtonConfig, ButtonAction, ButtonActionType, ButtonCondition } from '@/lib/services/opsTableService';
 
 interface ExistingColumn {
   key: string;
@@ -21,6 +21,7 @@ const ACTION_TYPES: { value: ButtonActionType; label: string; description: strin
   { value: 're_enrich', label: 'Re-enrich', description: 'Force re-enrichment of this row' },
   { value: 'call_function', label: 'Call Function', description: 'Invoke a Supabase edge function' },
   { value: 'start_sequence', label: 'Start Sequence', description: 'Trigger an automation sequence' },
+  { value: 'run_prompt', label: 'Run AI Prompt', description: 'Run an AI prompt using row data and write result to a column' },
 ];
 
 const BUTTON_COLORS = [
@@ -43,6 +44,7 @@ function defaultConfigForType(type: ButtonActionType): Record<string, unknown> {
     case 're_enrich': return {};
     case 'call_function': return { function_name: '' };
     case 'start_sequence': return { sequence_id: '' };
+    case 'run_prompt': return { system_prompt: '', user_message_template: '', model: 'claude-sonnet-4-5-20250929', provider: 'anthropic', temperature: 0.3, max_tokens: 2048, output_column_key: '' };
     default: return {};
   }
 }
@@ -316,6 +318,108 @@ export function ButtonColumnConfigPanel({ value, onChange, existingColumns }: Bu
                       </div>
                     )}
 
+                    {action.type === 'run_prompt' && (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-400">Provider</label>
+                            <select
+                              value={(action.config.provider as string) ?? 'anthropic'}
+                              onChange={(e) => updateActionConfig(idx, 'provider', e.target.value)}
+                              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-500"
+                            >
+                              <option value="anthropic">Anthropic</option>
+                              <option value="openrouter">OpenRouter</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-400">Model</label>
+                            <select
+                              value={(action.config.model as string) ?? 'claude-sonnet-4-5-20250929'}
+                              onChange={(e) => updateActionConfig(idx, 'model', e.target.value)}
+                              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-500"
+                            >
+                              {(action.config.provider as string) === 'openrouter' ? (
+                                <>
+                                  <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5</option>
+                                  <option value="anthropic/claude-haiku-4-5">Claude Haiku 4.5</option>
+                                  <option value="google/gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                                  <option value="openai/gpt-4o">GPT-4o</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                  <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-400">Temperature</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={1}
+                              step={0.1}
+                              value={(action.config.temperature as number) ?? 0.3}
+                              onChange={(e) => updateActionConfig(idx, 'temperature', parseFloat(e.target.value))}
+                              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-400">Max Tokens</label>
+                            <input
+                              type="number"
+                              min={100}
+                              max={16000}
+                              step={100}
+                              value={(action.config.max_tokens as number) ?? 2048}
+                              onChange={(e) => updateActionConfig(idx, 'max_tokens', parseInt(e.target.value))}
+                              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-500"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-400">System Prompt</label>
+                          <textarea
+                            value={(action.config.system_prompt as string) ?? ''}
+                            onChange={(e) => updateActionConfig(idx, 'system_prompt', e.target.value)}
+                            placeholder="You are an analyst. Use {{column_key}} to reference row values."
+                            rows={4}
+                            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-violet-500 font-mono text-xs"
+                          />
+                          <p className="mt-0.5 text-[10px] text-gray-500">
+                            Available: {existingColumns.map((c) => `{{${c.key}}}`).join(', ')}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-400">User Message</label>
+                          <textarea
+                            value={(action.config.user_message_template as string) ?? ''}
+                            onChange={(e) => updateActionConfig(idx, 'user_message_template', e.target.value)}
+                            placeholder="Analyse this transcript: {{transcript_text}}"
+                            rows={3}
+                            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-violet-500 font-mono text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-400">Output Column</label>
+                          <select
+                            value={(action.config.output_column_key as string) ?? ''}
+                            onChange={(e) => updateActionConfig(idx, 'output_column_key', e.target.value)}
+                            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-500"
+                          >
+                            <option value="">Select output column...</option>
+                            {existingColumns.map((col) => (
+                              <option key={col.key} value={col.key}>{col.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    )}
+
                     {(action.type === 'push_to_crm' || action.type === 're_enrich') && (
                       <p className="text-xs text-gray-500 italic">
                         No additional configuration needed. Uses default settings.
@@ -327,6 +431,75 @@ export function ButtonColumnConfigPanel({ value, onChange, existingColumns }: Bu
             );
           })}
         </div>
+      </div>
+
+      {/* Visibility Condition */}
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-gray-300">
+          Visibility Condition <span className="text-xs font-normal text-gray-500">(optional)</span>
+        </label>
+        <p className="mb-2 text-xs text-gray-500">
+          Only show this button when a column value matches a condition.
+        </p>
+        {value.condition ? (
+          <div className="space-y-2 rounded-lg border border-gray-700/60 bg-gray-800/50 p-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-400">Column</label>
+              <select
+                value={value.condition.column_key}
+                onChange={(e) => onChange({ ...value, condition: { ...value.condition!, column_key: e.target.value } })}
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-500"
+              >
+                <option value="">Select column...</option>
+                {existingColumns.map((col) => (
+                  <option key={col.key} value={col.key}>{col.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-400">Operator</label>
+              <select
+                value={value.condition.operator}
+                onChange={(e) => onChange({ ...value, condition: { ...value.condition!, operator: e.target.value as ButtonCondition['operator'] } })}
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-500"
+              >
+                <option value="equals">Equals</option>
+                <option value="not_equals">Not Equals</option>
+                <option value="contains">Contains</option>
+                <option value="is_empty">Is Empty</option>
+                <option value="is_not_empty">Is Not Empty</option>
+              </select>
+            </div>
+            {value.condition.operator !== 'is_empty' && value.condition.operator !== 'is_not_empty' && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-400">Value</label>
+                <input
+                  type="text"
+                  value={value.condition.value ?? ''}
+                  onChange={(e) => onChange({ ...value, condition: { ...value.condition!, value: e.target.value } })}
+                  placeholder="e.g. true"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 outline-none focus:border-violet-500"
+                />
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => onChange({ ...value, condition: undefined })}
+              className="text-xs text-red-400 hover:text-red-300"
+            >
+              Remove condition
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onChange({ ...value, condition: { column_key: '', operator: 'equals', value: '' } })}
+            className="flex items-center gap-1 text-xs font-medium text-violet-400 hover:text-violet-300"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Condition
+          </button>
+        )}
       </div>
     </div>
   );

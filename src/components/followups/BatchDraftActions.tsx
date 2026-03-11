@@ -1,141 +1,226 @@
-/**
- * BatchDraftActions — FU-006
- * Floating action bar for multi-select batch approve/reject of follow-up drafts.
- * Confirmation dialog before committing. Toast with count result.
- */
-
-import React, { useState } from 'react';
-import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/clientV2';
+import React, { useState, useCallback } from 'react';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+  CheckCircle2,
+  XCircle,
+  Calendar,
+  X,
+  Loader2,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { useFollowUpDrafts, type FollowUpDraft } from '@/lib/hooks/useFollowUpDrafts';
+import { useOrg } from '@/lib/contexts/OrgContext';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { ScheduleSendPicker } from './ScheduleSendPicker';
 
 interface BatchDraftActionsProps {
   selectedIds: Set<string>;
+  drafts: FollowUpDraft[];
   orgId: string;
   onComplete: () => void;
+  onClearSelection: () => void;
 }
 
-type BatchAction = 'approve' | 'reject';
+type BatchOperation = 'approve' | 'reject' | 'schedule' | null;
 
-export function BatchDraftActions({ selectedIds, orgId, onComplete }: BatchDraftActionsProps) {
-  const [pending, setPending] = useState<BatchAction | null>(null);
-  const [confirming, setConfirming] = useState<BatchAction | null>(null);
+export function BatchDraftActions({
+  selectedIds,
+  drafts,
+  orgId,
+  onComplete,
+  onClearSelection,
+}: BatchDraftActionsProps) {
+  const { activeOrgId } = useOrg();
+  const { user } = useAuth();
+  const { updateDraftStatus } = useFollowUpDrafts({
+    orgId: activeOrgId ?? undefined,
+    userId: user?.id,
+  });
+
+  const [activeOp, setActiveOp] = useState<BatchOperation>(null);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+
+  const selectedDrafts = drafts.filter((d) => selectedIds.has(d.id));
+
+  // Compute which statuses are actionable
+  const approvableCount = selectedDrafts.filter(
+    (d) => d.status === 'pending' || d.status === 'editing'
+  ).length;
+  const rejectableCount = selectedDrafts.filter(
+    (d) => d.status === 'pending' || d.status === 'editing'
+  ).length;
+  const schedulableCount = selectedDrafts.filter(
+    (d) => d.status === 'pending' || d.status === 'editing' || d.status === 'approved'
+  ).length;
+
+  const isProcessing = activeOp !== null;
+
+  const runBatchOperation = useCallback(
+    async (op: 'approve' | 'reject', targetStatus: string) => {
+      const eligible = selectedDrafts.filter(
+        (d) => d.status === 'pending' || d.status === 'editing'
+      );
+
+      if (eligible.length === 0) {
+        toast.error(`No selected drafts can be ${op === 'approve' ? 'approved' : 'rejected'}`);
+        return;
+      }
+
+      setActiveOp(op);
+      setProgress({ current: 0, total: eligible.length });
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < eligible.length; i++) {
+        setProgress({ current: i + 1, total: eligible.length });
+        try {
+          await updateDraftStatus(eligible[i].id, targetStatus);
+          successCount++;
+        } catch {
+          failCount++;
+        }
+      }
+
+      setActiveOp(null);
+      setProgress({ current: 0, total: 0 });
+
+      if (failCount > 0) {
+        toast.error(
+          `${successCount} ${op === 'approve' ? 'approved' : 'rejected'}, ${failCount} failed`
+        );
+      } else {
+        toast.success(
+          `${successCount} draft${successCount !== 1 ? 's' : ''} ${op === 'approve' ? 'approved' : 'rejected'}`
+        );
+      }
+
+      onComplete();
+    },
+    [selectedDrafts, updateDraftStatus, onComplete]
+  );
+
+  const handleApproveAll = useCallback(() => {
+    runBatchOperation('approve', 'approved');
+  }, [runBatchOperation]);
+
+  const handleRejectAll = useCallback(() => {
+    runBatchOperation('reject', 'rejected');
+  }, [runBatchOperation]);
+
+  const handleScheduleAll = useCallback(() => {
+    setShowSchedulePicker(true);
+  }, []);
+
+  // Called when schedule picker confirms a time for batch scheduling
+  const handleBatchScheduled = useCallback(() => {
+    setShowSchedulePicker(false);
+    toast.success(
+      `${schedulableCount} draft${schedulableCount !== 1 ? 's' : ''} scheduled`
+    );
+    onComplete();
+  }, [schedulableCount, onComplete]);
+
   const count = selectedIds.size;
 
-  const execute = async (action: BatchAction) => {
-    setPending(action);
-    setConfirming(null);
-
-    const ids = [...selectedIds];
-    const now = new Date().toISOString();
-    const updates =
-      action === 'approve'
-        ? { status: 'approved' as const, approved_at: now }
-        : { status: 'rejected' as const, rejected_at: now };
-
-    const { error } = await supabase
-      .from('follow_up_drafts')
-      .update(updates)
-      .in('id', ids);
-
-    setPending(null);
-
-    if (error) {
-      toast.error(`Batch ${action} failed: ${error.message}`);
-      return;
-    }
-
-    toast.success(`${count} draft${count !== 1 ? 's' : ''} ${action === 'approve' ? 'approved' : 'rejected'}`);
-    onComplete();
-  };
-
   return (
-    <>
-      {/* Floating bar */}
-      <div className="flex-shrink-0 px-3 py-2 bg-gray-900 border-b border-[#37bd7e]/20 flex items-center gap-2">
-        <span className="text-xs font-medium text-gray-300">
+    <div className="border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
+      {/* Action bar */}
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-[#37bd7e]/5">
+        <span className="text-sm font-medium text-gray-900 dark:text-white mr-1">
           {count} selected
         </span>
 
-        <div className="flex-1" />
+        {isProcessing ? (
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Loader2 className="w-4 h-4 animate-spin text-[#37bd7e]" />
+            <span>
+              {activeOp === 'approve' ? 'Approving' : 'Rejecting'}{' '}
+              {progress.current} of {progress.total}...
+            </span>
+          </div>
+        ) : (
+          <>
+            {/* Approve All */}
+            <Button
+              variant="success"
+              size="sm"
+              onClick={handleApproveAll}
+              disabled={approvableCount === 0}
+              title={
+                approvableCount === 0
+                  ? 'No selected drafts can be approved'
+                  : `Approve ${approvableCount} draft${approvableCount !== 1 ? 's' : ''}`
+              }
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+              Approve All
+            </Button>
 
-        <button
-          onClick={() => setConfirming('approve')}
-          disabled={!!pending}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
-        >
-          {pending === 'approve' ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <CheckCircle2 className="w-3.5 h-3.5" />
-          )}
-          Approve all
-        </button>
+            {/* Reject All */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRejectAll}
+              disabled={rejectableCount === 0}
+              className="border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/50"
+              title={
+                rejectableCount === 0
+                  ? 'No selected drafts can be rejected'
+                  : `Reject ${rejectableCount} draft${rejectableCount !== 1 ? 's' : ''}`
+              }
+            >
+              <XCircle className="w-3.5 h-3.5 mr-1.5" />
+              Reject All
+            </Button>
 
-        <button
-          onClick={() => setConfirming('reject')}
-          disabled={!!pending}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20 rounded-md hover:bg-red-500/20 transition-colors disabled:opacity-50"
-        >
-          {pending === 'reject' ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <XCircle className="w-3.5 h-3.5" />
-          )}
-          Reject all
-        </button>
+            {/* Schedule All */}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleScheduleAll}
+              disabled={schedulableCount === 0}
+              title={
+                schedulableCount === 0
+                  ? 'No selected drafts can be scheduled'
+                  : `Schedule ${schedulableCount} draft${schedulableCount !== 1 ? 's' : ''}`
+              }
+            >
+              <Calendar className="w-3.5 h-3.5 mr-1.5" />
+              Schedule All
+            </Button>
+
+            {/* Clear Selection */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClearSelection}
+              className="ml-auto"
+            >
+              <X className="w-3.5 h-3.5 mr-1.5" />
+              Clear
+            </Button>
+          </>
+        )}
       </div>
 
-      {/* Confirmation dialogs */}
-      <AlertDialog open={confirming === 'approve'} onOpenChange={(open) => !open && setConfirming(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Approve {count} draft{count !== 1 ? 's' : ''}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will mark {count} follow-up draft{count !== 1 ? 's' : ''} as approved. They will be queued for sending.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => execute('approve')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              Approve {count}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={confirming === 'reject'} onOpenChange={(open) => !open && setConfirming(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reject {count} draft{count !== 1 ? 's' : ''}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will reject {count} follow-up draft{count !== 1 ? 's' : ''}. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => execute('reject')}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              Reject {count}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+      {/* Inline schedule picker for batch scheduling */}
+      {showSchedulePicker && (
+        <div className="border-t border-gray-200 dark:border-gray-800">
+          <ScheduleSendPicker
+            drafts={selectedDrafts.filter(
+              (d) =>
+                d.status === 'pending' ||
+                d.status === 'editing' ||
+                d.status === 'approved'
+            )}
+            orgId={orgId}
+            onScheduled={handleBatchScheduled}
+            onCancel={() => setShowSchedulePicker(false)}
+          />
+        </div>
+      )}
+    </div>
   );
 }

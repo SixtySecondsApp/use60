@@ -66,6 +66,14 @@ interface EmailStep {
   body: string
 }
 
+/** Strip em-dashes and en-dashes from AI output — biggest AI tell */
+function stripEmDashes(steps: EmailStep[]): EmailStep[] {
+  return steps.map(s => ({
+    subject: s.subject.replace(/[—–]/g, '-'),
+    body: s.body.replace(/[—–]/g, '-'),
+  }))
+}
+
 interface ProspectData {
   row_id: string
   name: string
@@ -189,7 +197,9 @@ async function generateExampleEmails(
     system: buildEmailSystemPrompt(config.email_type, signOff, toneVoice),
     messages: [{
       role: 'user',
-      content: `Write a ${numSteps}-step ${sequenceType} for this prospect.
+      content: `Today's date: ${new Date().toISOString().slice(0, 10)}
+
+Write a ${numSteps}-step ${sequenceType} for this prospect.
 
 ## Prospect
 ${buildProspectBlock(prospect)}
@@ -226,7 +236,7 @@ Respond with ONLY a JSON array of objects, each with "subject" and "body" fields
   if (!Array.isArray(steps) || steps.length === 0) throw new Error('Invalid email format from Claude')
 
   return {
-    steps: steps.slice(0, numSteps),
+    steps: stripEmDashes(steps.slice(0, numSteps)),
     inputTokens: response.usage?.input_tokens || 0,
     outputTokens: response.usage?.output_tokens || 0,
   }
@@ -263,6 +273,8 @@ async function generateEmailsFromExample(
   const prompt = `${systemContext}
 
 ---
+
+Today's date: ${new Date().toISOString().slice(0, 10)}
 
 Generate a ${numSteps}-step ${sequenceType} for a NEW prospect, using the example emails below as a style and quality reference.
 
@@ -317,7 +329,7 @@ Respond with ONLY a JSON array of objects, each with "subject" and "body" fields
   const steps = JSON.parse(resultText) as EmailStep[]
   if (!Array.isArray(steps) || steps.length === 0) throw new Error('Invalid email sequence format')
 
-  return steps.slice(0, numSteps)
+  return stripEmDashes(steps.slice(0, numSteps))
 }
 
 // ============================================================================
@@ -610,6 +622,41 @@ serve(async (req) => {
       // Extract sign-off from context prompt if not provided explicitly
       const signOffMatch = contextPrompt.match(/(?:sign[ -]?off|closing|signature):\s*(.+?)(?:\n|$)/i)
       if (signOffMatch) signOff = signOffMatch[1].trim()
+    }
+
+    // --- Load user tone settings for style enrichment ---
+    const { data: toneSettings } = await serviceClient
+      .from('user_tone_settings')
+      .select('formality_level, words_to_avoid, preferred_keywords, email_sign_off, brand_voice_description, sample_phrases')
+      .eq('user_id', user.id)
+      .eq('content_type', 'email')
+      .maybeSingle()
+
+    if (toneSettings) {
+      // Inject words_to_avoid and preferred phrases into context
+      const ts = toneSettings as Record<string, unknown>
+      const wordsToAvoid = Array.isArray(ts.words_to_avoid) ? ts.words_to_avoid as string[] : []
+      const preferredPhrases = Array.isArray(ts.preferred_keywords) ? ts.preferred_keywords as string[] : []
+      const samplePhrases = Array.isArray(ts.sample_phrases) ? ts.sample_phrases as string[] : []
+      const allPhrases = [...new Set([...preferredPhrases, ...samplePhrases])]
+
+      const styleLines: string[] = []
+      if (wordsToAvoid.length > 0) {
+        styleLines.push(`\n## Words / Phrases to AVOID\n${wordsToAvoid.join(', ')}`)
+      }
+      if (allPhrases.length > 0) {
+        styleLines.push(`\n## Preferred Phrases\n${allPhrases.join(', ')}`)
+      }
+      if (ts.brand_voice_description) {
+        styleLines.push(`\n## Brand Voice\n${ts.brand_voice_description}`)
+      }
+      if (styleLines.length > 0) {
+        contextPrompt += '\n' + styleLines.join('\n')
+      }
+      // Use tone settings sign-off if none provided
+      if (!signOff && typeof ts.email_sign_off === 'string' && ts.email_sign_off) {
+        signOff = ts.email_sign_off
+      }
     }
 
     // --- Get prospect data from table rows ---

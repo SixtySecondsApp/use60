@@ -146,10 +146,15 @@ export default function InstantlySettings() {
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder="Enter your Instantly API key"
                     className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 pr-10 text-sm text-white placeholder-gray-500 outline-none focus:border-blue-500"
-                    autoComplete="off"
+                    autoComplete="new-password"
+                    name="sixty-instantly-api-key"
+                    id="sixty-instantly-api-key"
                     data-lpignore="true"
                     data-1p-ignore
                     data-form-type="other"
+                    data-dashlane-rid="sixty-instantly-no-autofill"
+                    data-dashlane-label="none"
+                    data-kwimpalastatus="none"
                   />
                   <button
                     type="button"

@@ -16,9 +16,11 @@ function getAllowedOrigins(): string[] {
   const defaults = [
     'http://localhost:5173',
     'http://localhost:5175',
+    'http://localhost:5176',
     'http://localhost:3000',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:5175',
+    'http://127.0.0.1:5176',
     'http://127.0.0.1:3000',
   ];
   
@@ -32,11 +34,13 @@ function getAllowedOrigins(): string[] {
     'https://www.use60.com',
     'https://app.use60.com',
     'https://staging.use60.com',
+    'https://dev.use60.com',
     'https://sixtyseconds.video',
     'https://www.sixtyseconds.video',
     'https://app.sixtyseconds.video',
     'https://sixty-sales-dashboard.vercel.app',
     '*-sixty-sales.vercel.app',
+    '*-sixty-seconds.vercel.app',
   ];
   
   return [...defaults, ...prodDomains];

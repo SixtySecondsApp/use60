@@ -67,12 +67,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('hubspot-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'status', org_id: activeOrgId }),
+        body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'status', org_id: activeOrgId }),
       });
 
       if (resp.error) {
@@ -107,7 +107,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('hubspot-oauth-initiate', {
+    const resp = await supabase.functions.invoke('oauth-initiate/hubspot', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -137,12 +137,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
 
     setDisconnecting(true);
     try {
-      const resp = await supabase.functions.invoke('hubspot-disconnect', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ org_id: activeOrgId }),
+        body: JSON.stringify({ action: 'hubspot_disconnect', org_id: activeOrgId }),
       });
       if (resp.error) {
         throw new Error(resp.error.message || 'Failed to disconnect HubSpot');
@@ -169,12 +169,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
 
       setSaving(true);
       try {
-        const resp = await supabase.functions.invoke('hubspot-admin', {
+        const resp = await supabase.functions.invoke('crm-admin-router', {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ action: 'save_settings', org_id: activeOrgId, settings }),
+          body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'save_settings', org_id: activeOrgId, settings }),
         });
         if (resp.error) throw new Error(resp.error.message || 'Failed to save settings');
         // Don't show toast for every auto-save - too noisy
@@ -195,12 +195,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('hubspot-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'enqueue', org_id: activeOrgId, ...args }),
+        body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'enqueue', org_id: activeOrgId, ...args }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to enqueue job');
     },
@@ -225,12 +225,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('hubspot-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'get_properties', org_id: activeOrgId, object_type: objectType }),
+        body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'get_properties', org_id: activeOrgId, object_type: objectType }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to fetch properties');
       if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch properties');
@@ -254,12 +254,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('hubspot-admin', {
+    const resp = await supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action: 'get_pipelines', org_id: activeOrgId }),
+      body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'get_pipelines', org_id: activeOrgId }),
     });
     if (resp.error) throw new Error(resp.error.message || 'Failed to fetch pipelines');
     if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch pipelines');
@@ -283,12 +283,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('hubspot-admin', {
+    const resp = await supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action: 'get_forms', org_id: activeOrgId }),
+      body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'get_forms', org_id: activeOrgId }),
     });
     if (resp.error) throw new Error(resp.error.message || 'Failed to fetch forms');
     if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch forms');
@@ -309,12 +309,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     const token = sessionData.session?.access_token;
     if (!token) throw new Error('No active session');
 
-    const resp = await supabase.functions.invoke('hubspot-admin', {
+    const resp = await supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action: 'get_lists', org_id: activeOrgId }),
+      body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'get_lists', org_id: activeOrgId }),
     });
     if (resp.error) throw new Error(resp.error.message || 'Failed to fetch segments');
     if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch segments');
@@ -328,6 +328,31 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     }>;
   }, [activeOrgId, enabled]);
 
+  const getSequences = useCallback(async () => {
+    if (!enabled) throw new Error('HubSpot integration is disabled');
+    if (!activeOrgId) throw new Error('No active organization selected');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('No active session');
+
+    const resp = await supabase.functions.invoke('crm-admin-router', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'get_sequences', org_id: activeOrgId }),
+    });
+    if (resp.error) throw new Error(resp.error.message || 'Failed to fetch sequences');
+    if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to fetch sequences');
+    return resp.data.sequences as Array<{
+      id: string;
+      name: string;
+      stepsCount: number;
+      folderId: string | null;
+      updatedAt: string | null;
+    }>;
+  }, [activeOrgId, enabled]);
+
   const previewContacts = useCallback(
     async (args: { list_id?: string; filters?: { propertyName: string; operator: string; value: string }[]; filter_logic?: 'AND' | 'OR'; limit?: number }) => {
       if (!enabled) throw new Error('HubSpot integration is disabled');
@@ -336,12 +361,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('hubspot-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'preview_contacts', org_id: activeOrgId, ...args }),
+        body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'preview_contacts', org_id: activeOrgId, ...args }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to preview contacts');
       if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to preview contacts');
@@ -371,12 +396,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error('No active session');
 
-      const resp = await supabase.functions.invoke('hubspot-admin', {
+      const resp = await supabase.functions.invoke('crm-admin-router', {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'trigger_sync', org_id: activeOrgId, ...args }),
+        body: JSON.stringify({ action: 'hubspot_admin', sub_action: 'trigger_sync', org_id: activeOrgId, ...args }),
       });
       if (resp.error) throw new Error(resp.error.message || 'Failed to trigger sync');
       if (!resp.data?.success) throw new Error(resp.data?.error || 'Failed to trigger sync');
@@ -387,6 +412,12 @@ export function useHubSpotIntegration(enabled: boolean = true) {
   );
 
   const isConnected = Boolean(status?.connected);
+
+  const hasSequenceScopes = useMemo(() => {
+    const scopes = status?.integration?.scopes ?? [];
+    return scopes.includes('automation.sequences.read')
+      && scopes.includes('automation.sequences.enrollments.write');
+  }, [status?.integration?.scopes]);
 
   const webhookUrl = useMemo(() => {
     return status?.webhook_url || null;
@@ -399,6 +430,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     settings: status?.settings || {},
     webhookUrl,
     isConnected,
+    hasSequenceScopes,
     canManage,
     loading,
     saving,
@@ -414,6 +446,7 @@ export function useHubSpotIntegration(enabled: boolean = true) {
     getPipelines,
     getForms,
     getSegments,
+    getSequences,
     previewContacts,
     triggerSync,
   };

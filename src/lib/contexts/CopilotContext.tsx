@@ -28,6 +28,8 @@ import type {
   QuestionOption,
 } from '@/lib/copilot/agent/types';
 import { supabase } from '@/lib/supabase/clientV2';
+import { v4 as uuidv4 } from 'uuid';
+import { useQueryClient } from '@tanstack/react-query';
 import logger from '@/lib/utils/logger';
 import { getTemporalContext } from '@/lib/utils/temporalContext';
 import { useOrg } from '@/lib/contexts/OrgContext';
@@ -96,10 +98,11 @@ interface CopilotContextValue {
   isLoading: boolean;
   context: CopilotContextType;
   setContext: (context: Partial<CopilotContextType>) => void;
-  startNewChat: () => void;
+  startNewChat: () => string | void;
   conversationId?: string;
   loadConversation: (conversationId: string) => Promise<void>;
   setConversationId: (conversationId: string) => void;
+  ensureConversation: (id: string, title?: string) => Promise<void>;
 
   // Progress steps for right panel (US-007)
   progressSteps: ProgressStep[];
@@ -155,6 +158,7 @@ interface CopilotProviderProps {
 
 export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) => {
   const { activeOrgId } = useOrg();
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [state, setState] = useState<CopilotState>({
     mode: 'empty',
@@ -188,6 +192,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   const autonomousCopilot = useCopilotChat({
     organizationId: activeOrgId || '',
     userId: context.userId || '',
+    conversationId: state.conversationId || null,
     initialContext: {
       currentView: context.currentView,
       contactId: context.contactId,
@@ -235,6 +240,9 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     actionItemsStore.clearExpired();
     logger.log('🧹 Cleared expired action items on CopilotProvider mount');
   }, []);
+
+  // Track which conversation has had its title auto-set (to avoid re-setting)
+  const titleSetForConversationRef = useRef<string | null>(null);
 
   // Abort controller for cancelling requests
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -334,8 +342,35 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         conversationId: undefined,
         mode: 'empty',
       }));
+      // Clear autonomous copilot state on org switch
+      autonomousCopilot.clearMessages();
+      autonomousCopilot.setConversationId(null);
     }
   }, [activeOrgId]);
+
+  // Ensure a conversation exists in the DB via RPC (create-if-missing)
+  const ensureConversation = useCallback(async (id: string, title?: string) => {
+    if (!context.userId) {
+      logger.warn('[CopilotContext] ensureConversation called without userId');
+      return;
+    }
+
+    const { error: rpcError } = await supabase.rpc('ensure_copilot_conversation', {
+      p_id: id,
+      p_user_id: context.userId,
+      p_org_id: activeOrgId || null,
+      p_title: title || 'New Conversation',
+    });
+
+    if (rpcError) {
+      logger.error('[CopilotContext] ensureConversation RPC error:', rpcError);
+      throw rpcError;
+    }
+
+    setState(prev => ({ ...prev, conversationId: id }));
+    setIsConversationPersisted(true);
+    logger.log('[CopilotContext] Conversation ensured in DB:', id);
+  }, [context.userId, activeOrgId]);
 
   const startNewChat = useCallback(() => {
     // Cancel any pending request
@@ -348,15 +383,24 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       clearTimeout(stepProgressionRef.current);
       stepProgressionRef.current = null;
     }
+
+    // Generate a new conversation ID and ensure it exists in DB
+    const newConversationId = uuidv4();
+
     setState(prev => ({
       ...prev,
       messages: [],
-      conversationId: undefined,
+      conversationId: newConversationId,
       currentInput: '',
       mode: 'empty',
       isLoading: false
     }));
     setIsConversationPersisted(false);
+
+    // Create DB record (fire-and-forget, will be retried on first message if needed)
+    ensureConversation(newConversationId).catch((err) => {
+      logger.warn('[CopilotContext] startNewChat ensureConversation failed:', err);
+    });
 
     // Clear context panel data
     setRelevantContextTypes([]);
@@ -372,7 +416,9 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       autonomousCopilot.stopGeneration();
       autonomousCopilot.clearMessages();
     }
-  }, [agentModeEnabled, agent, autonomousModeEnabled, autonomousCopilot]);
+
+    return newConversationId;
+  }, [agentModeEnabled, agent, autonomousModeEnabled, autonomousCopilot, ensureConversation]);
 
   // =============================================================================
   // Agent Mode Controls
@@ -513,12 +559,18 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   // which routes through autonomousCopilot.sendMessage in autonomous mode.
   // =============================================================================
   const trackedSimulationIdsRef = useRef<Set<string>>(new Set());
+  // Track last processed index so scanning effects only process new messages
+  const lastSimulationScanIdx = useRef(0);
+  const lastConfirmScanIdx = useRef(0);
+  const lastEntityScanIdx = useRef(0);
 
   React.useEffect(() => {
     if (!autonomousModeEnabled) return;
+    const msgs = autonomousCopilot.messages;
+    if (msgs.length <= lastSimulationScanIdx.current) return;
 
-    for (let i = autonomousCopilot.messages.length - 1; i >= 0; i--) {
-      const msg = autonomousCopilot.messages[i];
+    for (let i = msgs.length - 1; i >= lastSimulationScanIdx.current; i--) {
+      const msg = msgs[i];
       if (msg.role !== 'assistant' || !msg.structuredResponse) continue;
 
       const sr = msg.structuredResponse as any;
@@ -564,14 +616,17 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       logger.log('[CopilotContext] CPT-002: Tracked autonomous simulation as action item:', data.sequenceKey);
       break; // Only process the most recent simulation
     }
+    lastSimulationScanIdx.current = msgs.length;
   }, [autonomousModeEnabled, autonomousCopilot.messages]);
 
   // When autonomous mode re-executes with isSimulation=false, mark pending items confirmed
   React.useEffect(() => {
     if (!autonomousModeEnabled) return;
+    const msgs = autonomousCopilot.messages;
+    if (msgs.length <= lastConfirmScanIdx.current) return;
 
-    for (let i = autonomousCopilot.messages.length - 1; i >= 0; i--) {
-      const msg = autonomousCopilot.messages[i];
+    for (let i = msgs.length - 1; i >= lastConfirmScanIdx.current; i--) {
+      const msg = msgs[i];
       if (msg.role !== 'assistant' || !msg.structuredResponse) continue;
 
       const sr = msg.structuredResponse as any;
@@ -588,6 +643,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         });
       break;
     }
+    lastConfirmScanIdx.current = msgs.length;
   }, [autonomousModeEnabled, autonomousCopilot.messages]);
 
   // =============================================================================
@@ -595,9 +651,12 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   // =============================================================================
   React.useEffect(() => {
     if (!autonomousModeEnabled) return;
-    // Scan latest messages for resolve_entity tool results
-    for (let i = autonomousCopilot.messages.length - 1; i >= 0; i--) {
-      const msg = autonomousCopilot.messages[i];
+    const msgs = autonomousCopilot.messages;
+    if (msgs.length <= lastEntityScanIdx.current) return;
+
+    // Scan only new messages for resolve_entity tool results
+    for (let i = msgs.length - 1; i >= lastEntityScanIdx.current; i--) {
+      const msg = msgs[i];
       if (msg.role !== 'assistant' || !msg.toolCalls) continue;
       const entityCall = msg.toolCalls.find(
         tc => tc.name === 'resolve_entity' && tc.status === 'completed' && tc.result
@@ -635,9 +694,11 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
             alternativeCandidates: 0,
           });
         }
+        lastEntityScanIdx.current = msgs.length;
         return; // Found entity data, stop scanning
       }
     }
+    lastEntityScanIdx.current = msgs.length;
   }, [autonomousModeEnabled, autonomousCopilot.messages]);
 
   // Cancel the current request
@@ -1385,6 +1446,29 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         }
 
         await autonomousCopilot.sendMessage(message, { ...options, apiContent: enrichedMessage, routingContext: autonomousRoutingContext });
+
+        // Auto-generate title from first user message
+        // Use autonomousCopilot.conversationId when in autonomous mode — state.conversationId may be stale
+        const convId = autonomousCopilot.conversationId || state.conversationId;
+        if (convId && titleSetForConversationRef.current !== convId) {
+          titleSetForConversationRef.current = convId;
+          // Truncate to ~50 chars, not cutting mid-word
+          let title = message.trim();
+          if (title.length > 50) {
+            title = title.substring(0, 50);
+            const lastSpace = title.lastIndexOf(' ');
+            if (lastSpace > 30) title = title.substring(0, lastSpace);
+            title += '...';
+          }
+          supabase
+            .from('copilot_conversations')
+            .update({ title, updated_at: new Date().toISOString() })
+            .eq('id', convId)
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: ['copilot', 'conversations'] });
+            })
+            .catch((err) => logger.warn('[CopilotContext] Failed to update conversation title:', err));
+        }
         return;
       }
 
@@ -1928,10 +2012,13 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     }
   }, [pendingQuery, sendMessage]);
 
-  // Load a conversation from history
+  // Load a conversation from history (ensures it exists in DB first)
   const loadConversation = useCallback(async (conversationId: string) => {
     try {
       setState(prev => ({ ...prev, isLoading: true }));
+
+      // Ensure the conversation record exists before loading messages
+      await ensureConversation(conversationId);
 
       // Fetch conversation messages from database
       const { data: messages, error } = await supabase
@@ -1955,6 +2042,21 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         recommendations: msg.metadata?.recommendations
       }));
 
+      // When autonomous mode is active, the UI reads from autonomousCopilot.messages.
+      // Clear stale messages and inject the loaded ones so the history is visible.
+      if (autonomousModeEnabled) {
+        autonomousCopilot.clearMessages();
+        if (copilotMessages.length > 0) {
+          autonomousCopilot.injectMessages(copilotMessages.map(msg => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            structuredResponse: msg.structuredResponse,
+          })));
+        }
+      }
+
       setState(prev => ({
         ...prev,
         messages: copilotMessages,
@@ -1962,30 +2064,31 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
         mode: copilotMessages.length > 0 ? 'active' : 'empty',
         isLoading: false
       }));
-      setIsConversationPersisted(copilotMessages.length > 0); // Persisted if has messages
+      setIsConversationPersisted(true);
 
       logger.log('Loaded conversation:', conversationId, 'with', copilotMessages.length, 'messages');
     } catch (error) {
       logger.error('Failed to load conversation:', error);
       setState(prev => ({ ...prev, isLoading: false }));
-      setIsConversationPersisted(false); // Failed to load, not persisted
+      setIsConversationPersisted(false);
     }
-  }, []);
+  }, [ensureConversation, autonomousModeEnabled, autonomousCopilot]);
 
-  // Set conversation ID without loading messages (for new conversations from URL)
-  // This is used for client-generated IDs that don't exist in database yet
+  // Set conversation ID — ensures the conversation exists in DB
   const setConversationId = useCallback((conversationId: string) => {
     setState(prev => ({
       ...prev,
       conversationId,
     }));
-    setIsConversationPersisted(false); // Not in database yet
-    logger.log('Set conversation ID (not persisted):', conversationId);
-  }, []);
+    // Fire-and-forget: ensure conversation exists in DB
+    ensureConversation(conversationId).catch((err) => {
+      logger.warn('[CopilotContext] setConversationId ensureConversation failed:', err);
+    });
+  }, [ensureConversation]);
 
   // Determine which messages to show based on mode
   // Priority: autonomousMode > agentMode > regular
-  const getActiveMessages = (): CopilotMessage[] => {
+  const activeMessages = React.useMemo((): CopilotMessage[] => {
     if (autonomousModeEnabled) {
       // Convert autonomous copilot messages to CopilotMessage format
       return autonomousCopilot.messages.map(msg => ({
@@ -2003,11 +2106,9 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
       return agent.messages;
     }
     return state.messages;
-  };
-
-  const activeMessages = getActiveMessages();
+  }, [autonomousModeEnabled, autonomousCopilot.messages, agentModeEnabled, agent.messages, state.messages]);
   const activeIsLoading = autonomousModeEnabled
-    ? autonomousCopilot.isThinking
+    ? (autonomousCopilot.isThinking || autonomousCopilot.isLoadingSession)
     : agentModeEnabled
       ? agent.isProcessing
       : state.isLoading;
@@ -2087,6 +2188,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
     conversationId: state.conversationId,
     loadConversation,
     setConversationId,
+    ensureConversation,
 
     // Progress steps for right panel (US-007)
     progressSteps,

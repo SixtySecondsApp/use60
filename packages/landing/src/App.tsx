@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
+// Deploy trigger: 2026-03-03
 import { MeetingsLandingV4 } from './pages/MeetingsLandingV4';
 import { LandingPage } from './pages/LandingPage';
 import  WaitlistLanding  from './pages/WaitlistLanding';
@@ -16,6 +17,7 @@ import { IntroPage } from './pages/IntroPage';
 import { IntroducingPage } from './pages/IntroducingPage';
 import { LearnMore } from './pages/LearnMore';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
+import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import HeroV5Preview from './pages/HeroV5Preview';
 import HeroV5AltPreview from './pages/HeroV5AltPreview';
 import HeroV5BPreview from './pages/HeroV5BPreview';
@@ -24,11 +26,19 @@ import HeroV7Preview from './pages/HeroV7Preview';
 import HeroV8Preview from './pages/HeroV8Preview';
 import HeroV9Preview from './pages/HeroV9Preview';
 import HeroV10Preview from './pages/HeroV10Preview';
+import HeroV11Preview from './pages/HeroV11Preview';
 import DemoExperience from './demo/DemoExperience';
 import DemoExperienceV2 from './demo-v2/DemoExperience';
 import { LandingPageV5 } from './pages/LandingPageV5';
+import { LandingPageV6 } from './pages/LandingPageV6';
+import { LandingPageV7 } from './pages/LandingPageV7';
+import { lazy, Suspense } from 'react';
+
+const CampaignLanding = lazy(() => import('./pages/CampaignLanding'));
+const DemoPage = lazy(() => import('./pages/DemoPage'));
 import { getAppUrl } from './lib/utils/siteUrl';
 import { trackPageView } from './lib/pageViewTracker';
+import { CookieConsentBanner } from './lib/consent/CookieConsentBanner';
 
 // Initialize i18next for internationalization
 import './lib/i18n/config';
@@ -49,6 +59,7 @@ function App() {
   return (
     <BrowserRouter>
       <PageViewTracker />
+      <CookieConsentBanner />
       <Toaster position="top-center" richColors closeButton />
       <Routes>
         <Route path="/landing" element={<MeetingsLandingV4 />} />
@@ -67,6 +78,8 @@ function App() {
         <Route path="/waitlist-hero" element={<WaitlistLanding />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsOfServicePage />} />
         <Route path="/hero-v5" element={<HeroV5Preview />} />
         <Route path="/hero-v5-alt" element={<HeroV5AltPreview />} />
         <Route path="/hero-v5b" element={<HeroV5BPreview />} />
@@ -75,7 +88,12 @@ function App() {
         <Route path="/hero-v8" element={<HeroV8Preview />} />
         <Route path="/hero-v9" element={<HeroV9Preview />} />
         <Route path="/hero-v10" element={<HeroV10Preview />} />
-        <Route path="/demo" element={<DemoExperience />} />
+        <Route path="/hero-v11" element={<HeroV11Preview />} />
+        {/* Campaign analytics dashboard */}
+        {/* Campaign personalized demo links */}
+        <Route path="/t/:code" element={<Suspense fallback={<div className="min-h-screen bg-zinc-950" />}><CampaignLanding /></Suspense>} />
+        <Route path="/demo" element={<Suspense fallback={<div className="min-h-screen bg-zinc-950" />}><DemoPage /></Suspense>} />
+        <Route path="/demo-v3" element={<DemoExperience />} />
         <Route path="/demo-v2" element={<DemoExperienceV2 />} />
         {/* Redirect auth routes to app domain */}
         <Route path="/auth/*" element={<RedirectToApp />} />
@@ -83,7 +101,10 @@ function App() {
         <Route path="/signup" element={<RedirectToApp />} />
         <Route path="/v4" element={<MeetingsLandingV4 />} />
         <Route path="/v5" element={<LandingPageV5 />} />
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/v6" element={<LandingPageV6 />} />
+        <Route path="/v7" element={<LandingPageV7 />} />
+        <Route path="/v1" element={<LandingPage />} />
+        <Route path="/" element={<LandingPageV7 />} />
       </Routes>
     </BrowserRouter>
   );

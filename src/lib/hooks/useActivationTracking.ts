@@ -26,7 +26,11 @@ export type ActivationEventType =
   | 'first_ai_question_asked'
   | 'first_proposal_generated'
   | 'subscription_started'
-  | 'trial_started';
+  | 'trial_started'
+  | 'notetaker_connected'
+  | 'instant_replay_completed'
+  | 'credits_topped_up'
+  | 'tour_completed';
 
 interface UseActivationTrackingReturn {
   trackActivationEvent: (eventType: ActivationEventType, data?: Record<string, any>) => Promise<void>;
@@ -35,6 +39,10 @@ interface UseActivationTrackingReturn {
   trackFirstMeetingSynced: (meetingCount: number) => Promise<void>;
   trackFirstProposalGenerated: (proposalId: string) => Promise<void>;
   trackFirstAIQuestion: (question: string) => Promise<void>;
+  trackNotetakerConnected: () => Promise<void>;
+  trackInstantReplayCompleted: (meetingId: string) => Promise<void>;
+  trackCreditsToppedUp: (creditsAdded: number) => Promise<void>;
+  trackTourCompleted: (tourId?: string) => Promise<void>;
 }
 
 export function useActivationTracking(): UseActivationTrackingReturn {
@@ -118,6 +126,31 @@ export function useActivationTracking(): UseActivationTrackingReturn {
     [trackActivationEvent]
   );
 
+  const trackNotetakerConnected = useCallback(async () => {
+    await trackActivationEvent('notetaker_connected');
+  }, [trackActivationEvent]);
+
+  const trackInstantReplayCompleted = useCallback(
+    async (meetingId: string) => {
+      await trackActivationEvent('instant_replay_completed', { meeting_id: meetingId });
+    },
+    [trackActivationEvent]
+  );
+
+  const trackCreditsToppedUp = useCallback(
+    async (creditsAdded: number) => {
+      await trackActivationEvent('credits_topped_up', { credits_added: creditsAdded });
+    },
+    [trackActivationEvent]
+  );
+
+  const trackTourCompleted = useCallback(
+    async (tourId?: string) => {
+      await trackActivationEvent('tour_completed', tourId ? { tour_id: tourId } : undefined);
+    },
+    [trackActivationEvent]
+  );
+
   return {
     trackActivationEvent,
     trackFirstSummaryViewed,
@@ -125,6 +158,10 @@ export function useActivationTracking(): UseActivationTrackingReturn {
     trackFirstMeetingSynced,
     trackFirstProposalGenerated,
     trackFirstAIQuestion,
+    trackNotetakerConnected,
+    trackInstantReplayCompleted,
+    trackCreditsToppedUp,
+    trackTourCompleted,
   };
 }
 

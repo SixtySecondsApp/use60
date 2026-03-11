@@ -1,16 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { FileText, Loader2, Settings2 } from 'lucide-react';
+
+import ProposalProgressOverlay from '@/components/proposals/ProposalProgressOverlay';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
+import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
-import ProposalProgressOverlay from '@/components/proposals/ProposalProgressOverlay';
+
+export interface ProposalQuickGenerateHandle {
+  trigger: () => void;
+}
 
 interface ProposalQuickGenerateProps {
   meetingId: string;
@@ -20,6 +25,7 @@ interface ProposalQuickGenerateProps {
   hasNotes: boolean;
   onProposalStarted?: (proposalId: string) => void;
   onCustomise?: () => void;
+  triggerRef?: React.Ref<ProposalQuickGenerateHandle>;
 }
 
 export function ProposalQuickGenerate({
@@ -30,6 +36,7 @@ export function ProposalQuickGenerate({
   hasNotes,
   onProposalStarted,
   onCustomise,
+  triggerRef,
 }: ProposalQuickGenerateProps) {
   const [loading, setLoading] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -40,9 +47,6 @@ export function ProposalQuickGenerate({
 
   const isDisabled = !hasRecording && !hasNotes;
 
-  // -------------------------------------------------------------------
-  // Realtime subscription — tracks generation_status on created proposal
-  // -------------------------------------------------------------------
   useEffect(() => {
     if (!activeProposalId) return;
 
@@ -75,13 +79,12 @@ export function ProposalQuickGenerate({
 
   const handleGenerate = async () => {
     if (!userId || !orgId) {
-      toast.error('Unable to generate proposal — missing user or org context');
+      toast.error('Unable to generate proposal - missing user or org context');
       return;
     }
 
     setLoading(true);
     try {
-      // 1. Create the proposal row immediately so we have an ID for the overlay
       const { data: newRow, error: insertErr } = await supabase
         .from('proposals')
         .insert({
@@ -109,34 +112,34 @@ export function ProposalQuickGenerate({
 
       const proposalId = newRow.id;
 
-      // 2. Open the overlay immediately — user sees the stepper right away
       setActiveProposalId(proposalId);
       setOverlayOpen(true);
       setLoading(false);
       onProposalStarted?.(proposalId);
 
-      // 3. Fire the /proposal skill in the background via run-skill
-      //    Routes through executeAction → generate-proposal-v2 → proposal-pipeline-v2
-      supabase.functions.invoke('run-skill', {
-        body: {
-          skill_key: 'generate-proposal-v2',
-          context: {
-            proposal_id: proposalId,
-            meeting_id: meetingId,
-            deal_id: dealId ?? undefined,
-            contact_id: contactId ?? undefined,
-            trigger_type: 'manual_button',
-            org_id: orgId,
-          },
-        },
-      }).then(({ error }) => {
-        if (error) {
-          console.error('[ProposalQuickGenerate] run-skill error:', error.message);
-          // The overlay's realtime subscription will pick up the 'failed' status
+      void (async () => {
+        try {
+          const { error } = await supabase.functions.invoke('run-skill', {
+            body: {
+              skill_key: 'generate-proposal-v2',
+              context: {
+                proposal_id: proposalId,
+                meeting_id: meetingId,
+                deal_id: dealId ?? undefined,
+                contact_id: contactId ?? undefined,
+                trigger_type: 'manual_button',
+                org_id: orgId,
+              },
+            },
+          });
+
+          if (error) {
+            console.error('[ProposalQuickGenerate] run-skill error:', error.message);
+          }
+        } catch (err) {
+          console.error('[ProposalQuickGenerate] run-skill invocation failed:', err);
         }
-      }).catch((err) => {
-        console.error('[ProposalQuickGenerate] run-skill invocation failed:', err);
-      });
+      })();
     } catch (err) {
       console.error('[ProposalQuickGenerate] Unexpected error:', err);
       toast.error('Something went wrong starting proposal generation');
@@ -144,6 +147,8 @@ export function ProposalQuickGenerate({
       setLoading(false);
     }
   };
+
+  useImperativeHandle(triggerRef, () => ({ trigger: handleGenerate }), [handleGenerate]);
 
   const button = (
     <Button
@@ -153,9 +158,9 @@ export function ProposalQuickGenerate({
       onClick={handleGenerate}
     >
       {loading ? (
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
       ) : (
-        <FileText className="h-4 w-4 mr-2" />
+        <FileText className="mr-2 h-4 w-4" />
       )}
       Generate Proposal
     </Button>
@@ -177,7 +182,7 @@ export function ProposalQuickGenerate({
             <button
               type="button"
               onClick={onCustomise}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+              className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               <Settings2 className="h-3 w-3" />
               Customise
@@ -203,7 +208,7 @@ export function ProposalQuickGenerate({
           <button
             type="button"
             onClick={onCustomise}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             <Settings2 className="h-3 w-3" />
             Customise
@@ -221,3 +226,5 @@ export function ProposalQuickGenerate({
     </>
   );
 }
+
+export default ProposalQuickGenerate;

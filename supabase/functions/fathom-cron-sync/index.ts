@@ -251,7 +251,7 @@ async function syncSingleMeeting(
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-sync`
+    const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/fathom-ops-router`
     const response = await fetch(syncUrl, {
       method: 'POST',
       headers: {
@@ -259,6 +259,7 @@ async function syncSingleMeeting(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'sync',
         sync_type: 'webhook',
         user_id: userId,
         call_id: recordingId,

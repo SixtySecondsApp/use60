@@ -336,8 +336,8 @@ export class GoogleTasksSyncService {
       // If listId provided, use that specific list
       if (listId) {
         // Store the task list in our database
-        const { data: listData } = await supabase.functions.invoke('google-tasks', {
-          body: { action: 'list-tasklists' }
+        const { data: listData } = await supabase.functions.invoke('google-services-router', {
+          body: { action: 'tasks', handlerAction: 'list-tasklists' }
         });
         
         const taskList = listData?.items?.find((list: GoogleTaskList) => list.id === listId);
@@ -346,8 +346,8 @@ export class GoogleTasksSyncService {
         }
       } else {
         // Get or create sync status
-        const { data, error } = await supabase.functions.invoke('google-tasks', {
-          body: { action: 'list-tasklists' }
+        const { data, error } = await supabase.functions.invoke('google-services-router', {
+          body: { action: 'tasks', handlerAction: 'list-tasklists' }
         });
 
         if (error) throw error;
@@ -533,9 +533,10 @@ export class GoogleTasksSyncService {
 
     try {
       // Get tasks from Google (with incremental sync if available)
-      const { data } = await supabase.functions.invoke('google-tasks', {
+      const { data } = await supabase.functions.invoke('google-services-router', {
         body: {
-          action: 'sync-tasks',
+          action: 'tasks',
+          handlerAction: 'sync-tasks',
           lastSyncTime: lastSyncTime,
           taskListId: taskListId
         }
@@ -847,9 +848,10 @@ export class GoogleTasksSyncService {
     }
 
     // Create task in Google
-    const { data, error } = await supabase.functions.invoke('google-tasks', {
+    const { data, error } = await supabase.functions.invoke('google-services-router', {
       body: {
-        action: 'create-task',
+        action: 'tasks',
+        handlerAction: 'create-task',
         taskListId: listId,
         title: task.title,
         notes: task.description || undefined,
@@ -892,9 +894,10 @@ export class GoogleTasksSyncService {
       // Sanitize the list ID before using it
       const listId = this.sanitizeListId(task.google_list_id);
       
-      const { data, error } = await supabase.functions.invoke('google-tasks', {
+      const { data, error } = await supabase.functions.invoke('google-services-router', {
         body: {
-          action: 'update-task',
+          action: 'tasks',
+          handlerAction: 'update-task',
           taskListId: listId,
           taskId: task.google_task_id,
           title: task.title,

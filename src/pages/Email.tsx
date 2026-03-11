@@ -749,8 +749,7 @@ export default function Email() {
                   try {
                     // Test with the exact format expected by the Edge Function
                     const headers = await getAuthHeaders();
-                    const response = await supabase.functions.invoke('google-gmail?action=list', {
-                      body: {
+                    const response = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'list',
                         query: 'in:inbox',
                         maxResults: 200
                       },

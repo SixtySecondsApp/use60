@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>60 — Website Strategy Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --bg2: #111111;
+      --bg3: #1a1a1a;
+      --bdr: rgba(255,255,255,0.06);
+      --bdr2: rgba(255,255,255,0.12);
+      --txt: #ededed;
+      --txt2: #a0a0a0;
+      --txt3: #666666;
+      --indigo: #6366f1;
+      --violet: #8b5cf6;
+      --teal: #06b6d4;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--txt);
+      font-family: 'Inter', -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* Slide System */
+    .deck {
+      height: 100vh;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 80px 120px;
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.6s cubic-bezier(0.22,1,0.36,1), transform 0.6s cubic-bezier(0.22,1,0.36,1);
+      pointer-events: none;
+      overflow-y: auto;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    /* Navigation */
+    .nav {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 100;
+      background: var(--bg2);
+      border: 1px solid var(--bdr);
+      border-radius: 24px;
+      padding: 8px 16px;
+      backdrop-filter: blur(12px);
+    }
+
+    .nav-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--txt3);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .nav-dot.active {
+      background: var(--indigo);
+      width: 28px;
+      border-radius: 5px;
+    }
+
+    .slide-counter {
+      position: fixed;
+      top: 32px;
+      right: 40px;
+      font-size: 14px;
+      color: var(--txt3);
+      z-index: 100;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .key-hint {
+      position: fixed;
+      bottom: 32px;
+      right: 40px;
+      font-size: 12px;
+      color: var(--txt3);
+      z-index: 100;
+    }
+
+    .key-hint kbd {
+      background: var(--bg3);
+      border: 1px solid var(--bdr2);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: inherit;
+      font-size: 11px;
+    }
+
+    /* Typography */
+    h1 {
+      font-size: 64px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 24px;
+    }
+
+    h2 {
+      font-size: 48px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+
+    h3 {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      line-height: 1.3;
+      margin-bottom: 16px;
+    }
+
+    .subtitle {
+      font-size: 20px;
+      color: var(--txt2);
+      line-height: 1.6;
+      max-width: 700px;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, var(--indigo), var(--violet), var(--teal));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .accent { color: var(--indigo); }
+    .teal { color: var(--teal); }
+    .green { color: var(--green); }
+    .amber { color: var(--amber); }
+    .rose { color: var(--rose); }
+    .violet { color: var(--violet); }
+
+    /* Layout */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: start;
+    }
+
+    .three-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 32px;
+    }
+
+    .four-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 24px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--bdr);
+      border-radius: 16px;
+      padding: 28px;
+    }
+
+    .card-sm {
+      background: var(--bg2);
+      border: 1px solid var(--bdr);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .card-glow {
+      box-shadow: 0 0 60px rgba(99, 102, 241, 0.08);
+    }
+
+    .card-accent {
+      border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    /* Tags */
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+
+    .tag-indigo { background: rgba(99,102,241,0.15); color: var(--indigo); }
+    .tag-violet { background: rgba(139,92,246,0.15); color: var(--violet); }
+    .tag-teal { background: rgba(6,182,212,0.15); color: var(--teal); }
+    .tag-green { background: rgba(34,197,94,0.15); color: var(--green); }
+    .tag-amber { background: rgba(245,158,11,0.15); color: var(--amber); }
+    .tag-rose { background: rgba(244,63,94,0.15); color: var(--rose); }
+
+    /* Flow diagram */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .flow-step {
+      background: var(--bg3);
+      border: 1px solid var(--bdr);
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .flow-arrow {
+      color: var(--txt3);
+      font-size: 18px;
+    }
+
+    .flow-step.highlight {
+      border-color: rgba(99,102,241,0.4);
+      background: rgba(99,102,241,0.08);
+      color: var(--indigo);
+    }
+
+    /* Stats */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: var(--txt2);
+      margin-top: 4px;
+    }
+
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--txt3);
+      border-bottom: 1px solid var(--bdr2);
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--bdr);
+      color: var(--txt2);
+    }
+
+    td:first-child { color: var(--txt); font-weight: 500; }
+
+    /* Mockup frames */
+    .browser-frame {
+      background: var(--bg2);
+      border: 1px solid var(--bdr);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .browser-bar {
+      height: 36px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--bdr);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 6px;
+    }
+
+    .browser-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .browser-url {
+      margin-left: 12px;
+      font-size: 12px;
+      color: var(--txt3);
+      background: var(--bg);
+      padding: 4px 12px;
+      border-radius: 6px;
+      flex: 1;
+      max-width: 300px;
+    }
+
+    .browser-content {
+      padding: 32px;
+      min-height: 300px;
+    }
+
+    /* Animated background */
+    .bg-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+    }
+
+    .bg-glow {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.06;
+      pointer-events: none;
+    }
+
+    /* Slide-specific */
+    .section-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .section-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      background: var(--bg2);
+      border: 1px solid var(--bdr);
+      border-radius: 12px;
+      font-size: 15px;
+    }
+
+    .section-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(99,102,241,0.12);
+      color: var(--indigo);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .section-purpose {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    ul { list-style: none; }
+    ul li { padding: 6px 0; color: var(--txt2); font-size: 15px; }
+    ul li::before { content: '→'; margin-right: 10px; color: var(--indigo); }
+
+    .mt-8 { margin-top: 8px; }
+    .mt-16 { margin-top: 16px; }
+    .mt-24 { margin-top: 24px; }
+    .mt-32 { margin-top: 32px; }
+    .mt-48 { margin-top: 48px; }
+    .mb-8 { margin-bottom: 8px; }
+    .mb-16 { margin-bottom: 16px; }
+    .mb-24 { margin-bottom: 24px; }
+    .opacity-60 { opacity: 0.6; }
+    .text-sm { font-size: 14px; }
+    .text-xs { font-size: 12px; }
+    .font-medium { font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 1: TITLE -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide active" data-slide="0">
+      <div class="bg-glow" style="top: -200px; left: -200px; background: var(--indigo);"></div>
+      <div class="bg-glow" style="bottom: -200px; right: -100px; background: var(--violet);"></div>
+      <div class="bg-grid"></div>
+
+      <div style="position: relative; z-index: 1;">
+        <span class="tag tag-indigo">Website Strategy 2026</span>
+        <h1 style="font-size: 80px;">
+          The website <span class="gradient-text">IS</span> the demo.
+        </h1>
+        <p class="subtitle" style="max-width: 640px;">
+          A complete strategy to rebuild www.use60.com as a living, interactive product experience
+          that converts visitors into users before they even sign up.
+        </p>
+
+        <div class="stat-grid mt-48" style="max-width: 700px;">
+          <div class="stat">
+            <div class="stat-value gradient-text">10%+</div>
+            <div class="stat-label">Conversion target</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value teal">10K</div>
+            <div class="stat-label">Personalised links</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value violet">8</div>
+            <div class="stat-label">Interactive sections</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value green">2</div>
+            <div class="stat-label">Theme modes</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 2: THE PROBLEM -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide" data-slide="1">
+      <span class="tag tag-rose">The Problem</span>
+      <h2>The website doesn't match<br/>the product.</h2>
+      <p class="subtitle mb-24">The app is beautiful, intelligent, and alive. The website is a marketing page with a demo bolted on. We're leaving the wow factor on the table.</p>
+
+      <div class="three-col mt-32">
+        <div class="card">
+          <span class="tag tag-rose">Current State</span>
+          <h3>Static marketing</h3>
+          <ul>
+            <li>Traditional sections that describe features</li>
+            <li>Demo is a separate page, not the experience</li>
+            <li>No personalisation for campaign traffic</li>
+            <li>No visitor tracking or lead intelligence</li>
+          </ul>
+        </div>
+        <div class="card card-accent card-glow">
+          <span class="tag tag-indigo">New Vision</span>
+          <h3>Living demo</h3>
+          <ul>
+            <li>Every section is an interactive demo</li>
+            <li>The site IS the product experience</li>
+            <li>Personalised links with pre-loaded data</li>
+            <li>Full interaction heatmap → Slack pipeline</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag tag-green">Impact</span>
+          <h3>The numbers</h3>
+          <ul>
+            <li>3.8% → 10%+ homepage conversion</li>
+            <li>15-20% /t/ campaign conversion</li>
+            <li>Full engagement scoring per visitor</li>
+            <li>Every visitor becomes a qualified lead</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 3: AUDIENCE -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide" data-slide="2">
+      <span class="tag tag-violet">Audience</span>
+      <h2>Who we're building for.</h2>
+
+      <div class="two-col mt-32">
+        <div>
+          <div class="card mb-24">
+            <span class="tag tag-amber">Primary Persona</span>
+            <h3>The overwhelmed founder</h3>
+            <p style="color: var(--txt2); line-height: 1.7;">
+              Solo founder or small sales team (1-5 reps). B2B SaaS or services. 5-50 employees.
+              They KNOW they're dropping follow-ups and losing deals. They just don't have bandwidth
+              to fix it. Their stack is fragmented — Calendly + HubSpot + Gmail + Notion + Slack.
+              Nothing talks to anything.
+            </p>
+          </div>
+          <div class="card">
+            <span class="tag tag-teal">Their internal monologue</span>
+            <p style="color: var(--txt2); line-height: 1.7; font-style: italic;">
+              "I had 3 great calls this week. I know I promised follow-ups. I think I sent one of them.
+              The other two... I'll get to it tomorrow. Again."
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="mb-16">Traffic sources & awareness</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Channel</th>
+                <th>Awareness</th>
+                <th>What they need</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>LinkedIn /t/</td>
+                <td><span class="tag tag-amber" style="margin:0;">Problem-aware</span></td>
+                <td>Mind-blown by their data</td>
+              </tr>
+              <tr>
+                <td>Email campaign</td>
+                <td><span class="tag tag-amber" style="margin:0;">Problem-aware</span></td>
+                <td>Personalised proof</td>
+              </tr>
+              <tr>
+                <td>Google organic</td>
+                <td><span class="tag tag-teal" style="margin:0;">Solution-aware</span></td>
+                <td>Why 60 vs others</td>
+              </tr>
+              <tr>
+                <td>LLM referral</td>
+                <td><span class="tag tag-green" style="margin:0;">Most-aware</span></td>
+                <td>Fast path to signup</td>
+              </tr>
+              <tr>
+                <td>Direct / WOM</td>
+                <td><span class="tag tag-green" style="margin:0;">Most-aware</span></td>
+                <td>Confirm the hype</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 4: SITE ARCHITECTURE -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide" data-slide="3">
+      <span class="tag tag-indigo">Architecture</span>
+      <h2>8 interactive sections.<br/>Zero static content.</h2>
+      <p class="subtitle mb-24">Every section demonstrates a real capability. The site IS the product.</p>
+
+      <div class="section-list" style="max-width: 900px;">
+        <div class="section-item">
+          <div class="section-num">1</div>
+          <div>
+            <strong>Hero — Product Input</strong>
+            <span class="text-sm opacity-60" style="margin-left: 8px;">URL input, live research trigger</span>
+          </div>
+          <div class="section-purpose tag-rose" style="background: rgba(244,63,94,0.1); color: var(--rose);">HOOK</div>
+        </div>
+        <div class="section-item">
+          <div class="section-num">2</div>
+          <div>
+            <strong>Live Research Demo</strong>
+            <span class="text-sm opacity-60" style="margin-left: 8px;">6 AI agents analysing their company</span>
+          </div>
+          <div class="section-purpose" style="background: rgba(99,102,241,0.1); color: var(--indigo);">SHOW</div>
+        </div>
+        <div class="section-item">
+          <div class="section-num">3</div>
+          <div>
+            <strong>Product Showcase</strong>
+            <span class="text-sm opacity-60" style="margin-left: 8px;">5-panel interactive feature tour</span>
+          </div>
+          <div class="section-purpose" style="background: rgba(99,102,241,0.1); color: var(--indigo);">SHOW</div>
+        </div>
+        <div class="section-item">
+          <div class="section-num">4</div>
+          <div>
+            <strong>Integration Map</strong>
+            <span class="text-sm opacity-60" style="margin-left: 8px;">Slack-style integration cards</span>
+          </div>
+          <div class="section-purpose" style="background: rgba(139,92,246,0.1); color: var(--violet);">DIFFERENTIATE</div>
+        </div>
+        <div class="section-item">
+          <div class="section-num">5</div>
+          <div>
+            <strong>Your Week with 60</strong>
+            <span class="text-sm opacity-60" style="margin-left: 8px;">Personalised stats + emotional peak</span>
+          </div>
+          <div class="section-purpose" style="background: rgba(99,102,241,0.1); color: var(--indigo);">SHOW</div>
+        </div>
+        <div class="section-item">
+          <div class="section-num">6</div>
+          <div>
+            <strong>Social Proof Layer</strong>
+            <span class="text-sm opacity-60" style="margin-left: 8px;">Testimonials, logos, metrics</span>
+          </div>
+          <div class="section-purpose" style="background: rgba(6,182,212,0.1); color: var(--teal);">PROVE</div>
+        </div>
+        <div class="section-item">
+          <div class="section-num">7</div>
+          <div>
+            <strong>Autonomy Progression</strong>
+            <span class="text-sm opacity-60" style="margin-left: 8px;">"It learns you, then becomes you"</span>
+          </div>
+          <div class="section-purpose" style="background: rgba(139,92,246,0.1); color: var(--violet);">DIFFERENTIATE</div>
+        </div>
+        <div class="section-item">
+          <div class="section-num">8</div>
+          <div>
+            <strong>Signup</strong>
+            <span class="text-sm opacity-60" style="margin-left: 8px;">Demo data seeds into real account</span>
+          </div>
+          <div class="section-purpose" style="background: rgba(34,197,94,0.1); color: var(--green);">CONVERT</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 5: HERO MOCKUP -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide" data-slide="4">
+      <span class="tag tag-indigo">Section 1</span>
+      <h2>The hero IS the product.</h2>
+
+      <div class="two-col mt-24">
+        <div>
+          <p class="subtitle mb-24">
+            No marketing fluff above the fold. The visitor arrives, sees a URL input, enters their website,
+            and watches 60 go to work. The product sells itself.
+          </p>
+          <ul>
+            <li>Warm headline: "Finally, a sales tool that actually gets it."</li>
+            <li>URL input as primary CTA (the product IS the action)</li>
+            <li>Example domains for instant gratification</li>
+            <li>Product UI animation: Quick Add → AI cascade in background</li>
+            <li>Subtle proof stats below the fold line</li>
+          </ul>
+        </div>
+
+        <div class="browser-frame">
+          <div class="browser-bar">
+            <div class="browser-dot" style="background: var(--rose);"></div>
+            <div class="browser-dot" style="background: var(--amber);"></div>
+            <div class="browser-dot" style="background: var(--green);"></div>
+            <div class="browser-url">use60.com</div>
+          </div>
+          <div class="browser-content" style="text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 360px; background: var(--bg); position: relative; overflow: hidden;">
+            <!-- Simulated particle dots -->
+            <div style="position: absolute; inset: 0; opacity: 0.15;">
+              <svg width="100%" height="100%" viewBox="0 0 400 300">
+                <circle cx="50" cy="80" r="2" fill="var(--indigo)"><animate attributeName="cy" values="80;75;85;80" dur="4s" repeatCount="indefinite"/></circle>
+                <circle cx="120" cy="150" r="1.5" fill="var(--violet)"><animate attributeName="cx" values="120;125;115;120" dur="5s" repeatCount="indefinite"/></circle>
+                <circle cx="280" cy="60" r="2" fill="var(--teal)"><animate attributeName="cy" values="60;55;65;60" dur="3.5s" repeatCount="indefinite"/></circle>
+                <circle cx="350" cy="200" r="1.5" fill="var(--indigo)"><animate attributeName="cx" values="350;345;355;350" dur="4.5s" repeatCount="indefinite"/></circle>
+                <circle cx="200" cy="250" r="2" fill="var(--violet)"><animate attributeName="cy" values="250;245;255;250" dur="3s" repeatCount="indefinite"/></circle>
+                <circle cx="80" cy="220" r="1" fill="var(--teal)"><animate attributeName="cx" values="80;85;75;80" dur="6s" repeatCount="indefinite"/></circle>
+                <circle cx="320" cy="120" r="1.5" fill="var(--indigo)"><animate attributeName="cy" values="120;115;125;120" dur="4s" repeatCount="indefinite"/></circle>
+              </svg>
+            </div>
+
+            <div style="position: relative; z-index: 1;">
+              <div style="font-size: 12px; color: var(--txt3); margin-bottom: 24px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;">One tool. Every sales workflow.</div>
+              <div style="font-size: 32px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px;">
+                Finally, a sales tool that
+              </div>
+              <div style="font-size: 32px; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 24px;">
+                <span class="gradient-text">actually gets it.</span>
+              </div>
+              <div style="font-size: 14px; color: var(--txt2); margin-bottom: 32px; max-width: 360px; margin-inline: auto;">
+                One place for everything before and after the call.
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; background: var(--bg3); border: 1px solid var(--bdr2); border-radius: 12px; padding: 10px 16px; max-width: 380px; margin: 0 auto;">
+                <span style="color: var(--txt3); font-size: 14px;">https://</span>
+                <span style="color: var(--txt2); font-size: 14px; flex: 1; text-align: left;">enter your company website</span>
+                <span style="background: linear-gradient(135deg, var(--indigo), var(--violet)); color: white; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 8px;">Go</span>
+              </div>
+              <div style="display: flex; gap: 12px; justify-content: center; margin-top: 12px;">
+                <span style="font-size: 11px; color: var(--txt3); background: var(--bg3); padding: 3px 8px; border-radius: 6px; cursor: pointer;">stripe.com</span>
+                <span style="font-size: 11px; color: var(--txt3); background: var(--bg3); padding: 3px 8px; border-radius: 6px; cursor: pointer;">notion.com</span>
+                <span style="font-size: 11px; color: var(--txt3); background: var(--bg3); padding: 3px 8px; border-radius: 6px; cursor: pointer;">linear.app</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 6: PERSONALISATION ENGINE -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide" data-slide="5">
+      <span class="tag tag-violet">Campaign Engine</span>
+      <h2>10,000 personalised links.<br/>21 characters each.</h2>
+
+      <div class="two-col mt-32">
+        <div>
+          <h3 class="mb-16">The /t/ pipeline</h3>
+          <div class="flow mb-24">
+            <div class="flow-step">Email list</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">Domain extraction</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step highlight">AI enrichment</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step">6-char code</div>
+            <div class="flow-arrow">→</div>
+            <div class="flow-step highlight">use60.com/t/a7Kx9B</div>
+          </div>
+
+          <div class="card mb-16">
+            <span class="tag tag-green">What they see</span>
+            <h3>Personal command center</h3>
+            <p style="color: var(--txt2); line-height: 1.6;">
+              "Welcome, Sarah." A full mock 60 dashboard pre-loaded with their company as a deal,
+              simulated meetings, an AI-written follow-up email about their product, and a deal
+              health score. They're already inside 60 before they sign up.
+            </p>
+          </div>
+
+          <div class="card-sm" style="margin-bottom: 16px;">
+            <div style="color: var(--txt3); font-size: 13px;">
+              <strong style="color: var(--txt);">URL:</strong> use60.com/t/{6-char-code} — <span class="accent">21 chars total</span><br/>
+              <strong style="color: var(--txt);">Method:</strong> Random base62 code → DB lookup (no encryption)<br/>
+              <strong style="color: var(--txt);">Capacity:</strong> 56.8B unique codes (base62 × 6 chars)<br/>
+              <strong style="color: var(--txt);">Fallback:</strong> Invalid code → redirect to homepage
+            </div>
+          </div>
+
+          <div class="card-sm" style="border-color: rgba(34,197,94,0.2);">
+            <div style="font-size: 12px; font-weight: 600; color: var(--green); margin-bottom: 6px;">WHY LOOKUP BEATS ENCRYPTION</div>
+            <div style="font-size: 12px; color: var(--txt3); line-height: 1.6;">
+              Shorter URLs (21 vs 35 chars) · Faster (DB lookup vs decrypt) · More secure (nothing to reverse-engineer) · Code IS the tracking ID
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="browser-frame">
+            <div class="browser-bar">
+              <div class="browser-dot" style="background: var(--rose);"></div>
+              <div class="browser-dot" style="background: var(--amber);"></div>
+              <div class="browser-dot" style="background: var(--green);"></div>
+              <div class="browser-url">use60.com/t/a7Kx9B</div>
+            </div>
+            <div class="browser-content" style="background: var(--bg); padding: 24px;">
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px;">
+                <div style="width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #4f46e5, #7c3aed); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">60</div>
+                <div>
+                  <div style="font-size: 12px; color: var(--txt3);">Welcome back,</div>
+                  <div style="font-size: 18px; font-weight: 700;">Sarah Chen</div>
+                </div>
+              </div>
+
+              <div style="font-size: 13px; color: var(--txt2); margin-bottom: 16px;">
+                <span style="color: var(--teal);">Acme Corp</span> at a glance
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                <div class="card-sm" style="padding: 14px;">
+                  <div style="font-size: 11px; color: var(--txt3); text-transform: uppercase; letter-spacing: 0.05em;">Next Meeting</div>
+                  <div style="font-size: 14px; font-weight: 600; margin-top: 4px;">Q1 Review — Tue 2pm</div>
+                  <div style="font-size: 11px; color: var(--green); margin-top: 2px;">Prep doc ready</div>
+                </div>
+                <div class="card-sm" style="padding: 14px;">
+                  <div style="font-size: 11px; color: var(--txt3); text-transform: uppercase; letter-spacing: 0.05em;">Deal Health</div>
+                  <div style="font-size: 14px; font-weight: 600; margin-top: 4px;">
+                    <span style="color: var(--green);">Strong</span> — 78/100
+                  </div>
+                  <div style="font-size: 11px; color: var(--txt2); margin-top: 2px;">3 positive signals</div>
+                </div>
+              </div>
+
+              <div class="card-sm" style="padding: 14px;">
+                <div style="font-size: 11px; color: var(--txt3); text-transform: uppercase; letter-spacing: 0.05em;">AI-Drafted Follow-Up</div>
+                <div style="font-size: 13px; color: var(--txt2); margin-top: 6px; line-height: 1.5;">
+                  Hi Sarah, great chat about Acme's expansion plans. I've put together the proposal we discussed — attached. The enterprise tier would cover your team of 12 with room to grow...
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                  <span style="font-size: 11px; background: rgba(99,102,241,0.15); color: var(--indigo); padding: 4px 10px; border-radius: 6px; font-weight: 500;">Send</span>
+                  <span style="font-size: 11px; background: var(--bg3); color: var(--txt3); padding: 4px 10px; border-radius: 6px;">Edit</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 7: TRACKING & LEAD INTELLIGENCE -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide" data-slide="6">
+      <span class="tag tag-teal">Lead Intelligence</span>
+      <h2>Every click becomes<br/>a signal.</h2>
+
+      <div class="two-col mt-32">
+        <div>
+          <h3 class="mb-16">Full interaction heatmap</h3>
+          <table>
+            <thead>
+              <tr><th>Event</th><th>Weight</th><th>Signal</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Page visit</td><td>1</td><td>Alive</td></tr>
+              <tr><td>Scroll depth 50%+</td><td>2</td><td>Engaged</td></tr>
+              <tr><td>Demo step completed</td><td>5</td><td>Invested</td></tr>
+              <tr><td>URL input submitted</td><td><span class="accent">10</span></td><td>High intent</td></tr>
+              <tr><td>Product panel viewed</td><td>3</td><td>Feature interest</td></tr>
+              <tr><td>Signup form started</td><td><span class="accent">15</span></td><td>Near-conversion</td></tr>
+              <tr><td>Signup completed</td><td><span class="green">25</span></td><td>Converted</td></tr>
+              <tr><td>Return visit</td><td><span class="accent">10</span></td><td>Multi-session</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h3 class="mb-16">Real-time Slack alerts</h3>
+          <div class="card" style="background: #1a1325; border-color: rgba(139,92,246,0.2); font-family: 'Inter', sans-serif;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+              <div style="width: 28px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, var(--indigo), var(--violet)); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;">60</div>
+              <div style="font-size: 14px; font-weight: 600;">60 Lead Intelligence</div>
+              <div style="font-size: 11px; color: var(--txt3); margin-left: auto;">2m ago</div>
+            </div>
+            <div style="font-size: 13px; line-height: 1.7; color: var(--txt2);">
+              <span style="font-size: 16px;">🔥</span> <strong style="color: var(--txt);">Hot Lead — Sarah Chen</strong> from <strong style="color: var(--teal);">Acme Corp</strong><br/>
+              <br/>
+              <strong>Score:</strong> <span style="color: var(--amber);">47 (High)</span> · <strong>Source:</strong> LinkedIn /t/<br/>
+              <strong>Time on site:</strong> 3m 42s · <strong>Demo:</strong> 4/5 panels viewed<br/>
+              <strong>Top interest:</strong> Email automation, Meeting prep<br/>
+              <br/>
+              <span style="color: var(--indigo); cursor: pointer;">View in 60</span> · <span style="color: var(--indigo); cursor: pointer;">Send follow-up</span> · <span style="color: var(--indigo); cursor: pointer;">Assign to rep</span>
+            </div>
+          </div>
+
+          <div class="mt-24">
+            <h3 class="mb-16">Engagement tiers</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="card-sm" style="text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: var(--txt3);">1-10</div>
+                <div style="font-size: 12px; color: var(--txt3);">Low</div>
+              </div>
+              <div class="card-sm" style="text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: var(--amber);">11-30</div>
+                <div style="font-size: 12px; color: var(--amber);">Medium</div>
+              </div>
+              <div class="card-sm" style="text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: var(--indigo);">31-50</div>
+                <div style="font-size: 12px; color: var(--indigo);">High</div>
+              </div>
+              <div class="card-sm" style="text-align: center; border-color: rgba(244,63,94,0.3);">
+                <div style="font-size: 24px; font-weight: 700; color: var(--rose);">51+</div>
+                <div style="font-size: 12px; color: var(--rose);">Hot 🔥</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 8: ANIMATIONS & DESIGN -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide" data-slide="7">
+      <span class="tag tag-violet">Design System</span>
+      <h2>Product UI IS the animation.<br/>System-aware theming.</h2>
+
+      <div class="two-col mt-32">
+        <div>
+          <h3 class="mb-16">5 product-UI animations</h3>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="card-sm" style="display: flex; align-items: center; gap: 16px;">
+              <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(99,102,241,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              </div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Quick Add → AI Cascade</div>
+                <div style="font-size: 12px; color: var(--txt3);">Real Quick Add modal triggers AI actions</div>
+              </div>
+            </div>
+            <div class="card-sm" style="display: flex; align-items: center; gap: 16px;">
+              <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(6,182,212,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Slack Notification Cascade</div>
+                <div style="font-size: 12px; color: var(--txt3);">Block Kit cards stack in with spring physics</div>
+              </div>
+            </div>
+            <div class="card-sm" style="display: flex; align-items: center; gap: 16px;">
+              <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(139,92,246,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+              </div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Proposal Generation Wizard</div>
+                <div style="font-size: 12px; color: var(--txt3);">6-step wizard with loading → checkmark flow</div>
+              </div>
+            </div>
+            <div class="card-sm" style="display: flex; align-items: center; gap: 16px;">
+              <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(34,197,94,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Research Agents at Work</div>
+                <div style="font-size: 12px; color: var(--txt3);">Live app-style agent cards with status</div>
+              </div>
+            </div>
+            <div class="card-sm" style="display: flex; align-items: center; gap: 16px;">
+              <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(245,158,11,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Autonomy Timeline</div>
+                <div style="font-size: 12px; color: var(--txt3);">Real product screenshots showing trust growth</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="mb-16">Theme system</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+            <div class="card-sm" style="background: #0a0a0a; text-align: center;">
+              <div style="font-size: 12px; color: var(--txt3); margin-bottom: 8px;">DARK MODE</div>
+              <div style="display: flex; gap: 6px; justify-content: center;">
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: #0a0a0a; border: 1px solid var(--bdr2);"></div>
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: #111111;"></div>
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: #1a1a1a;"></div>
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: var(--indigo);"></div>
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: var(--violet);"></div>
+              </div>
+              <div style="font-size: 11px; color: var(--txt3); margin-top: 8px;">Premium, glow effects</div>
+            </div>
+            <div class="card-sm" style="background: #ffffff; text-align: center; border-color: rgba(0,0,0,0.1);">
+              <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">LIGHT MODE</div>
+              <div style="display: flex; gap: 6px; justify-content: center;">
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: #ffffff; border: 1px solid rgba(0,0,0,0.1);"></div>
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: #f8fafc;"></div>
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: #f1f5f9;"></div>
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: #4f46e5;"></div>
+                <div style="width: 24px; height: 24px; border-radius: 6px; background: #7c3aed;"></div>
+              </div>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">Friendly, shadow-based</div>
+            </div>
+          </div>
+
+          <h3 class="mb-16">AI imagery (minimal)</h3>
+          <div class="card-sm mb-16">
+            <div style="font-size: 13px; color: var(--txt2); line-height: 1.6;">
+              <strong style="color: var(--txt);">2 images total.</strong> Abstract, atmospheric accents.
+              Integration map background + signup celebration piece.
+              Opacity 0.10-0.15. Both dark & light variants.
+              < 200KB each. WebP/AVIF format.
+            </div>
+          </div>
+
+          <h3 class="mb-16">Performance budget</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="card-sm" style="text-align: center; padding: 14px;">
+              <div style="font-size: 20px; font-weight: 700; color: var(--green);">&lt; 1.5s</div>
+              <div style="font-size: 11px; color: var(--txt3);">LCP</div>
+            </div>
+            <div class="card-sm" style="text-align: center; padding: 14px;">
+              <div style="font-size: 20px; font-weight: 700; color: var(--green);">&lt; 100ms</div>
+              <div style="font-size: 11px; color: var(--txt3);">INP</div>
+            </div>
+            <div class="card-sm" style="text-align: center; padding: 14px;">
+              <div style="font-size: 20px; font-weight: 700; color: var(--green);">&lt; 800KB</div>
+              <div style="font-size: 11px; color: var(--txt3);">Initial load</div>
+            </div>
+            <div class="card-sm" style="text-align: center; padding: 14px;">
+              <div style="font-size: 20px; font-weight: 700; color: var(--green);">95+</div>
+              <div style="font-size: 11px; color: var(--txt3);">Lighthouse</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 9: DATA FLOW -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide" data-slide="8">
+      <span class="tag tag-teal">Data Flow</span>
+      <h2>From LinkedIn click<br/>to closed deal.</h2>
+
+      <div style="max-width: 900px; margin-top: 40px;">
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="card-sm" style="flex: 1; display: flex; align-items: center; gap: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(99,102,241,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--indigo); font-size: 14px;">1</div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Batch enrichment</div>
+                <div style="font-size: 12px; color: var(--txt3);">10K emails → domain → company data → encrypted hashes</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align: center; color: var(--txt3); font-size: 20px;">↓</div>
+
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="card-sm" style="flex: 1; display: flex; align-items: center; gap: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(139,92,246,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--violet); font-size: 14px;">2</div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Campaign send</div>
+                <div style="font-size: 12px; color: var(--txt3);">LinkedIn DM or email with ultra-short use60.com/t/{code} link (21 chars)</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align: center; color: var(--txt3); font-size: 20px;">↓</div>
+
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="card-sm card-accent" style="flex: 1; display: flex; align-items: center; gap: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(99,102,241,0.2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--indigo); font-size: 14px;">3</div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Visitor lands on personal command center</div>
+                <div style="font-size: 12px; color: var(--txt3);">Pre-loaded dashboard with their data. Full interaction tracking begins.</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align: center; color: var(--txt3); font-size: 20px;">↓</div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="card-sm" style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(245,158,11,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--amber); font-size: 14px;">4a</div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Slack alert fires</div>
+                <div style="font-size: 12px; color: var(--txt3);">Engagement score + feature interests + intent signals</div>
+              </div>
+            </div>
+            <div class="card-sm" style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(34,197,94,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--green); font-size: 14px;">4b</div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Lead appears in 60</div>
+                <div style="font-size: 12px; color: var(--txt3);">Auto-created contact with full engagement history</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align: center; color: var(--txt3); font-size: 20px;">↓</div>
+
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="card-sm" style="flex: 1; display: flex; align-items: center; gap: 12px; border-color: rgba(34,197,94,0.3);">
+              <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(34,197,94,0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; color: var(--green); font-size: 14px;">5</div>
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">Rep follows up from 60</div>
+                <div style="font-size: 12px; color: var(--txt3);">AI-drafted outreach based on which features they engaged with. Full circle.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- SLIDE 10: ROADMAP -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="slide" data-slide="9">
+      <span class="tag tag-green">Roadmap</span>
+      <h2>Four phases. Ship fast.</h2>
+
+      <div class="four-col mt-32">
+        <div class="card" style="border-top: 3px solid var(--indigo);">
+          <span class="tag tag-indigo">Phase 1</span>
+          <h3 style="font-size: 18px;">Core Website</h3>
+          <p style="font-size: 13px; color: var(--txt3); margin-bottom: 16px;">Weeks 1-3</p>
+          <ul style="font-size: 13px;">
+            <li>8-section demo-as-website</li>
+            <li>System-aware dark/light</li>
+            <li>5 product-UI animations</li>
+            <li>Mobile responsive</li>
+            <li>Signup with data seeding</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-top: 3px solid var(--violet);">
+          <span class="tag tag-violet">Phase 2</span>
+          <h3 style="font-size: 18px;">Personalisation</h3>
+          <p style="font-size: 13px; color: var(--txt3); margin-bottom: 16px;">Weeks 3-5</p>
+          <ul style="font-size: 13px;">
+            <li>/t/ routing + DB lookup</li>
+            <li>Batch enrichment pipeline</li>
+            <li>Personal command center</li>
+            <li>Campaign visitor table</li>
+            <li>Slack webhook alerts</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-top: 3px solid var(--teal);">
+          <span class="tag tag-teal">Phase 3</span>
+          <h3 style="font-size: 18px;">Intelligence</h3>
+          <p style="font-size: 13px; color: var(--txt3); margin-bottom: 16px;">Weeks 5-6</p>
+          <ul style="font-size: 13px;">
+            <li>Full interaction heatmap</li>
+            <li>Engagement scoring</li>
+            <li>Rich Slack formatting</li>
+            <li>Lead flow into 60 app</li>
+            <li>Campaign analytics</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-top: 3px solid var(--green);">
+          <span class="tag tag-green">Phase 4</span>
+          <h3 style="font-size: 18px;">SEO & Scale</h3>
+          <p style="font-size: 13px; color: var(--txt3); margin-bottom: 16px;">Weeks 6-8</p>
+          <ul style="font-size: 13px;">
+            <li>Competitor comparison pages</li>
+            <li>Integration pages</li>
+            <li>Structured data / JSON-LD</li>
+            <li>Blog infrastructure</li>
+            <li>A/B testing framework</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="mt-48" style="text-align: center;">
+        <h3 class="gradient-text" style="font-size: 36px;">The website sells itself.</h3>
+        <p style="color: var(--txt2); margin-top: 8px; font-size: 16px;">Because the website IS the product.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Navigation -->
+  <div class="nav" id="nav"></div>
+  <div class="slide-counter" id="counter">1 / 10</div>
+  <div class="key-hint"><kbd>←</kbd> <kbd>→</kbd> or click dots</div>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const nav = document.getElementById('nav');
+    const counter = document.getElementById('counter');
+    let current = 0;
+
+    // Build nav dots
+    slides.forEach((_, i) => {
+      const dot = document.createElement('div');
+      dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+      dot.addEventListener('click', () => goTo(i));
+      nav.appendChild(dot);
+    });
+
+    function goTo(index) {
+      if (index < 0 || index >= slides.length) return;
+      slides[current].classList.remove('active');
+      nav.children[current].classList.remove('active');
+      current = index;
+      slides[current].classList.add('active');
+      nav.children[current].classList.add('active');
+      counter.textContent = `${current + 1} / ${slides.length}`;
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(current - 1); }
+    });
+
+    // Touch support
+    let touchStart = 0;
+    document.addEventListener('touchstart', e => touchStart = e.touches[0].clientX);
+    document.addEventListener('touchend', e => {
+      const diff = touchStart - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 60) diff > 0 ? goTo(current + 1) : goTo(current - 1);
+    });
+  </script>
+</body>
+</html>

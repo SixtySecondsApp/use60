@@ -509,13 +509,13 @@ serve(async (req: Request) => {
 
     // OI-011: Trigger insights analysis after sync (fire-and-forget)
     try {
-      fetch(`${supabaseUrl}/functions/v1/ops-table-insights-engine`, {
+      fetch(`${supabaseUrl}/functions/v1/ops-table-router`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(authHeader ? { 'Authorization': authHeader } : {}),
         },
-        body: JSON.stringify({ tableId: table_id, action: 'analyze' }),
+        body: JSON.stringify({ action: 'insights_engine', handler_action: 'analyze', tableId: table_id }),
       }).catch(err => console.error('[sync] Insights trigger failed:', err));
     } catch (e) {
       // Silent fail - don't block sync
@@ -532,15 +532,16 @@ serve(async (req: Request) => {
 
       if (workflows && workflows.length > 0) {
         for (const workflow of workflows) {
-          fetch(`${supabaseUrl}/functions/v1/ops-table-workflow-engine`, {
+          fetch(`${supabaseUrl}/functions/v1/ops-table-router`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               ...(authHeader ? { 'Authorization': authHeader } : {}),
             },
             body: JSON.stringify({
+              action: 'workflow_engine',
+              handler_action: 'execute',
               tableId: table_id,
-              action: 'execute',
               workflowId: workflow.id,
             }),
           }).catch(err => console.error('[sync] Workflow trigger failed:', err));

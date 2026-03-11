@@ -65,6 +65,7 @@ async function callSimilaritySearch(params: {
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY;
 
   const body: Record<string, unknown> = {
+    action: 'similarity',
     seed_company_domain: params.lookalike_domains[0],
     match_count: params.match_count ?? 5,
     page: params.page ?? 0,
@@ -81,7 +82,7 @@ async function callSimilaritySearch(params: {
     body.account = params.account;
   }
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/ai-ark-similarity`, {
+  const response = await fetch(`${supabaseUrl}/functions/v1/enrichment-ai-ark`, {
     method: 'POST',
     redirect: 'error',
     headers: {

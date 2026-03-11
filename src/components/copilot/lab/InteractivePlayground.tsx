@@ -526,8 +526,10 @@ export function InteractivePlayground({
 
       // Call the copilot API - use /chat endpoint path
       // LAB-003: Include debug flag for verbose logging
-      const { data, error } = await supabase.functions.invoke('api-copilot/chat', {
+      const { data, error } = await supabase.functions.invoke('api-services-router', {
         body: {
+          action: 'copilot',
+          path: '/chat',
           message: query,
           context: {
             orgId: organizationId,

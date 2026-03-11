@@ -6,6 +6,7 @@ export interface GoogleIntegration {
   email: string;
   expires_at: string | null;
   scopes: string;
+  scope_tier: 'free' | 'paid';
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -25,14 +26,14 @@ export interface GoogleOAuthResponse {
 export class GoogleIntegrationAPI {
   /**
    * Initiate Google OAuth flow
-   * Calls the google-oauth-initiate Edge Function to generate an authorization URL
+   * Calls the google-oauth-initiate Edge Function to generate an authorization URL.
+   * @param scopeTier - 'free' (default) for sensitive-only scopes, 'paid' includes restricted scopes via Nylas
    */
-  static async initiateOAuth(): Promise<GoogleOAuthResponse> {
+  static async initiateOAuth(scopeTier: 'free' | 'paid' = 'free'): Promise<GoogleOAuthResponse> {
     // Get current origin to pass to Edge Function for dynamic redirect URI
     const origin = window.location.origin;
-    
-    const { data, error } = await supabase.functions.invoke('google-oauth-initiate', {
-      body: { origin }
+
+    const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'oauth_initiate',  origin, scope_tier: scopeTier }
     });
 
     if (error) {
@@ -306,8 +307,7 @@ export class GoogleIntegrationAPI {
    */
   static async testConnection(): Promise<GoogleTestConnectionResult> {
     try {
-      const { data, error } = await supabase.functions.invoke('google-test-connection', {
-        body: {}
+      const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'test_connection', }
       });
 
       // Log full response for debugging
@@ -385,7 +385,7 @@ interface ServiceTestResult {
 
 // Export convenience methods for easier imports
 export const googleApi = {
-  initiateOAuth: GoogleIntegrationAPI.initiateOAuth,
+  initiateOAuth: (scopeTier?: 'free' | 'paid') => GoogleIntegrationAPI.initiateOAuth(scopeTier),
   getStatus: GoogleIntegrationAPI.getIntegrationStatus,
   getServiceStatus: GoogleIntegrationAPI.getServiceStatus,
   getHealth: GoogleIntegrationAPI.getIntegrationHealth,

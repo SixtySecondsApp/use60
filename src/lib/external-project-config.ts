@@ -36,17 +36,16 @@ export const EXTERNAL_ACCESSIBLE_FUNCTIONS = [
   'ask-meeting-ai',
 
   // Meeting Data
-  'api-v1-meetings',
-  'fetch-transcript',
-  'fetch-summary',
+  'api-v1',
+  'fetch-router',
   'condense-meeting-summary',
   'extract-action-items',
   'analyze-action-item',
-  'generate-more-actions',
+  'generate-router',
 
   // Fathom Integration
   'fathom-sync',
-  'fathom-oauth-initiate',
+  'oauth-initiate',
   'fathom-oauth-callback',
   'proxy-fathom-video',
 
@@ -63,6 +62,7 @@ export const INTERNAL_ONLY_FUNCTIONS = [
   'deals',
   'deal-splits',
   'deal-activities',
+  'deal-router',
   'contacts',
   'companies',
   'clients',
@@ -70,16 +70,18 @@ export const INTERNAL_ONLY_FUNCTIONS = [
   // Activities & Tasks
   'add-activity',
   'add-sale',
+  'add-router',
   'bulk-import-activities',
-  'process-single-activity',
+  'process-jobs-router',
   'create-task-unified',
   'create-task-from-action-item',
 
   // Leads & Pipeline
-  'process-lead-prep',
+  // process-lead-prep is now routed through process-jobs-router (already listed above)
   'reprocess-lead-prep',
-  'savvycal-leads-webhook',
+  'webhook-leads',
   'import-leads-generic',
+  'import-router',
 
   // Admin
   'impersonate-user',
@@ -92,6 +94,13 @@ export const INTERNAL_ONLY_FUNCTIONS = [
   // Analytics (internal)
   'analytics-web-vitals',
   'calculate-deal-health',
+
+  // Routers
+  'populate-router',
+  'enrich-router',
+  'analyze-router',
+  'create-router',
+  'get-router',
 ] as const;
 
 export type ExternalAccessibleFunction = typeof EXTERNAL_ACCESSIBLE_FUNCTIONS[number];
@@ -126,15 +135,15 @@ export const FUNCTION_DATABASE_TARGET: Record<string, DatabaseTarget> = {
   // Meeting functions query external DB (customer data)
   'meeting-intelligence-search': 'external',
   'meeting-intelligence-index': 'external',
+  'meeting-router': 'external',
   'meeting-intelligence-process-queue': 'external',
   'ask-meeting-ai': 'external',
-  'api-v1-meetings': 'external',
-  'fetch-transcript': 'external',
-  'fetch-summary': 'external',
+  'api-v1': 'external',
+  'fetch-router': 'external',
 
   // These still query internal (integration state, etc.)
   'fathom-sync': 'internal', // Syncs TO external, but reads config from internal
-  'fathom-oauth-initiate': 'internal',
+  'oauth-initiate': 'internal',
   'fathom-oauth-callback': 'internal',
 };
 

@@ -145,6 +145,7 @@
     "cors": "^2.8.5",
     "d3": "^7.9.0",
     "date-fns": "^3.2.0",
+    "driver.js": "^1.4.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.0.1",
     "express-slow-down": "^3.0.0",

@@ -54,7 +54,8 @@ export interface TeamAnalyticsSummary {
 // ---------------------------------------------------------------------------
 
 async function invokeAdmin<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('agent-config-admin', { body });
+  const { action: subAction, ...rest } = body;
+  const { data, error } = await supabase.functions.invoke('agent-fleet-router', { body: { action: 'config_admin', sub_action: subAction, ...rest } });
   if (error) throw error;
   return data as T;
 }
@@ -82,11 +83,16 @@ export function useAutonomyCeilings() {
     queryKey: MANAGER_AUTONOMY_KEYS.ceilings(activeOrgId ?? ''),
     queryFn: async () => {
       if (!activeOrgId) return [];
-      const result = await invokeAdmin<{ ceilings: AutonomyCeiling[] }>({
-        action: 'get_autonomy_ceilings',
-        org_id: activeOrgId,
-      });
-      return result.ceilings;
+      try {
+        const result = await invokeAdmin<{ ceilings: AutonomyCeiling[] }>({
+          action: 'get_autonomy_ceilings',
+          org_id: activeOrgId,
+        });
+        return result.ceilings;
+      } catch (err) {
+        console.warn('[useAutonomyCeilings] Edge function unavailable:', err);
+        return [];
+      }
     },
     enabled: !!activeOrgId,
     staleTime: 5 * 60 * 1000,
@@ -143,11 +149,16 @@ export function useRepAutonomyLevels() {
     queryKey: MANAGER_AUTONOMY_KEYS.repAutonomy(activeOrgId ?? ''),
     queryFn: async () => {
       if (!activeOrgId) return [];
-      const result = await invokeAdmin<{ reps: RepAutonomyEntry[] }>({
-        action: 'get_rep_autonomy',
-        org_id: activeOrgId,
-      });
-      return result.reps;
+      try {
+        const result = await invokeAdmin<{ reps: RepAutonomyEntry[] }>({
+          action: 'get_rep_autonomy',
+          org_id: activeOrgId,
+        });
+        return result.reps;
+      } catch (err) {
+        console.warn('[useRepAutonomyLevels] Edge function unavailable:', err);
+        return [];
+      }
     },
     enabled: !!activeOrgId,
     staleTime: 5 * 60 * 1000,
@@ -204,15 +215,20 @@ export function useTeamAutonomyAnalytics(windowDays: number = 30) {
     queryKey: MANAGER_AUTONOMY_KEYS.teamAnalytics(activeOrgId ?? '', windowDays),
     queryFn: async () => {
       if (!activeOrgId) return null;
-      const result = await invokeAdmin<{
-        analytics: TeamAnalyticsRow[];
-        summary: TeamAnalyticsSummary;
-      }>({
-        action: 'get_team_autonomy_analytics',
-        org_id: activeOrgId,
-        window_days: windowDays,
-      });
-      return result;
+      try {
+        const result = await invokeAdmin<{
+          analytics: TeamAnalyticsRow[];
+          summary: TeamAnalyticsSummary;
+        }>({
+          action: 'get_team_autonomy_analytics',
+          org_id: activeOrgId,
+          window_days: windowDays,
+        });
+        return result;
+      } catch (err) {
+        console.warn('[useTeamAutonomyAnalytics] Edge function unavailable:', err);
+        return null;
+      }
     },
     enabled: !!activeOrgId,
     staleTime: 5 * 60 * 1000,

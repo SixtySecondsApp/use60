@@ -120,16 +120,21 @@ export function useApprovalDetection(
         query = query.eq('org_id', orgId);
       }
 
-      const { data, error } = await query.maybeSingle();
+      // Order by most recent and limit to 1 — user may have multiple requests from retries
+      const { data, error } = await query
+        .order('requested_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (error) {
-        console.error('[useApprovalDetection] Error fetching join request:', error);
-        throw new Error(error.message);
+        // Non-fatal — membership check is the source of truth
+        console.warn('[useApprovalDetection] Join request query error (non-blocking):', error.code);
+        return null;
       }
 
       return data as JoinRequest | null;
     },
-    enabled: enabled && !!userId,
+    enabled: enabled && !!userId && !!orgId,
     staleTime: 30_000,
   });
 

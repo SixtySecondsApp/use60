@@ -54,13 +54,14 @@ export async function triggerPreMeetingIfSoon(
       return;
     }
 
-    await fetch(`${supabaseUrl}/functions/v1/agent-orchestrator`, {
+    await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         type: 'pre_meeting_90min',
         source: 'webhook:calendar-sync',
         org_id: event.org_id,

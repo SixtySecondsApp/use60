@@ -189,13 +189,14 @@ export class FathomAPIService {
     }
 
     const { data: { session } } = await supabase.auth.getSession();
-    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fathom-oauth-token`, {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fathom-ops-router`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session?.access_token}`,
       },
       body: JSON.stringify({
+        action: 'oauth_token',
         grant_type: 'refresh_token',
         refresh_token: integration.refresh_token,
       }),

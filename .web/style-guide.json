@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "lockedAt": "2026-03-10T21:45:00Z",
+  "direction": "C",
+  "name": "Ink & Light",
+
+  "palette": {
+    "background": { "value": "#0c0c0c", "tailwind": "[#0c0c0c]" },
+    "surface": { "value": "#161616", "tailwind": "[#161616]" },
+    "surfaceHover": { "value": "#1c1c1c", "tailwind": "[#1c1c1c]" },
+    "border": { "value": "rgba(255,255,255,0.08)", "tailwind": "white/[0.08]" },
+    "borderHover": { "value": "rgba(255,255,255,0.14)", "tailwind": "white/[0.14]" },
+    "textPrimary": { "value": "#f5f5f4", "tailwind": "stone-100" },
+    "textSecondary": { "value": "#a8a29e", "tailwind": "stone-400" },
+    "textMuted": { "value": "#78716c", "tailwind": "stone-500" },
+    "accent": { "value": "#c084fc", "tailwind": "purple-400" },
+    "accentSubtle": { "value": "#e9d5ff", "tailwind": "purple-200" },
+    "accentDeep": { "value": "#9333ea", "tailwind": "purple-600" },
+    "ahaAccent": { "value": "#fbbf24", "tailwind": "amber-400" },
+    "cta": { "bg": "#f5f5f4", "text": "#0c0c0c", "tailwind": "bg-stone-100 text-[#0c0c0c]" },
+    "ctaHover": { "bg": "#ffffff", "text": "#0c0c0c", "tailwind": "bg-white text-[#0c0c0c]" }
+  },
+
+  "typography": {
+    "display": { "family": "Cabinet Grotesk", "weights": [500, 700, 800], "source": "fontsource", "fallback": "sans-serif" },
+    "body": { "family": "Source Sans 3", "weights": [400, 500, 600], "source": "google-fonts", "fallback": "system-ui, sans-serif" },
+    "mono": { "family": "IBM Plex Mono", "weights": [400, 500], "source": "google-fonts", "fallback": "monospace" }
+  },
+
+  "animation": {
+    "tier": 2,
+    "heroTier": 2,
+    "approach": "Spring physics on interactions, gentle content reveals with slight scale (1.02→1.0). Organic, not mechanical.",
+    "microInteractions": "CSS spring transitions on hover/focus. Scale + opacity on buttons (0.98 press, 1.02 hover).",
+    "scrollReveals": "fade-up (y:24→0, opacity:0→1, scale:0.98→1), stagger 80ms between siblings. Ease: [0.25, 0.4, 0, 1].",
+    "easing": {
+      "entrance": "[0.25, 0.4, 0, 1]",
+      "exit": "[0.4, 0, 1, 0.5]",
+      "spring": { "stiffness": 260, "damping": 20 }
+    }
+  },
+
+  "mode": "dark",
+  "style": "warm-editorial-dark",
+
+  "spacing": {
+    "sectionPadding": "py-28 md:py-36",
+    "containerMax": "max-w-6xl",
+    "sectionGap": "space-y-6",
+    "cardPadding": "p-6 md:p-8",
+    "note": "Generous spacing — content-heavy pages need room to breathe"
+  },
+
+  "antiConvergence": {
+    "bannedFonts": ["Inter as display", "Roboto", "Space Grotesk", "Open Sans", "Arial", "Lato"],
+    "requiredSurprises": [
+      "Cabinet Grotesk 800 at text-6xl+ creates natural visual weight",
+      "Amber-400 accent appears exactly ONCE in the workflow case study aha moment",
+      "Product showcase panels break the centered-text rhythm with full-width interactive content",
+      "Architecture diagram uses asymmetric hub-and-spoke layout"
+    ],
+    "atmosphereEffects": [
+      "Subtle noise texture overlay (1-2% opacity, warm grain not digital noise)",
+      "Soft radial gradient on hero only (purple-600/5 to transparent)",
+      "NO dot grids, NO line grids, NO glow effects — restraint is the aesthetic"
+    ],
+    "forbidden": [
+      "Violet/purple glow effects (this was Electric Depth's problem)",
+      "Grid background patterns",
+      "Gradient text (overused in V6)",
+      "More than 2 atmosphere layers on any section"
+    ]
+  },
+
+  "components": {
+    "cards": "bg-[#161616] border border-white/[0.08] rounded-xl hover:border-white/[0.14] hover:bg-[#1c1c1c] transition-all duration-200",
+    "badges": "bg-purple-400/10 text-purple-400 text-xs font-medium px-2.5 py-1 rounded-full",
+    "buttons": {
+      "primary": "bg-stone-100 text-[#0c0c0c] hover:bg-white font-medium rounded-lg px-5 py-2.5 transition-colors",
+      "secondary": "border border-white/[0.08] text-stone-100 hover:border-white/[0.14] hover:bg-[#161616] font-medium rounded-lg px-5 py-2.5 transition-all"
+    },
+    "sectionHeader": "text-stone-400 text-sm font-medium tracking-wide uppercase",
+    "headline": "font-display font-bold text-stone-100 tracking-tight",
+    "body": "text-stone-400 text-lg leading-relaxed"
+  },
+
+  "nanobananaPrefix": "Warm dark editorial interface, near-black background, warm stone-white typography, subtle purple accent, clean professional aesthetic, minimal decoration, confident restraint, no glow effects",
+
+  "geminiSvgStyle": "Warm minimal, smooth spring easing, purple-400 accent on dark, organic motion, no sharp geometric patterns, editorial confidence"
+}

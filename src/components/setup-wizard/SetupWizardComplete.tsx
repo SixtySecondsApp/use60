@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Bot, Check, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useSetupWizardStore } from '@/lib/stores/setupWizardStore';
+import { useSetupWizardStore, SETUP_STEPS } from '@/lib/stores/setupWizardStore';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { supabase } from '@/lib/supabase/clientV2';
 import { cn } from '@/lib/utils';
+
+// Credits awarded per completed setup wizard step — update here if the amount changes
+const CREDITS_PER_WIZARD_STEP = 20;
 
 interface ScanResult {
   briefing: string;
@@ -18,9 +21,13 @@ interface ScanResult {
 }
 
 export function SetupWizardComplete() {
-  const { closeWizard } = useSetupWizardStore();
+  const { closeWizard, steps } = useSetupWizardStore();
   const { user } = useAuth();
   const activeOrgId = useActiveOrgId();
+
+  // Derive total credits from completed steps rather than hardcoding a number
+  const completedStepsCount = SETUP_STEPS.filter(s => steps[s].completed).length;
+  const totalCreditsAwarded = completedStepsCount * CREDITS_PER_WIZARD_STEP;
 
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [isScanning, setIsScanning] = useState(true);
@@ -45,14 +52,16 @@ export function SetupWizardComplete() {
       p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       p_morning_briefing_time: '08:00',
       p_morning_briefing_enabled: true,
-    }).catch((err) => console.error('[SetupWizardComplete] Persona creation failed:', err));
+    }).then(({ error }) => {
+      if (error) console.error('[SetupWizardComplete] Persona creation failed:', error);
+    });
 
     // Run the initial scan
     const runScan = async () => {
       setIsScanning(true);
       try {
-        const { data, error } = await supabase.functions.invoke('agent-initial-scan', {
-          body: { user_id: user.id, org_id: activeOrgId },
+        const { data, error } = await supabase.functions.invoke('agent-fleet-router', {
+          body: { action: 'initial_scan', user_id: user.id, org_id: activeOrgId },
         });
         if (error) throw error;
         setScanResult(data);
@@ -156,7 +165,7 @@ export function SetupWizardComplete() {
           </span>
         </div>
         <div className="text-3xl font-bold text-green-700 dark:text-green-300">
-          100
+          {totalCreditsAwarded}
         </div>
         <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">credits</p>
       </div>

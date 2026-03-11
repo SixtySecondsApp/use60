@@ -1,19 +1,48 @@
 import { useRef, useEffect } from 'react';
-import { Bot, User, Loader2 } from 'lucide-react';
-import { useSupportMessages, type SupportMessage } from '@/lib/hooks/useSupportMessages';
+import { Shield, User, Loader2, EyeOff } from 'lucide-react';
+import { useSupportMessages, useSupportMessagesRealtime, type SupportMessage } from '@/lib/hooks/useSupportMessages';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { useUserProfileById } from '@/lib/hooks/useUserProfile';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/clientV2';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { TypingIndicator } from './TypingIndicator';
+import type { TypingUser } from '@/lib/hooks/useTypingIndicator';
 
 interface TicketConversationProps {
   ticketId: string;
+  typingUsers?: TypingUser[];
+}
+
+function useSenderName(senderId: string, isOwn: boolean) {
+  return useQuery({
+    queryKey: ['sender-name', senderId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('first_name')
+        .eq('id', senderId)
+        .single();
+      if (error) throw error;
+      return data.first_name || 'User';
+    },
+    enabled: !isOwn,
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
 function MessageBubble({ message }: { message: SupportMessage }) {
   const { user } = useAuth();
-  const isOwn = message.sender_id === user?.id && message.sender_type === 'user';
+  const { data: userProfile } = useUserProfileById(user?.id);
+  const isOwn = message.sender_id === user?.id;
   const isAgent = message.sender_type === 'agent';
+  const { data: senderFirstName } = useSenderName(message.sender_id, isOwn);
   const isSystem = message.sender_type === 'system';
+
+  const initials = userProfile
+    ? `${userProfile.first_name?.[0] ?? ''}${userProfile.last_name?.[0] ?? ''}`.toUpperCase() || '?'
+    : '?';
 
   if (isSystem) {
     return (
@@ -21,6 +50,25 @@ function MessageBubble({ message }: { message: SupportMessage }) {
         <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1 rounded-full">
           {message.content}
         </span>
+      </div>
+    );
+  }
+
+  if (message.is_internal) {
+    return (
+      <div className="flex gap-2.5 justify-start">
+        <div className="p-1.5 rounded-lg h-fit mt-0.5 shrink-0 border bg-amber-50 dark:bg-amber-500/10 border-amber-100 dark:border-amber-500/20">
+          <EyeOff className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
+        </div>
+        <div className="max-w-[75%] space-y-1">
+          <p className="text-xs text-amber-600 dark:text-amber-400 font-medium px-1">Internal Note</p>
+          <div className="px-3.5 py-2.5 rounded-2xl text-sm bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-500/20 rounded-bl-sm">
+            <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+          </div>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 px-1">
+            {format(new Date(message.created_at), 'MMM d, h:mm a')}
+          </p>
+        </div>
       </div>
     );
   }
@@ -35,7 +83,7 @@ function MessageBubble({ message }: { message: SupportMessage }) {
             : 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
         )}>
           {isAgent ? (
-            <Bot className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
+            <Shield className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
           ) : (
             <User className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
           )}
@@ -45,7 +93,7 @@ function MessageBubble({ message }: { message: SupportMessage }) {
       <div className={cn('max-w-[75%] space-y-1', isOwn ? 'items-end' : 'items-start')}>
         {!isOwn && (
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium px-1">
-            {isAgent ? 'Support Agent' : 'You'}
+            {isAgent ? `${senderFirstName || 'Agent'} (Agent)` : senderFirstName || 'Customer'}
           </p>
         )}
         <div
@@ -64,16 +112,25 @@ function MessageBubble({ message }: { message: SupportMessage }) {
       </div>
 
       {isOwn && (
-        <div className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 h-fit mt-0.5 shrink-0">
-          <User className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
-        </div>
+        userProfile?.avatar_url ? (
+          <img
+            src={userProfile.avatar_url}
+            alt={initials}
+            className="w-7 h-7 rounded-lg object-cover mt-0.5 shrink-0 border border-gray-200 dark:border-gray-700"
+          />
+        ) : (
+          <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 h-fit mt-0.5 shrink-0 flex items-center justify-center">
+            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">{initials}</span>
+          </div>
+        )
       )}
     </div>
   );
 }
 
-export function TicketConversation({ ticketId }: TicketConversationProps) {
+export function TicketConversation({ ticketId, typingUsers = [] }: TicketConversationProps) {
   const { data: messages, isLoading } = useSupportMessages(ticketId);
+  useSupportMessagesRealtime(ticketId);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -104,6 +161,7 @@ export function TicketConversation({ ticketId }: TicketConversationProps) {
       {messages.map((message) => (
         <MessageBubble key={message.id} message={message} />
       ))}
+      <TypingIndicator typingUsers={typingUsers} />
       <div ref={bottomRef} />
     </div>
   );

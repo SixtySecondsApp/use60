@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic, CheckCircle2, CircleDot, Building2, Globe, Linkedin, Users, TrendingUp, Briefcase } from 'lucide-react';
 import FathomPlayerV2, { FathomPlayerV2Handle } from '@/components/FathomPlayerV2';
 import { VoiceMeetingPlayer } from '@/components/meetings/VoiceMeetingPlayer';
 import { AskAIChat } from '@/components/meetings/AskAIChat';
@@ -16,7 +16,7 @@ import { useActivitiesActions } from '@/lib/hooks/useActivitiesActions';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import { toast } from 'sonner';
 import { ProposalWizard } from '@/components/proposals/ProposalWizard';
-import { ProposalQuickGenerate } from '@/components/proposals/ProposalQuickGenerate';
+import { ProposalQuickGenerate, type ProposalQuickGenerateHandle } from '@/components/proposals/ProposalQuickGenerate';
 import { TalkTimeChart } from '@/components/meetings/analytics/TalkTimeChart';
 import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsights';
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard';
@@ -24,6 +24,7 @@ import { ShareMeetingModal } from '@/components/meetings/ShareMeetingModal';
 import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary';
 import { useActivationTracking } from '@/lib/hooks/useActivationTracking';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
+import { useCreditGatedAction } from '@/lib/hooks/useCreditGatedAction';
 import { InternalMeetingTypeBadge } from '@/components/meetings/InternalMeetingTypeBadge';
 import { PrepBriefCard } from '@/components/meetings/PrepBriefCard';
 import { useMeetingPrepBrief } from '@/lib/hooks/useMeetingPrepBrief';
@@ -227,6 +228,17 @@ export function MeetingDetail() {
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [companyData, setCompanyData] = useState<{
+    id: string;
+    name: string;
+    domain: string | null;
+    industry: string | null;
+    size: string | null;
+    website: string | null;
+    description: string | null;
+    linkedin_url: string | null;
+    enrichment_data: Record<string, unknown> | null;
+  } | null>(null);
   const [attendees, setAttendees] = useState<MeetingAttendee[]>([]);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -235,6 +247,7 @@ export function MeetingDetail() {
   const [thumbnailEnsured, setThumbnailEnsured] = useState(false);
   const [summaryViewTracked, setSummaryViewTracked] = useState(false);
   const [hasStructuredSummary, setHasStructuredSummary] = useState(false);
+  const [hasScorecard, setHasScorecard] = useState(false);
   const [voiceRecordingData, setVoiceRecordingData] = useState<VoiceRecordingData | null>(null);
   const [voiceCurrentTime, setVoiceCurrentTime] = useState(0);
   const [speakerAvatarMap, setSpeakerAvatarMap] = useState<Map<string, string>>(new Map());
@@ -250,11 +263,13 @@ export function MeetingDetail() {
 
   const [showProposalWizard, setShowProposalWizard] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
+  const { execute: executeMeetingSummaryGated } = useCreditGatedAction('meeting_summary', 5);
   const [showShareModal, setShowShareModal] = useState(false);
+  const proposalRef = useRef<ProposalQuickGenerateHandle>(null);
 
   const handleQuickAdd = async (type: 'meeting' | 'outbound' | 'proposal' | 'sale') => {
     if (!meeting) return;
-    const clientName = primaryExternal?.name || attendees[0]?.name || meeting.title || 'Prospect';
+    const clientName = companyName || primaryExternal?.name || attendees[0]?.name || meeting.title || 'Prospect';
     // Derive website from primary external attendee email domain when available
     let websiteFromEmail: string | undefined;
     const email = primaryExternal?.email || undefined;
@@ -283,6 +298,28 @@ export function MeetingDetail() {
         }
       }
     });
+  };
+
+  const handleDraftFollowUp = async () => {
+    if (!meeting) return;
+    const toastId = toast.loading('Drafting follow-up email...');
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-follow-up', {
+        body: { meeting_id: meeting.id },
+      });
+      if (error) throw error;
+      const body = data?.email?.body || data?.body;
+      const subject = data?.email?.subject || data?.subject;
+      if (body) {
+        await navigator.clipboard.writeText(`Subject: ${subject || ''}\n\n${body}`);
+        toast.success('Follow-up email copied to clipboard', { id: toastId });
+      } else {
+        toast.error('Could not generate follow-up email', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('[MeetingDetail] Draft follow-up failed:', err);
+      toast.error(err?.message || 'Failed to draft follow-up', { id: toastId });
+    }
   };
 
   useEffect(() => {
@@ -324,14 +361,48 @@ export function MeetingDetail() {
         }
         setMeeting(meetingData);
 
-        // Fetch company name if company_id exists
+        // For 60 Notetaker meetings, fetch a fresh video URL (pre-signed URLs expire after 4h)
+        if (meetingData.source_type === '60_notetaker' && (meetingData.recording_id || meetingData.bot_id)) {
+          try {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token && supabaseUrl) {
+              const res = await fetch(
+                `${supabaseUrl}/functions/v1/get-router`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ action: 'recording_url', recording_id: meetingData.recording_id }),
+                }
+              );
+              if (res.ok) {
+                const urlResult = await res.json();
+                if (urlResult.success && urlResult.url) {
+                  meetingData.video_url = urlResult.url;
+                  setMeeting({ ...meetingData });
+                }
+              }
+            }
+          } catch (e) {
+            // Non-fatal — will show stale URL or no video
+            console.warn('[MeetingDetail] Failed to refresh video URL:', e);
+          }
+        }
+
+        // Fetch company data if company_id exists
         if (meetingData.company_id) {
-          const { data: companyData } = await supabase
+          const { data: companyResult } = await supabase
             .from('companies')
-            .select('id, name')
+            .select('id, name, domain, industry, size, website, description, linkedin_url, enrichment_data')
             .eq('id', meetingData.company_id)
             .maybeSingle();
-          if (companyData) setCompanyName(companyData.name);
+          if (companyResult) {
+            setCompanyName(companyResult.name);
+            setCompanyData(companyResult as any);
+          }
         }
 
         // Fetch attendees - combine internal (meeting_attendees) and external (meeting_contacts via contacts)
@@ -363,8 +434,8 @@ export function MeetingDetail() {
 
         if (externalError) throw externalError;
 
-        // Combine both internal and external attendees
-        const combinedAttendees: MeetingAttendee[] = [
+        // Combine both internal and external attendees, deduplicating by email
+        const allAttendees: MeetingAttendee[] = [
           ...((internalAttendeesData || []) as any[]).map((a: any) => ({
             id: a.id,
             name: a.name,
@@ -385,6 +456,13 @@ export function MeetingDetail() {
               };
             })
         ];
+        const seen = new Set<string>();
+        const combinedAttendees = allAttendees.filter(a => {
+          const key = a.email?.toLowerCase();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
 
         setAttendees(combinedAttendees);
 
@@ -397,6 +475,26 @@ export function MeetingDetail() {
 
         if (actionItemsError) throw actionItemsError;
         setActionItems(actionItemsData || []);
+
+        // Check analysis completion status (non-blocking — failures are ignored)
+        try {
+          const [summaryCheck, scorecardCheck] = await Promise.all([
+            (supabase as any)
+              .from('meeting_structured_summaries')
+              .select('id')
+              .eq('meeting_id', id)
+              .maybeSingle(),
+            (supabase as any)
+              .from('meeting_scorecards')
+              .select('id')
+              .eq('meeting_id', id)
+              .maybeSingle(),
+          ]);
+          if (summaryCheck.data) setHasStructuredSummary(true);
+          if (scorecardCheck.data) setHasScorecard(true);
+        } catch {
+          // Non-fatal — status indicators are best-effort
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load meeting');
       } finally {
@@ -545,8 +643,9 @@ export function MeetingDetail() {
 
         if (embedUrl) {
           // Try generation service first
-          const { data, error } = await supabase.functions.invoke('generate-video-thumbnail-v2', {
+          const { data, error } = await supabase.functions.invoke('generate-router', {
             body: {
+              action: 'video_thumbnail_v2',
               recording_id: meeting.fathom_recording_id,
               share_url: meeting.share_url,
               fathom_embed_url: embedUrl,
@@ -598,10 +697,11 @@ export function MeetingDetail() {
   }, []);
 
 
-  // Reprocess meeting with AI analysis
+  // Reprocess meeting with AI analysis (credit-gated)
   const handleReprocessMeeting = useCallback(async () => {
     if (!meeting?.id) return;
 
+    await executeMeetingSummaryGated(async () => {
     try {
       setIsReprocessing(true);
 
@@ -637,6 +737,26 @@ export function MeetingDetail() {
             .order('timestamp_seconds', { ascending: true });
           setActionItems(items || []);
         }
+
+        // Refresh analysis completion status
+        try {
+          const [summaryCheck, scorecardCheck] = await Promise.all([
+            (supabase as any)
+              .from('meeting_structured_summaries')
+              .select('id')
+              .eq('meeting_id', meeting.id)
+              .maybeSingle(),
+            (supabase as any)
+              .from('meeting_scorecards')
+              .select('id')
+              .eq('meeting_id', meeting.id)
+              .maybeSingle(),
+          ]);
+          if (summaryCheck.data) setHasStructuredSummary(true);
+          if (scorecardCheck.data) setHasScorecard(true);
+        } catch {
+          // Non-fatal
+        }
       } else {
         throw new Error(data?.error || 'Reprocessing failed');
       }
@@ -646,7 +766,8 @@ export function MeetingDetail() {
     } finally {
       setIsReprocessing(false);
     }
-  }, [meeting?.id]);
+    });
+  }, [meeting?.id, executeMeetingSummaryGated]);
 
   // Attach click handlers to Fathom timestamp links in summary
   useEffect(() => {
@@ -924,50 +1045,83 @@ export function MeetingDetail() {
               </div>
             )}
 
-            {/* Missing AI Analysis Alert */}
-            {meeting.transcript_text && (
-              meeting.sentiment_score === null ||
-              meeting.talk_time_rep_pct === null ||
-              meeting.talk_time_customer_pct === null
-            ) && (
-              <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
-                <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <AlertDescription className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="font-medium text-amber-900 dark:text-amber-100">
-                      AI Analysis Incomplete
-                    </p>
-                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                      This meeting has a transcript but is missing {
-                        [
-                          meeting.sentiment_score === null && 'sentiment analysis',
-                          meeting.talk_time_rep_pct === null && 'talk time data',
-                          meeting.talk_time_customer_pct === null && meeting.talk_time_rep_pct !== null && 'coaching insights'
-                        ].filter(Boolean).join(' and ')
-                      }. Click to reprocess with AI.
-                    </p>
+            {/* Analysis Status Section */}
+            {meeting.transcript_text && (() => {
+              const basicDone = meeting.sentiment_score !== null && meeting.talk_time_rep_pct !== null;
+              const allDone = basicDone && hasStructuredSummary && hasScorecard;
+
+              if (allDone) {
+                return (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Full analysis complete</span>
                   </div>
-                  <Button
-                    onClick={handleReprocessMeeting}
-                    disabled={isReprocessing}
-                    size="sm"
-                    className="ml-4 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600"
-                  >
-                    {isReprocessing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Reprocess
-                      </>
-                    )}
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
+                );
+              }
+
+              // Show incomplete alert with per-step status
+              const missingBasic = [
+                meeting.sentiment_score === null && 'sentiment',
+                meeting.talk_time_rep_pct === null && 'talk time',
+              ].filter(Boolean);
+
+              return (
+                <div className="space-y-2">
+                  <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+                    <BarChart3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <AlertDescription className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="font-medium text-amber-900 dark:text-amber-100">
+                          {basicDone ? 'Deep analysis pending' : 'AI Analysis Incomplete'}
+                        </p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                          {basicDone
+                            ? 'Basic analysis is done. Structured summary and scorecard are still processing or can be triggered below.'
+                            : `Missing ${missingBasic.join(' and ')}. Click to run full AI analysis.`}
+                        </p>
+                        {/* Per-step status indicators */}
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          {[
+                            { label: 'Basic Analysis', done: basicDone },
+                            { label: 'Structured Summary', done: hasStructuredSummary },
+                            { label: 'Scorecard', done: hasScorecard },
+                          ].map(({ label, done }) => (
+                            <span key={label} className="flex items-center gap-1 text-xs">
+                              {done
+                                ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                : <CircleDot className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />}
+                              <span className={done
+                                ? 'text-emerald-700 dark:text-emerald-300'
+                                : 'text-amber-700 dark:text-amber-300'}>
+                                {label}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleReprocessMeeting}
+                        disabled={isReprocessing}
+                        size="sm"
+                        className="ml-4 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 shrink-0"
+                      >
+                        {isReprocessing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            {basicDone ? 'Run Deep Analysis' : 'Reprocess'}
+                          </>
+                        )}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              );
+            })()}
 
             {/* Enhanced Talk Time Analytics */}
             {meeting.talk_time_rep_pct !== null && meeting.talk_time_customer_pct !== null && (
@@ -992,12 +1146,16 @@ export function MeetingDetail() {
             {/* Tabbed Interface: Summary, Transcript, Ask AI, Content */}
             <div className="section-card">
               <Tabs defaultValue="summary" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 mb-4">
+                <TabsList className="grid w-full grid-cols-5 mb-4">
                   <TabsTrigger value="summary">Summary</TabsTrigger>
                   <TabsTrigger value="transcript">Transcript</TabsTrigger>
                   <TabsTrigger value="ask-ai">
                     <MessageSquare className="h-4 w-4 mr-2" />
                     Ask AI
+                  </TabsTrigger>
+                  <TabsTrigger value="intel">
+                    <Building2 className="h-4 w-4 mr-2" />
+                    Intel
                   </TabsTrigger>
                   <TabsTrigger value="content">
                     <Sparkles className="h-4 w-4 mr-2" />
@@ -1019,6 +1177,7 @@ export function MeetingDetail() {
                       hasRecording={!!meeting.fathom_recording_id}
                       hasNotes={!!meeting.transcript_text}
                       onCustomise={() => setShowProposalWizard(true)}
+                      triggerRef={proposalRef}
                     />
                   </div>
 
@@ -1271,6 +1430,168 @@ export function MeetingDetail() {
                   <AskAIChat meetingId={meeting.id} />
                 </TabsContent>
 
+                {/* Intel Tab — Prospect & Company */}
+                <TabsContent value="intel" className="mt-0">
+                  <div className="space-y-4">
+                    {companyData ? (
+                      <>
+                        {/* Company Header */}
+                        <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 border">
+                          <div className="shrink-0">
+                            {companyData.domain ? (
+                              <img
+                                src={`https://img.logo.dev/${companyData.domain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ&size=64&format=png`}
+                                alt={companyData.name}
+                                className="w-12 h-12 rounded-lg object-contain bg-white p-1"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                  (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                }}
+                              />
+                            ) : null}
+                            <div className={`w-12 h-12 rounded-lg bg-gray-200 dark:bg-zinc-800 flex items-center justify-center ${companyData.domain ? 'hidden' : ''}`}>
+                              <Building2 className="w-6 h-6 text-muted-foreground" />
+                            </div>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-semibold text-lg leading-tight">{companyData.name}</h3>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-muted-foreground">
+                              {companyData.domain && (
+                                <a href={`https://${companyData.domain}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-foreground transition-colors">
+                                  <Globe className="w-3.5 h-3.5" />
+                                  {companyData.domain}
+                                </a>
+                              )}
+                              {companyData.linkedin_url && (
+                                <a href={companyData.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-foreground transition-colors">
+                                  <Linkedin className="w-3.5 h-3.5" />
+                                  LinkedIn
+                                </a>
+                              )}
+                            </div>
+                            {companyData.description && (
+                              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{companyData.description}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Company Details Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {companyData.industry && (
+                            <div className="p-3 rounded-lg border bg-card">
+                              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                                <Briefcase className="w-3 h-3" />
+                                Industry
+                              </div>
+                              <div className="text-sm font-medium">{companyData.industry}</div>
+                            </div>
+                          )}
+                          {companyData.size && (
+                            <div className="p-3 rounded-lg border bg-card">
+                              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                                <Users className="w-3 h-3" />
+                                Company Size
+                              </div>
+                              <div className="text-sm font-medium capitalize">{companyData.size}</div>
+                            </div>
+                          )}
+                          {companyData.website && companyData.website !== `https://${companyData.domain}` && (
+                            <div className="p-3 rounded-lg border bg-card">
+                              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                                <Globe className="w-3 h-3" />
+                                Website
+                              </div>
+                              <a href={companyData.website} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-500 hover:underline truncate block">
+                                {companyData.website.replace(/^https?:\/\//, '')}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Enrichment Data */}
+                        {companyData.enrichment_data && Object.keys(companyData.enrichment_data).length > 0 && (
+                          <div className="space-y-3">
+                            <h4 className="font-medium text-sm flex items-center gap-2">
+                              <TrendingUp className="w-4 h-4" />
+                              Company Intelligence
+                            </h4>
+                            {(() => {
+                              const ed = companyData.enrichment_data as Record<string, unknown>;
+                              const sections: Array<{ label: string; value: string }> = [];
+
+                              // Extract common enrichment fields
+                              if (ed.funding && typeof ed.funding === 'string') sections.push({ label: 'Funding', value: ed.funding });
+                              if (ed.funding_total && typeof ed.funding_total === 'string') sections.push({ label: 'Total Funding', value: ed.funding_total });
+                              if (ed.tech_stack && typeof ed.tech_stack === 'string') sections.push({ label: 'Tech Stack', value: ed.tech_stack });
+                              if (ed.recent_news && typeof ed.recent_news === 'string') sections.push({ label: 'Recent News', value: ed.recent_news });
+                              if (ed.hiring_signals && typeof ed.hiring_signals === 'string') sections.push({ label: 'Hiring Signals', value: ed.hiring_signals });
+                              if (ed.competitors && typeof ed.competitors === 'string') sections.push({ label: 'Competitors', value: ed.competitors });
+                              if (ed.pain_points && typeof ed.pain_points === 'string') sections.push({ label: 'Potential Pain Points', value: ed.pain_points });
+
+                              // Handle nested objects / arrays
+                              if (ed.summary && typeof ed.summary === 'string') sections.push({ label: 'Summary', value: ed.summary });
+                              if (ed.overview && typeof ed.overview === 'string') sections.push({ label: 'Overview', value: ed.overview });
+
+                              if (sections.length === 0) {
+                                // Fallback: render any string values
+                                for (const [key, val] of Object.entries(ed)) {
+                                  if (typeof val === 'string' && val.length > 0 && val.length < 2000) {
+                                    sections.push({ label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), value: val });
+                                  }
+                                }
+                              }
+
+                              return sections.length > 0 ? (
+                                <div className="space-y-2">
+                                  {sections.map((s, i) => (
+                                    <div key={i} className="p-3 rounded-lg border bg-card">
+                                      <div className="text-xs font-medium text-muted-foreground mb-1">{s.label}</div>
+                                      <div className="text-sm whitespace-pre-wrap">{s.value}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">Enrichment data available but no displayable sections found.</p>
+                              );
+                            })()}
+                          </div>
+                        )}
+
+                        {/* Primary Contact */}
+                        {meeting.primary_contact_id && (() => {
+                          const primaryAttendee = attendees.find(a => a.id === meeting.primary_contact_id);
+                          if (!primaryAttendee) return null;
+                          return (
+                            <div>
+                              <h4 className="font-medium text-sm mb-2">Primary Contact</h4>
+                              <div className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-semibold shrink-0">
+                                  {(primaryAttendee.name?.[0] ?? '?').toUpperCase()}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium text-sm">{primaryAttendee.name}</div>
+                                  {primaryAttendee.email && (
+                                    <div className="text-xs text-muted-foreground truncate">{primaryAttendee.email}</div>
+                                  )}
+                                  {primaryAttendee.role && primaryAttendee.role !== 'attendee' && (
+                                    <div className="text-xs text-muted-foreground">{primaryAttendee.role}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Building2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No company data available for this meeting.</p>
+                        <p className="text-xs mt-1">Company information is populated from attendee emails and enrichment.</p>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
                 {/* Content Tab */}
                 <TabsContent value="content" className="mt-0">
                   <MeetingContent meeting={meeting} />
@@ -1288,13 +1609,16 @@ export function MeetingDetail() {
             <PrepBriefCard brief={prepBrief} />
           )}
 
-          {/* Quick Actions */}
+          {/* Quick Actions — Next Steps */}
           {meeting && (
             <QuickActionsCard
               meeting={meeting}
-              onEmailClick={() => toast.info('Email follow-up requires OAuth setup — coming soon')}
-              onBookCallClick={() => toast.info('Book call feature coming soon')}
+              onEmailClick={handleDraftFollowUp}
+              onGenerateProposal={() => proposalRef.current?.trigger()}
+              onCreateTask={() => handleQuickAdd('outbound')}
+              onCreateDeal={() => handleQuickAdd('sale')}
               onShareClick={() => setShowShareModal(true)}
+              onBookCallClick={() => handleQuickAdd('meeting')}
             />
           )}
 

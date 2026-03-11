@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "project": "60 Landing Page V7",
+  "description": "Rebuild use60.com landing page to spacebot.sh quality — deeper content, architecture explanation, product showcase, richer feature depth",
+  "phase": "copy",
+  "startedAt": "2026-03-10T21:15:00Z",
+  "lastUpdatedAt": "2026-03-10T21:15:00Z",
+
+  "input": {
+    "type": "description",
+    "source": "Build use60 website landing page like spacebot",
+    "productType": "AI SaaS — sales command center",
+    "industry": "sales technology",
+    "referenceUrl": "https://spacebot.sh"
+  },
+
+  "phaseGates": {
+    "reference": { "status": "complete", "completedAt": "2026-03-10T21:15:00Z" },
+    "brief":     { "status": "complete", "completedAt": "2026-03-10T21:30:00Z" },
+    "design":    { "status": "complete", "completedAt": "2026-03-10T21:45:00Z" },
+    "copy":      { "status": "complete", "completedAt": "2026-03-10T22:00:00Z" },
+    "build":     { "status": "pending", "completedAt": null },
+    "assets":    { "status": "pending", "completedAt": null },
+    "polish":    { "status": "pending", "completedAt": null }
+  },
+
+  "artifacts": {
+    "reference": ".web/reference.md",
+    "brief": null,
+    "styleGuide": ".web/style-guide.json",
+    "copy": null,
+    "components": [],
+    "assets": [],
+    "polishReport": null
+  },
+
+  "styleGuide": {
+    "locked": true,
+    "direction": "C",
+    "name": "Ink & Light"
+  },
+
+  "contentProfile": {
+    "density": "heavy",
+    "technicalDepth": "mid-deep",
+    "codeExamples": 2,
+    "dataTables": 3,
+    "sectionCount": 14
+  }
+}

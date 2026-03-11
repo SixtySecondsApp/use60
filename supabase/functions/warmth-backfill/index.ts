@@ -79,21 +79,44 @@ async function fetchAll<T>(
 }
 
 // ============================================================================
-// Source extractors
+// Org membership helper
+// ============================================================================
+
+/** Get all user_ids belonging to an org via organization_memberships. */
+async function getOrgMemberIds(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+): Promise<string[]> {
+  const rows = await fetchAll((from, to) =>
+    supabase
+      .from('organization_memberships')
+      .select('user_id')
+      .eq('org_id', orgId)
+      .range(from, to),
+  );
+  return rows.map((r) => r.user_id);
+}
+
+// ============================================================================
+// Source extractors — scoped via organization_memberships (not clerk_org_id)
 // ============================================================================
 
 /**
  * Source 1: Activities — outbound (email/call/linkedin), meetings, proposals.
+ * Scoped by activities.user_id IN org member ids.
  */
 async function extractActivities(
   supabase: ReturnType<typeof createClient>,
   orgId: string,
+  memberIds: string[],
 ): Promise<SignalInsert[]> {
+  if (memberIds.length === 0) return [];
+
   const rows = await fetchAll((from, to) =>
     supabase
       .from('activities')
       .select('id, contact_id, type, outbound_type, date, subject')
-      .eq('clerk_org_id', orgId)
+      .in('user_id', memberIds)
       .eq('status', 'completed')
       .not('contact_id', 'is', null)
       .in('type', ['outbound', 'meeting', 'proposal'])
@@ -137,16 +160,20 @@ async function extractActivities(
 
 /**
  * Source 2: Meetings via meeting_contacts junction — one signal per attendee.
+ * Scoped by meetings.owner_user_id IN org member ids.
  */
 async function extractMeetings(
   supabase: ReturnType<typeof createClient>,
   orgId: string,
+  memberIds: string[],
 ): Promise<SignalInsert[]> {
+  if (memberIds.length === 0) return [];
+
   const rows = await fetchAll((from, to) =>
     supabase
       .from('meeting_contacts')
-      .select('contact_id, meeting_id, meetings!inner(id, meeting_start, title, clerk_org_id)')
-      .eq('meetings.clerk_org_id', orgId)
+      .select('contact_id, meeting_id, meetings!inner(id, meeting_start, title, owner_user_id)')
+      .in('meetings.owner_user_id', memberIds)
       .range(from, to),
   );
 
@@ -176,17 +203,21 @@ async function extractMeetings(
 
 /**
  * Source 3: Deal stage changes — propagated to all contacts on each deal.
+ * Scoped by deals.owner_id IN org member ids.
  */
 async function extractDealStages(
   supabase: ReturnType<typeof createClient>,
   orgId: string,
+  memberIds: string[],
 ): Promise<SignalInsert[]> {
+  if (memberIds.length === 0) return [];
+
   // Step 1: Get deal → contact mapping for this org
   const dcRows = await fetchAll((from, to) =>
     supabase
       .from('deal_contacts')
-      .select('deal_id, contact_id, deals!inner(id, clerk_org_id)')
-      .eq('deals.clerk_org_id', orgId)
+      .select('deal_id, contact_id, deals!inner(id, owner_id)')
+      .in('deals.owner_id', memberIds)
       .range(from, to),
   );
 
@@ -274,6 +305,17 @@ serve(async (req: Request) => {
       return errorResponse('Organization not found', req, 404);
     }
 
+    // ---- Get org member user_ids for scoping ----------------------------------
+    const memberIds = await getOrgMemberIds(supabase, org_id);
+    console.log(`[warmth-backfill] Org ${org_id} has ${memberIds.length} members`);
+
+    if (memberIds.length === 0) {
+      return jsonResponse(
+        { total_signals: 0, contacts_affected: 0, sources: { activities: 0, meetings: 0, deal_stages: 0 }, recalculate: { processed: 0, updated: 0 }, duration_ms: Date.now() - startMs },
+        req,
+      );
+    }
+
     // ---- Delete previous backfill signals (idempotent re-runs) ---------------
     const { error: deleteErr } = await supabase
       .from('contact_warmth_signals')
@@ -287,9 +329,9 @@ serve(async (req: Request) => {
 
     // ---- Extract signals from all sources in parallel ------------------------
     const [activitySignals, meetingSignals, dealStageSignals] = await Promise.all([
-      extractActivities(supabase, org_id),
-      extractMeetings(supabase, org_id),
-      extractDealStages(supabase, org_id),
+      extractActivities(supabase, org_id, memberIds),
+      extractMeetings(supabase, org_id, memberIds),
+      extractDealStages(supabase, org_id, memberIds),
     ]);
 
     const allSignals = [...activitySignals, ...meetingSignals, ...dealStageSignals];

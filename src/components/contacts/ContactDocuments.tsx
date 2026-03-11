@@ -223,9 +223,10 @@ const ContactDocuments: React.FC<ContactDocumentsProps> = ({
 
     try {
       // Call the Google Docs Edge Function to create a new document
-      const { data, error } = await supabase.functions.invoke('google-docs', {
+      const { data, error } = await supabase.functions.invoke('google-services-router', {
         body: {
-          action: 'create',
+          action: 'docs',
+          handlerAction: 'create',
           title: newDocument.title.trim(),
           type: newDocument.type,
           contactId: contactId
@@ -277,9 +278,10 @@ const ContactDocuments: React.FC<ContactDocumentsProps> = ({
   const handleShareDocument = async (doc: ContactDocument) => {
     try {
       // Call the Google Docs Edge Function to share the document
-      const { data, error } = await supabase.functions.invoke('google-docs', {
+      const { data, error } = await supabase.functions.invoke('google-services-router', {
         body: {
-          action: 'share',
+          action: 'docs',
+          handlerAction: 'share',
           documentId: doc.google_doc_id,
           contactId: contactId
         }

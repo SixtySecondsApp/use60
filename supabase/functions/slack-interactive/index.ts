@@ -3,6 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import {
   buildTaskAddedConfirmation,
@@ -44,6 +45,7 @@ import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
 import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
 import { handleAutopilotPromotion } from './handlers/autopilotPromotion.ts';
 import { handlePrepBriefingAction, handlePrepBriefingAskSubmission, handlePrepBriefingFeedbackSubmission } from './handlers/prepBriefing.ts';
+import { handleMorningBriefAction } from './handlers/morningBrief.ts';
 import { enrichContactContext } from '../_shared/orchestrator/adapters/contextEnrichment.ts';
 import { buildFollowupEmailPrompt } from '../_shared/orchestrator/adapters/emailSend.ts';
 import { buildEmailDraftApprovalBlocks } from '../_shared/orchestrator/adapters/emailDraftApproval.ts';
@@ -792,6 +794,17 @@ Return JSON: { "subject": "...", "body": "..." }`;
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
           emailDraft = { subject: parsed.subject || emailDraft.subject, body: parsed.body || emailDraft.body };
+        }
+        // Log AI cost event (fire-and-forget)
+        if (aiData.usage && ctx?.userId) {
+          logAICostEvent(
+            supabase, ctx.userId, ctx.orgId ?? null,
+            'anthropic', 'claude-haiku-4-5-20251001',
+            aiData.usage.input_tokens || 0, aiData.usage.output_tokens || 0,
+            'slack_draft_followup',
+            undefined,
+            { source: 'user_initiated', agentType: 'slack-interactive' },
+          ).catch((e: unknown) => console.warn('[slack-interactive] cost log error:', e));
         }
       }
     }
@@ -2361,7 +2374,7 @@ async function triggerHITLCallback(
  */
 async function resumeOrchestratorJob(jobId: string, approvalId: string): Promise<void> {
   try {
-    const orchestratorUrl = `${supabaseUrl}/functions/v1/agent-orchestrator`;
+    const orchestratorUrl = `${supabaseUrl}/functions/v1/agent-fleet-router`;
     const response = await fetch(orchestratorUrl, {
       method: 'POST',
       headers: {
@@ -2369,6 +2382,7 @@ async function resumeOrchestratorJob(jobId: string, approvalId: string): Promise
         'Authorization': `Bearer ${supabaseServiceKey}`,
       },
       body: JSON.stringify({
+        action: 'orchestrator',
         resume_job_id: jobId,
         approval_data: {
           approved: true,
@@ -9802,18 +9816,18 @@ serve(async (req) => {
             action.action_id.startsWith('crm_edit::') ||
             action.action_id.startsWith('crm_approve_all::') ||
             action.action_id.startsWith('crm_reject_all::')) {
-          console.log('[CRM Approval] Forwarding action to agent-crm-approval:', action.action_id);
-          // Forward the raw form body to agent-crm-approval (it handles its own Slack verification)
-          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+          console.log('[CRM Approval] Forwarding action to agent-fleet-router (crm_approval):', action.action_id);
+          // Forward the raw form body to agent-fleet-router (crm_approval handler handles its own Slack verification)
+          fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Type': 'application/json',
               'Authorization': `Bearer ${supabaseServiceKey}`,
               // Forward Slack signing headers for verification
               'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
               'x-slack-signature': req.headers.get('x-slack-signature') || '',
             },
-            body: `payload=${encodeURIComponent(payloadStr)}`,
+            body: JSON.stringify({ action: 'crm_approval', payload: payloadStr }),
           }).catch(err => console.error('[CRM Approval] Forward error:', err));
           // Acknowledge immediately (agent-crm-approval handles async response)
           return new Response(JSON.stringify({ ok: true }), {
@@ -9935,6 +9949,182 @@ serve(async (req) => {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
+        }
+
+        // =====================================================================
+        // Pipeline Hygiene Digest actions (US-A4)
+        // =====================================================================
+        if (action.action_id.startsWith('hygiene_')) {
+          try {
+            const valueData = JSON.parse(action.value || '{}');
+            const userId = payload.user?.id;
+            const teamId = payload.team?.id;
+
+            // Resolve org context
+            const { data: mapping } = await supabase
+              .from('slack_user_mappings')
+              .select('sixty_user_id, org_id')
+              .eq('slack_user_id', userId)
+              .maybeSingle();
+
+            const sixtyUserId = mapping?.sixty_user_id;
+            const orgId = mapping?.org_id;
+
+            if (!sixtyUserId || !orgId) {
+              return new Response(JSON.stringify({ ok: true }), {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+
+            if (action.action_id === 'hygiene_snooze_7d') {
+              const snoozeUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+              await writeToCommandCentre({
+                org_id: orgId,
+                user_id: sixtyUserId,
+                source_agent: 'pipeline_hygiene',
+                item_type: 'deal_action',
+                title: `Snoozed deal for 7 days`,
+                summary: `Deal snoozed until ${new Date(snoozeUntil).toLocaleDateString()}`,
+                context: { deal_id: valueData.deal_id, action: 'snooze', snoozed_until: snoozeUntil },
+                deal_id: valueData.deal_id,
+                urgency: 'low',
+              });
+            } else if (action.action_id === 'hygiene_draft_followup') {
+              await writeToCommandCentre({
+                org_id: orgId,
+                user_id: sixtyUserId,
+                source_agent: 'pipeline_hygiene',
+                item_type: 'follow_up',
+                title: `Draft follow-up for stale deal`,
+                context: { deal_id: valueData.deal_id, action: 'draft_followup' },
+                deal_id: valueData.deal_id,
+                urgency: 'normal',
+              });
+            } else if (action.action_id === 'hygiene_close_lost') {
+              await writeToCommandCentre({
+                org_id: orgId,
+                user_id: sixtyUserId,
+                source_agent: 'pipeline_hygiene',
+                item_type: 'deal_action',
+                title: `Close deal as lost`,
+                context: { deal_id: valueData.deal_id, action: 'close_lost' },
+                deal_id: valueData.deal_id,
+                urgency: 'normal',
+              });
+            } else if (action.action_id === 'hygiene_reengage') {
+              // Trigger re-engagement sequence via orchestrator
+              try {
+                await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                  },
+                  body: JSON.stringify({
+                    event_type: 'stale_deal_revival',
+                    user_id: sixtyUserId,
+                    org_id: orgId,
+                    context: { deal_id: valueData.deal_id, source: 'pipeline_hygiene', reason: valueData.reason },
+                  }),
+                });
+              } catch {
+                // Non-fatal — re-engagement request queued
+              }
+              await writeToCommandCentre({
+                org_id: orgId,
+                user_id: sixtyUserId,
+                source_agent: 'pipeline_hygiene',
+                item_type: 'follow_up',
+                title: `Re-engagement draft queued`,
+                summary: `Drafting re-engagement email for deal`,
+                context: { deal_id: valueData.deal_id, action: 'reengage', reason: valueData.reason },
+                deal_id: valueData.deal_id,
+                urgency: 'normal',
+              });
+            } else if (action.action_id === 'hygiene_snooze_all') {
+              const snoozeUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+              const dealIds = valueData.deal_ids || [];
+              for (const dealId of dealIds) {
+                await writeToCommandCentre({
+                  org_id: orgId,
+                  user_id: sixtyUserId,
+                  source_agent: 'pipeline_hygiene',
+                  item_type: 'deal_action',
+                  title: `Snoozed deal for 7 days (bulk)`,
+                  context: { deal_id: dealId, action: 'snooze', snoozed_until: snoozeUntil, bulk: true },
+                  deal_id: dealId,
+                  urgency: 'low',
+                });
+              }
+            }
+
+            // Update the original message to reflect action taken
+            if (payload.response_url) {
+              const actionLabel = action.action_id === 'hygiene_snooze_7d' ? 'Snoozed for 7 days'
+                : action.action_id === 'hygiene_draft_followup' ? 'Follow-up queued'
+                : action.action_id === 'hygiene_reengage' ? 'Re-engagement draft queued'
+                : action.action_id === 'hygiene_close_lost' ? 'Closing as lost'
+                : action.action_id === 'hygiene_snooze_all' ? 'All deals snoozed for 7 days'
+                : 'Action taken';
+
+              await fetch(payload.response_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  replace_original: false,
+                  text: `✓ ${actionLabel}`,
+                }),
+              });
+            }
+
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          } catch (err) {
+            console.error('[Hygiene] Action handler error:', err);
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        // =====================================================================
+        // PST-008/009: Morning Brief action handlers
+        // Format: morning_brief_{action}::{id}
+        // =====================================================================
+        if (action.action_id.startsWith('morning_brief_')) {
+          try {
+            const result = await handleMorningBriefAction(action.action_id, payload, action);
+            if (result) {
+              // Send response back to Slack
+              if (payload.response_url) {
+                await fetch(payload.response_url, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    replace_original: false,
+                    text: result.success
+                      ? (result.responseBlocks ? undefined : 'Done.')
+                      : `Error: ${result.error}`,
+                    ...(result.responseBlocks ? { blocks: result.responseBlocks } : {}),
+                  }),
+                });
+              }
+              return new Response(JSON.stringify({ ok: true }), {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+          } catch (err) {
+            console.error('[MorningBrief] Action handler error:', err);
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
         }
 
         // =====================================================================
@@ -10285,16 +10475,16 @@ serve(async (req) => {
           return handleLogActivitySubmission(supabase, payload);
         }
         if (payload.view?.callback_id === 'crm_edit_modal_submit') {
-          console.log('[CRM Approval] Forwarding edit modal submission to agent-crm-approval');
-          fetch(`${supabaseUrl}/functions/v1/agent-crm-approval`, {
+          console.log('[CRM Approval] Forwarding edit modal submission to agent-fleet-router (crm_approval)');
+          fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Type': 'application/json',
               'Authorization': `Bearer ${supabaseServiceKey}`,
               'x-slack-request-timestamp': req.headers.get('x-slack-request-timestamp') || '',
               'x-slack-signature': req.headers.get('x-slack-signature') || '',
             },
-            body: `payload=${encodeURIComponent(JSON.stringify(payload))}`,
+            body: JSON.stringify({ action: 'crm_approval', payload: JSON.stringify(payload) }),
           }).catch(err => console.error('[CRM Approval] Forward error:', err));
           return new Response('', { status: 200, headers: corsHeaders });
         }
@@ -10312,6 +10502,10 @@ serve(async (req) => {
             console.error('[schedule_email_modal] Submission handler error:', err),
           );
           return new Response('', { status: 200, headers: corsHeaders });
+        }
+        // EMAIL-008: Schedule email modal submission
+        if (payload.view?.callback_id === 'schedule_email_modal') {
+          return handleScheduleEmailSubmission(supabase, payload);
         }
         // EMAIL-008: Schedule email modal submission
         if (payload.view?.callback_id === 'schedule_email_modal') {

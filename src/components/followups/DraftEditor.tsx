@@ -1,31 +1,35 @@
-/**
- * DraftEditor — FU-002
- * Inline rich text editor for follow-up draft review and editing.
- * Send + Schedule + History toggle buttons in toolbar.
- */
-
-import React, { useState, useCallback } from 'react';
-import {
-  Send,
-  Calendar,
-  History,
-  Loader2,
-  CheckCircle2,
-  XCircle,
-  RotateCcw,
-  Bold,
-  Italic,
-  List,
-} from 'lucide-react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/clientV2';
-import { type FollowUpDraft } from '@/lib/hooks/useFollowUpDrafts';
+import {
+  Bold,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Undo,
+  Redo,
+  CheckCircle2,
+  Calendar,
+  XCircle,
+  History,
+  Loader2,
+  AlertTriangle,
+  Lock,
+  Mail,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/lib/supabase/clientV2';
+import { toast } from 'sonner';
+import type { FollowUpDraft } from '@/lib/hooks/useFollowUpDrafts';
+import { useFollowUpDrafts } from '@/lib/hooks/useFollowUpDrafts';
+import { useOrg } from '@/lib/contexts/OrgContext';
+import { useAuth } from '@/lib/contexts/AuthContext';
 
 interface DraftEditorProps {
   draft: FollowUpDraft;
@@ -37,6 +41,18 @@ interface DraftEditorProps {
   showScheduler: boolean;
 }
 
+const STATUS_BADGE_MAP: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'success' | 'warning' | 'outline'; label: string }> = {
+  pending: { variant: 'warning', label: 'Pending' },
+  editing: { variant: 'default', label: 'Edited' },
+  approved: { variant: 'success', label: 'Approved' },
+  scheduled: { variant: 'default', label: 'Scheduled' },
+  sent: { variant: 'secondary', label: 'Sent' },
+  rejected: { variant: 'destructive', label: 'Rejected' },
+  expired: { variant: 'secondary', label: 'Expired' },
+};
+
+const READ_ONLY_STATUSES = new Set(['sent', 'approved', 'scheduled']);
+
 export function DraftEditor({
   draft,
   orgId,
@@ -46,280 +62,418 @@ export function DraftEditor({
   showHistory,
   showScheduler,
 }: DraftEditorProps) {
+  const { activeOrgId } = useOrg();
+  const { user } = useAuth();
+  const { updateDraftStatus } = useFollowUpDrafts({
+    orgId: activeOrgId ?? undefined,
+    userId: user?.id,
+  });
+
+  const isReadOnly = READ_ONLY_STATUSES.has(draft.status);
+
+  // Local state for subject editing
+  const [subject, setSubject] = useState(draft.subject);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSending, setIsSending] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
 
-  const currentBody = draft.edited_body ?? draft.body;
+  // Track the current body content for diff detection
+  const initialBody = draft.edited_body ?? draft.body;
+  const [currentBody, setCurrentBody] = useState(initialBody);
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Underline,
+  // Detect if user has made edits vs the original AI-generated body
+  const hasEdits = currentBody !== draft.body;
+
+  // Reset local state when draft changes (user selects a different draft)
+  useEffect(() => {
+    setSubject(draft.subject);
+    const body = draft.edited_body ?? draft.body;
+    setCurrentBody(body);
+  }, [draft.id, draft.subject, draft.edited_body, draft.body]);
+
+  // TipTap extensions
+  const extensions = useMemo(
+    () => [
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+      }),
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { class: 'text-[#37bd7e] underline' },
+        HTMLAttributes: {
+          class: 'text-[#37bd7e] underline cursor-pointer hover:text-[#2da56b]',
+        },
       }),
-      Placeholder.configure({ placeholder: 'Edit your follow-up email...' }),
+      Placeholder.configure({
+        placeholder: 'Write your follow-up...',
+      }),
     ],
-    content: currentBody,
+    []
+  );
+
+  const editor = useEditor({
+    extensions,
+    content: initialBody,
+    editable: !isReadOnly,
+    onUpdate: ({ editor: ed }) => {
+      setCurrentBody(ed.getHTML());
+    },
     editorProps: {
       attributes: {
-        class:
-          'prose prose-invert max-w-none focus:outline-none min-h-[300px] p-4 text-sm leading-relaxed',
+        class: 'prose prose-invert max-w-none focus:outline-none min-h-[200px] p-4',
       },
     },
   });
 
-  const handleSave = useCallback(async () => {
-    if (!editor) return;
-    setIsSaving(true);
-    const editedBody = editor.getHTML();
-    const { data, error } = await supabase
-      .from('follow_up_drafts')
-      .update({ edited_body: editedBody, status: 'editing', updated_at: new Date().toISOString() })
-      .eq('id', draft.id)
-      .select(
-        'id, org_id, user_id, meeting_id, to_email, to_name, subject, body, edited_body, status, buying_signals, generated_at, approved_at, sent_at, rejected_at, expires_at, scheduled_email_id, created_at, updated_at'
-      )
-      .maybeSingle();
-
-    setIsSaving(false);
-    if (error) {
-      toast.error(`Failed to save: ${error.message}`);
-      return;
+  // Sync editor content when draft changes (e.g. user selects a different draft)
+  useEffect(() => {
+    if (editor) {
+      const body = draft.edited_body ?? draft.body;
+      if (body !== editor.getHTML()) {
+        editor.commands.setContent(body);
+      }
     }
-    if (data) onDraftUpdated(data as FollowUpDraft);
-    toast.success('Draft saved');
-  }, [editor, draft.id, onDraftUpdated]);
+  }, [draft.id, draft.edited_body, draft.body, editor]);
 
-  const handleSendNow = useCallback(async () => {
-    if (!editor) return;
-    setIsSending(true);
-    const body = editor.getHTML();
+  // Sync editable state when draft status changes
+  useEffect(() => {
+    if (editor && editor.isEditable === isReadOnly) {
+      editor.setEditable(!isReadOnly);
+    }
+  }, [isReadOnly, editor]);
 
+  // Persist body + subject changes to the database
+  const saveDraftEdits = useCallback(async () => {
+    setIsSaving(true);
     try {
-      const { error: saveError } = await supabase
+      const updateData: Record<string, unknown> = {
+        edited_body: currentBody,
+        subject,
+      };
+
+      // If user is editing a pending draft, move it to 'editing' status
+      if (draft.status === 'pending') {
+        updateData.status = 'editing';
+      }
+
+      const { error } = await supabase
         .from('follow_up_drafts')
-        .update({ edited_body: body, status: 'approved', approved_at: new Date().toISOString() })
+        .update(updateData)
         .eq('id', draft.id);
 
-      if (saveError) throw saveError;
+      if (error) {
+        toast.error('Failed to save draft', { description: error.message });
+        return;
+      }
 
-      const { error: sendError } = await supabase.functions.invoke('hitl-send-followup-email', {
-        body: {
-          draftId: draft.id,
-          userId: draft.user_id,
-          orgId,
-          to: draft.to_email,
-          subject: draft.subject,
-          body,
-          action: 'approve',
-        },
-      });
-
-      if (sendError) throw sendError;
-
-      const { data: updated } = await supabase
-        .from('follow_up_drafts')
-        .select(
-          'id, org_id, user_id, meeting_id, to_email, to_name, subject, body, edited_body, status, buying_signals, generated_at, approved_at, sent_at, rejected_at, expires_at, scheduled_email_id, created_at, updated_at'
-        )
-        .eq('id', draft.id)
-        .maybeSingle();
-
-      if (updated) onDraftUpdated(updated as FollowUpDraft);
-      toast.success('Email sent');
-    } catch (err) {
-      toast.error(`Send failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      const updatedDraft: FollowUpDraft = {
+        ...draft,
+        edited_body: currentBody,
+        subject,
+        status: draft.status === 'pending' ? 'editing' : draft.status,
+        updated_at: new Date().toISOString(),
+      };
+      onDraftUpdated(updatedDraft);
+      toast.success('Draft saved');
     } finally {
-      setIsSending(false);
+      setIsSaving(false);
     }
-  }, [editor, draft, orgId, onDraftUpdated]);
+  }, [currentBody, subject, draft, onDraftUpdated]);
 
+  // Approve & Send
+  const handleApprove = useCallback(async () => {
+    setIsApproving(true);
+    try {
+      // Save any pending edits first
+      if (currentBody !== (draft.edited_body ?? draft.body) || subject !== draft.subject) {
+        const { error: saveError } = await supabase
+          .from('follow_up_drafts')
+          .update({ edited_body: currentBody, subject })
+          .eq('id', draft.id);
+
+        if (saveError) {
+          toast.error('Failed to save edits before approving', { description: saveError.message });
+          return;
+        }
+      }
+
+      await updateDraftStatus(draft.id, 'approved');
+
+      const updatedDraft: FollowUpDraft = {
+        ...draft,
+        edited_body: currentBody,
+        subject,
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      onDraftUpdated(updatedDraft);
+    } catch {
+      // updateDraftStatus already shows toast on error
+    } finally {
+      setIsApproving(false);
+    }
+  }, [currentBody, subject, draft, onDraftUpdated, updateDraftStatus]);
+
+  // Reject
   const handleReject = useCallback(async () => {
     setIsRejecting(true);
-    const { data, error } = await supabase
-      .from('follow_up_drafts')
-      .update({ status: 'rejected', rejected_at: new Date().toISOString() })
-      .eq('id', draft.id)
-      .select(
-        'id, org_id, user_id, meeting_id, to_email, to_name, subject, body, edited_body, status, buying_signals, generated_at, approved_at, sent_at, rejected_at, expires_at, scheduled_email_id, created_at, updated_at'
-      )
-      .maybeSingle();
+    try {
+      await updateDraftStatus(draft.id, 'rejected');
 
-    setIsRejecting(false);
-    if (error) {
-      toast.error(`Failed to reject: ${error.message}`);
-      return;
+      const updatedDraft: FollowUpDraft = {
+        ...draft,
+        status: 'rejected',
+        rejected_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      onDraftUpdated(updatedDraft);
+    } catch {
+      // updateDraftStatus already shows toast on error
+    } finally {
+      setIsRejecting(false);
     }
-    if (data) onDraftUpdated(data as FollowUpDraft);
-    toast.success('Draft rejected');
-  }, [draft.id, onDraftUpdated]);
+  }, [draft, onDraftUpdated, updateDraftStatus]);
 
-  const handleRestoreOriginal = useCallback(() => {
-    if (!editor) return;
-    editor.commands.setContent(draft.body);
-    toast.info('Restored to AI-generated version');
-  }, [editor, draft.body]);
-
-  const isSent = draft.status === 'sent';
-  const isRejected = draft.status === 'rejected';
-  const readOnly = isSent || isRejected;
-
-  if (editor && editor.isEditable !== !readOnly) {
-    editor.setEditable(!readOnly);
-  }
+  const badgeInfo = STATUS_BADGE_MAP[draft.status] ?? { variant: 'secondary' as const, label: draft.status };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Header */}
-      <div className="flex-shrink-0 border-b border-gray-800 p-4">
-        <p className="text-xs text-gray-500 mb-0.5">To</p>
-        <p className="text-sm text-white font-medium">{draft.to_name ?? draft.to_email}</p>
-        {draft.to_name && <p className="text-xs text-gray-500">{draft.to_email}</p>}
-        <div className="mt-2">
-          <p className="text-xs text-gray-500 mb-0.5">Subject</p>
-          <p className="text-sm text-gray-200">{draft.subject}</p>
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Header: recipient + status */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#37bd7e]/10 flex items-center justify-center">
+            <Mail className="w-4 h-4 text-[#37bd7e]" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                {draft.to_name ?? draft.to_email}
+              </span>
+              <Badge variant={badgeInfo.variant} className="flex-shrink-0">
+                {badgeInfo.label}
+              </Badge>
+            </div>
+            <span className="text-xs text-gray-500 truncate block">{draft.to_email}</span>
+          </div>
+        </div>
+
+        {/* Read-only indicator */}
+        {isReadOnly && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Lock className="w-3.5 h-3.5" />
+            Read-only
+          </div>
+        )}
+      </div>
+
+      {/* Subject line */}
+      <div className="px-5 py-2.5 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500 flex-shrink-0 w-14">Subject</span>
+          <Input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            disabled={isReadOnly}
+            className="border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-8 text-sm text-gray-900 dark:text-white"
+            placeholder="Email subject"
+          />
         </div>
       </div>
 
-      {/* Formatting toolbar */}
-      {!readOnly && editor && (
-        <div className="flex-shrink-0 border-b border-gray-800 px-4 py-2 flex items-center gap-1">
-          <button
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            className={cn(
-              'p-1.5 rounded text-gray-400 hover:text-white hover:bg-gray-800 transition-colors',
-              editor.isActive('bold') && 'bg-gray-800 text-white'
-            )}
-            title="Bold"
-          >
-            <Bold className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={cn(
-              'p-1.5 rounded text-gray-400 hover:text-white hover:bg-gray-800 transition-colors',
-              editor.isActive('italic') && 'bg-gray-800 text-white'
-            )}
-            title="Italic"
-          >
-            <Italic className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-            className={cn(
-              'p-1.5 rounded text-gray-400 hover:text-white hover:bg-gray-800 transition-colors',
-              editor.isActive('bulletList') && 'bg-gray-800 text-white'
-            )}
-            title="Bullet list"
-          >
-            <List className="w-3.5 h-3.5" />
-          </button>
-          <div className="flex-1" />
-          {draft.edited_body && (
-            <button
-              onClick={handleRestoreOriginal}
-              className="flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
-              title="Restore AI original"
-            >
-              <RotateCcw className="w-3 h-3" />
-              Restore original
-            </button>
-          )}
+      {/* Diff indicator */}
+      {hasEdits && !isReadOnly && (
+        <div className="px-5 py-1.5 bg-amber-500/5 border-b border-amber-500/10 flex items-center gap-2 flex-shrink-0">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+          <span className="text-xs text-amber-400">
+            Body has been edited from the original AI draft
+          </span>
         </div>
       )}
 
-      {/* Editor body */}
-      <div className="flex-1 overflow-y-auto">
-        <EditorContent editor={editor} className="h-full" />
+      {/* TipTap editor area */}
+      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+        {/* Toolbar */}
+        {!isReadOnly && editor && (
+          <div className="border-b border-gray-200 dark:border-gray-800 px-3 py-1.5 flex flex-wrap gap-0.5 flex-shrink-0">
+            <ToolbarButton
+              onClick={() => editor.chain().focus().toggleBold().run()}
+              isActive={editor.isActive('bold')}
+              icon={<Bold className="w-4 h-4" />}
+              title="Bold (Ctrl+B)"
+            />
+            <ToolbarButton
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+              isActive={editor.isActive('italic')}
+              icon={<Italic className="w-4 h-4" />}
+              title="Italic (Ctrl+I)"
+            />
+            <ToolbarButton
+              onClick={() => {
+                const url = window.prompt('Enter URL:');
+                if (url) {
+                  editor.chain().focus().setLink({ href: url }).run();
+                }
+              }}
+              isActive={editor.isActive('link')}
+              icon={<LinkIcon className="w-4 h-4" />}
+              title="Add Link"
+            />
+
+            <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1 self-center" />
+
+            <ToolbarButton
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+              isActive={editor.isActive('bulletList')}
+              icon={<List className="w-4 h-4" />}
+              title="Bullet List"
+            />
+            <ToolbarButton
+              onClick={() => editor.chain().focus().toggleOrderedList().run()}
+              isActive={editor.isActive('orderedList')}
+              icon={<ListOrdered className="w-4 h-4" />}
+              title="Numbered List"
+            />
+
+            <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1 self-center" />
+
+            <ToolbarButton
+              onClick={() => editor.chain().focus().undo().run()}
+              disabled={!editor.can().undo()}
+              icon={<Undo className="w-4 h-4" />}
+              title="Undo (Ctrl+Z)"
+            />
+            <ToolbarButton
+              onClick={() => editor.chain().focus().redo().run()}
+              disabled={!editor.can().redo()}
+              icon={<Redo className="w-4 h-4" />}
+              title="Redo (Ctrl+Y)"
+            />
+          </div>
+        )}
+
+        {/* Editor content */}
+        <div className="flex-1 overflow-y-auto">
+          {editor ? (
+            <EditorContent editor={editor} />
+          ) : (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Action toolbar */}
-      <div className="flex-shrink-0 border-t border-gray-800 p-3 flex items-center gap-2">
-        {!readOnly && (
-          <>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="px-3 py-1.5 text-xs font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-md transition-colors disabled:opacity-50"
-            >
-              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save draft'}
-            </button>
-
-            <button
-              onClick={onShowScheduler}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
-                showScheduler
-                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                  : 'text-gray-300 bg-gray-800 hover:bg-gray-700'
-              )}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              Schedule
-            </button>
-
-            <button
-              onClick={handleSendNow}
-              disabled={isSending}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#37bd7e] text-black rounded-md hover:bg-[#2da56b] transition-colors disabled:opacity-50"
-            >
-              {isSending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Send className="w-3.5 h-3.5" />
-              )}
-              Send now
-            </button>
-
-            <div className="flex-1" />
-
-            <button
-              onClick={handleReject}
-              disabled={isRejecting}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10 rounded-md transition-colors disabled:opacity-50"
-            >
-              {isRejecting ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <XCircle className="w-3.5 h-3.5" />
-              )}
-              Reject
-            </button>
-          </>
-        )}
-
-        {isSent && (
-          <div className="flex items-center gap-2 text-sm text-emerald-400">
-            <CheckCircle2 className="w-4 h-4" />
-            Email sent
-          </div>
-        )}
-
-        {isRejected && (
-          <div className="flex items-center gap-2 text-sm text-red-400">
-            <XCircle className="w-4 h-4" />
-            Rejected
-          </div>
-        )}
-
-        <div className="ml-auto">
-          <button
+      {/* Action bar */}
+      <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200 dark:border-gray-800 flex-shrink-0 bg-white dark:bg-gray-950/50">
+        <div className="flex items-center gap-2">
+          {/* History toggle */}
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onShowHistory}
-            className={cn(
-              'flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md transition-colors',
-              showHistory
-                ? 'bg-gray-700 text-white'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
-            )}
+            className={cn(showHistory && 'bg-gray-100 dark:bg-gray-800')}
           >
-            <History className="w-3.5 h-3.5" />
+            <History className="w-4 h-4 mr-1.5" />
             History
-          </button>
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isReadOnly ? (
+            <span className="text-xs text-gray-500 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5" />
+              Draft is {draft.status}
+            </span>
+          ) : (
+            <>
+              {/* Save edits (only if body or subject changed) */}
+              {(currentBody !== (draft.edited_body ?? draft.body) || subject !== draft.subject) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={saveDraftEdits}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                  ) : null}
+                  Save
+                </Button>
+              )}
+
+              {/* Reject */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleReject}
+                disabled={isRejecting}
+                className="border-red-500/30 text-red-500 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/50"
+              >
+                {isRejecting ? (
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <XCircle className="w-4 h-4 mr-1.5" />
+                )}
+                Reject
+              </Button>
+
+              {/* Schedule */}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onShowScheduler}
+                className={cn(showScheduler && 'bg-gray-100 dark:bg-gray-800')}
+              >
+                <Calendar className="w-4 h-4 mr-1.5" />
+                Schedule
+              </Button>
+
+              {/* Approve & Send */}
+              <Button
+                variant="success"
+                size="sm"
+                onClick={handleApprove}
+                disabled={isApproving}
+              >
+                {isApproving ? (
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                )}
+                Approve & Send
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+/* ---- Toolbar button ---- */
+
+interface ToolbarButtonProps {
+  onClick: () => void;
+  isActive?: boolean;
+  disabled?: boolean;
+  icon: React.ReactNode;
+  title: string;
+}
+
+function ToolbarButton({ onClick, isActive, disabled, icon, title }: ToolbarButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={cn(
+        'p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors',
+        isActive && 'bg-[#37bd7e]/20 text-[#37bd7e]',
+        disabled && 'opacity-50 cursor-not-allowed',
+        !isActive && !disabled && 'text-gray-500 dark:text-gray-400'
+      )}
+    >
+      {icon}
+    </button>
   );
 }

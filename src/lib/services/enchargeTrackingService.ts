@@ -290,6 +290,64 @@ export function trackUsageLimitReached(data: {
 }
 
 /**
+ * Track when a user connects a notetaker integration
+ */
+export function trackNotetakerConnected(data: {
+  email: string;
+  userId: string;
+}): void {
+  trackEvent('Notetaker Connected', {
+    user_id: data.userId,
+    connected_at: new Date().toISOString(),
+  });
+}
+
+/**
+ * Track when a user completes an instant replay
+ */
+export function trackInstantReplayCompleted(data: {
+  email: string;
+  userId: string;
+  meetingId: string;
+}): void {
+  trackEvent('Instant Replay Completed', {
+    user_id: data.userId,
+    meeting_id: data.meetingId,
+    completed_at: new Date().toISOString(),
+  });
+}
+
+/**
+ * Track when a user tops up their credits
+ */
+export function trackCreditsToppedUp(data: {
+  email: string;
+  userId: string;
+  creditsAdded: number;
+}): void {
+  trackEvent('Credits Topped Up', {
+    user_id: data.userId,
+    credits_added: data.creditsAdded,
+    topped_up_at: new Date().toISOString(),
+  });
+}
+
+/**
+ * Track when a user completes the product tour
+ */
+export function trackTourCompleted(data: {
+  email: string;
+  userId: string;
+  tourId?: string;
+}): void {
+  trackEvent('Tour Completed', {
+    user_id: data.userId,
+    tour_id: data.tourId,
+    completed_at: new Date().toISOString(),
+  });
+}
+
+/**
  * Track page views
  */
 export function trackPageView(pageName: string, properties?: Record<string, any>): void {
@@ -330,6 +388,10 @@ export default {
   trackUpgradedToPaid,
   trackUsageLimitWarning,
   trackUsageLimitReached,
+  trackNotetakerConnected,
+  trackInstantReplayCompleted,
+  trackCreditsToppedUp,
+  trackTourCompleted,
   trackPageView,
   trackFeatureUsed,
 };

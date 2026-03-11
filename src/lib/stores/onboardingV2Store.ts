@@ -229,6 +229,7 @@ export type OnboardingV2Step =
   | 'enrichment_result'       // Show what we learned
   | 'agent_config_confirm'    // Confirm AI-inferred agent configuration
   | 'skills_config'           // Configure 5 skills
+  | 'notetaker_connection'    // Connect notetaker bot to calendar
   | 'complete';               // All done!
 
 // Legacy type alias for backward compatibility
@@ -336,6 +337,9 @@ interface OnboardingV2State {
   resetSkillConfig: (skillId: SkillId) => void;
 
   // Save actions
+  persistSkillsToServer: (organizationId: string) => Promise<boolean>;
+  completeOnboarding: () => Promise<void>;
+  /** @deprecated Use persistSkillsToServer() then completeOnboarding() separately */
   saveAllSkills: (organizationId: string) => Promise<boolean>;
 
   // Platform skills actions (Phase 7)
@@ -516,6 +520,55 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
         console.log('[onboardingV2] Business email detected, checking for existing org with domain:', domain);
 
+        // Check for existing join requests (rejected or pending) BEFORE org matching
+        const { data: existingRequests } = await supabase
+          .from('organization_join_requests')
+          .select('id, org_id, status, rejection_reason, organizations(name)')
+          .eq('user_id', session.user.id)
+          .in('status', ['pending', 'rejected'])
+          .order('requested_at', { ascending: false })
+          .limit(1);
+
+        const latestRequest = existingRequests?.[0];
+        if (latestRequest) {
+          const reqOrgName = (latestRequest.organizations as any)?.name || 'the organization';
+          if (latestRequest.status === 'rejected') {
+            // Show rejection screen with reason
+            console.log('[onboardingV2] Found rejected join request for:', reqOrgName);
+            set({
+              userEmail: email,
+              isPersonalEmail: isPersonal,
+              currentStep: 'pending_approval',
+              domain,
+              pendingJoinRequest: {
+                requestId: latestRequest.id,
+                orgId: latestRequest.org_id,
+                orgName: reqOrgName,
+                status: 'pending', // useApprovalDetection will detect rejection
+              },
+            });
+            return;
+          }
+          if (latestRequest.status === 'pending') {
+            // Resume pending approval screen
+            console.log('[onboardingV2] Found pending join request for:', reqOrgName);
+            await supabase.from('profiles').update({ profile_status: 'pending_approval' }).eq('id', session.user.id);
+            set({
+              userEmail: email,
+              isPersonalEmail: isPersonal,
+              currentStep: 'pending_approval',
+              domain,
+              pendingJoinRequest: {
+                requestId: latestRequest.id,
+                orgId: latestRequest.org_id,
+                orgName: reqOrgName,
+                status: 'pending',
+              },
+            });
+            return;
+          }
+        }
+
         let hasExactMatch = false;
         let exactMatchOrg: any = null;
         let fuzzyMatches: any[] = [];
@@ -583,6 +636,26 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
             if (joinRequestResult.error) throw joinRequestResult.error;
 
+            // Check if user is already a member — skip onboarding entirely
+            const joinResult = joinRequestResult.data?.[0];
+            if (joinResult && !joinResult.success && joinResult.message?.toLowerCase().includes('already a member')) {
+              console.log('[onboardingV2] User already a member of', exactMatchOrg.name, '— completing onboarding');
+              await supabase.from('profiles').update({ profile_status: 'active' }).eq('id', session.user.id);
+              await supabase.from('user_onboarding_progress').upsert({
+                user_id: session.user.id,
+                onboarding_step: 'complete',
+                onboarding_completed_at: new Date().toISOString(),
+              }, { onConflict: 'user_id' });
+              set({
+                userEmail: email,
+                isPersonalEmail: isPersonal,
+                organizationId: exactMatchOrg.id,
+                currentStep: 'complete',
+                domain,
+              });
+              return;
+            }
+
             // Update user profile status to pending_approval
             await supabase
               .from('profiles')
@@ -597,7 +670,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
               currentStep: 'pending_approval',
               domain,
               pendingJoinRequest: {
-                requestId: joinRequestResult.data[0].join_request_id,
+                requestId: joinResult?.join_request_id || '',
                 orgId: exactMatchOrg.id,
                 orgName: exactMatchOrg.name,
                 status: 'pending',
@@ -644,30 +717,93 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             .single();
 
           if (orgError) {
-            // Might be duplicate — try to fetch existing
-            const { data: existing } = await supabase
+            // Duplicate domain — an org already exists for this domain (owned by someone else)
+            // Check if it's our own org or someone else's
+            const { data: ownOrg } = await supabase
               .from('organizations')
               .select('id')
               .eq('company_domain', domain)
               .eq('created_by', session.user.id)
               .maybeSingle();
 
-            if (existing) {
-              console.log('[onboardingV2] Reusing existing org for domain:', domain);
-              // Ensure membership exists
+            if (ownOrg) {
+              // User's own org from a previous attempt — reuse it
+              console.log('[onboardingV2] Reusing own org for domain:', domain);
               await supabase.from('organization_memberships').upsert(
-                { org_id: existing.id, user_id: session.user.id, role: 'owner', member_status: 'active' },
+                { org_id: ownOrg.id, user_id: session.user.id, role: 'owner', member_status: 'active' },
                 { onConflict: 'org_id,user_id' }
               );
               set({
                 userEmail: email,
                 isPersonalEmail: isPersonal,
-                organizationId: existing.id,
+                organizationId: ownOrg.id,
                 currentStep: 'enrichment_loading',
                 domain,
               });
             } else {
-              throw orgError;
+              // Org belongs to someone else — route to join request flow
+              // Use RPC to find org (bypasses RLS since user has no membership)
+              console.log('[onboardingV2] Org exists for domain but owned by someone else — routing to join request');
+              const { data: rpcOrg } = await supabase.rpc('find_organization_by_domain', { p_domain: domain });
+              const existingOrg = rpcOrg?.[0];
+
+              if (existingOrg) {
+                // Create join request for the existing org
+                const { data: profileData } = await supabase
+                  .from('profiles')
+                  .select('first_name, last_name')
+                  .eq('id', session.user.id)
+                  .maybeSingle();
+
+                const joinResult = await supabase.rpc('create_join_request', {
+                  p_org_id: existingOrg.id,
+                  p_user_id: session.user.id,
+                  p_user_profile: profileData
+                    ? { first_name: profileData.first_name, last_name: profileData.last_name }
+                    : null,
+                });
+
+                if (!joinResult.error && joinResult.data?.[0]?.success !== false) {
+                  await supabase
+                    .from('profiles')
+                    .update({ profile_status: 'pending_approval' })
+                    .eq('id', session.user.id);
+
+                  set({
+                    userEmail: email,
+                    isPersonalEmail: isPersonal,
+                    organizationId: existingOrg.id,
+                    currentStep: 'pending_approval',
+                    domain,
+                    pendingJoinRequest: {
+                      requestId: joinResult.data[0].join_request_id,
+                      orgId: existingOrg.id,
+                      orgName: existingOrg.name,
+                      status: 'pending',
+                    },
+                  });
+                  console.log('[onboardingV2] Join request created via conflict detection for:', existingOrg.name);
+                } else {
+                  // Join request failed (maybe already exists) — show pending approval anyway
+                  console.warn('[onboardingV2] Join request RPC failed, checking existing request:', joinResult.error);
+                  set({
+                    userEmail: email,
+                    isPersonalEmail: isPersonal,
+                    organizationId: existingOrg.id,
+                    currentStep: 'pending_approval',
+                    domain,
+                    pendingJoinRequest: {
+                      requestId: '',
+                      orgId: existingOrg.id,
+                      orgName: existingOrg.name,
+                      status: 'pending',
+                    },
+                  });
+                }
+              } else {
+                // Can't find org via RPC either — throw original error
+                throw orgError;
+              }
             }
           } else {
             // Create membership for new org
@@ -925,6 +1061,7 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             .insert({
               name: organizationName,
               company_domain: domain,
+              company_website: websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`,
               created_by: session.user.id,
               is_active: true,
             })
@@ -1672,12 +1809,12 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     }
   },
 
-  // Save all skills
-  saveAllSkills: async (organizationId) => {
+  // Save all skills to the server (does NOT set step or mark onboarding complete)
+  persistSkillsToServer: async (organizationId) => {
     set({ isSaving: true, saveError: null });
 
     try {
-      const { skillConfigs, configuredSkills } = get();
+      const { skillConfigs } = get();
 
       // Prepare skills array
       const skills = SKILLS.map((skill) => ({
@@ -1697,7 +1834,19 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       if (response.error) throw response.error;
       if (!response.data?.success) throw new Error(response.data?.error || 'Failed to save skills');
 
-      // Also mark V1 onboarding as complete so ProtectedRoute allows dashboard access
+      set({ isSaving: false });
+      return true;
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save skills';
+      set({ isSaving: false, saveError: message });
+      return false;
+    }
+  },
+
+  // Mark onboarding as complete in DB and clear local state
+  completeOnboarding: async () => {
+    try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         await supabase
@@ -1710,6 +1859,13 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
             onConflict: 'user_id',
           });
 
+        // Write timestamp for ProductTour to detect recent onboarding completion
+        try {
+          localStorage.setItem('sixty_onboarding_completed_at', String(Date.now()));
+        } catch {
+          // localStorage unavailable — tour just won't show
+        }
+
         // Clear localStorage on onboarding completion
         const { userEmail } = get();
         if (userEmail) {
@@ -1717,14 +1873,22 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
         }
       }
 
-      set({ isSaving: false, currentStep: 'complete' });
-      return true;
-
+      set({ currentStep: 'complete' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to save skills';
-      set({ isSaving: false, saveError: message });
-      return false;
+      const message = error instanceof Error ? error.message : 'Failed to complete onboarding';
+      set({ saveError: message });
+      toast.error(message);
     }
+  },
+
+  // @deprecated — use persistSkillsToServer() then completeOnboarding() separately
+  saveAllSkills: async (organizationId) => {
+    const store = get();
+    const saved = await store.persistSkillsToServer(organizationId);
+    if (saved) {
+      await store.completeOnboarding();
+    }
+    return saved;
   },
 
   // ============================================================================
@@ -1842,7 +2006,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     try {
       const { compiledSkills } = get();
 
-      // Update each skill's is_enabled status
+      // Update each skill's is_enabled status — collect errors instead of aborting on first failure
+      const errors: string[] = [];
       for (const skill of compiledSkills) {
         const { error } = await supabase
           .from('organization_skills')
@@ -1850,7 +2015,13 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           .eq('organization_id', organizationId)
           .eq('skill_id', skill.skill_key);
 
-        if (error) throw error;
+        if (error) {
+          errors.push(`${skill.skill_key}: ${error.message}`);
+          console.error('[onboarding] Skill save error:', skill.skill_key, error);
+        }
+      }
+      if (errors.length > 0) {
+        throw new Error(`Failed to save ${errors.length} skills: ${errors[0]}`);
       }
 
       // Also mark V1 onboarding as complete so ProtectedRoute allows dashboard access
@@ -1865,6 +2036,13 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           }, {
             onConflict: 'user_id',
           });
+
+        // Write timestamp for ProductTour to detect recent onboarding completion
+        try {
+          localStorage.setItem('sixty_onboarding_completed_at', String(Date.now()));
+        } catch {
+          // localStorage unavailable — tour just won't show
+        }
 
         // Clear localStorage on onboarding completion
         const { userEmail } = get();
@@ -1934,7 +2112,40 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
       // Check RPC result - it returns success/message
       const result = data?.[0];
       if (!result?.success) {
-        throw new Error(result?.message || 'Failed to create join request');
+        const msg = result?.message || 'Failed to create join request';
+
+        // User is already a member — skip onboarding entirely, go to dashboard
+        if (msg.toLowerCase().includes('already a member')) {
+          console.log('[submitJoinRequest] User already a member of', orgName, '— completing onboarding');
+          await supabase
+            .from('profiles')
+            .update({ profile_status: 'active' })
+            .eq('id', session.user.id);
+          await supabase
+            .from('user_onboarding_progress')
+            .upsert({
+              user_id: session.user.id,
+              onboarding_step: 'complete',
+              onboarding_completed_at: new Date().toISOString(),
+            }, { onConflict: 'user_id' });
+          set({
+            organizationId: orgId,
+            currentStep: 'complete',
+          });
+          return;
+        }
+
+        // Already has a pending request — go to pending approval
+        if (msg.toLowerCase().includes('already have a pending')) {
+          console.log('[submitJoinRequest] User already has pending request for', orgName);
+          set({
+            pendingJoinRequest: { orgId, orgName, requestId: '', status: 'pending' },
+            currentStep: 'pending_approval',
+          });
+          return;
+        }
+
+        throw new Error(msg);
       }
 
       // Update profile status
@@ -1987,15 +2198,34 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
           org_id: org.id,
           user_id: session.user.id,
           role: 'owner',
+          member_status: 'active',
         });
-
-      set({ organizationId: org.id });
 
       // Proceed to enrichment — use resolved domain if user picked one
       const freshState = get();
       const enrichDomain = freshState.resolvedResearchDomain || freshState.domain;
+
+      // Always transition to enrichment_loading (the step handles domain mismatch picker)
+      set({
+        organizationId: org.id,
+        ...(enrichDomain ? { currentStep: 'enrichment_loading', enrichmentSource: 'website' } : { currentStep: 'skills' }),
+      });
+
+      // If there's an unresolved domain mismatch, don't start enrichment yet —
+      // EnrichmentLoadingStep will show the domain picker first, then start enrichment
+      if (freshState.hasDomainMismatch && !freshState.resolvedResearchDomain) {
+        console.log('[onboardingV2Store] Domain mismatch unresolved — deferring enrichment to picker');
+        return;
+      }
+
       if (enrichDomain) {
-        await get().startEnrichment(org.id, enrichDomain, false);
+        const enrichmentResult = await get().startEnrichment(org.id, enrichDomain, false);
+
+        if (!enrichmentResult.success) {
+          console.error('[onboardingV2Store] Enrichment failed after org creation, skipping to skills');
+          toast.error('Enrichment could not start. You can continue setup.');
+          set({ currentStep: 'skills' });
+        }
       }
     } catch (error) {
       console.error('[onboardingV2Store] Error creating organization:', error);
@@ -2010,6 +2240,9 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
 
   // Reset store
   reset: () => {
+    // Capture userEmail BEFORE nulling it — set() wipes userEmail so get() after would return null
+    const emailBeforeReset = get().userEmail;
+
     set({
       // Context
       organizationId: null,
@@ -2063,9 +2296,8 @@ export const useOnboardingV2Store = create<OnboardingV2State>((set, get) => ({
     });
 
     // Clear localStorage to prevent stale data from being restored
-    const state = get();
-    if (state.userEmail) {
-      clearOnboardingState(state.userEmail);
+    if (emailBeforeReset) {
+      clearOnboardingState(emailBeforeReset);
     }
   },
 

@@ -43,6 +43,10 @@ function validateName(name: string): NameValidationResult {
     return { valid: false, error: 'Name must be at least 2 characters' };
   }
 
+  if (name.trim().length > 100) {
+    return { valid: false, error: 'Name must be 100 characters or less' };
+  }
+
   if (!validNameRegex.test(name.trim())) {
     return { valid: false, error: 'Name can only contain letters, spaces, hyphens, and apostrophes' };
   }
@@ -157,8 +161,16 @@ export default function SetPassword() {
     }
     setLastNameError(null);
 
-    if (!password || password.length < 6) {
-      toast.error('Password must be at least 6 characters long');
+    if (!password || password.length < 8) {
+      toast.error('Password must be at least 8 characters long');
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      toast.error('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+      toast.error('Password must contain at least one special character');
       return;
     }
 
@@ -342,9 +354,10 @@ export default function SetPassword() {
         try {
           console.log('[SetPassword] Attempting profile sync via edge function...');
           const { data: edgeResponse, error: edgeFunctionError } = await supabase.functions.invoke(
-            'sync-profile-names',
+            'sync-jobs-router',
             {
               body: {
+                action: 'profile_names',
                 userId,
                 firstName: firstName.trim(),
                 lastName: lastName.trim(),
@@ -519,7 +532,7 @@ export default function SetPassword() {
                   placeholder="Enter password (min 6 characters)"
                   className="w-full pl-10 pr-4 py-3 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent"
                   required
-                  minLength={6}
+                  minLength={8}
                   disabled={isLoading}
                 />
               </div>
@@ -539,7 +552,7 @@ export default function SetPassword() {
                   placeholder="Confirm your password"
                   className="w-full pl-10 pr-4 py-3 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent"
                   required
-                  minLength={6}
+                  minLength={8}
                   disabled={isLoading}
                 />
               </div>
@@ -566,7 +579,7 @@ export default function SetPassword() {
               <Mail className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-gray-400">
                 <p className="font-medium text-gray-300 mb-1">Your account will be created</p>
-                <p>Once you set your password, your account will be fully activated and you'll have access to the dashboard.</p>
+                <p>Once you set your password, your account will be fully activated and you&apos;ll have access to the dashboard.</p>
               </div>
             </div>
           </div>

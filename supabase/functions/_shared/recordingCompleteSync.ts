@@ -67,9 +67,10 @@ export async function syncRecordingToMeeting(options: SyncOptions): Promise<void
 
       try {
         const { error: thumbnailError } = await supabase.functions.invoke(
-          'generate-s3-video-thumbnail',
+          'generate-router',
           {
             body: {
+              action: 's3_video_thumbnail',
               recording_id: recording_id,
               video_url: recording.s3_video_url,
             },

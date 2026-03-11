@@ -46,18 +46,26 @@ Deno.serve(async (req) => {
     // List of providers to fetch
     const providers = ['meetingbaas', 'gladia', 'deepgram'];
 
-    // Fetch from each provider in parallel
+    // Map provider names to fetch-router action names
+    const providerActions: Record<string, string> = {
+      meetingbaas: 'meetingbaas_usage',
+      gladia: 'gladia_usage',
+      deepgram: 'deepgram_usage',
+    };
+
+    // Fetch from each provider in parallel via fetch-router
     const fetchPromises = providers.map(async (provider) => {
-      const functionName = `fetch-${provider}-usage`;
-      console.log(`[api-usage-cron] Invoking ${functionName}...`);
+      const action = providerActions[provider];
+      console.log(`[api-usage-cron] Invoking fetch-router action=${action}...`);
 
       try {
-        const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+        const response = await fetch(`${supabaseUrl}/functions/v1/fetch-router`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${supabaseServiceKey}`,
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ action }),
         });
 
         const result = await response.json();
@@ -90,12 +98,13 @@ Deno.serve(async (req) => {
     try {
       console.log('[api-usage-cron] Triggering usage alerts check...');
 
-      const alertsResponse = await fetch(`${supabaseUrl}/functions/v1/api-usage-alerts`, {
+      const alertsResponse = await fetch(`${supabaseUrl}/functions/v1/api-services-router`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${supabaseServiceKey}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ action: 'usage_alerts' }),
       });
 
       if (alertsResponse.ok) {

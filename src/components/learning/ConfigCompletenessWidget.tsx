@@ -1,28 +1,41 @@
 /**
- * ConfigCompletenessWidget — LEARN-UI-001
+ * ConfigCompletenessWidget
  *
- * Compact version of ConfigCompletenessCard for dashboard and settings mounting.
- * Shows: tier badge, progress bar, percentage, category breakdown.
- * Tiers: functional → tuned → optimised → learning
+ * Compact, inline version of ConfigCompletenessCard for embedding at the top
+ * of pages like Teach Sixty. Shows tier badge, progress bar, question count,
+ * and optional mini category breakdown.
  */
 
-import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Loader2,
-  ChevronDown,
-  ChevronUp,
-  Brain,
+  AlertCircle,
+  ArrowRight,
+  Settings2,
   Target,
   Clock,
-  Bot,
-  BookOpen,
+  Shield,
+  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useConfigCompleteness, type ConfigTier } from '@/lib/hooks/useConfigCompleteness';
 
 // ============================================================================
-// Config
+// Types
+// ============================================================================
+
+interface ConfigCompletenessWidgetProps {
+  orgId: string;
+  userId?: string;
+  /** Show a mini per-category breakdown below the main bar */
+  showCategories?: boolean;
+  /** Show a CTA prompting the user to reach the next tier */
+  showCTA?: boolean;
+}
+
+// ============================================================================
+// Constants
 // ============================================================================
 
 const TIER_CONFIG: Record<
@@ -51,136 +64,155 @@ const TIER_CONFIG: Record<
   },
 };
 
-const CATEGORY_META: Record<string, { Icon: React.ComponentType<{ className?: string }>; label: string }> = {
-  revenue_pipeline: { Icon: Target, label: 'Revenue & Pipeline' },
-  daily_rhythm: { Icon: Clock, label: 'Daily Rhythm' },
-  agent_behaviour: { Icon: Bot, label: 'Agent Behaviour' },
-  methodology: { Icon: BookOpen, label: 'Methodology' },
+const TIER_ORDER: ConfigTier[] = ['functional', 'tuned', 'optimised', 'learning'];
+
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  'Pipeline & Targets': Target,
+  'Daily Rhythm': Clock,
+  'Security & Compliance': Shield,
+  'AI & Automation': Zap,
 };
 
 // ============================================================================
-// Props
+// Helpers
 // ============================================================================
 
-interface ConfigCompletenessWidgetProps {
-  orgId: string;
-  userId?: string;
-  /** Whether to show category breakdown toggle */
-  showCategories?: boolean;
-  /** Whether to show link to Teach 60 section */
-  showCTA?: boolean;
-  className?: string;
+/** Returns the next tier above `current`, or null if already at the top. */
+function getNextTier(current: ConfigTier): ConfigTier | null {
+  const idx = TIER_ORDER.indexOf(current);
+  if (idx < 0 || idx >= TIER_ORDER.length - 1) return null;
+  return TIER_ORDER[idx + 1];
 }
 
 // ============================================================================
-// Component
+// Loading skeleton
+// ============================================================================
+
+function WidgetSkeleton() {
+  return (
+    <div className="flex items-center gap-4">
+      <Skeleton className="h-5 w-20 rounded-full" />
+      <Skeleton className="h-2 flex-1 rounded-full" />
+      <Skeleton className="h-4 w-12 rounded" />
+    </div>
+  );
+}
+
+// ============================================================================
+// Main component
 // ============================================================================
 
 export function ConfigCompletenessWidget({
   orgId,
   userId,
-  showCategories = true,
+  showCategories = false,
   showCTA = true,
-  className,
 }: ConfigCompletenessWidgetProps) {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(false);
-  const { data, isLoading, error } = useConfigCompleteness(orgId, userId);
+  const { data, isLoading, isError } = useConfigCompleteness(orgId, userId);
 
+  // -- Loading ---
   if (isLoading) {
+    return <WidgetSkeleton />;
+  }
+
+  // -- Error / no data ---
+  if (isError || !data) {
     return (
-      <div className={cn('flex items-center gap-2 py-3', className)}>
-        <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-        <span className="text-xs text-gray-500">Loading…</span>
+      <div className="flex items-center gap-2 text-sm text-gray-500">
+        <AlertCircle className="h-3.5 w-3.5 text-red-400 flex-shrink-0" />
+        <span>Unable to load configuration status</span>
       </div>
     );
   }
 
-  if (error || !data) {
-    return null;
-  }
-
-  const tierCfg = TIER_CONFIG[data.tier] ?? TIER_CONFIG.functional;
+  // -- Derived values ---
+  const tier = data.tier;
+  const tierCfg = TIER_CONFIG[tier] ?? TIER_CONFIG.functional;
   const pct = Math.round(data.percentage);
+  const nextTier = getNextTier(tier);
   const categories = Object.entries(data.categories ?? {});
 
   return (
-    <div className={cn('space-y-2', className)}>
-      {/* Header: icon + tier badge + percentage */}
-      <div className="flex items-center gap-2">
-        <Brain className="h-3.5 w-3.5 text-gray-500 flex-shrink-0" />
-        <span className="text-xs font-medium text-gray-400">Agent Config</span>
-        <span
+    <div className="space-y-3">
+      {/* ---- Top row: badge + bar + count ---- */}
+      <div className="flex items-center gap-3">
+        {/* Tier badge */}
+        <Badge
+          variant="outline"
           className={cn(
-            'text-[10px] font-semibold px-1.5 py-0.5 rounded-full border',
-            tierCfg.badgeCls
+            'text-xs px-2 py-0 border font-medium capitalize flex-shrink-0',
+            tierCfg.badgeCls,
           )}
         >
           {tierCfg.label}
-        </span>
-        <span className="ml-auto text-xs font-bold text-gray-300">{pct}%</span>
+        </Badge>
+
+        {/* Progress bar */}
+        <div className="flex-1 h-2 rounded-full bg-gray-800 overflow-hidden">
+          <div
+            className={cn(
+              'h-full rounded-full transition-all duration-700',
+              tierCfg.barCls,
+            )}
+            style={{ width: `${Math.min(pct, 100)}%` }}
+          />
+        </div>
+
+        {/* Percentage + count */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-sm font-semibold text-gray-100">{pct}%</span>
+          <span className="text-xs text-gray-500">
+            {data.answered_questions}/{data.total_questions}
+          </span>
+        </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
-        <div
-          className={cn('h-full rounded-full transition-all duration-700', tierCfg.barCls)}
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
-      </div>
-
-      {/* Summary */}
-      <p className="text-[10px] text-gray-500 dark:text-gray-600">
-        {data.answered_questions} of {data.total_questions} config items answered
-      </p>
-
-      {/* Category breakdown */}
+      {/* ---- Category mini breakdown ---- */}
       {showCategories && categories.length > 0 && (
-        <>
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-600 hover:text-gray-700 dark:hover:text-gray-400 transition-colors"
-          >
-            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            {expanded ? 'Hide' : 'Show'} breakdown
-          </button>
-
-          {expanded && (
-            <div className="space-y-1.5 pt-1">
-              {categories.map(([key, cat]) => {
-                const meta = CATEGORY_META[key];
-                const Icon = meta?.Icon ?? Brain;
-                const label = meta?.label ?? key;
-                return (
-                  <div key={key} className="flex items-center gap-2">
-                    <Icon className="h-3 w-3 text-gray-600 flex-shrink-0" />
-                    <span className="text-[10px] text-gray-500 w-28 truncate">{label}</span>
-                    <div className="flex-1 h-1 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
-                      <div
-                        className={cn('h-full rounded-full', tierCfg.barCls)}
-                        style={{ width: `${Math.min(cat.percentage, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-gray-500 dark:text-gray-600 w-8 text-right">
-                      {cat.answered}/{cat.total}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          {categories.map(([name, cat]) => {
+            const Icon = CATEGORY_ICONS[name] ?? Settings2;
+            return (
+              <div key={name} className="flex items-center gap-2 min-w-0">
+                <Icon className="h-3 w-3 text-gray-500 flex-shrink-0" />
+                <span className="text-xs text-gray-400 truncate">{name}</span>
+                <div className="flex-1 h-1 rounded-full bg-gray-800 overflow-hidden min-w-[40px]">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-500',
+                      tierCfg.barCls,
+                    )}
+                    style={{ width: `${Math.min(cat.percentage, 100)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-gray-600 flex-shrink-0 tabular-nums">
+                  {cat.answered}/{cat.total}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      {/* CTA */}
-      {showCTA && pct < 100 && (
+      {/* ---- CTA ---- */}
+      {showCTA && pct < 100 && nextTier && (
         <button
-          onClick={() => navigate('/settings/teach-sixty')}
-          className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500 rounded"
+          onClick={() => navigate('/settings/ai-intelligence')}
+          className={cn(
+            'flex items-center gap-1.5 text-xs',
+            'text-gray-500 hover:text-gray-300 transition-colors',
+          )}
         >
-          Answer pending questions
+          Answer more questions to reach{' '}
+          <span className="font-medium text-gray-300">
+            {TIER_CONFIG[nextTier].label}
+          </span>
+          <ArrowRight className="h-3 w-3" />
         </button>
       )}
     </div>
   );
 }
+
+export default ConfigCompletenessWidget;

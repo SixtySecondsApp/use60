@@ -216,7 +216,8 @@ export class IntegrationExecutor {
 
     // Build request body based on operation
     const body: Record<string, unknown> = {
-      action,
+      action: 'hubspot_admin',
+      sub_action: action,
       org_id: orgId,
     };
 
@@ -261,7 +262,7 @@ export class IntegrationExecutor {
       }
     }
 
-    console.log('[IntegrationExecutor] Calling hubspot-admin with:', { action, org_id: orgId });
+    console.log('[IntegrationExecutor] Calling crm-admin-router (hubspot_admin) with:', { action, org_id: orgId });
 
     // Get session token for authorization
     const { data: sessionData } = await supabase.auth.getSession();
@@ -270,7 +271,7 @@ export class IntegrationExecutor {
       return { success: false, error: 'No active session' };
     }
 
-    const { data: response, error } = await supabase.functions.invoke('hubspot-admin', {
+    const { data: response, error } = await supabase.functions.invoke('crm-admin-router', {
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',

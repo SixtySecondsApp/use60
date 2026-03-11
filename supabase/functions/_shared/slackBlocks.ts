@@ -26,16 +26,16 @@ export interface SlackMessage {
  * - button text: 75 chars
  * - button value: 2000 chars
  */
-const truncate = (value: string, max: number): string => {
+export const truncate = (value: string, max: number): string => {
   const v = String(value ?? '');
   if (v.length <= max) return v;
   if (max <= 1) return v.slice(0, max);
   return `${v.slice(0, max - 1)}…`;
 };
 
-const safeHeaderText = (text: string): string => truncate(text, 150);
+export const safeHeaderText = (text: string): string => truncate(text, 150);
 const safeButtonText = (text: string): string => truncate(text, 75);
-const safeMrkdwn = (text: string): string => truncate(text, 2800);
+export const safeMrkdwn = (text: string): string => truncate(text, 2800);
 const safeFieldText = (text: string): string => truncate(text, 1900);
 const safeContextMrkdwn = (text: string): string => truncate(text, 1900);
 const safeButtonValue = (value: string): string => truncate(value, 1900);
@@ -1738,6 +1738,26 @@ export interface MorningBriefData {
     }>;
   };
   appUrl: string;
+  // PST-007: Deal observations from heartbeat system
+  dealObservations?: Array<{
+    id: string;
+    deal_id: string;
+    deal_name: string;
+    category: string;
+    severity: string;
+    title: string;
+    description: string | null;
+    proposed_action: Record<string, unknown> | null;
+  }>;
+  // PST-007: Pending follow-up drafts awaiting approval
+  pendingDrafts?: Array<{
+    id: string;
+    deal_id: string | null;
+    deal_name: string | null;
+    field_name: string;
+    preview: string | null;
+    created_at: string;
+  }>;
 }
 
 /**
@@ -1773,6 +1793,64 @@ export const buildMorningBriefMessage = (data: MorningBriefData): SlackMessage =
     blocks.push(section(safeMrkdwn(`*Here's your day at a glance*`)));
   }
   blocks.push(divider());
+
+  // ─── PST-007: READY TO SEND section (pending drafts from overnight work) ───
+  if (data.pendingDrafts && data.pendingDrafts.length > 0) {
+    blocks.push(section(safeMrkdwn('*Ready to send*')));
+    data.pendingDrafts.forEach(draft => {
+      const dealCtx = draft.deal_name ? ` — ${draft.deal_name}` : '';
+      const fieldLabel = draft.field_name.replace(/_/g, ' ');
+      blocks.push(
+        section(safeMrkdwn(`*${fieldLabel}*${dealCtx}`))
+      );
+      blocks.push(actions([
+        { text: 'Send', actionId: `morning_brief_send::${draft.id}`, value: JSON.stringify({ approvalId: draft.id, dealId: draft.deal_id }), style: 'primary' },
+        { text: 'Edit', actionId: `morning_brief_edit::${draft.id}`, value: JSON.stringify({ approvalId: draft.id, dealId: draft.deal_id }) },
+        { text: 'Dismiss', actionId: `morning_brief_dismiss::${draft.id}`, value: JSON.stringify({ approvalId: draft.id, type: 'draft' }) },
+      ]));
+    });
+    blocks.push(divider());
+  }
+
+  // ─── PST-007: DEAL OBSERVATIONS section (heartbeat findings) ───
+  if (data.dealObservations && data.dealObservations.length > 0) {
+    blocks.push(section(safeMrkdwn('*Overnight findings*')));
+    data.dealObservations.forEach(obs => {
+      const categoryLabel = obs.category.replace(/_/g, ' ');
+      const actionButtons: Array<{ text: string; actionId: string; value: string; style?: string; url?: string }> = [];
+
+      // Contextual action based on observation type
+      if (obs.proposed_action?.type === 'draft_email' || obs.proposed_action?.type === 'reengage') {
+        actionButtons.push({
+          text: 'Draft email',
+          actionId: `morning_brief_draft::${obs.id}`,
+          value: JSON.stringify({ observationId: obs.id, dealId: obs.deal_id, category: obs.category }),
+          style: 'primary',
+        });
+      } else if (obs.proposed_action?.type === 'create_task') {
+        actionButtons.push({
+          text: 'Create task',
+          actionId: `morning_brief_task::${obs.id}`,
+          value: JSON.stringify({ observationId: obs.id, dealId: obs.deal_id }),
+          style: 'primary',
+        });
+      }
+
+      actionButtons.push(
+        { text: 'View deal', actionId: 'view_deal', value: obs.deal_id, url: `${data.appUrl}/deals/${obs.deal_id}` },
+        { text: 'Snooze 7d', actionId: `morning_brief_snooze::${obs.id}`, value: JSON.stringify({ observationId: obs.id, type: 'observation' }) },
+        { text: 'Dismiss', actionId: `morning_brief_dismiss_obs::${obs.id}`, value: JSON.stringify({ observationId: obs.id, type: 'observation' }) }
+      );
+
+      blocks.push(
+        section(safeMrkdwn(
+          `\`${categoryLabel.toUpperCase()}\` *${obs.deal_name}*\n${obs.title}`
+        ))
+      );
+      blocks.push(actions(actionButtons));
+    });
+    blocks.push(divider());
+  }
 
   // ─── NEEDS ACTION section (deals at risk, overdue tasks) ───
   const needsAction: SlackBlock[] = [];
@@ -6117,5 +6195,165 @@ export function buildEnhancedCoachingDigestBlocks(data: EnhancedCoachingDigestDa
   return {
     blocks,
     text: `Weekly Coaching Digest for ${data.repName} — ${data.weekOf}`,
+  };
+}
+
+// =============================================================================
+// Pipeline Hygiene Digest
+// =============================================================================
+
+export interface HygieneDigestDeal {
+  id: string;
+  name: string;
+  company: string | null;
+  value: number | null;
+  stage_name: string | null;
+  days_since_last_activity: number;
+  expected_close_date: string | null;
+  ghost_probability: number;
+  overdue_task_count?: number;
+  days_in_current_stage?: number;
+  stale_reason: 'no_activity_14d' | 'past_close_date' | 'ghost_risk' | 'undone_tasks' | 'stuck_in_stage';
+}
+
+export interface PipelineHygieneDigestData {
+  repName: string;
+  deals: HygieneDigestDeal[];
+  date: string; // e.g. "Mon 8 Mar 2026"
+}
+
+export function buildPipelineHygieneDigest(data: PipelineHygieneDigestData): SlackMessage {
+  const blocks: SlackBlock[] = [];
+  const maxDeals = 15;
+
+  blocks.push({
+    type: 'header',
+    text: { type: 'plain_text', text: safeHeaderText(`Pipeline Hygiene — ${data.deals.length} deals need attention`), emoji: true },
+  });
+
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: safeContextMrkdwn(`${data.date} · Hey ${data.repName}, these deals need a nudge or a close.`) }],
+  });
+
+  blocks.push({ type: 'divider' });
+
+  // Group by stale reason
+  const noActivity = data.deals.filter(d => d.stale_reason === 'no_activity_14d');
+  const pastClose = data.deals.filter(d => d.stale_reason === 'past_close_date');
+  const ghostRisk = data.deals.filter(d => d.stale_reason === 'ghost_risk');
+  const undoneTasks = data.deals.filter(d => d.stale_reason === 'undone_tasks');
+  const stuckInStage = data.deals.filter(d => d.stale_reason === 'stuck_in_stage');
+
+  let dealCount = 0;
+
+  const renderGroup = (title: string, emoji: string, deals: HygieneDigestDeal[]) => {
+    if (deals.length === 0 || dealCount >= maxDeals) return;
+
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: safeMrkdwn(`${emoji} *${title}* (${deals.length})`) },
+    });
+
+    for (const deal of deals) {
+      if (dealCount >= maxDeals) break;
+      dealCount++;
+
+      const value = deal.value ? `$${Math.round(deal.value).toLocaleString()}` : '$0';
+      const stage = deal.stage_name || 'Unknown';
+      const days = deal.days_since_last_activity;
+
+      // Context line varies by reason
+      let contextLine = `_${days}d since last activity_`;
+      if (deal.stale_reason === 'undone_tasks' && deal.overdue_task_count) {
+        contextLine = `_${deal.overdue_task_count} overdue task${deal.overdue_task_count > 1 ? 's' : ''} · ${days}d since last activity_`;
+      } else if (deal.stale_reason === 'stuck_in_stage' && deal.days_in_current_stage) {
+        contextLine = `_${deal.days_in_current_stage}d in ${stage} stage · ${days}d since last activity_`;
+      }
+
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeMrkdwn(`*${deal.company || deal.name}* · ${value} · ${stage}\n${contextLine}`),
+        },
+      });
+
+      // Action buttons — contextual per category
+      const actionElements: any[] = [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: safeButtonText('Snooze 7d'), emoji: true },
+          action_id: 'hygiene_snooze_7d',
+          value: JSON.stringify({ deal_id: deal.id }).substring(0, 2000),
+          style: undefined,
+        },
+      ];
+
+      if (deal.stale_reason === 'ghost_risk' || deal.stale_reason === 'no_activity_14d') {
+        // Re-engage for ghosting/stale deals
+        actionElements.push({
+          type: 'button',
+          text: { type: 'plain_text', text: safeButtonText('Re-engage'), emoji: true },
+          action_id: 'hygiene_reengage',
+          value: JSON.stringify({ deal_id: deal.id, reason: deal.stale_reason }).substring(0, 2000),
+          style: 'primary' as any,
+        });
+      } else {
+        actionElements.push({
+          type: 'button',
+          text: { type: 'plain_text', text: safeButtonText('Draft Follow-up'), emoji: true },
+          action_id: 'hygiene_draft_followup',
+          value: JSON.stringify({ deal_id: deal.id }).substring(0, 2000),
+        });
+      }
+
+      actionElements.push({
+        type: 'button',
+        text: { type: 'plain_text', text: safeButtonText('Close as Lost'), emoji: true },
+        action_id: 'hygiene_close_lost',
+        value: JSON.stringify({ deal_id: deal.id }).substring(0, 2000),
+        style: 'danger' as any,
+      });
+
+      blocks.push({
+        type: 'actions',
+        elements: actionElements,
+      });
+    }
+  };
+
+  renderGroup('Overdue Tasks', ':rotating_light:', undoneTasks);
+  renderGroup('Stuck in Stage (30+ days)', ':construction:', stuckInStage);
+  renderGroup('No Activity (14+ days)', ':hourglass:', noActivity);
+  renderGroup('Past Close Date', ':calendar:', pastClose);
+  renderGroup('Ghost Risk', ':ghost:', ghostRisk);
+
+  if (data.deals.length > maxDeals) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: safeContextMrkdwn(`_...and ${data.deals.length - maxDeals} more. Check your pipeline for the full list._`) }],
+    });
+  }
+
+  // Snooze All button when 3+ deals
+  if (data.deals.length >= 3) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: safeButtonText('Snooze All (7 days)'), emoji: true },
+          action_id: 'hygiene_snooze_all',
+          value: JSON.stringify({ deal_ids: data.deals.map(d => d.id).slice(0, 50) }).substring(0, 2000),
+        },
+      ],
+    });
+  }
+
+  return {
+    blocks,
+    text: `Pipeline Hygiene: ${data.deals.length} deals need attention`,
   };
 }

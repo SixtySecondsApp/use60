@@ -1,44 +1,25 @@
 /**
- * AnswerHistoryTimeline — LEARN-UI-004
+ * AnswerHistoryTimeline — LEARN-UI-005
  *
- * Paginated reverse-chronological list of all agent_config_questions.
- * Filter by category. Each entry shows: question text, status, answer, date, channel.
+ * Shows a chronological list of previously answered config questions.
+ * Uses the useAnsweredQuestions hook from configQuestionService.
  */
 
-import React, { useState } from 'react';
-import { formatDistanceToNow, format } from 'date-fns';
-import {
-  CheckCircle2,
-  XCircle,
-  Clock,
-  SkipForward,
-  MessageSquare,
-  MonitorSmartphone,
-  ChevronDown,
-  Loader2,
-  Inbox,
-} from 'lucide-react';
+import { Loader2, CheckCircle2, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAllConfigQuestions, type QuestionStatus, type QuestionCategory } from '@/lib/services/configQuestionService';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import {
+  useAnsweredQuestions,
+  type AnsweredQuestion,
+  type QuestionCategory,
+} from '@/lib/services/configQuestionService';
 
 // ============================================================================
-// Config
+// Helpers
 // ============================================================================
 
-const STATUS_CONFIG: Record<
-  QuestionStatus,
-  { label: string; Icon: React.ComponentType<{ className?: string }>; cls: string }
-> = {
-  pending: { label: 'Pending', Icon: Clock, cls: 'text-amber-400' },
-  asked: { label: 'Asked', Icon: Clock, cls: 'text-blue-400' },
-  answered: { label: 'Answered', Icon: CheckCircle2, cls: 'text-emerald-400' },
-  skipped: { label: 'Skipped', Icon: SkipForward, cls: 'text-gray-500' },
-  expired: { label: 'Expired', Icon: XCircle, cls: 'text-red-400' },
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
+const CATEGORY_LABELS: Record<QuestionCategory, string> = {
   revenue_pipeline: 'Revenue & Pipeline',
   daily_rhythm: 'Daily Rhythm',
   agent_behaviour: 'Agent Behaviour',
@@ -46,78 +27,59 @@ const CATEGORY_LABELS: Record<string, string> = {
   signals: 'Signals',
 };
 
-const ALL_CATEGORIES: QuestionCategory[] = [
-  'revenue_pipeline',
-  'daily_rhythm',
-  'agent_behaviour',
-  'methodology',
-  'signals',
-];
+function formatAnswerValue(answer: unknown): string {
+  if (answer === null || answer === undefined) return '';
+  if (typeof answer === 'object' && answer !== null && 'value' in answer) {
+    return String((answer as { value: unknown }).value);
+  }
+  if (typeof answer === 'string') return answer;
+  return JSON.stringify(answer);
+}
 
-const PAGE_SIZE = 20;
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
 // ============================================================================
-// Timeline entry
+// Single timeline entry
 // ============================================================================
 
-function TimelineEntry({ question }: { question: ReturnType<typeof useAllConfigQuestions>['data'] extends (infer T)[] | undefined ? T : never }) {
-  const statusCfg = STATUS_CONFIG[question.status] ?? STATUS_CONFIG.pending;
-  const { Icon } = statusCfg;
-  const catLabel = CATEGORY_LABELS[question.category] ?? question.category;
-
-  const dateStr = question.answered_at
-    ? format(new Date(question.answered_at), 'MMM d, yyyy')
-    : question.skipped_at
-    ? format(new Date(question.skipped_at), 'MMM d, yyyy')
-    : question.asked_at
-    ? format(new Date(question.asked_at), 'MMM d, yyyy')
-    : format(new Date(question.created_at), 'MMM d, yyyy');
-
-  const relativeDate = question.answered_at
-    ? formatDistanceToNow(new Date(question.answered_at), { addSuffix: true })
-    : question.skipped_at
-    ? formatDistanceToNow(new Date(question.skipped_at), { addSuffix: true })
-    : formatDistanceToNow(new Date(question.created_at), { addSuffix: true });
+function TimelineEntry({ item }: { item: AnsweredQuestion }) {
+  const categoryLabel = CATEGORY_LABELS[item.category] ?? item.category;
+  const answerDisplay = formatAnswerValue(item.answer_value);
 
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-gray-200 dark:border-gray-800/60 last:border-0">
-      {/* Status icon */}
-      <div className="flex-shrink-0 mt-0.5">
-        <Icon className={cn('h-4 w-4', statusCfg.cls)} />
+    <div className="flex gap-3 py-3">
+      {/* Timeline dot */}
+      <div className="flex flex-col items-center pt-1">
+        <div className="h-2 w-2 rounded-full bg-indigo-500" />
+        <div className="flex-1 w-px bg-gray-800 mt-1" />
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-800 dark:text-gray-200 leading-snug">{question.question_text}</p>
-
-        {/* Answer */}
-        {question.answer_value && (
-          <p className="text-xs text-indigo-300 mt-1 font-medium">
-            &rarr; {question.answer_value}
-          </p>
-        )}
-
-        {/* Meta row */}
-        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          <span className="text-[10px] text-gray-500 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-            {catLabel}
+      <div className="flex-1 min-w-0 space-y-1">
+        <p className="text-sm text-gray-200">{item.question}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+            <CheckCircle2 className="h-3 w-3" />
+            {answerDisplay}
           </span>
-          <span className={cn('text-[10px] font-medium', statusCfg.cls)}>
-            {statusCfg.label}
+          <span className="text-xs text-gray-600">
+            {categoryLabel}
           </span>
-          {question.delivery_channel && (
-            <span className="flex items-center gap-0.5 text-[10px] text-gray-500 dark:text-gray-600">
-              {question.delivery_channel === 'slack' ? (
-                <MessageSquare className="h-2.5 w-2.5" />
-              ) : (
-                <MonitorSmartphone className="h-2.5 w-2.5" />
-              )}
-              {question.delivery_channel === 'slack' ? 'Slack' : 'In-app'}
+          {item.answered_at && (
+            <span className="text-xs text-gray-600">
+              {formatDate(item.answered_at)}
             </span>
           )}
-          <span className="text-[10px] text-gray-500 dark:text-gray-600 ml-auto" title={dateStr}>
-            {relativeDate}
-          </span>
         </div>
       </div>
     </div>
@@ -128,102 +90,46 @@ function TimelineEntry({ question }: { question: ReturnType<typeof useAllConfigQ
 // Main component
 // ============================================================================
 
-interface AnswerHistoryTimelineProps {
-  className?: string;
-}
-
-export function AnswerHistoryTimeline({ className }: AnswerHistoryTimelineProps) {
+export function AnswerHistoryTimeline() {
   const { activeOrgId } = useOrg();
   const { user } = useAuth();
-  const [activeCategory, setActiveCategory] = useState<QuestionCategory | 'all'>('all');
-  const [page, setPage] = useState(0);
 
-  const { data: questions = [], isLoading, error } = useAllConfigQuestions(
+  const { data: answered = [], isLoading, isError } = useAnsweredQuestions(
     activeOrgId ?? '',
     user?.id
   );
 
-  // Filter by category
-  const filtered =
-    activeCategory === 'all'
-      ? questions
-      : questions.filter((q) => q.category === activeCategory);
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8 gap-2 text-gray-500">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm">Loading history...</span>
+      </div>
+    );
+  }
 
-  // Paginate
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice(0, (page + 1) * PAGE_SIZE);
+  if (isError) {
+    return (
+      <div className="text-sm text-gray-500 py-8 text-center">
+        Could not load answer history
+      </div>
+    );
+  }
+
+  if (answered.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 gap-2 text-gray-500">
+        <MessageSquare className="h-5 w-5 text-gray-600" />
+        <p className="text-sm">No answers yet. Answer some questions to build your history.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className={cn('space-y-4', className)}>
-      {/* Category filter tabs */}
-      <div className="flex items-center gap-1 flex-wrap">
-        <button
-          onClick={() => { setActiveCategory('all'); setPage(0); }}
-          className={cn(
-            'px-2.5 py-1 text-xs rounded-md transition-colors',
-            activeCategory === 'all'
-              ? 'bg-indigo-500/15 text-indigo-400 font-medium'
-              : 'text-gray-500 hover:text-gray-300'
-          )}
-        >
-          All
-        </button>
-        {ALL_CATEGORIES.map((cat) => {
-          const count = questions.filter((q) => q.category === cat).length;
-          if (count === 0) return null;
-          return (
-            <button
-              key={cat}
-              onClick={() => { setActiveCategory(cat); setPage(0); }}
-              className={cn(
-                'px-2.5 py-1 text-xs rounded-md transition-colors',
-                activeCategory === cat
-                  ? 'bg-indigo-500/15 text-indigo-400 font-medium'
-                  : 'text-gray-500 hover:text-gray-300'
-              )}
-            >
-              {CATEGORY_LABELS[cat]} ({count})
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Timeline */}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
-        </div>
-      ) : error ? (
-        <div className="flex items-center justify-center h-32 text-red-400 text-sm">
-          Failed to load history
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-32 text-gray-600 gap-2">
-          <Inbox className="h-6 w-6" />
-          <p className="text-sm">No questions yet</p>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/40 overflow-hidden">
-          <div className="divide-y divide-gray-800/0 px-4">
-            {paginated.map((q) => (
-              <TimelineEntry key={q.id} question={q} />
-            ))}
-          </div>
-
-          {/* Load more */}
-          {page + 1 < totalPages && (
-            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-800">
-              <button
-                onClick={() => setPage((p) => p + 1)}
-                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                <ChevronDown className="h-3.5 w-3.5" />
-                Load more ({filtered.length - paginated.length} remaining)
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+    <div className={cn('divide-y divide-gray-800/40')}>
+      {answered.map((item) => (
+        <TimelineEntry key={item.id} item={item} />
+      ))}
     </div>
   );
 }

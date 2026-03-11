@@ -179,7 +179,9 @@ export function QualificationCriteriaEditor({
           </span>
         </div>
         <div className="mt-3">
-          <Label className="text-xs text-gray-500 mb-1 block">Completeness threshold</Label>
+          <Label className="text-xs text-gray-500 mb-1 block">
+            Completeness threshold · <span className="text-gray-400 font-normal">Below this = flagged as a gap</span>
+          </Label>
           <Slider
             value={[val.threshold ?? 70]}
             min={0}
@@ -211,7 +213,9 @@ export function QualificationCriteriaEditor({
           </span>
         </div>
         <div className="mt-3">
-          <Label className="text-xs text-gray-500 mb-1 block">Scoring weight</Label>
+          <Label className="text-xs text-gray-500 mb-1 block">
+            Scoring weight · <span className="text-gray-400 font-normal">Higher = more impact on deal score</span>
+          </Label>
           <Slider
             value={[val.weight ?? 25]}
             min={0}
@@ -238,6 +242,19 @@ export function QualificationCriteriaEditor({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-xl">
+          <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+            {methodologyKey === 'bant' ? (
+              <>
+                <span className="font-medium">Scoring weights</span> control how much each criterion matters when 60 scores deal qualification. Higher weight = more impact on the overall score. Weights don&apos;t need to total 100%.
+              </>
+            ) : (
+              <>
+                <span className="font-medium">Completeness thresholds</span> set the minimum score for each criterion. When a deal scores below the threshold, 60 flags it as a gap in your qualification. Set lower to be lenient, higher to be strict.
+              </>
+            )}
+          </p>
+        </div>
         {/* Predefined criteria */}
         {predefinedCriteria && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

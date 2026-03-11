@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders } from '../_shared/corsHelper.ts';
+import { logAICostEvent } from '../_shared/costTracking.ts';
 
 // Reply classification categories
 type ReplyCategory = 'interested' | 'not_interested' | 'out_of_office' | 'unsubscribe' | 'forwarded' | 'question';
@@ -94,7 +95,10 @@ serve(async (req) => {
     const replies = await repliesResponse.json();
 
     // 4. Classify replies using AI
-    const classifiedReplies = await classifyReplies(replies, org_id);
+    const classifiedReplies = await classifyReplies(
+      replies, org_id,
+      user_id ? { supabase, userId: user_id } : undefined
+    );
 
     // 5. Generate recommendations
     const recommendations = generateRecommendations(metrics, classifiedReplies);
@@ -118,7 +122,11 @@ serve(async (req) => {
 /**
  * Classify email replies using Claude Haiku
  */
-async function classifyReplies(replies: any[], orgId: string): Promise<ClassifiedReply[]> {
+async function classifyReplies(
+  replies: any[],
+  orgId: string,
+  costCtx?: { supabase: ReturnType<typeof createClient>; userId: string }
+): Promise<ClassifiedReply[]> {
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!anthropicKey || !replies.length) {
     return [];
@@ -150,6 +158,17 @@ Return a JSON array of classifications.`;
     });
 
     const aiResult = await response.json();
+    // Log AI cost event (fire-and-forget)
+    if (costCtx?.supabase && aiResult.usage && costCtx.userId) {
+      logAICostEvent(
+        costCtx.supabase, costCtx.userId, orgId,
+        'anthropic', 'claude-haiku-4-5-20251001',
+        aiResult.usage.input_tokens || 0, aiResult.usage.output_tokens || 0,
+        'monitor_campaigns_classify',
+        undefined,
+        { source: 'agent_automated', agentType: 'monitor-campaigns' },
+      ).catch((e: unknown) => console.warn('[monitor-campaigns] cost log error:', e));
+    }
     const text = aiResult.content?.[0]?.text || '[]';
 
     // Extract JSON from response
