@@ -1,5 +1,5 @@
 /**
- * GodsEyeAdmin — Real-time token flow visualization for platform admins
+ * GoldenEyeAdmin — Real-time token flow visualization for platform admins
  *
  * Full-screen dark-themed admin page showing:
  * - Active users on the left
@@ -29,6 +29,8 @@ import {
   FlaskConical,
   Zap,
   Trophy,
+  X,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,21 +43,21 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
-import { useGodsEyeData } from '@/lib/hooks/useGodsEyeData';
-import type { ActiveUser, LLMEndpoint, RecentEvent } from '@/lib/hooks/useGodsEyeData';
-import { ParticleFlowCanvas } from '@/components/godseye/ParticleFlowCanvas';
-import { FlaggingRulesPanel } from '@/components/godseye/FlaggingRulesPanel';
-import { ModelRoutingPanel } from '@/components/godseye/ModelRoutingPanel';
-import { UsageTotalsBar } from '@/components/godseye/UsageTotalsBar';
-import { ActivityLogTerminal } from '@/components/godseye/ActivityLogTerminal';
+import { useGoldenEyeData } from '@/lib/hooks/useGoldenEyeData';
+import type { ActiveUser, LLMEndpoint, RecentEvent } from '@/lib/hooks/useGoldenEyeData';
+import { ParticleFlowCanvas, DEFAULT_SANKEY_COLORS } from '@/components/goldeneye/ParticleFlowCanvas';
+import { FlaggingRulesPanel } from '@/components/goldeneye/FlaggingRulesPanel';
+import { ModelRoutingPanel } from '@/components/goldeneye/ModelRoutingPanel';
+import { UsageTotalsBar } from '@/components/goldeneye/UsageTotalsBar';
+import { ActivityLogTerminal } from '@/components/goldeneye/ActivityLogTerminal';
 import {
   generateFullSeedData,
   startSeedEventStream,
   type SeedDataSet,
-} from '@/components/godseye/seedData';
+} from '@/components/goldeneye/seedData';
 import { formatTokens } from '@/lib/types/aiModels';
 
-export default function GodsEyeAdmin() {
+export default function GoldenEyeAdmin() {
   const navigate = useNavigate();
   const { isPlatformAdmin } = useUserPermissions();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -64,6 +66,8 @@ export default function GodsEyeAdmin() {
   const [showRulesPanel, setShowRulesPanel] = useState(false);
   const [showModelPanel, setShowModelPanel] = useState(false);
   const [selectedUser, setSelectedUser] = useState<ActiveUser | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [sankeyColors, setSankeyColors] = useState<string[]>([...DEFAULT_SANKEY_COLORS]);
 
   // Seed data state
   const [flowSpeed, setFlowSpeed] = useState(10);
@@ -74,7 +78,7 @@ export default function GodsEyeAdmin() {
   const seedCleanupRef = useRef<(() => void) | null>(null);
 
   // Live data from hook
-  const liveData = useGodsEyeData(isPaused || useSeedData ? 0 : 3_000); // 3s event poll, 18s full refresh
+  const liveData = useGoldenEyeData(isPaused || useSeedData ? 0 : 3_000); // 3s event poll, 18s full refresh
 
   // Initialize seed data
   useEffect(() => {
@@ -265,9 +269,18 @@ export default function GodsEyeAdmin() {
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowSettings(true)}
+            className="text-slate-400 hover:text-slate-200 hover:bg-slate-800 h-7 w-7 p-0"
+            title="Settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
           <div className="flex items-center gap-2">
             <Eye className="h-5 w-5 text-emerald-400" />
-            <h1 className="text-base font-semibold text-slate-100">God&apos;s Eye</h1>
+            <h1 className="text-base font-semibold text-slate-100">GoldenEye</h1>
           </div>
           <Badge variant="outline" className="border-slate-700 text-slate-400 text-xs">
             <Activity className="h-3 w-3 mr-1" />
@@ -488,6 +501,7 @@ export default function GodsEyeAdmin() {
               width={canvasSize.width}
               height={canvasSize.height}
               flowSpeed={flowSpeed}
+              colors={sankeyColors}
               onUserClick={handleUserClick}
               onEndpointClick={handleEndpointClick}
             />
@@ -576,6 +590,79 @@ export default function GodsEyeAdmin() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Settings popup */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowSettings(false)}
+          />
+          {/* Panel */}
+          <div className="relative bg-[#1e293b] border border-slate-700 rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60">
+              <div className="flex items-center gap-2">
+                <Settings className="h-4 w-4 text-slate-400" />
+                <h2 className="text-sm font-semibold text-slate-100">Settings</h2>
+              </div>
+              <button
+                onClick={() => setShowSettings(false)}
+                className="text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Tab bar — Colours is the first (and currently only) tab */}
+            <div className="flex border-b border-slate-700/60">
+              <button className="px-5 py-2.5 text-xs font-medium text-emerald-400 border-b-2 border-emerald-400">
+                Colours
+              </button>
+            </div>
+
+            {/* Colours content */}
+            <div className="p-5 space-y-3 overflow-y-auto max-h-[60vh]">
+              <p className="text-[11px] text-slate-500 mb-4">
+                Each colour is assigned to users in the Sankey flow diagram. Click a swatch to change it.
+              </p>
+              {sankeyColors.map((color, idx) => (
+                <div key={idx} className="flex items-center gap-3">
+                  <label
+                    className="relative flex items-center justify-center w-8 h-8 rounded-lg cursor-pointer border border-slate-600/50 hover:border-slate-400 transition-colors group"
+                    style={{ backgroundColor: color }}
+                  >
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => {
+                        const next = [...sankeyColors];
+                        next[idx] = e.target.value;
+                        setSankeyColors(next);
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <span className="absolute inset-0 rounded-lg ring-1 ring-white/10 group-hover:ring-white/30 transition-all" />
+                  </label>
+                  <span className="text-xs text-slate-300 w-14">User {idx + 1}</span>
+                  <span className="text-[10px] text-slate-500 font-mono uppercase">{color}</span>
+                </div>
+              ))}
+
+              {/* Reset button */}
+              <div className="pt-4 border-t border-slate-700/40">
+                <button
+                  onClick={() => setSankeyColors([...DEFAULT_SANKEY_COLORS])}
+                  className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  Reset to defaults
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

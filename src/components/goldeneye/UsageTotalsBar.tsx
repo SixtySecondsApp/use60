@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import type { UsageTotals, UsageBucket } from '@/lib/hooks/useGodsEyeData';
+import type { UsageTotals, UsageBucket } from '@/lib/hooks/useGoldenEyeData';
 
 interface UsageTotalsBarProps {
   usageTotals: UsageTotals;
@@ -22,7 +22,7 @@ function formatCompactTokens(n: number): string {
 
 // ─── FX Rate (shared cache with ActivityLogTerminal) ─────────────────
 
-const FX_CACHE_KEY = 'godseye_usd_gbp_fx';
+const FX_CACHE_KEY = 'goldeneye_usd_gbp_fx';
 const FX_CACHE_TTL = 4 * 60 * 60 * 1000;
 const FX_FALLBACK = 0.79;
 

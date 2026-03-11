@@ -1,5 +1,5 @@
 /**
- * useGodsEyeData — Polling hook for God's Eye admin visualization
+ * useGoldenEyeData — Polling hook for GoldenEye admin visualization
  *
  * Fetches active users (AI request in last 5 min), recent cost events,
  * LLM endpoints, and anomaly rules on a configurable interval.
@@ -81,7 +81,7 @@ export interface UsageTotals {
   last_24h: UsageBucket;
 }
 
-export interface GodsEyeData {
+export interface GoldenEyeData {
   activeUsers: ActiveUser[];
   recentEvents: RecentEvent[];
   llmEndpoints: LLMEndpoint[];
@@ -124,7 +124,7 @@ function applyAnomalyRules(events: RecentEvent[], rules: AnomalyRule[]): RecentE
  *   The heavy full refresh (users, totals, models, rules) runs at 6× this
  *   interval (default 30s) so it doesn't hammer the DB.
  */
-export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
+export function useGoldenEyeData(pollIntervalMs = 5_000): GoldenEyeData {
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
   const [llmEndpoints, setLlmEndpoints] = useState<LLMEndpoint[]>([]);
@@ -471,7 +471,7 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
-      console.error('GodsEye fetch error:', err);
+      console.error('GoldenEye fetch error:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
       setIsLoading(false);
@@ -528,7 +528,7 @@ export function useGodsEyeData(pollIntervalMs = 5_000): GodsEyeData {
       setLastUpdated(new Date());
     } catch (err) {
       // Swallow errors on incremental poll — full refresh will recover
-      console.warn('GodsEye incremental poll error:', err);
+      console.warn('GoldenEye incremental poll error:', err);
     }
   }, []);
 

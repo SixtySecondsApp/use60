@@ -1,7 +1,7 @@
 /**
- * God's Eye Seed Data Generator
+ * GoldenEye Seed Data Generator
  *
- * Generates realistic mock data for testing the God's Eye visualization
+ * Generates realistic mock data for testing the GoldenEye visualization
  * when no real ai_cost_events data exists. Toggle on/off from the UI.
  */
 
@@ -11,7 +11,7 @@ import type {
   LLMEndpoint,
   AnomalyRule,
   UsageTotals,
-} from '@/lib/hooks/useGodsEyeData';
+} from '@/lib/hooks/useGoldenEyeData';
 
 // ─── Realistic names and emails ─────────────────────────────────────────
 

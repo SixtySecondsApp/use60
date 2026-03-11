@@ -631,9 +631,9 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     order: 3.6,
   },
   {
-    path: '/platform/godseye',
+    path: '/platform/goldeneye',
     access: 'platformAdmin',
-    label: 'God\'s Eye',
+    label: 'GoldenEye',
     icon: Eye,
     showInNav: true,
     navSection: 'platform',

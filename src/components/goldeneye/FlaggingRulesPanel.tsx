@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
-import type { AnomalyRule } from '@/lib/hooks/useGodsEyeData';
+import type { AnomalyRule } from '@/lib/hooks/useGoldenEyeData';
 
 interface FlaggingRulesPanelProps {
   rules: AnomalyRule[];

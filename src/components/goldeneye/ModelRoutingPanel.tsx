@@ -2,7 +2,7 @@
  * ModelRoutingPanel — Inline LLM model configuration and pricing matrix
  *
  * Embeds model config controls and lets admin set cost per 1M tokens
- * for each model directly from the God's Eye page.
+ * for each model directly from the GoldenEye page.
  */
 
 import { useState, useEffect } from 'react';
@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
-import type { LLMEndpoint } from '@/lib/hooks/useGodsEyeData';
+import type { LLMEndpoint } from '@/lib/hooks/useGoldenEyeData';
 import { formatCost, getProviderColor, AI_PROVIDERS } from '@/lib/types/aiModels';
 
 interface ModelRoutingPanelProps {

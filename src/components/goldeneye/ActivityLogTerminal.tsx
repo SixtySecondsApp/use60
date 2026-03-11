@@ -1,5 +1,5 @@
 /**
- * ActivityLogTerminal — Terminal-style live activity log for God's Eye
+ * ActivityLogTerminal — Terminal-style live activity log for GoldenEye
  *
  * Read-only view of ai_cost_events showing:
  * username, timestamp, tokens in/out, provider/model, cost in GBP
@@ -13,12 +13,12 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { TerminalSquare, ChevronDown, Settings } from 'lucide-react';
-import type { RecentEvent, LLMEndpoint } from '@/lib/hooks/useGodsEyeData';
+import type { RecentEvent, LLMEndpoint } from '@/lib/hooks/useGoldenEyeData';
 import { formatTokens } from '@/lib/types/aiModels';
 
 // ─── FX Rate ────────────────────────────────────────────────────────────
 
-const FX_CACHE_KEY = 'godseye_usd_gbp_fx';
+const FX_CACHE_KEY = 'goldeneye_usd_gbp_fx';
 const FX_CACHE_TTL = 4 * 60 * 60 * 1000; // 4 hours
 const FX_FALLBACK = 0.79; // reasonable fallback if API fails
 
