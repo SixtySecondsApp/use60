@@ -35,6 +35,7 @@ import {
   Columns,
   ChevronLeft,
   ChevronRight,
+  Square,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -253,6 +254,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [isRunningPipeline, setIsRunningPipeline] = useState(false);
   const [pipelineProgress, setPipelineProgress] = useState('');
   const [pipelineBannerDismissed, setPipelineBannerDismissed] = useState(false);
+  const pipelineAbortRef = useRef(false);
   const [viewPromptText, setViewPromptText] = useState<string | null>(null);
 
   // ---- Campaign wizard ----
@@ -604,8 +606,18 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   }, [tableData?.rows, normalizedSorts]);
 
   // ---- Run All Pipeline handler ----
+  // Processes each row fully (all steps) before moving to the next row.
+  // Recalculates dependent formulas between steps so conditions (e.g. qualified) are fresh.
+  // Supports stop/resume — skips rows whose output columns are already filled.
   const handleRunAllPipeline = useCallback(async () => {
     if (!tableId || !rows.length || !columns.length) return;
+
+    // If already running, stop the pipeline
+    if (isRunningPipeline) {
+      pipelineAbortRef.current = true;
+      toast.info('Stopping pipeline after current row…');
+      return;
+    }
 
     // Find button columns with run_prompt actions, ordered by position
     const promptButtonCols = columns
@@ -621,71 +633,142 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       return;
     }
 
+    // Count rows that still need processing (last step output empty)
+    const lastStep = promptButtonCols[promptButtonCols.length - 1];
+    const lastOutputKey = (lastStep.action_config as any)?.actions?.find((a: any) => a.type === 'run_prompt')?.config?.output_column_key;
+    const pendingRows = lastOutputKey
+      ? rows.filter((r) => !r.cells[lastOutputKey]?.value).length
+      : rows.length;
+
     const confirmed = window.confirm(
-      `Run AI pipeline on ${rows.length} rows?\n\n${promptButtonCols.map((c, i) => `Step ${i + 1}: ${(c.action_config as any)?.label || c.label}`).join('\n')}`
+      `Run AI pipeline on ${pendingRows} remaining rows (${rows.length} total)?\n\n${promptButtonCols.map((c, i) => `Step ${i + 1}: ${(c.action_config as any)?.label || c.label}`).join('\n')}\n\nClick "Run All" again to stop at any time.`
     );
     if (!confirmed) return;
 
     setIsRunningPipeline(true);
+    pipelineAbortRef.current = false;
+    let completedRows = 0;
 
     try {
-      for (let stepIdx = 0; stepIdx < promptButtonCols.length; stepIdx++) {
-        const col = promptButtonCols[stepIdx];
-        const buttonConfig = col.action_config as any;
-        const promptAction = buttonConfig?.actions?.find((a: any) => a.type === 'run_prompt');
-        if (!promptAction) continue;
+      for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+        if (pipelineAbortRef.current) {
+          toast.info(`Pipeline stopped — ${completedRows} rows completed`);
+          break;
+        }
 
-        const outputKey = promptAction.config?.output_column_key;
-
-        for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
-          const row = rows[rowIdx];
-          const rowCellValues: Record<string, string> = {};
-          if (row.cells) {
-            for (const [key, c] of Object.entries(row.cells)) {
-              if ((c as any).value) rowCellValues[key] = (c as any).value;
-            }
+        const row = rows[rowIdx];
+        // Build fresh cell values for this row
+        let rowCellValues: Record<string, string> = {};
+        if (row.cells) {
+          for (const [key, c] of Object.entries(row.cells)) {
+            if ((c as any).value) rowCellValues[key] = (c as any).value;
           }
+        }
 
-          // Skip if output already has a value
+        // Skip row if the LAST step's output is already filled (fully processed)
+        if (lastOutputKey && rowCellValues[lastOutputKey]) continue;
+
+        let ranAnyStep = false;
+
+        for (let stepIdx = 0; stepIdx < promptButtonCols.length; stepIdx++) {
+          if (pipelineAbortRef.current) break;
+
+          const col = promptButtonCols[stepIdx];
+          const buttonConfig = col.action_config as any;
+          const promptAction = buttonConfig?.actions?.find((a: any) => a.type === 'run_prompt');
+          if (!promptAction) continue;
+
+          const outputKey = promptAction.config?.output_column_key;
+
+          // Skip step if output already filled for this row
           if (outputKey && rowCellValues[outputKey]) continue;
 
-          // Check condition
+          // Check condition (case-insensitive, matching OpsTableCell)
           if (buttonConfig.condition) {
             const cond = buttonConfig.condition;
-            const cellVal = rowCellValues[cond.column_key] ?? '';
+            const cellVal = (rowCellValues[cond.column_key] ?? '').trim().toLowerCase();
+            const condVal = (cond.value ?? '').trim().toLowerCase();
             let condMet = true;
             switch (cond.operator) {
-              case 'equals': condMet = cellVal === cond.value; break;
-              case 'not_equals': condMet = cellVal !== cond.value; break;
-              case 'contains': condMet = cellVal.includes(cond.value ?? ''); break;
+              case 'equals': condMet = cellVal === condVal; break;
+              case 'not_equals': condMet = cellVal !== condVal; break;
+              case 'contains': condMet = cellVal.includes(condVal); break;
               case 'is_empty': condMet = !cellVal; break;
               case 'is_not_empty': condMet = !!cellVal; break;
             }
             if (!condMet) continue;
           }
 
-          setPipelineProgress(`Step ${stepIdx + 1}/${promptButtonCols.length} — Row ${rowIdx + 1}/${rows.length}`);
+          setPipelineProgress(`Row ${rowIdx + 1}/${rows.length} — Step ${stepIdx + 1}/${promptButtonCols.length}`);
 
           try {
             const { data, error } = await supabase.functions.invoke('run-prompt', {
               body: { table_id: tableId, row_id: row.id, action_config: promptAction.config },
             });
-            if (error) console.error(`Pipeline error row ${rowIdx + 1}:`, error);
+            if (error) {
+              console.error(`Pipeline error row ${rowIdx + 1} step ${stepIdx + 1}:`, error);
+              continue;
+            }
+            ranAnyStep = true;
+
+            // Update local cell values so the next step's condition check uses fresh data
+            if (outputKey && data?.result) {
+              rowCellValues[outputKey] = data.result;
+            }
+
+            // Recalculate dependent formula columns for this row (e.g. qualified)
+            const outputKeys = new Set(outputKey ? [outputKey] : []);
+            if (outputKeys.size > 0) {
+              try {
+                const dependentFormulas = columns
+                  .filter((c) => c.column_type === 'formula' && c.formula_expression)
+                  .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)));
+                if (dependentFormulas.length > 0) {
+                  const formulaResults = await Promise.all(
+                    dependentFormulas.map((c) =>
+                      supabase.functions.invoke('evaluate-formula', {
+                        body: { table_id: tableId, column_id: c.id, row_ids: [row.id] },
+                      }),
+                    ),
+                  );
+                  // Update local cell values with formula results so next step condition works
+                  for (let fi = 0; fi < dependentFormulas.length; fi++) {
+                    const formulaCol = dependentFormulas[fi];
+                    const formulaData = formulaResults[fi]?.data;
+                    if (formulaData?.results?.[row.id]) {
+                      rowCellValues[formulaCol.key] = formulaData.results[row.id];
+                    }
+                  }
+                }
+              } catch {
+                // Non-fatal — formulas will be stale until next full recalc
+              }
+            }
           } catch (err) {
-            console.error(`Pipeline error row ${rowIdx + 1}:`, err);
+            console.error(`Pipeline error row ${rowIdx + 1} step ${stepIdx + 1}:`, err);
           }
+        }
+
+        if (ranAnyStep) completedRows++;
+
+        // Refresh UI every 5 rows so user sees progress
+        if (completedRows > 0 && completedRows % 5 === 0) {
+          queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
         }
       }
 
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
-      toast.success('Pipeline complete');
+      if (!pipelineAbortRef.current) {
+        toast.success(`Pipeline complete — ${completedRows} rows processed`);
+      }
     } catch (err: any) {
       toast.error(err.message || 'Pipeline failed');
     } finally {
       setIsRunningPipeline(false);
       setPipelineProgress('');
+      pipelineAbortRef.current = false;
     }
-  }, [tableId, rows, columns, queryClient]);
+  }, [tableId, rows, columns, queryClient, isRunningPipeline]);
 
   // ---- Integration polling ----
   useIntegrationPolling(tableId, columns, rows);
@@ -2830,16 +2913,19 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             {columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
               <button
                 onClick={handleRunAllPipeline}
-                disabled={isRunningPipeline}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-900/40 hover:text-emerald-200 disabled:opacity-50"
-                title={pipelineProgress || 'Run AI pipeline on all rows'}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  isRunningPipeline
+                    ? 'border-red-700/40 bg-red-900/20 text-red-300 hover:bg-red-900/40 hover:text-red-200'
+                    : 'border-emerald-700/40 bg-emerald-900/20 text-emerald-300 hover:bg-emerald-900/40 hover:text-emerald-200'
+                }`}
+                title={isRunningPipeline ? 'Click to stop after current row' : pipelineProgress || 'Run AI pipeline on all rows'}
               >
                 {isRunningPipeline ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Square className="h-3.5 w-3.5" />
                 ) : (
                   <Play className="h-3.5 w-3.5" />
                 )}
-                {isRunningPipeline ? pipelineProgress || 'Running...' : 'Run All'}
+                {isRunningPipeline ? pipelineProgress || 'Stop' : 'Run All'}
               </button>
             )}
             {/* Add Row */}
