@@ -101,8 +101,24 @@ function CollapsedStrip({
     );
   }
 
-  // Don't show if no data at all
-  if (totalDecisions === 0 && trustScore === 0) return null;
+  const hasData = totalDecisions > 0 || trustScore > 0;
+
+  // Empty state — still show the strip so users know the feature exists
+  if (!hasData) {
+    return (
+      <button
+        type="button"
+        onClick={onExpand}
+        className="group w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-violet-50/40 dark:bg-violet-950/10 border border-dashed border-violet-200/60 dark:border-violet-800/30 hover:bg-violet-50/70 dark:hover:bg-violet-950/20 transition-colors text-left"
+      >
+        <Brain className="h-4 w-4 text-violet-400/70" />
+        <span className="text-xs text-slate-400 dark:text-gray-500">
+          <span className="font-medium text-violet-500/80">Agent Learning</span> — approve or edit suggestions to start training your AI teammate
+        </span>
+        <ChevronRight className="h-3.5 w-3.5 text-slate-300 dark:text-gray-600 ml-auto flex-shrink-0" />
+      </button>
+    );
+  }
 
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
   const trendColor =

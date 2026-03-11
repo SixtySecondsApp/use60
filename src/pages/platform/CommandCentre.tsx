@@ -25,7 +25,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useCommandCentreItemsQuery,
   useCommandCentreStatsQuery,
@@ -455,36 +454,27 @@ export default function CommandCentre() {
         </div>
       </div>
 
-      {/* ====== TABS: Feed / Agent Learning ====== */}
-      <Tabs defaultValue="feed" className="flex flex-col flex-1 overflow-hidden">
-        <div className="flex-shrink-0 px-6 border-b border-slate-200 dark:border-gray-800/60 bg-white dark:bg-gray-900/80">
-          <TabsList className="h-9 bg-transparent p-0 gap-4">
-            <TabsTrigger value="feed" className="px-0 pb-2 pt-1 h-auto rounded-none border-b-2 border-transparent data-[state=active]:border-violet-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none text-sm">
-              Feed
-            </TabsTrigger>
-            <TabsTrigger value="learning" className="px-0 pb-2 pt-1 h-auto rounded-none border-b-2 border-transparent data-[state=active]:border-violet-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none text-sm">
-              Agent Learning
-            </TabsTrigger>
-          </TabsList>
-        </div>
+      {/* ====== FILTER BAR + DETAIL PANEL (compression layout) ====== */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Feed area — compresses when panel opens */}
+        <div className="flex-1 min-w-0 overflow-hidden flex flex-col transition-all duration-200 ease-out">
+          {/* Main filter bar */}
+          <div className="flex-shrink-0 px-6 pt-3 pb-2 bg-white dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800/60">
+            <CCFilterBar
+              activeFilter={activeFilter}
+              onFilterChange={handleFilterChange}
+              needsYouCount={needsYouCount}
+            />
+          </div>
 
-        {/* Feed tab */}
-        <TabsContent value="feed" className="flex flex-1 overflow-hidden mt-0">
-          <div className="flex flex-1 overflow-hidden">
-            {/* Feed area — compresses when panel opens */}
-            <div className="flex-1 min-w-0 overflow-hidden flex flex-col transition-all duration-200 ease-out">
-              {/* Main filter bar */}
-              <div className="flex-shrink-0 px-6 pt-3 pb-2 bg-white dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800/60">
-                <CCFilterBar
-                  activeFilter={activeFilter}
-                  onFilterChange={handleFilterChange}
-                  needsYouCount={needsYouCount}
-                />
-              </div>
+          {/* Unified feed */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* Agent Learning section — PST-015 */}
+            <div className="mb-4">
+              <CCAgentLearning />
+            </div>
 
-              {/* Unified feed */}
-              <div className="flex-1 overflow-y-auto p-6">
-                {allItemsQuery.isLoading ? (
+            {allItemsQuery.isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
                   <ItemSkeleton key={i} />
@@ -525,18 +515,9 @@ export default function CommandCentre() {
           </div>
         </div>
 
-            {/* Detail panel — inline, compresses the feed (no overlay) */}
-            <CCDetailPanel item={detailItem} onClose={handleCloseDetail} />
-          </div>
-        </TabsContent>
-
-        {/* Agent Learning tab */}
-        <TabsContent value="learning" className="flex-1 overflow-y-auto mt-0">
-          <div className="p-6 max-w-4xl mx-auto">
-            <CCAgentLearning />
-          </div>
-        </TabsContent>
-      </Tabs>
+        {/* Detail panel — inline, compresses the feed (no overlay) */}
+        <CCDetailPanel item={detailItem} onClose={handleCloseDetail} />
+      </div>
     </div>
   );
 }
