@@ -50,6 +50,7 @@ import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
 import { LinkedInConfigModal } from '@/components/integrations/LinkedInConfigModal';
 import { HeyGenConfigModal } from '@/components/integrations/HeyGenConfigModal';
 import { ElevenLabsConfigModal } from '@/components/integrations/ElevenLabsConfigModal';
+import { FalConfigModal } from '@/components/integrations/FalConfigModal';
 
 // Hooks and stores
 import { useGoogleIntegration, useMicrosoftIntegration, useIntegrationStore } from '@/lib/stores/integrationStore';
@@ -69,6 +70,7 @@ import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
 import { useLinkedInIntegration } from '@/lib/hooks/useLinkedInIntegration';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
 import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
+import { useFalIntegration } from '@/lib/hooks/useFalIntegration';
 import { getIntegrationDomain, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { useUser } from '@/lib/hooks/useUser';
@@ -621,6 +623,20 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'fal-ai',
+    name: 'fal.ai',
+    description: 'Generate AI videos with Kling, Veo, Wan models.',
+    permissions: [
+      { title: 'Generate videos', description: 'Create AI videos using Kling, Veo, and Wan models.' },
+      { title: 'Use platform or own credits', description: 'Run video generation via platform key or your own fal.ai account.' },
+    ],
+    brandColor: 'violet',
+    iconBgColor: 'bg-violet-50 dark:bg-violet-900/20',
+    iconBorderColor: 'border-violet-100 dark:border-violet-800/40',
+    fallbackIcon: <Video className="w-6 h-6 text-violet-600 dark:text-violet-400" />,
+    isBuilt: true,
+  },
+  {
     id: 'apify',
     name: 'Apify',
     description: 'Run any web scraping actor from the Apify marketplace.',
@@ -873,6 +889,11 @@ export default function Integrations() {
     loading: elevenlabsLoading,
   } = useElevenLabsIntegration();
 
+  const {
+    isConfigured: falConfigured,
+    isLoading: falLoading,
+  } = useFalIntegration();
+
   // Modal states
   const [activeConnectModal, setActiveConnectModal] = useState<string | null>(null);
   const [activeConfigModal, setActiveConfigModal] = useState<string | null>(null);
@@ -992,6 +1013,8 @@ export default function Integrations() {
         return heygenConnected ? 'active' : 'inactive';
       case 'elevenlabs':
         return elevenlabsConnected ? 'active' : 'inactive';
+      case 'fal-ai':
+        return falConfigured ? 'active' : 'inactive';
       default:
         return 'coming_soon';
     }
@@ -1073,6 +1096,10 @@ export default function Integrations() {
       }
       if (integrationId === 'heygen') {
         setActiveConfigModal('heygen');
+        return;
+      }
+      if (integrationId === 'fal-ai') {
+        setActiveConfigModal('fal-ai');
         return;
       }
       // 60 Notetaker goes straight to config modal (handles its own enable flow)
@@ -1171,8 +1198,9 @@ export default function Integrations() {
       instantly: instantlyLoading,
       apify: apifyLoading,
       linkedin: linkedinLoading,
+      'fal-ai': falLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading, linkedinLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading, linkedinLoading, falLoading]
   );
 
   // Preload logo.dev URLs on page load to prevent any visible swap/flicker.
@@ -1378,6 +1406,10 @@ export default function Integrations() {
       />
       <ElevenLabsConfigModal
         open={activeConfigModal === 'elevenlabs'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <FalConfigModal
+        open={activeConfigModal === 'fal-ai'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
     </div>
