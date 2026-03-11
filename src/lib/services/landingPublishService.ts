@@ -311,10 +311,19 @@ export const landingPublishService = {
       pageId = data.id;
     }
 
+    // Auto-inject visitor tracking snippet if enabled for this org
+    let finalHtml = htmlContent;
+    try {
+      const snippetHtml = await injectVisitorSnippet(orgId, htmlContent);
+      if (snippetHtml) finalHtml = snippetHtml;
+    } catch (snippetErr) {
+      logger.warn('[publish] Visitor snippet injection skipped:', snippetErr);
+    }
+
     // Deploy to Vercel
     let deployment: VercelDeploymentResponse;
     try {
-      deployment = await deployToVercel(slug, htmlContent, vercelToken);
+      deployment = await deployToVercel(slug, finalHtml, vercelToken);
     } catch (deployError) {
       // Mark as failed in DB
       await supabase
@@ -556,3 +565,37 @@ export const landingPublishService = {
     return counts;
   },
 };
+
+// ---------------------------------------------------------------------------
+// Visitor Snippet Auto-Injection (US-009)
+// ---------------------------------------------------------------------------
+
+/**
+ * If the org has visitor intelligence enabled, inject the tracking snippet
+ * into the HTML before </body>. Returns modified HTML or null if not applicable.
+ */
+async function injectVisitorSnippet(orgId: string, html: string): Promise<string | null> {
+  // Check if org has visitor tracking enabled
+  const { data: config } = await supabase
+    .from('visitor_snippet_configs')
+    .select('snippet_token, is_active, allowed_domains')
+    .eq('org_id', orgId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!config?.snippet_token) return null;
+
+  // Don't double-inject if snippet already present
+  if (html.includes('visitor-snippet-serve') || html.includes('__60vi')) return null;
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const snippetTag = `<script async src="${supabaseUrl}/functions/v1/visitor-snippet-serve?t=${config.snippet_token}"></script>`;
+
+  // Inject before </body>
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${snippetTag}\n</body>`);
+  }
+
+  // Fallback: append to end
+  return html + `\n${snippetTag}`;
+}
