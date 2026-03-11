@@ -184,7 +184,7 @@ export function CompletionStep() {
           <span className="font-semibold text-white">
             {enrichment?.company_name || 'your company'}
           </span>
-          &apos;s way of selling. It now knows your qualification criteria, objection handling, and
+          &apos;s way of selling. It now knows your qualification criteria, objection handling and
           brand voice.
         </p>
 
