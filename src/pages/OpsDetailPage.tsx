@@ -262,6 +262,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [pipelineBannerDismissed, setPipelineBannerDismissed] = useState(false);
   const pipelineAbortRef = useRef(false);
   const [viewPromptText, setViewPromptText] = useState<string | null>(null);
+  const [isAddingRows, setIsAddingRows] = useState(false);
 
   // ---- Campaign wizard ----
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
@@ -777,6 +778,68 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       pipelineAbortRef.current = false;
     }
   }, [tableId, rows, columns, queryClient, isRunningPipeline]);
+
+  // ---- Add Rows (append new meetings to existing pipeline table) ----
+  const handleAddRows = useCallback(async (dateRange: '30' | '60' | '90' | '180' | '365' | 'all') => {
+    if (!tableId || !table) return;
+
+    // Detect which pipeline template this table uses by checking column keys
+    const { getPipelineTemplateByKey } = await import('@/lib/config/pipelineTemplates');
+    const templateKeys = ['reengagement', 'lead_scoring', 'meeting_followup'];
+    let templateConfig = null;
+    for (const key of templateKeys) {
+      const tmpl = getPipelineTemplateByKey(key);
+      if (!tmpl) continue;
+      const tmplColumnKeys = new Set(tmpl.columns.map((c: any) => c.key));
+      const tableColumnKeys = new Set(columns.map((c) => c.key));
+      const overlap = [...tmplColumnKeys].filter((k) => tableColumnKeys.has(k)).length;
+      if (overlap >= tmplColumnKeys.size * 0.6) {
+        templateConfig = tmpl;
+        break;
+      }
+    }
+
+    if (!templateConfig) {
+      toast.error('Could not detect pipeline template for this table');
+      return;
+    }
+
+    setIsAddingRows(true);
+    try {
+      const filters: Record<string, string> = {};
+      if (dateRange !== 'all') {
+        const daysAgo = new Date();
+        daysAgo.setDate(daysAgo.getDate() - parseInt(dateRange));
+        filters.date_from = daysAgo.toISOString();
+      }
+
+      const { data, error } = await supabase.functions.invoke('setup-pipeline-template', {
+        body: {
+          org_id: table.organization_id,
+          template_key: templateConfig.key,
+          template_config: templateConfig,
+          existing_table_id: tableId,
+          filters,
+        },
+      });
+
+      if (error) throw error;
+
+      const newRows = data?.rows_created ?? 0;
+      const skipped = data?.rows_skipped ?? 0;
+      if (newRows > 0) {
+        toast.success(`Added ${newRows} new rows${skipped ? ` (${skipped} duplicates skipped)` : ''}`);
+        queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+        queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      } else {
+        toast.info('No new meetings found — all meetings in that range are already in the table');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add rows');
+    } finally {
+      setIsAddingRows(false);
+    }
+  }, [tableId, table, columns, queryClient]);
 
   // ---- Integration polling ----
   useIntegrationPolling(tableId, columns, rows);
@@ -2935,6 +2998,40 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                 )}
                 {isRunningPipeline ? pipelineProgress || 'Stop' : 'Run All'}
               </button>
+            )}
+            {/* Add Rows from wider date range (pipeline tables) */}
+            {columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    disabled={isAddingRows}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-700/40 bg-blue-900/20 px-2.5 py-1.5 text-xs font-medium text-blue-300 transition-colors hover:bg-blue-900/40 hover:text-blue-200 disabled:opacity-50"
+                  >
+                    {isAddingRows ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" />
+                    )}
+                    {isAddingRows ? 'Adding…' : 'Add Rows'}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[200px]">
+                  <div className="px-2 py-1.5 text-xs font-medium text-gray-400">Import meetings from…</div>
+                  <DropdownMenuSeparator />
+                  {[
+                    { label: 'Last 30 days', value: '30' as const },
+                    { label: 'Last 60 days', value: '60' as const },
+                    { label: 'Last 90 days', value: '90' as const },
+                    { label: 'Last 6 months', value: '180' as const },
+                    { label: 'Last 12 months', value: '365' as const },
+                    { label: 'All time', value: 'all' as const },
+                  ].map((opt) => (
+                    <DropdownMenuItem key={opt.value} onClick={() => handleAddRows(opt.value)}>
+                      {opt.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {/* Add Row */}
             <button
