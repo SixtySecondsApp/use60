@@ -99,33 +99,50 @@ function AgentCard({ agent }: { agent: AgentStatus }) {
   );
 }
 
+const MAX_VISIBLE_ITEMS = 4;
+
 function ActivityFeed({ items }: { items: ActivityItem[] }) {
+  const visible = items.slice(-MAX_VISIBLE_ITEMS);
+
   return (
-    <div className="space-y-1 max-h-[120px] overflow-y-auto scrollbar-hide">
-      {items.map((item, idx) => (
-        <div
-          key={item.id}
-          className={cn(
-            'flex items-start gap-1.5 text-[11px] leading-relaxed transition-opacity duration-300',
-            idx === items.length - 1 ? 'opacity-100' : 'opacity-60'
-          )}
-        >
-          {item.type === 'complete' ? (
-            <CheckCircle2 className="w-3 h-3 text-green-500 mt-0.5 flex-shrink-0" />
-          ) : item.type === 'finding' ? (
-            <Sparkles className="w-3 h-3 text-amber-500 mt-0.5 flex-shrink-0" />
-          ) : (
-            <Circle className="w-3 h-3 text-indigo-400 mt-0.5 flex-shrink-0 animate-pulse" />
-          )}
-          <span className={cn(
-            item.type === 'complete' ? 'text-green-600 dark:text-green-400' :
-            item.type === 'finding' ? 'text-amber-600 dark:text-amber-400' :
-            'text-gray-500 dark:text-gray-400'
-          )}>
-            {item.text}
-          </span>
-        </div>
-      ))}
+    <div className="relative overflow-hidden" style={{ minHeight: 24 }}>
+      {/* Fade-out gradient at the top when items are being pushed up */}
+      {items.length > MAX_VISIBLE_ITEMS && (
+        <div className="absolute top-0 left-0 right-0 h-5 bg-gradient-to-b from-inherit to-transparent z-10 pointer-events-none" />
+      )}
+      <div className="space-y-1">
+        {visible.map((item, idx) => {
+          const isLatest = idx === visible.length - 1;
+          const distFromBottom = visible.length - 1 - idx;
+          // Progressively fade older items: latest=100%, one back=50%, two back=30%, three back=15%
+          const opacityClass = isLatest ? 'opacity-100' : distFromBottom === 1 ? 'opacity-50' : distFromBottom === 2 ? 'opacity-30' : 'opacity-[0.15]';
+
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                'flex items-start gap-1.5 text-[11px] leading-relaxed transition-all duration-500',
+                opacityClass
+              )}
+            >
+              {item.type === 'complete' ? (
+                <CheckCircle2 className="w-3 h-3 text-green-500 mt-0.5 flex-shrink-0" />
+              ) : item.type === 'finding' ? (
+                <Sparkles className="w-3 h-3 text-amber-500 mt-0.5 flex-shrink-0" />
+              ) : (
+                <Circle className="w-3 h-3 text-indigo-400 mt-0.5 flex-shrink-0 animate-pulse" />
+              )}
+              <span className={cn(
+                item.type === 'complete' ? 'text-green-600 dark:text-green-400' :
+                item.type === 'finding' ? 'text-amber-600 dark:text-amber-400' :
+                'text-gray-500 dark:text-gray-400'
+              )}>
+                {item.text}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -430,7 +447,7 @@ If you lack personalization data, do NOT ask the user for details. Instead, offe
           body: JSON.stringify({
             message: prompt,
             organizationId: activeOrgId,
-            context: { user_id: user?.id, force_single_agent: true },
+            context: { user_id: user?.id, force_single_agent: true, source: 'setup_wizard' },
             stream: true,
           }),
           signal: abortRef.current.signal,
