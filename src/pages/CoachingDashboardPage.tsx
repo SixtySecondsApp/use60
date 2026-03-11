@@ -15,6 +15,7 @@ import {
   Lightbulb,
   Trophy,
   TrendingUp,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOrg } from '@/lib/contexts/OrgContext';
@@ -26,6 +27,8 @@ import {
 import { RepPerformanceCard } from '@/components/coaching/RepPerformanceCard';
 import { TeamLeaderboard } from '@/components/coaching/TeamLeaderboard';
 import { OrgLearningInsightsPanel } from '@/components/coaching/OrgLearningInsightsPanel';
+import { DealCoachingAlert } from '@/components/coaching/DealCoachingAlert';
+import { useDealCoachingSignals } from '@/lib/hooks/useDealCoachingSignals';
 
 // ============================================================================
 // Period Picker
@@ -182,6 +185,8 @@ export default function CoachingDashboardPage() {
     period
   );
 
+  const { data: coachingSignals = [] } = useDealCoachingSignals(activeOrgId ?? null);
+
   const handleRepSelect = (userId: string) => {
     setSelectedRepId(userId);
     navigate(`/coaching/rep/${userId}`);
@@ -235,6 +240,24 @@ export default function CoachingDashboardPage() {
             {/* Overview tab */}
             {activeTab === 'overview' && (
               <>
+                {/* Coaching Signals — hidden when empty */}
+                {coachingSignals.length > 0 && (
+                  <div className="rounded-xl border border-gray-800 bg-gray-900/30 p-5">
+                    <h2 className="text-sm font-semibold text-gray-200 mb-4 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-400" />
+                      Coaching Signals
+                      <span className="ml-1 inline-flex items-center justify-center h-5 min-w-[20px] rounded-full bg-amber-500/15 border border-amber-500/25 px-1.5 text-[10px] font-bold text-amber-400">
+                        {coachingSignals.length}
+                      </span>
+                    </h2>
+                    <div className="max-h-[480px] overflow-y-auto pr-1 space-y-3">
+                      {coachingSignals.map((signal) => (
+                        <DealCoachingAlert key={signal.deal.id} signal={signal} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Stat strip */}
                 {!statsLoading && (
                   <StatStrip stats={teamStats} />

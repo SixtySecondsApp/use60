@@ -40,6 +40,7 @@ function getAllowedOrigins(): string[] {
     'https://app.sixtyseconds.video',
     'https://sixty-sales-dashboard.vercel.app',
     '*-sixty-sales.vercel.app',
+    '*-sixty-seconds.vercel.app',
   ];
   
   return [...defaults, ...prodDomains];

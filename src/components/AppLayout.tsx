@@ -96,6 +96,7 @@ import { ProductTour } from '@/components/ProductTour';
 import { useCommandCentreStatsQuery } from '@/lib/hooks/useCommandCentreItemsQuery';
 import { usePendingConfigQuestions } from '@/lib/services/configQuestionService';
 import { useOnboardingSeeding } from '@/lib/hooks/useOnboardingSeeding';
+import { ContextualQuestionToast } from '@/components/learning/ContextualQuestionToast';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { userData, isImpersonating, stopImpersonating } = useUser();
@@ -1306,6 +1307,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {userData?.id && (
           <ProductTour userId={userData.id} />
         )}
+
+        {/* Contextual Learning Moments — non-blocking slide-in prompt */}
+        <ContextualQuestionToast />
 
       </main>
     </div>

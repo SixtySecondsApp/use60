@@ -27,6 +27,7 @@ import {
   gradeColour,
 } from '@/lib/services/coachingDashboardService';
 import { SkillProgressionChart } from '@/components/coaching/SkillProgressionChart';
+import { TeamRadarChart } from '@/components/coaching/TeamRadarChart';
 import { RepScorecardView } from '@/components/coaching/RepScorecardView';
 
 interface ScorecardRowProps {
@@ -107,14 +108,17 @@ export default function CoachingRepDetailPage() {
 
         <div className="flex-1 overflow-auto">
           <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-            {/* Skill Progression Chart */}
+            {/* Skill Progression + Peer Benchmarks */}
             {activeOrgId && (
-              <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 p-5">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-indigo-400" />
-                  Skill Progression
-                </h3>
-                <SkillProgressionChart userId={userId} orgId={activeOrgId} />
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 p-5">
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-indigo-400" />
+                    Skill Progression
+                  </h3>
+                  <SkillProgressionChart userId={userId} orgId={activeOrgId} />
+                </div>
+                <TeamRadarChart userId={userId} orgId={activeOrgId} />
               </div>
             )}
 
