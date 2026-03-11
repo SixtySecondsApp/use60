@@ -1,0 +1,2 @@
+# Public endpoint for landing page form submissions (no JWT required).
+verify_jwt = false

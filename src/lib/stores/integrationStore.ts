@@ -98,10 +98,26 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
     }));
 
     try {
-      // Get integration status — this is the source of truth for connection
+      // Get integration status from google_integrations (may be null if using Nylas-only)
       const integration = await googleApi.getStatus();
 
-      if (!integration) {
+      // Check Nylas calendar integration status (primary calendar source)
+      let nylasCalendarConnected = false;
+      let nylasEmail: string | null = null;
+      try {
+        const { data: nylasInt } = await supabase
+          .from('nylas_integrations')
+          .select('id, email')
+          .eq('is_active', true)
+          .maybeSingle();
+        nylasCalendarConnected = !!nylasInt;
+        nylasEmail = nylasInt?.email || null;
+      } catch (e) {
+        console.warn('[integrationStore] Failed to check Nylas status:', e);
+      }
+
+      // No google_integrations AND no Nylas → fully disconnected
+      if (!integration && !nylasCalendarConnected) {
         set(state => ({
           google: {
             ...state.google,
@@ -112,7 +128,27 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
             lastSync: null,
             status: 'disconnected',
             isLoading: false,
-            error: null
+            error: null,
+            nylasCalendarConnected: false,
+          }
+        }));
+        return;
+      }
+
+      // Nylas-only (no direct Google OAuth) — calendar connected via Nylas
+      if (!integration && nylasCalendarConnected) {
+        set(state => ({
+          google: {
+            ...state.google,
+            isConnected: true,
+            integration: null,
+            email: nylasEmail,
+            services: { gmail: false, calendar: true, drive: false },
+            lastSync: null,
+            status: 'connected',
+            isLoading: false,
+            error: null,
+            nylasCalendarConnected: true,
           }
         }));
         return;
@@ -137,18 +173,7 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
       const isConnected = !!integration && integration.is_active;
       const computedStatus: 'connected' | 'disconnected' | 'error' = isConnected ? 'connected' : 'error';
 
-      // Check Nylas calendar integration status
-      let nylasCalendarConnected = false;
-      try {
-        const { data: nylasInt } = await supabase
-          .from('nylas_integrations')
-          .select('id')
-          .eq('is_active', true)
-          .maybeSingle();
-        nylasCalendarConnected = !!nylasInt;
-      } catch (e) {
-        console.warn('[integrationStore] Failed to check Nylas status:', e);
-      }
+      // nylasCalendarConnected already checked at the top of this function
 
       set(state => ({
         google: {

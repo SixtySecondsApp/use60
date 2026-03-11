@@ -80,7 +80,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GodsEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, GeminiModelComparison, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GodsEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, GeminiModelComparison, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage, ProactiveTeammateDemo,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -90,7 +90,7 @@ import {
   // Features
   MeetingsPage, MeetingLibraryPage, ProposalsList, Calls, CallDetail, VoiceRecorder, VoiceRecordingDetail,
   Events, ActivityLog,
-  ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage,
+  ActivityProcessingPage, Workflows, FreepikFlow, Copilot, CopilotPage, LandingPageBuilderPage, LandingPagesPage,
   CampaignsPage,
   AbmCampaignsPage,
   OutreachAnalyticsPage,
@@ -353,6 +353,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/copilot/:conversationId" element={<InternalRouteGuard><AppLayout><CopilotPage /></AppLayout></InternalRouteGuard>} />
                 {/* Landing Page Builder */}
                 <Route path="/landing-page-builder" element={<InternalRouteGuard><AppLayout><LandingPageBuilderPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/landing-pages" element={<InternalRouteGuard><AppLayout><LandingPagesPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/action-centre" element={<Navigate to="/command-centre" replace />} />
                 <Route path="/command-centre" element={<InternalRouteGuard><AppLayout><CommandCentre /></AppLayout></InternalRouteGuard>} />
                 <Route path="/activity" element={<InternalRouteGuard><AppLayout><ActivityLog /></AppLayout></InternalRouteGuard>} />
@@ -468,6 +469,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/demo/conversational-copilot" element={<PlatformAdminRouteGuard><AppLayout><DemoConversationalCopilot /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/demo/autonomy" element={<PlatformAdminRouteGuard><AppLayout><AutonomyDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/test/autopilot" element={<PlatformAdminRouteGuard><AppLayout><AutopilotTestPage /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/demo/proactive-teammate" element={<PlatformAdminRouteGuard><AppLayout><ProactiveTeammateDemo /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-teams-live" element={<PlatformAdminRouteGuard><AppLayout><AgentTeamsLiveDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/agent-abilities" element={<PlatformAdminRouteGuard><AppLayout><AgentAbilitiesPage /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/credit-system-demo" element={<PlatformAdminRouteGuard><AppLayout><CreditSystemDemo /></AppLayout></PlatformAdminRouteGuard>} />

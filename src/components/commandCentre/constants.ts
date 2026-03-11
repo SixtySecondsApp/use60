@@ -1,33 +1,33 @@
-/**
- * Command Centre shared constants
- *
- * Extracted from CCItemCard, CCDetailPanel, and CommandCentre page to eliminate duplication.
- */
+import { AlertTriangle, ArrowUp, Minus, ArrowDown } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
-import { AlertTriangle, ArrowUp, Bell, ChevronDown } from 'lucide-react';
+export const COMMAND_CENTRE_CONSTANTS = {};
 
-export const URGENCY_CONFIG = {
+export const URGENCY_CONFIG: Record<string, { label: string; color: string; icon: LucideIcon; badgeClass: string }> = {
   critical: {
     label: 'Critical',
-    badgeClass: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400',
+    color: '#EF4444',
     icon: AlertTriangle,
+    badgeClass: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   },
   high: {
     label: 'High',
-    badgeClass: 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400',
+    color: '#F59E0B',
     icon: ArrowUp,
+    badgeClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   },
   normal: {
     label: 'Normal',
-    badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400',
-    icon: Bell,
+    color: '#3B82F6',
+    icon: Minus,
+    badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   },
   low: {
     label: 'Low',
-    badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-    icon: ChevronDown,
+    color: '#6B7280',
+    icon: ArrowDown,
+    badgeClass: 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400',
   },
-} as const;
+};
 
-export const URGENCY_OPTIONS = ['critical', 'high', 'normal', 'low'] as const;
-export type UrgencyKey = keyof typeof URGENCY_CONFIG;
+export const URGENCY_OPTIONS: string[] = ['critical', 'high', 'normal', 'low'];

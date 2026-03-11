@@ -19,8 +19,19 @@ Analyze the input and project state, then route to exactly one command. Do NOT a
 ### Step 1: Check Project State
 
 ```
+FIRST: Check current git branch.
+  git branch --show-current
+  If on a feature/* branch → STRONG signal of in-progress work.
+
 HAS .sixty/pipeline.json with phase != "complete"?
   → Active pipeline exists. Check if input relates to it.
+  → If on matching feature branch: ALWAYS default to resume unless
+    input is EXPLICITLY about a DIFFERENT feature.
+
+ON a feature/* branch BUT no active pipeline.json?
+  → Warn: "You're on branch feature/X but no active pipeline found.
+    Did a previous run lose state? Want to resume here or start fresh?"
+  → Ask before creating anything new.
 
 HAS .sixty/plan.json with pending stories?
   → Plan exists, stories ready to execute.
@@ -28,9 +39,55 @@ HAS .sixty/plan.json with pending stories?
 HAS prd.json or tasks/prd-*.md?
   → PRD exists but may not be planned yet.
 
-NONE of the above?
+NONE of the above AND on main/master branch?
   → Fresh start or ad-hoc task.
 ```
+
+### BRANCH PROTECTION RULE
+
+**NEVER create a new branch or start a new pipeline when the user is mid-work on an existing feature branch** unless they explicitly say "new feature", "start fresh", or "different branch". If there's ANY ambiguity, route to `--resume` or ask.
+
+Signals that mean RESUME (not new):
+- On a `feature/*` branch with uncommitted changes
+- `.sixty/pipeline.json` exists with incomplete phase
+- Input relates to the same feature area as current branch
+- User says "continue", "keep going", "next", or gives no input
+
+### Step 1b: Staleness Detection
+
+If `.sixty/pipeline.json` exists and has `lastActiveAt`:
+
+```
+Calculate hours since lastActiveAt.
+
+FRESH (< 4 hours):
+  → Normal routing. Pipeline is actively being worked on.
+
+WARM (4-48 hours):
+  → Pipeline exists but hasn't been touched in a while.
+  → Route normally, but note: "Pipeline idle for Xh — resuming."
+
+STALE (48+ hours):
+  → Pipeline has been abandoned or forgotten.
+  → Present options:
+    "This pipeline has been idle for X days."
+    "Project: <name> | Phase: <phase> | Stories: X/Y complete"
+    ""
+    "[R]esume where you left off"
+    "[A]rchive and start fresh"
+    "[S]tatus check (read-only)"
+```
+
+If `lastActiveAt` is missing (older pipeline), fall back to checking `lastUpdatedAt` or `startedAt`.
+
+Also check `.sixty/handoff.md` — if it exists, mention it:
+```
+Handoff brief found from last session. Key context:
+  - Last action: <from handoff>
+  - Next step: <from handoff>
+```
+
+---
 
 ### Step 2: Classify Input
 

@@ -20,6 +20,7 @@ interface ReactSectionRendererProps {
   showDividers?: boolean;
   onSectionUpdate?: (sectionId: string, updates: Partial<LandingSection>) => void;
   onRegenerateAsset?: (sectionId: string, assetType: 'image' | 'svg') => void;
+  onUploadAsset?: (sectionId: string, file: File) => Promise<string>;
   className?: string;
 }
 
@@ -30,6 +31,7 @@ export function ReactSectionRenderer({
   showDividers = true,
   onSectionUpdate,
   onRegenerateAsset,
+  onUploadAsset,
   className = '',
 }: ReactSectionRendererProps) {
   const sorted = useMemo(
@@ -70,6 +72,7 @@ export function ReactSectionRenderer({
                 sections={sorted}
                 onSectionUpdate={onSectionUpdate}
                 onRegenerateAsset={onRegenerateAsset}
+                onUploadAsset={onUploadAsset}
               />
             )}
             {sorted.map((section, index) => {

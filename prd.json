@@ -1,175 +1,423 @@
 {
-  "project": "Platform Polish Sprint",
-  "runSlug": "platform-polish-sprint",
-  "branchName": "feature/platform-polish-sprint",
-  "description": "8 targeted fixes and enhancements: proposal bugs, deals table, relationship graph touchpoints, entity filter, meeting next steps, AI email quality, ABM demo relationship graph, inline lead creation, and user writing preference learning",
+  "project": "Landing Builder V2",
+  "runSlug": "landing-builder-v2",
+  "branchName": "feature/landing-builder-v2",
+  "description": "5 improvements: one-click Vercel publish, form builder with lead capture, image upload/crop, template library, SEO & analytics",
   "aiDevHubProjectId": null,
-  "createdAt": "2026-03-09T12:00:00Z",
+  "createdAt": "2026-03-10T21:14:00.000Z",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Fix Proposal Generation 400/500 Errors",
-      "description": "As a sales rep, I want proposal generation to work without errors so that I can create proposals from meeting context",
+      "title": "Published pages database schema",
+      "description": "As a developer, I want a published_landing_pages table so that published page data is persisted and queryable",
       "acceptanceCriteria": [
-        "Replace metadata column with rendered_html in proposals SELECT query",
-        "Read pipeline errors from style_config._pipeline_error",
-        "Fix thumbnail to use brand_config.thumbnail_url only",
+        "Migration creates published_landing_pages table with: id (UUID PK), session_id (FK), org_id, user_id, slug (unique), title, html_content, meta_description, og_image_url, custom_domain, vercel_deployment_id, vercel_url, status (draft/published/unpublished), published_at, updated_at, created_at",
+        "RLS policies: users can CRUD own org's pages",
+        "Unique index on slug, index on org_id",
+        "DROP POLICY IF EXISTS before CREATE POLICY",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Completed. ProposalProgressOverlay.tsx updated.",
+      "notes": "Feature 1: Publish. Schema first.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-002",
-      "title": "Stop Ops Deals Table Redirecting to Pipeline",
-      "description": "As a platform admin, I want the Deals ops table to display inline instead of redirecting to the pipeline page",
+      "title": "Publish service with Vercel deploy API",
+      "description": "As a developer, I want a landingPublishService that deploys HTML to Vercel so pages go live with a URL",
       "acceptanceCriteria": [
-        "Remove standard_deals from DEDICATED_ROUTES",
-        "Deals table renders inline in ops",
+        "New service at src/lib/services/landingPublishService.ts",
+        "publish() method: generates final HTML with SEO tags, calls Vercel Deploy API, stores in published_landing_pages",
+        "unpublish() method: removes deployment, updates status",
+        "updateSlug() method: updates slug, triggers redeployment",
+        "Vercel API token from org settings (not VITE_ prefixed)",
+        "Returns live URL on success, toast on error",
         "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Completed. StandardTablesGallery.tsx updated.",
+      "notes": "Feature 1: Publish. Core service.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-003",
-      "title": "Add Communication Events to Relationship Graph Timeline",
-      "description": "As a sales rep, I want the relationship graph to show all touchpoints including emails, calls, and meetings so I get a complete picture",
+      "title": "Image persistence on publish",
+      "description": "As a user, I want AI-generated images permanently hosted so they don't break after publish",
       "acceptanceCriteria": [
-        "Add communication_events query to fetchContactGraph and fetchCompanyGraph",
-        "Add normalizeCommunicationToTimeline function",
-        "Add communication record type with Mail icon and cyan colors to TimelineView",
-        "Limit to 50 most recent communications per entity",
+        "On publish, all base64/temporary image URLs uploaded to Supabase Storage landing-page-assets bucket",
+        "HTML updated with permanent public URLs before Vercel deploy",
+        "Storage bucket: public read, write for authenticated users",
+        "Handles both base64 data URLs and external URLs",
         "Typecheck passes"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Completed. useContactCompanyGraph.ts and TimelineView.tsx updated.",
+      "notes": "Feature 1: Publish. Prevents broken images.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-004",
-      "title": "Simplify Company/Contact Toggle on Relationship Graph",
-      "description": "As a sales rep, I want the entity filter to be a simple 3-button toggle like the contacts view",
+      "title": "Publish modal UI",
+      "description": "As a user, I want a publish button and modal so I can set my page slug and publish with one click",
       "acceptanceCriteria": [
-        "Add All/Contacts/Companies toggle with emerald highlight",
-        "Filter entities before search filter in useMemo chain",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "Publish button in EditorToolbar (assembly mode), Lucide Globe icon",
+        "Modal with: slug input (auto-suggested), title, URL preview (pages.use60.com/{slug}), publish button",
+        "Slug validation: lowercase, alphanumeric + hyphens, 3-60 chars, unique check",
+        "Loading state during deployment, success state with copy URL + open link",
+        "Re-publish updates existing deployment",
+        "Verify in browser on localhost:5175",
+        "Typecheck passes"
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Completed. RelationshipHealthDashboard.tsx updated.",
+      "notes": "Feature 1: Publish. Main user-facing UI.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-005",
-      "title": "Wire 6 Working Meeting Next Steps Actions",
-      "description": "As a sales rep, I want all 6 next-step actions on the meeting page to work so I can take immediate action",
+      "title": "Published pages list view",
+      "description": "As a user, I want to see all my published pages so I can manage them",
       "acceptanceCriteria": [
-        "Expand to 6 actions: follow_up_email, generate_proposal, create_task, create_deal, share_recording, book_call",
-        "Wire generate_proposal to ProposalQuickGenerate via useImperativeHandle",
-        "Wire follow_up_email to generate-follow-up edge function",
-        "Wire create_task, create_deal, book_call to quick-add modal",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "New route at /landing-pages with table of published pages",
+        "Columns: title, slug, status, published date, live URL (clickable)",
+        "Actions: copy URL, open page, unpublish, edit (opens builder)",
+        "Empty state when no pages",
+        "Filtered by active org",
+        "Verify in browser on localhost:5175",
+        "Typecheck passes"
       ],
       "priority": 5,
       "passes": true,
-      "notes": "Completed. QuickActionsCard.tsx, useQuickActionPriority.ts, MeetingDetail.tsx updated.",
+      "notes": "Feature 1: Publish. Management view.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-006",
-      "title": "Strip Em-Dashes and Inject Date in All AI Email Prompts",
-      "description": "As a sales rep, I want AI-generated emails to never contain em-dashes and reference today's date",
+      "title": "Custom domain mapping via Vercel",
+      "description": "As a user, I want to connect a custom domain to my published page",
       "acceptanceCriteria": [
-        "Add stripEmDashes utility to generate-email-sequence",
-        "Apply to both Tier 1 (Claude) and Tier 2 (Gemini) outputs",
-        "Add today's date to Tier 1 and Tier 2 prompts",
-        "Add em-dash stripping to follow-up composer return values",
-        "Deploy to staging",
+        "Custom domain input in publish modal (expandable section)",
+        "Instructions: Add CNAME record pointing to cname.vercel-dns.com",
+        "Calls Vercel Domains API to add domain",
+        "Stores in published_landing_pages.custom_domain",
+        "Shows verification status (pending/active)",
         "Typecheck passes"
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Completed and deployed to staging.",
+      "notes": "Feature 1: Publish. Custom domains.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-007",
-      "title": "Add Relationship Graph Scene to ABM Demo Sandbox",
-      "description": "As a prospect viewing the ABM demo, I want to see the relationship graph feature",
+      "title": "Form submissions database schema",
+      "description": "As a developer, I want a landing_form_submissions table so form data from published pages is stored",
       "acceptanceCriteria": [
-        "Create SandboxRelationships.tsx with SVG-based interactive graph",
-        "Nodes show contacts, deals, companies with health/engagement coloring",
-        "Clicking a node opens detail panel",
-        "Register in VIEW_MAP, MOBILE_TABS, NAV_ITEMS, FLOW_ORDER",
-        "Update TOTAL_VIEWS from 6 to 7",
-        "Typecheck passes (landing package)"
+        "Migration creates landing_form_submissions with: id (UUID PK), page_id (FK), org_id, form_data (JSONB), source_url, ip_address, user_agent, submitted_at",
+        "RLS: org members can read their org's submissions",
+        "Index on page_id and org_id",
+        "DROP POLICY IF EXISTS before CREATE POLICY",
+        "Typecheck passes"
       ],
       "priority": 7,
       "passes": true,
-      "notes": "Completed. New SandboxRelationships.tsx created, sandbox wiring done.",
+      "notes": "Feature 2: Forms. Schema first.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-008",
-      "title": "ABM Campaign Inline Lead Creation + URL Params",
-      "description": "As a platform admin, I want to add leads directly from the table view and via URL params for fast campaign link creation",
+      "title": "Form submission edge function",
+      "description": "As a developer, I want an edge function that receives form submissions from published pages",
       "acceptanceCriteria": [
-        "Add inline quick-add form with domain, name, email, title, company, campaign fields",
-        "Campaign name autocompletes from existing campaigns",
-        "Enter key submits, calls campaign-enrich for single prospect",
-        "Add short URL param aliases: f, l, id, t",
-        "Auto-create campaign link when CreatorView loads with query params",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "New edge function handle-landing-form-submission/index.ts",
+        "POST with { page_id, form_data, source_url }",
+        "Validates page_id exists and is published",
+        "Stores in landing_form_submissions",
+        "Rate limit: 10 per IP per minute per page",
+        "CORS via getCorsHeaders(req), verify_jwt = false (public)",
+        "Typecheck passes"
       ],
       "priority": 8,
       "passes": true,
-      "notes": "Completed. AbmCampaignsPage.tsx, CampaignLanding.tsx, CreatorView.tsx updated.",
+      "notes": "Feature 2: Forms. Backend.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-009",
-      "title": "Inline Writing Preference Capture on AI Edit/Reject",
-      "description": "As a sales rep, I want to provide writing preference feedback when I edit or reject an AI suggestion so future suggestions improve",
+      "title": "FormBlock shared component",
+      "description": "As a user, I want CTA sections to have working email capture forms so pages collect leads",
       "acceptanceCriteria": [
-        "Add style feedback popover when user edits AI-generated email",
-        "Quick toggles for formality (1-5), directness (1-5), warmth (1-5)",
-        "Text field for words to avoid (appends to user_tone_settings.words_to_avoid)",
-        "Text field for preferred phrases (appends to user_tone_settings.preferred_keywords)",
-        "Pre-populate from toneSettingsService.getToneSettings('email')",
-        "Save via toneSettingsService.saveToneSettings() UPSERT",
-        "Record approved_edited signal to autopilot_signals",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "New component src/components/landing-builder/sections/shared/FormBlock.tsx",
+        "Configurable fields: name, email, phone, company, message",
+        "Client-side validation: email format, required fields",
+        "Submit button with loading + success/error states",
+        "POST to handle-landing-form-submission edge function",
+        "Styled with section brand config",
+        "Works in preview iframe and published HTML",
+        "Typecheck passes"
       ],
       "priority": 9,
       "passes": true,
-      "notes": "Completed. StyleFeedbackPopover.tsx created, wired into ApprovalReviewDialog.tsx.",
+      "notes": "Feature 2: Forms. Core component.",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-010",
-      "title": "Surface Writing Preferences in Follow-Up Composer Edge Function",
-      "description": "As a system, I want the follow-up email composer to read the user's tone settings so generated emails match confirmed style",
+      "title": "Form config in section data model + CTA integration",
+      "description": "As a developer, I want sections to support form configuration so the builder can add forms to CTAs",
       "acceptanceCriteria": [
-        "Fetch user_tone_settings for content_type='email' in generate-follow-up",
-        "Fetch user_tone_settings for content_type='email' in generate-email-sequence",
-        "Map formality, words_to_avoid, preferred_keywords, cta_style, email_sign_off into WritingStyle block",
-        "Pass buildWritingStyleBlock() output into system prompt",
-        "Deploy updated edge functions to staging",
+        "Extend LandingSection with optional form?: { fields: FormField[], submit_label, success_message, notification_email? }",
+        "FormField type: { name, type, label, required, placeholder? }",
+        "CTA components (CtaCentered, CtaSplitLeft, CtaGradient) render FormBlock when section.form defined",
+        "Default form config for CTAs: email (required) + name (optional)",
         "Typecheck passes"
       ],
       "priority": 10,
       "passes": true,
-      "notes": "Completed. generate-follow-up fetches full tone settings, generate-email-sequence injects tone into context. Deployed to staging.",
+      "notes": "Feature 2: Forms. Data model + rendering.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-011",
+      "title": "Form editor in Properties Panel",
+      "description": "As a user, I want to configure form fields in the editor so I can customize what data I collect",
+      "acceptanceCriteria": [
+        "Form tab in PropertiesPanel for CTA sections",
+        "Toggle to enable/disable form",
+        "Add/remove/reorder fields with drag handles",
+        "Per-field: label, placeholder, required toggle, type dropdown",
+        "Submit label + success message editors",
+        "Live preview updates",
+        "Verify in browser on localhost:5175",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Feature 2: Forms. Builder UI.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-012",
+      "title": "Form submissions viewer",
+      "description": "As a user, I want to view form submissions so I can follow up with leads",
+      "acceptanceCriteria": [
+        "Submissions tab on /landing-pages list view",
+        "Click page to see submissions table",
+        "Columns: date, email, name, other fields",
+        "Export to CSV button",
+        "Submission count badge on page row",
+        "Verify in browser on localhost:5175",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Feature 2: Forms. Management UI.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-013",
+      "title": "Auto-create contacts from form submissions",
+      "description": "As a user, I want submissions to auto-create contacts in 60's pipeline so leads flow into my CRM",
+      "acceptanceCriteria": [
+        "Toggle in page settings: Auto-create contacts from submissions",
+        "Edge function creates contacts record with owner_id = page owner",
+        "Maps: email → contact email, name → name, company → company",
+        "Creates activities record: Lead captured from landing page",
+        "Deduplicates by email — existing contact gets activity only",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Feature 2: Forms. CRM sync follow-up.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-014",
+      "title": "Landing builder assets storage bucket",
+      "description": "As a developer, I want a Supabase Storage bucket for user-uploaded landing page assets",
+      "acceptanceCriteria": [
+        "landing-builder-assets bucket created",
+        "Public read, authenticated write within org",
+        "Max file: 5MB, types: jpeg, png, webp, gif, svg+xml",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Feature 3: Image upload. Infrastructure.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-015",
+      "title": "Image upload service",
+      "description": "As a developer, I want a service that handles image upload and URL generation for the builder",
+      "acceptanceCriteria": [
+        "New service src/lib/services/landingAssetService.ts",
+        "uploadImage(file, sessionId) → uploads to landing-builder-assets/{orgId}/{sessionId}/{filename}, returns public URL",
+        "deleteImage(url) → removes from storage",
+        "File validation: type, size, max 4096x4096",
+        "Unique filenames to prevent collisions",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Feature 3: Image upload. Service layer.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-016",
+      "title": "Image upload in Properties Panel + inline toolbar",
+      "description": "As a user, I want to upload my own image for a section so I'm not limited to AI generation",
+      "acceptanceCriteria": [
+        "Upload Image button in PropertiesPanel Assets section",
+        "Upload button in InlineEditController floating toolbar (Lucide Upload icon)",
+        "File picker filtered to image types",
+        "Upload progress indicator",
+        "Updates section.image_url and sets image_status to complete",
+        "Thumbnail preview after upload",
+        "Paste URL input for external images",
+        "Verify in browser on localhost:5175",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Feature 3: Image upload. UI integration.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-017",
+      "title": "Image crop modal",
+      "description": "As a user, I want to crop images so they fit my section layout",
+      "acceptanceCriteria": [
+        "After upload, optional crop modal with react-easy-crop",
+        "Aspect ratio presets: Free, 16:9, 4:3, 1:1",
+        "Apply saves cropped version to storage, updates URL",
+        "Skip uses original uncropped",
+        "Also accessible from Properties Panel Crop button",
+        "Verify in browser on localhost:5175",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Feature 3: Image upload. Crop capability.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-018",
+      "title": "Template data format and 6 starter templates",
+      "description": "As a developer, I want a template format and starter templates so users can start from pre-built pages",
+      "acceptanceCriteria": [
+        "New directory src/components/landing-builder/templates/",
+        "Template type with: id, name, description, category, thumbnail, sections[], brandConfig",
+        "6 templates: SaaS Hero, Agency, Product Launch, Event/Webinar, Waitlist, Minimal Portfolio",
+        "Each has 4-8 sections with placeholder copy and layout variants",
+        "Exported from templates/index.ts",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": "Feature 4: Templates. Data + content.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-019",
+      "title": "Template gallery in builder empty state",
+      "description": "As a user, I want to browse and pick a template so I can skip the strategy phase",
+      "acceptanceCriteria": [
+        "Start from Template card in LandingBuilderEmpty",
+        "Opens gallery modal showing templates as cards",
+        "Cards: name, description, category badge, section count, thumbnail",
+        "Category filter tabs",
+        "Full-width preview with ReactSectionRenderer on click",
+        "Use this template button loads into assembly mode",
+        "Verify in browser on localhost:5175",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Feature 4: Templates. Gallery UI.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-020",
+      "title": "Template selection phase skip logic",
+      "description": "As a developer, I want template selection to bypass Strategy + Copy so users go straight to editing",
+      "acceptanceCriteria": [
+        "Template select: setAssemblySections(template.sections), setAssemblyBrandConfig(template.brandConfig)",
+        "Sets isAssemblyMode = true, currentPhase = 2",
+        "Workspace created with sections pre-populated, current_phase: 2",
+        "Asset queue NOT started (templates use placeholders, user regenerates or uploads)",
+        "Chat available for refinements",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": "Feature 4: Templates. Phase integration.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-021",
+      "title": "SEO fields data model + auto-generation",
+      "description": "As a developer, I want SEO metadata stored in workspace so pages have proper meta tags",
+      "acceptanceCriteria": [
+        "Extend workspace type with seo?: { title, description, og_image_url?, keywords?, canonical_url?, gtm_id?, facebook_pixel_id? }",
+        "Auto-generate: title from hero headline, description from hero subhead (160 chars)",
+        "SEO fields saved to workspace and copied to published_landing_pages on publish",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": "Feature 5: SEO. Data model.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-022",
+      "title": "SEO settings panel",
+      "description": "As a user, I want to edit SEO meta tags so my page appears correctly in search and social",
+      "acceptanceCriteria": [
+        "Page Settings button in EditorToolbar (Lucide Settings icon)",
+        "Panel with SEO tab: title (60 char counter), description (160 char counter), keywords, OG image preview",
+        "Analytics tab: GTM ID input, Facebook Pixel ID, custom head script textarea",
+        "Auto-saves to workspace",
+        "Verify in browser on localhost:5175",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": "Feature 5: SEO. Editor UI.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-023",
+      "title": "SEO tags + analytics scripts in HTML export",
+      "description": "As a developer, I want HTML export to include all SEO meta and tracking scripts",
+      "acceptanceCriteria": [
+        "wrapInHtml() includes: <title>, meta description, og:title, og:description, og:image, og:url, twitter:card, canonical",
+        "GTM script in <head> + noscript in <body> if ID provided",
+        "Facebook Pixel script if ID provided",
+        "Custom head scripts injected",
+        "JSON-LD Organization schema from org profile",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": true,
+      "notes": "Feature 5: SEO. Export integration.",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-024",
+      "title": "OG image auto-generation on publish",
+      "description": "As a user, I want an OG image auto-generated so social shares look professional",
+      "acceptanceCriteria": [
+        "On publish (if no custom OG image), generate 1200x630 image via Nano Banana",
+        "Prompt uses hero headline + brand colors",
+        "Upload to Supabase Storage, set as og_image_url",
+        "Fallback: use hero section image if generation fails",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": true,
+      "notes": "Feature 5: SEO. OG image.",
       "aiDevHubTaskId": null
     }
   ]

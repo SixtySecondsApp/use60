@@ -129,7 +129,7 @@ CREATE POLICY "Org members can view sync runs" ON linkedin_analytics_sync_runs
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_analytics_sync_runs.org_id
+      WHERE organization_memberships.org_id = linkedin_analytics_sync_runs.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -144,7 +144,7 @@ CREATE POLICY "Org members can view campaign metrics" ON linkedin_campaign_metri
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_campaign_metrics.org_id
+      WHERE organization_memberships.org_id = linkedin_campaign_metrics.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -159,7 +159,7 @@ CREATE POLICY "Org members can view demographic metrics" ON linkedin_demographic
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM organization_memberships
-      WHERE organization_memberships.organization_id = linkedin_demographic_metrics.org_id
+      WHERE organization_memberships.org_id = linkedin_demographic_metrics.org_id
         AND organization_memberships.user_id = auth.uid()
     )
   );
@@ -221,7 +221,7 @@ SELECT
   MAX(cm.date) AS last_date
 FROM linkedin_campaign_metrics cm
 LEFT JOIN linkedin_campaign_performance p
-  ON p.org_id = cm.org_id
+  ON p.org_id = cm.org_id::text
   AND p.campaign_name = cm.campaign_name
 GROUP BY
   cm.org_id, cm.ad_account_id, cm.campaign_id, cm.campaign_name,

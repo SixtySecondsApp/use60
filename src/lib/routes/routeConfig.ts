@@ -459,6 +459,16 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     displayGroup: 4,
   },
   {
+    path: '/landing-pages',
+    access: 'internal',
+    label: 'Landing Pages',
+    icon: FileText,
+    showInNav: true,
+    navSection: 'tools',
+    order: 3.55,
+    displayGroup: 4,
+  },
+  {
     path: '/action-centre',
     access: 'internal',
     label: 'Action Centre',

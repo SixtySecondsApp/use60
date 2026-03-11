@@ -1,8 +1,13 @@
 # Progress Log
-Run: nylas-integration-verification
-Started: 2026-03-07T18:00:00Z
+Run: landing-builder-v2
+Started: 2026-03-10T21:14:00Z
 
 ## Codebase Patterns
-(Add reusable patterns/gotchas discovered during implementation)
+- Landing builder: src/components/landing-builder/ (~87 files, 12K LOC)
+- Workspace persistence: landing_builder_sessions table (JSONB sections column)
+- Asset generation: assetQueue.ts → nanoBananaService (images) + geminiSvgService (SVGs)
+- Preview: react-frame-component iframe with Tailwind CDN + Google Fonts
+- Section registry: 12 types × ~30 layout variants, getSectionComponent() with fallback chain
+- Migrations: ./scripts/new-migration.sh, DROP POLICY IF EXISTS before CREATE POLICY
 
 ---
