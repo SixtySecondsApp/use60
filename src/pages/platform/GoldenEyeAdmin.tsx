@@ -50,6 +50,7 @@ import { FlaggingRulesPanel } from '@/components/goldeneye/FlaggingRulesPanel';
 import { ModelRoutingPanel } from '@/components/goldeneye/ModelRoutingPanel';
 import { UsageTotalsBar } from '@/components/goldeneye/UsageTotalsBar';
 import { ActivityLogTerminal } from '@/components/goldeneye/ActivityLogTerminal';
+import { ModelRatioChart } from '@/components/goldeneye/ModelRatioChart';
 import {
   generateFullSeedData,
   startSeedEventStream,
@@ -155,6 +156,7 @@ export default function GoldenEyeAdmin() {
   const llmEndpointsRaw = useSeedData && seedData ? seedData.llmEndpoints : liveData.llmEndpoints;
   const anomalyRules = useSeedData && seedData ? seedData.anomalyRules : liveData.anomalyRules;
   const usageTotals = useSeedData && seedData ? seedData.usageTotals : liveData.usageTotals;
+  const modelBreakdown = liveData.modelBreakdown;
   // Recompute active_request_count from merged recentEvents (includes test events)
   // so the canvas shows the correct endpoints as visible nodes
   const llmEndpoints = useMemo(() => {
@@ -424,9 +426,9 @@ export default function GoldenEyeAdmin() {
 
       {/* Main visualization + activity log side by side */}
       <div className="flex-1 flex min-h-0 min-w-0">
-        {/* Left panel — Leaderboard */}
-        <div className="w-[440px] shrink-0 flex flex-col p-2">
-          <div className="flex-1 rounded-lg border border-slate-700/50 bg-slate-900/60 flex flex-col overflow-hidden">
+        {/* Left panel — Leaderboard + Model Ratio */}
+        <div className="w-[440px] shrink-0 flex flex-col gap-2 p-2">
+          <div className="flex-1 min-h-0 rounded-lg border border-slate-700/50 bg-slate-900/60 flex flex-col overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/50">
               <Trophy className="h-3.5 w-3.5 text-amber-400" />
               <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Leaderboard — Top 15 All Time</span>
@@ -435,12 +437,12 @@ export default function GoldenEyeAdmin() {
               <table className="w-full text-[10px]">
                 <thead className="sticky top-0 bg-slate-900/90 backdrop-blur">
                   <tr className="text-slate-500 border-b border-slate-700/50">
-                    <th className="text-left px-2 py-1.5 font-medium">#</th>
-                    <th className="text-left px-2 py-1.5 font-medium">User</th>
-                    <th className="text-right px-2 py-1.5 font-medium">In</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Out</th>
-                    <th className="text-right px-2 py-1.5 font-medium">GBP</th>
-                    <th className="text-right px-2 py-1.5 font-medium">Credits</th>
+                    <th className="text-left px-2 py-1 font-medium">#</th>
+                    <th className="text-left px-2 py-1 font-medium">User</th>
+                    <th className="text-right px-2 py-1 font-medium">In</th>
+                    <th className="text-right px-2 py-1 font-medium">Out</th>
+                    <th className="text-right px-2 py-1 font-medium">GBP</th>
+                    <th className="text-right px-2 py-1 font-medium">Credits</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -450,8 +452,8 @@ export default function GoldenEyeAdmin() {
                       className="border-b border-slate-800/30 hover:bg-slate-800/40 cursor-pointer transition-colors"
                       onClick={() => handleUserClick(user)}
                     >
-                      <td className="px-2 py-1.5 text-slate-600 font-mono">{i + 1}</td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-2 py-1 text-slate-600 font-mono">{i + 1}</td>
+                      <td className="px-2 py-1">
                         <div className="truncate max-w-[110px]">
                           <span className={`font-medium ${user.is_active ? 'text-emerald-300' : 'text-slate-300'}`}>
                             {user.user_name || user.user_email || 'Unknown'}
@@ -461,10 +463,10 @@ export default function GoldenEyeAdmin() {
                           <div className="text-[9px] text-slate-600 truncate max-w-[110px]">{user.org_name}</div>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 text-right text-indigo-300 font-mono">{formatTokens(user.total_input_tokens)}</td>
-                      <td className="px-2 py-1.5 text-right text-emerald-300 font-mono">{formatTokens(user.total_output_tokens)}</td>
-                      <td className="px-2 py-1.5 text-right text-amber-300 font-mono">£{user.total_cost_gbp.toFixed(2)}</td>
-                      <td className="px-2 py-1.5 text-right text-cyan-300 font-mono">{user.credits_bought}</td>
+                      <td className="px-2 py-1 text-right text-indigo-300 font-mono">{formatTokens(user.total_input_tokens)}</td>
+                      <td className="px-2 py-1 text-right text-emerald-300 font-mono">{formatTokens(user.total_output_tokens)}</td>
+                      <td className="px-2 py-1 text-right text-amber-300 font-mono">£{user.total_cost_gbp.toFixed(2)}</td>
+                      <td className="px-2 py-1 text-right text-cyan-300 font-mono">{user.credits_bought}</td>
                     </tr>
                   ))}
                   {leaderboardUsers.length === 0 && (
@@ -477,6 +479,10 @@ export default function GoldenEyeAdmin() {
             </div>
           </div>
 
+          {/* Model Ratio donut chart */}
+          <div className="shrink-0">
+            <ModelRatioChart modelBreakdown={modelBreakdown} />
+          </div>
         </div>
 
         {/* Canvas area — constrained to prevent pushing siblings off-screen */}
