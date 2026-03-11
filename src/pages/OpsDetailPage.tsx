@@ -1557,40 +1557,38 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           const actionLabel = buttonConfig.label || col.label || 'Action';
           toast.info(`Running: ${actionLabel}...`);
 
-          executeButton.mutate(
-            {
-              columnId: col.id,
-              rowId,
-              buttonConfig,
-              rowCellValues,
-              onUpdateCell: (targetKey: string, newValue: string) => {
-                // Trigger a regular cell edit for set_value actions
-                handleCellEdit(rowId, targetKey, newValue);
-              },
-            },
-            {
-              onSuccess: async () => {
-                // Mark button cell as complete — await to avoid race with formula recalc
-                await tableService.upsertCell(rowId, col.id, 'complete');
-                // Re-evaluate dependent formula columns for this specific row
-                const outputKeys = new Set(
-                  (buttonConfig.actions ?? [])
-                    .filter((a: any) => a.type === 'run_prompt' && a.config?.output_column_key)
-                    .map((a: any) => a.config.output_column_key),
-                );
-                if (outputKeys.size > 0) {
-                  await recalcFormulasForRow(rowId, outputKeys);
-                } else {
-                  queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
-                }
-                toast.success(`Done: ${actionLabel}`);
-              },
-              onError: () => {
-                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
-                toast.error(`Failed: ${actionLabel}`);
-              },
-            },
-          );
+          // Use mutateAsync so each row's post-action logic runs independently.
+          // (.mutate() callbacks get overwritten when multiple rows are clicked.)
+          (async () => {
+            try {
+              await executeButton.mutateAsync({
+                columnId: col.id,
+                rowId,
+                buttonConfig,
+                rowCellValues,
+                onUpdateCell: (targetKey: string, newValue: string) => {
+                  handleCellEdit(rowId, targetKey, newValue);
+                },
+              });
+              // Mark button cell as complete
+              tableService.upsertCell(rowId, col.id, 'complete').catch(() => {});
+              // Re-evaluate dependent formula columns for this specific row
+              const outputKeys = new Set(
+                (buttonConfig.actions ?? [])
+                  .filter((a: any) => a.type === 'run_prompt' && a.config?.output_column_key)
+                  .map((a: any) => a.config.output_column_key),
+              );
+              if (outputKeys.size > 0) {
+                await recalcFormulasForRow(rowId, outputKeys);
+              } else {
+                await queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+              }
+              toast.success(`Done: ${actionLabel}`);
+            } catch {
+              tableService.upsertCell(rowId, col.id, 'failed').catch(() => {});
+              toast.error(`Failed: ${actionLabel}`);
+            }
+          })();
           return;
         }
 
