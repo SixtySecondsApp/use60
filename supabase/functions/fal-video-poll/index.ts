@@ -26,7 +26,7 @@ const MODEL_COST_PER_SECOND: Record<string, number> = {
 };
 
 const DEFAULT_COST_PER_SECOND = 2.5;
-const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const JOB_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes — Kling I2V can take 10-15 min
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +44,8 @@ interface FalVideoJob {
   dynamic_table_id: string | null;
   created_at: string;
   credit_cost: number | null;
+  status_url: string | null;
+  response_url: string | null;
 }
 
 type PollResult =
@@ -115,7 +117,7 @@ async function processJob(
     const ageMs = Date.now() - new Date(job.created_at).getTime();
     if (ageMs > JOB_TIMEOUT_MS) {
       const stuckMsg = 'Job submission incomplete — no fal request ID recorded (timed out)';
-      console.warn(`[fal-video-poll] Job ${job.id} stuck with fal_request_id='pending' for >10min — marking failed`);
+      console.warn(`[fal-video-poll] Job ${job.id} stuck with fal_request_id='pending' for >${Math.round(JOB_TIMEOUT_MS / 60000)}min — marking failed`);
       await svc.from('fal_video_jobs').update({
         status: 'failed',
         error_message: stuckMsg,
@@ -136,13 +138,13 @@ async function processJob(
   }
 
   try {
-    const falStatus = await fal.getJobStatus(job.model_id, job.fal_request_id);
+    const falStatus = await fal.getJobStatus(job.model_id, job.fal_request_id, job.status_url ?? undefined);
 
     // -----------------------------------------------------------------------
     // COMPLETED
     // -----------------------------------------------------------------------
     if (falStatus.status === 'COMPLETED') {
-      const result = await fal.getJobResult<FalVideoOutput>(job.model_id, job.fal_request_id);
+      const result = await fal.getJobResult<FalVideoOutput>(job.model_id, job.fal_request_id, job.response_url ?? undefined);
 
       if (!result?.video?.url) {
         // Mark failed — result has no usable URL
@@ -284,17 +286,25 @@ async function processJob(
     return { id: job.id, status: 'processing' };
 
   } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.warn(`[fal-video-poll] Status check failed for job ${job.id}:`, errMsg);
+    // FalClient throws plain { status, message, code } objects — NOT Error instances
+    const isFalError = err && typeof err === 'object' && 'message' in err && 'status' in err;
+    const errMsg = isFalError
+      ? `fal.ai ${(err as any).status}: ${(err as any).message}`
+      : err instanceof Error
+        ? err.message
+        : JSON.stringify(err);
+    const falStatus = isFalError ? (err as any).status : undefined;
+    console.warn(`[fal-video-poll] Status check failed for job ${job.id} (fal status: ${falStatus ?? 'N/A'}):`, errMsg);
 
-    // Only mark permanently failed if the job has been stuck for > 10 minutes
+    // Only mark permanently failed if the job has been stuck for > 20 minutes
     const ageMs = Date.now() - new Date(job.created_at).getTime();
+    const ageMins = Math.round(ageMs / 60000);
     if (ageMs > JOB_TIMEOUT_MS) {
-      const timeoutMsg = 'Generation timed out after 10 minutes';
+      const timeoutMsg = `Generation timed out after ${ageMins} minutes (last poll error: ${errMsg})`;
+      console.error(`[fal-video-poll] Job ${job.id} timed out after ${ageMins}min — marking failed. Last error: ${errMsg}`);
       await svc.from('fal_video_jobs').update({
         status: 'failed',
         error_message: timeoutMsg,
-        // Credits are charged on completion only — no deduction for timed-out jobs
         credit_cost: 0,
       }).eq('id', job.id);
 
@@ -308,6 +318,7 @@ async function processJob(
       return { id: job.id, status: 'failed', error: timeoutMsg };
     }
 
+    console.log(`[fal-video-poll] Job ${job.id} poll error at ${ageMins}min — will retry (timeout at ${Math.round(JOB_TIMEOUT_MS / 60000)}min)`);
     return { id: job.id, status: 'poll_error', error: errMsg };
   }
 }
@@ -349,7 +360,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: job, error: jobError } = await svc
         .from('fal_video_jobs')
-        .select('id, org_id, user_id, model_id, fal_request_id, status, input_config, dynamic_table_row_id, dynamic_table_id, created_at, credit_cost')
+        .select('id, org_id, user_id, model_id, fal_request_id, status, input_config, dynamic_table_row_id, dynamic_table_id, created_at, credit_cost, status_url, response_url')
         .eq('id', jobId)
         .eq('user_id', user.id)   // Ensure user owns this job
         .maybeSingle();
@@ -368,7 +379,7 @@ Deno.serve(async (req: Request) => {
     // -------------------------------------------------------------------------
     const { data: jobs, error: fetchError } = await svc
       .from('fal_video_jobs')
-      .select('id, org_id, user_id, model_id, fal_request_id, status, input_config, dynamic_table_row_id, dynamic_table_id, created_at, credit_cost')
+      .select('id, org_id, user_id, model_id, fal_request_id, status, input_config, dynamic_table_row_id, dynamic_table_id, created_at, credit_cost, status_url, response_url')
       .in('status', ['pending', 'processing'])
       .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString()) // last 1 hour
       .order('created_at', { ascending: true })

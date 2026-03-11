@@ -27,6 +27,34 @@ export interface FalQueueResponse {
   cancel_url: string;
 }
 
+/**
+ * Extracts the queue base path from a fal.ai URL.
+ * fal.ai uses a shortened path for queue operations (status/result/cancel).
+ * e.g. submit: fal-ai/kling-video/v3/pro/image-to-video
+ *      queue:  fal-ai/kling-video
+ */
+function extractQueuePath(statusOrResponseUrl: string): string | null {
+  // e.g. "https://queue.fal.run/fal-ai/kling-video/requests/abc-123"
+  const match = statusOrResponseUrl.match(/queue\.fal\.run\/(.+?)\/requests\//);
+  return match?.[1] ?? null;
+}
+
+/**
+ * Derives the queue model path from a full model ID.
+ * fal.ai queue endpoints use a shorter path than submission endpoints.
+ * e.g. "fal-ai/kling-video/v3/pro/text-to-video" → "fal-ai/kling-video"
+ *      "fal-ai/veo3" → "fal-ai/veo3"
+ *      "fal-ai/nano-banana-2" → "fal-ai/nano-banana-2"
+ */
+function deriveQueueModelPath(fullModelId: string): string {
+  const parts = fullModelId.split('/');
+  // fal.ai queue paths use the first 2 segments (provider/model-base)
+  if (parts.length > 2) {
+    return `${parts[0]}/${parts[1]}`;
+  }
+  return fullModelId;
+}
+
 export interface FalStatusResponse {
   status: FalJobStatus;
   queue_position?: number;
@@ -117,8 +145,14 @@ export class FalClient {
   private async request<T>(method: string, url: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = {
       'Authorization': `Key ${this.apiKey}`,
-      'Content-Type': 'application/json',
     };
+    // Only include Content-Type when there's a body (POST/PUT) — some servers
+    // reject GET requests with Content-Type: application/json (405).
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    console.log(`[fal.ts] ${method} ${url}`);
 
     const res = await fetch(url, {
       method,
@@ -139,12 +173,15 @@ export class FalClient {
 
     if (!res.ok) {
       let message = `fal.ai API error (${res.status})`;
+      let rawBody = '';
       try {
-        const json = await res.json();
+        rawBody = await res.text();
+        const json = JSON.parse(rawBody);
         message = json.detail || json.message || json.error || message;
       } catch {
-        // ignore parse errors
+        if (rawBody) message = `${message}: ${rawBody.slice(0, 200)}`;
       }
+      console.error(`[fal.ts] ${method} ${url} → ${res.status}: ${message}`);
       const err: FalError = { status: res.status, message };
       throw err;
     }
@@ -165,18 +202,19 @@ export class FalClient {
     return this.request<FalQueueResponse>('POST', url, input);
   }
 
-  async getJobStatus(modelId: FalModelId, requestId: string): Promise<FalStatusResponse> {
-    const url = `${FAL_QUEUE_BASE}/${modelId}/requests/${requestId}/status`;
+  async getJobStatus(modelId: FalModelId, requestId: string, statusUrl?: string): Promise<FalStatusResponse> {
+    // Use stored status_url if available, otherwise derive the queue path
+    const url = statusUrl || `${FAL_QUEUE_BASE}/${deriveQueueModelPath(modelId)}/requests/${requestId}/status`;
     return this.request<FalStatusResponse>('GET', url);
   }
 
-  async getJobResult<T = FalVideoOutput>(modelId: FalModelId, requestId: string): Promise<T> {
-    const url = `${FAL_QUEUE_BASE}/${modelId}/requests/${requestId}`;
+  async getJobResult<T = FalVideoOutput>(modelId: FalModelId, requestId: string, responseUrl?: string): Promise<T> {
+    const url = responseUrl || `${FAL_QUEUE_BASE}/${deriveQueueModelPath(modelId)}/requests/${requestId}`;
     return this.request<T>('GET', url);
   }
 
-  async cancelJob(modelId: FalModelId, requestId: string): Promise<void> {
-    const url = `${FAL_QUEUE_BASE}/${modelId}/requests/${requestId}/cancel`;
+  async cancelJob(modelId: FalModelId, requestId: string, cancelUrl?: string): Promise<void> {
+    const url = cancelUrl || `${FAL_QUEUE_BASE}/${deriveQueueModelPath(modelId)}/requests/${requestId}/cancel`;
     await this.request<unknown>('PUT', url);
   }
 

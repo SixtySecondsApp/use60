@@ -69,6 +69,8 @@ const MODEL_LABELS: Record<string, string> = {
   'fal-ai/stable-diffusion-v35-large': 'SD 3.5',
   'fal-ai/recraft-v3':             'Recraft v3',
   'fal-ai/ideogram/v2':            'Ideogram v2',
+  'fal-ai/nano-banana-2':          'Nano Banana 2',
+  'fal-ai/nano-banana/v2':         'Nano Banana 2',
 };
 
 function getModelLabel(modelId?: string): string {
@@ -132,6 +134,11 @@ export const AiImageCell: React.FC<AiImageCellProps> = ({
     const poll = async () => {
       try {
         const { supabase } = await import('@/lib/supabase/clientV2');
+
+        // Trigger backend poll to check fal.ai and update cells
+        await supabase.functions.invoke('ai-image-generate', {
+          body: { action: 'poll' },
+        }).catch(() => {}); // fire-and-forget
 
         const { data: cell } = await supabase
           .from('dynamic_table_cells')
@@ -300,10 +307,6 @@ export const AiImageCell: React.FC<AiImageCellProps> = ({
         >
           <Check className="w-3 h-3" />
           Ready
-        </span>
-
-        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-gray-800 text-gray-500 border border-gray-700/50">
-          {modelLabel}
         </span>
 
         {canGenerate && (

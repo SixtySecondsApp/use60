@@ -133,7 +133,7 @@ export const SvgAnimationCell: React.FC<SvgAnimationCellProps> = ({
 
         if (cell?.value) {
           const latest = parseCell(cell.value);
-          if (latest?.status === 'completed' || latest?.status === 'failed') {
+          if (latest?.status === 'completed' || latest?.status === 'failed' || latest?.status === 'error') {
             onCellUpdate(cell.value);
             stopPolling();
           }

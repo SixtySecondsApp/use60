@@ -22,6 +22,7 @@ import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
 interface ExistingColumn {
   key: string;
   label: string;
+  column_type?: string;
 }
 
 interface ColumnConfig {

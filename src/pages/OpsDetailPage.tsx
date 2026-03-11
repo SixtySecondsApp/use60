@@ -45,6 +45,9 @@ import { EditColumnSettingsModal } from '@/components/ops/EditColumnSettingsModa
 import { EditApolloSettingsModal } from '@/components/ops/EditApolloSettingsModal';
 import { EditInstantlySettingsModal } from '@/components/ops/EditInstantlySettingsModal';
 import { EditHeyGenVideoSettingsModal } from '@/components/ops/EditHeyGenVideoSettingsModal';
+import { FalVideoColumnWizard } from '@/components/ops/FalVideoColumnWizard';
+import { AiImageColumnWizard } from '@/components/ops/AiImageColumnWizard';
+import { SvgAnimationColumnWizard } from '@/components/ops/SvgAnimationColumnWizard';
 import { EditEmailGenerationModal, type EmailGenerationConfig } from '@/components/ops/EditEmailGenerationModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
@@ -208,6 +211,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [editApolloColumn, setEditApolloColumn] = useState<OpsTableColumn | null>(null);
   const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
   const [editHeyGenColumn, setEditHeyGenColumn] = useState<OpsTableColumn | null>(null);
+  const [editFalVideoColumn, setEditFalVideoColumn] = useState<OpsTableColumn | null>(null);
+  const [editAiImageColumn, setEditAiImageColumn] = useState<OpsTableColumn | null>(null);
+  const [editSvgAnimationColumn, setEditSvgAnimationColumn] = useState<OpsTableColumn | null>(null);
   const [createCampaignFromStepColumn, setCreateCampaignFromStepColumn] = useState<OpsTableColumn | null>(null);
   const [editEmailGenColumn, setEditEmailGenColumn] = useState<OpsTableColumn | null>(null);
   const [scheduleDialogColumn, setScheduleDialogColumn] = useState<string | null>(null);
@@ -3287,7 +3293,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             toast.error(msg);
           }
         }}
-        existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
         sourceType={table?.source_type as 'manual' | 'csv' | 'hubspot' | null}
         tableId={tableId}
@@ -3412,6 +3418,15 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           onEditHeygen={activeColumn.column_type === 'heygen_video' ? () => {
             setEditHeyGenColumn(activeColumn);
           } : undefined}
+          onEditFalVideo={activeColumn.column_type === 'fal_video' ? () => {
+            setEditFalVideoColumn(activeColumn);
+          } : undefined}
+          onEditAiImage={activeColumn.column_type === 'ai_image' ? () => {
+            setEditAiImageColumn(activeColumn);
+          } : undefined}
+          onEditSvgAnimation={activeColumn.column_type === 'svg_animation' ? () => {
+            setEditSvgAnimationColumn(activeColumn);
+          } : undefined}
           onEditEmailGeneration={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
             setEditEmailGenColumn(activeColumn);
           } : undefined}
@@ -3524,7 +3539,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           currentModel={editEnrichmentColumn.enrichment_model ?? 'anthropic/claude-3.5-sonnet'}
           currentProvider={editEnrichmentColumn.enrichment_provider ?? 'openrouter'}
           columnLabel={editEnrichmentColumn.label}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
           contextProfileName={contextProfile?.company_name ?? (factProfiles.find((p) => p.is_org_profile)?.company_name || null)}
           contextProfileIsOrg={contextProfile ? contextProfile.is_org_profile : true}
         />
@@ -3544,7 +3559,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             });
           }}
           columnLabel={editFormulaColumn.label}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
           sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
         />
       )}
@@ -3563,7 +3578,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             });
           }}
           columnLabel={editButtonColumn.label}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
       )}
 
@@ -3712,7 +3727,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           columnLabel={editInstantlyColumn.label}
           currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
           orgId={table?.organization_id}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
       )}
 
@@ -3732,8 +3747,83 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           }}
           columnLabel={editHeyGenColumn.label}
           currentConfig={(editHeyGenColumn.integration_config as any) ?? undefined}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
+      )}
+
+      {/* Edit FAL Video Settings */}
+      {editFalVideoColumn && tableId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditFalVideoColumn(null)} />
+          <div className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <FalVideoColumnWizard
+              tableId={tableId}
+              existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              initialConfig={(editFalVideoColumn.integration_config as any) ?? undefined}
+              onComplete={async (config) => {
+                try {
+                  await tableService.updateColumn(editFalVideoColumn.id, { integrationConfig: config as unknown as Record<string, unknown> });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                  toast.success('Video settings updated');
+                } catch {
+                  toast.error('Failed to update video settings');
+                }
+                setEditFalVideoColumn(null);
+              }}
+              onCancel={() => setEditFalVideoColumn(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Edit AI Image Settings */}
+      {editAiImageColumn && tableId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditAiImageColumn(null)} />
+          <div className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <AiImageColumnWizard
+              tableId={tableId}
+              existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              initialConfig={(editAiImageColumn.integration_config as any) ?? undefined}
+              onComplete={async (config) => {
+                try {
+                  await tableService.updateColumn(editAiImageColumn.id, { integrationConfig: config as unknown as Record<string, unknown> });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                  toast.success('Image settings updated');
+                } catch {
+                  toast.error('Failed to update image settings');
+                }
+                setEditAiImageColumn(null);
+              }}
+              onCancel={() => setEditAiImageColumn(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Edit SVG Animation Settings */}
+      {editSvgAnimationColumn && tableId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditSvgAnimationColumn(null)} />
+          <div className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <SvgAnimationColumnWizard
+              tableId={tableId}
+              existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              initialConfig={(editSvgAnimationColumn.integration_config as any) ?? undefined}
+              onComplete={async (config) => {
+                try {
+                  await tableService.updateColumn(editSvgAnimationColumn.id, { integrationConfig: config as unknown as Record<string, unknown> });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                  toast.success('Animation settings updated');
+                } catch {
+                  toast.error('Failed to update animation settings');
+                }
+                setEditSvgAnimationColumn(null);
+              }}
+              onCancel={() => setEditSvgAnimationColumn(null)}
+            />
+          </div>
+        </div>
       )}
 
       {/* Create Instantly Campaign from Step Columns */}
@@ -3833,7 +3923,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             return (campaignConfigCol?.integration_config as any) ?? { instantly_subtype: 'campaign_config' };
           })()}
           orgId={table?.organization_id}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
       )}
 
