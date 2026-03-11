@@ -51,7 +51,7 @@ import {
   usePageSubmissions,
   useSubmissionCounts,
 } from '@/lib/hooks/useLandingPublish';
-import type { PublishedLandingPage, FormSubmission } from '@/lib/services/landingPublishService';
+import type { PublishedLandingPage } from '@/lib/services/landingPublishService';
 
 // ============================================================================
 // Status badge

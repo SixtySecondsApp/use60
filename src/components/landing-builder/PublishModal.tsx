@@ -35,8 +35,9 @@ import { usePublishedPage, usePublishPage, useUnpublishPage, useAddCustomDomain 
 import { landingPublishService } from '@/lib/services/landingPublishService';
 import { landingAssetService } from '@/lib/services/landingAssetService';
 import { generateExport } from './agents/exportPolishAgent';
-import { OrganizationContextService } from '@/lib/services/organizationContextService';
-import type { LandingSection, BrandConfig } from './types';
+import { organizationContextService } from '@/lib/services/organizationContextService';
+import { generateOgImage } from '@/lib/services/landingPublishService';
+import type { LandingSection, BrandConfig, SeoConfig } from './types';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -51,6 +52,7 @@ export interface PublishModalProps {
   sections: LandingSection[];
   brandConfig: BrandConfig;
   companyName?: string;
+  seoConfig?: SeoConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +95,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   sections,
   brandConfig,
   companyName,
+  seoConfig,
 }) => {
   // ---- State ----
   const [slug, setSlug] = useState('');
@@ -150,8 +153,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
 
   // ---- Retrieve Vercel token from org context ----
   const getVercelToken = useCallback(async (): Promise<string> => {
-    const ctxService = new OrganizationContextService();
-    const ctx = await ctxService.getContext(orgId);
+    const ctx = await organizationContextService.getContext(orgId);
     const token = ctx.vercel_api_token as string | undefined;
     if (!token) {
       throw new Error('Vercel API token not configured. Add "vercel_api_token" in your organization settings.');
@@ -201,18 +203,39 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       // 2. Persist section images to Supabase Storage
       const persistedSections = await landingAssetService.persistSectionImages(sections, orgId, sessionId);
 
-      // 3. Generate HTML via export polish agent
+      // 3. Auto-generate OG image if no custom one is set (US-024)
+      let effectiveSeoConfig = seoConfig ? { ...seoConfig } : undefined;
+      if (!effectiveSeoConfig?.og_image_url) {
+        const hero = sections.find(s => s.type === 'hero');
+        const headline = hero?.copy.headline ?? title;
+        try {
+          const ogUrl = await generateOgImage(headline, brandConfig, orgId, sessionId);
+          if (ogUrl) {
+            effectiveSeoConfig = {
+              title: effectiveSeoConfig?.title ?? title,
+              description: effectiveSeoConfig?.description ?? '',
+              ...effectiveSeoConfig,
+              og_image_url: ogUrl,
+            };
+          }
+        } catch {
+          // OG generation is best-effort — continue without it
+        }
+      }
+
+      // 4. Generate HTML via export polish agent (includes SEO tags)
       const exportResult = await generateExport({
         sections: persistedSections,
         brandConfig,
         companyName,
         polishWithAI: false,
+        seoConfig: effectiveSeoConfig,
       });
 
-      // 4. Get Vercel token
+      // 5. Get Vercel token
       const vercelToken = await getVercelToken();
 
-      // 5. Publish
+      // 6. Publish
       await publishMutation.mutateAsync({
         params: {
           sessionId,
@@ -221,6 +244,9 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           slug,
           title: title.trim(),
           htmlContent: exportResult.html,
+          metaDescription: effectiveSeoConfig?.description,
+          ogImageUrl: effectiveSeoConfig?.og_image_url,
+          seoConfig: effectiveSeoConfig as Record<string, unknown> | undefined,
         },
         vercelToken,
       });
@@ -235,7 +261,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     } finally {
       setIsPublishing(false);
     }
-  }, [slug, title, publishedPage, sections, orgId, sessionId, userId, brandConfig, companyName, getVercelToken, publishMutation]);
+  }, [slug, title, publishedPage, sections, orgId, sessionId, userId, brandConfig, companyName, seoConfig, getVercelToken, publishMutation]);
 
   // ---- Unpublish ----
   const handleUnpublish = useCallback(async () => {

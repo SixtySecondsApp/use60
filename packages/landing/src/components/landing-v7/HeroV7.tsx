@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { DemoUrlInput } from '../landing-v5/DemoUrlInput';
+import heroOrbSvg from './svg/HeroOrb.svg?raw';
 
 interface HeroV7Props {
   onSubmit: (url: string) => void;
@@ -27,6 +28,13 @@ const fadeUp = {
 export function HeroV7({ onSubmit, inputRef }: HeroV7Props) {
   return (
     <section className="relative min-h-[90vh] flex items-center bg-[#0c0c0c] overflow-hidden">
+      {/* Animated orb visualization */}
+      <div
+        className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-40 md:opacity-50"
+        aria-hidden="true"
+        dangerouslySetInnerHTML={{ __html: heroOrbSvg }}
+      />
+
       {/* Subtle radial gradient atmosphere */}
       <div
         className="pointer-events-none absolute inset-0"

@@ -435,6 +435,42 @@ After human approves:
 
 ---
 
+## STEP 10: Write Learnings (MANDATORY)
+
+**This step runs automatically after DELIVER approval, BEFORE HOUSEKEEPING.** It is NOT optional — the entire learnings feed-forward system depends on this data being written.
+
+### 10a. Collect Run Metrics
+
+For each story in this run, calculate:
+- `estimatedMinutes` vs `actualMinutes` (from story start/complete timestamps)
+- Gate failures (from progress.md log entries)
+- Stories that were split mid-run
+- Blockers encountered (secrets, dependencies, tool unavailability)
+- Patterns discovered during BUILD
+
+### 10b. Write to `.sixty/learnings.json`
+
+**If file exists**: Append this run to `runs[]` array and recalculate `aggregated` section.
+**If file doesn't exist**: Create with this run as the first entry.
+
+**Aggregation rules:**
+- `avgEstimateAccuracy` = average of all runs' accuracy scores
+- `estimateCalibration[type]` = average(actual/estimated) across all runs for that story type
+- `topRecurringIssues` = observations that appear in 3+ runs, sorted by frequency
+- `topBlockerTypes` = blockers that appear in 2+ runs, sorted by frequency
+
+### 10c. Report What Was Learned
+
+```
+Learnings persisted for future runs:
+  Estimate accuracy this run: 84% (avg across 5 runs: 82%)
+  Calibration updates: schema +20%, api -37%
+  New recurring issues: 1 ("Missing empty states" — now at 8 occurrences)
+  Patterns saved: 1 ("Webhook idempotency via dedup key")
+```
+
+---
+
 ## RETROSPECTIVE + LEARNING LOOP (Auto-Generated)
 
 Post to Slack after DELIVER approval, AND persist learnings for future runs.

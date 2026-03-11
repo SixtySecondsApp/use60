@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Network, Cpu, CheckCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import architectureSvg from './svg/ArchitectureGraph.svg?raw';
 
 const stagger = {
   hidden: {},
@@ -81,6 +82,21 @@ export function ArchitectureV7() {
             every deal, every contact, every conversation. When something needs
             to happen, it acts.
           </motion.p>
+        </motion.div>
+
+        {/* Animated context graph */}
+        <motion.div
+          variants={fadeUp}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-40px' }}
+          className="mb-16 flex justify-center"
+        >
+          <div
+            className="w-full max-w-2xl opacity-80"
+            aria-hidden="true"
+            dangerouslySetInnerHTML={{ __html: architectureSvg }}
+          />
         </motion.div>
 
         {/* Concept cards */}

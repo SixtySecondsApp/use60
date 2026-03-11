@@ -53,6 +53,42 @@ Signals that mean RESUME (not new):
 - Input relates to the same feature area as current branch
 - User says "continue", "keep going", "next", or gives no input
 
+### Step 1b: Staleness Detection
+
+If `.sixty/pipeline.json` exists and has `lastActiveAt`:
+
+```
+Calculate hours since lastActiveAt.
+
+FRESH (< 4 hours):
+  → Normal routing. Pipeline is actively being worked on.
+
+WARM (4-48 hours):
+  → Pipeline exists but hasn't been touched in a while.
+  → Route normally, but note: "Pipeline idle for Xh — resuming."
+
+STALE (48+ hours):
+  → Pipeline has been abandoned or forgotten.
+  → Present options:
+    "This pipeline has been idle for X days."
+    "Project: <name> | Phase: <phase> | Stories: X/Y complete"
+    ""
+    "[R]esume where you left off"
+    "[A]rchive and start fresh"
+    "[S]tatus check (read-only)"
+```
+
+If `lastActiveAt` is missing (older pipeline), fall back to checking `lastUpdatedAt` or `startedAt`.
+
+Also check `.sixty/handoff.md` — if it exists, mention it:
+```
+Handoff brief found from last session. Key context:
+  - Last action: <from handoff>
+  - Next step: <from handoff>
+```
+
+---
+
 ### Step 2: Classify Input
 
 Read the input and classify into one of these intents:

@@ -43,6 +43,8 @@ import type { WorkspacePhaseKey } from '@/lib/services/landingBuilderWorkspaceSe
 import type { FactProfile } from '@/lib/types/factProfile';
 import type { ProductProfile } from '@/lib/types/productProfile';
 import type { LandingTemplate } from './templates';
+import { ImageCropModal } from './ImageCropModal';
+import { landingAssetService } from '@/lib/services/landingAssetService';
 
 
 /**
@@ -445,6 +447,11 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     // Restore divider toggle from workspace visuals
     if (vis.show_dividers !== undefined) {
       setShowDividers(vis.show_dividers !== false);
+    }
+
+    // Restore SEO config from workspace visuals (US-022)
+    if (vis.seo_config && typeof vis.seo_config === 'object') {
+      setSeoConfig(vis.seo_config as SeoConfig);
     }
   }, [workspace, isAssemblyMode]);
 
@@ -946,6 +953,99 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
     ));
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Image upload + crop (US-016, US-017)
+  // ---------------------------------------------------------------------------
+
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [cropImageUrl, setCropImageUrl] = useState('');
+  const [cropSectionId, setCropSectionId] = useState<string | null>(null);
+
+  /** Upload a file for a section. Returns the public URL. Optionally opens crop modal. */
+  const handleUploadAsset = useCallback(async (sectionId: string, file: File): Promise<string> => {
+    const orgId = activeOrgId ?? 'unknown';
+    const sessionId = conversationId ?? 'unknown';
+
+    try {
+      const publicUrl = await landingAssetService.uploadImage(file, orgId, sessionId);
+
+      // Update section with the new image URL
+      setAssemblySections(prev => prev.map(s =>
+        s.id === sectionId ? { ...s, image_url: publicUrl, image_status: 'complete' as const } : s
+      ));
+
+      toast.success('Image uploaded');
+
+      // Open crop modal for the uploaded image
+      setCropSectionId(sectionId);
+      setCropImageUrl(publicUrl);
+      setCropModalOpen(true);
+
+      return publicUrl;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      toast.error(message);
+      throw err;
+    }
+  }, [activeOrgId, conversationId]);
+
+  /** Open crop modal for an existing section image */
+  const handleCropAsset = useCallback((sectionId: string) => {
+    const section = assemblySections.find(s => s.id === sectionId);
+    if (!section?.image_url) return;
+
+    setCropSectionId(sectionId);
+    setCropImageUrl(section.image_url);
+    setCropModalOpen(true);
+  }, [assemblySections]);
+
+  /** Apply crop: upload cropped blob, update section */
+  const handleCropApply = useCallback(async (croppedBlob: Blob) => {
+    if (!cropSectionId) return;
+
+    const orgId = activeOrgId ?? 'unknown';
+    const sessionId = conversationId ?? 'unknown';
+    const file = new File([croppedBlob], 'cropped.png', { type: 'image/png' });
+
+    try {
+      const publicUrl = await landingAssetService.uploadImage(file, orgId, sessionId);
+      setAssemblySections(prev => prev.map(s =>
+        s.id === cropSectionId ? { ...s, image_url: publicUrl, image_status: 'complete' as const } : s
+      ));
+      toast.success('Image cropped and saved');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save cropped image';
+      toast.error(message);
+    }
+
+    setCropModalOpen(false);
+    setCropSectionId(null);
+    setCropImageUrl('');
+  }, [cropSectionId, activeOrgId, conversationId]);
+
+  /** Skip crop — use original image as-is */
+  const handleCropSkip = useCallback(() => {
+    setCropModalOpen(false);
+    setCropSectionId(null);
+    setCropImageUrl('');
+  }, []);
+
+  // Open SEO settings panel — initialise defaults from sections if first time (US-022)
+  const handleOpenSeoSettings = useCallback(() => {
+    if (!seoConfig) {
+      setSeoConfig(generateDefaultSeo(assemblySections));
+    }
+    setSeoSettingsOpen(true);
+  }, [seoConfig, assemblySections]);
+
+  // Update SEO config and persist to workspace visuals (US-022)
+  const handleUpdateSeoConfig = useCallback((updated: SeoConfig) => {
+    setSeoConfig(updated);
+    // Persist alongside existing visuals JSONB
+    const existingVisuals = (workspace?.visuals ?? {}) as Record<string, unknown>;
+    updatePhaseOutput({ phase: 'visuals', output: { ...existingVisuals, seo_config: updated } });
+  }, [workspace, updatePhaseOutput]);
+
   // Dynamic preview padding based on chat overlay state
   const previewPadding = chatOverlayState === 'collapsed'
     ? 'pb-20'
@@ -968,18 +1068,30 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
             onToggleDividers={handleToggleDividers}
             onSectionUpdate={handleInlineSectionUpdate}
             onRegenerateAsset={handleRegenerateAsset}
+            onUploadAsset={handleUploadAsset}
           />
 
-          {/* Publish button — top-right overlay */}
-          <button
-            type="button"
-            onClick={() => setPublishModalOpen(true)}
-            className="absolute top-2 left-2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors"
-            title="Publish landing page"
-          >
-            <Globe className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Publish</span>
-          </button>
+          {/* Toolbar overlay — Publish + Page Settings */}
+          <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPublishModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors"
+              title="Publish landing page"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Publish</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenSeoSettings}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-white/10 shadow-sm transition-colors backdrop-blur-sm"
+              title="Page Settings (SEO & Analytics)"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Page Settings</span>
+            </button>
+          </div>
 
           {/* Floating chat bar — centered within preview area */}
           <FloatingChatBar
@@ -1005,6 +1117,8 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
             sections={assemblySections}
             onSectionsChange={setAssemblySections}
             onRegenerateAsset={handleRegenerateAsset}
+            onUploadAsset={handleUploadAsset}
+            onCropAsset={handleCropAsset}
             selectedSectionId={highlightSectionId}
             onSelectSection={(id) => setHighlightSectionId(id)}
           />
@@ -1020,6 +1134,24 @@ export const LandingPageBuilder: React.FC<LandingPageBuilderProps> = ({
           sections={assemblySections}
           brandConfig={assemblyBrandConfig}
           companyName={orgProfile?.research_data?.company_overview?.name || orgProfile?.company_name || undefined}
+          seoConfig={seoConfig ?? undefined}
+        />
+
+        {/* SEO & Analytics settings panel (US-022) */}
+        <SeoSettingsPanel
+          open={seoSettingsOpen}
+          onClose={() => setSeoSettingsOpen(false)}
+          seoConfig={seoConfig ?? generateDefaultSeo(assemblySections)}
+          onUpdate={handleUpdateSeoConfig}
+        />
+
+        {/* Image crop modal (US-017) */}
+        <ImageCropModal
+          open={cropModalOpen}
+          imageUrl={cropImageUrl}
+          onCrop={handleCropApply}
+          onSkip={handleCropSkip}
+          onClose={handleCropSkip}
         />
       </div>
     );

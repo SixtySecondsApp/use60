@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import skillNetworkSvg from './svg/SkillNetwork.svg?raw';
 
 const stagger = {
   hidden: {},
@@ -90,6 +91,21 @@ export function TechCredibilityV7() {
             agents, and a context graph that connects every deal, contact, and
             conversation.
           </motion.p>
+        </motion.div>
+
+        {/* Animated skill network visualization */}
+        <motion.div
+          variants={fadeUp}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          className="mb-16"
+        >
+          <div
+            className="w-full opacity-60"
+            aria-hidden="true"
+            dangerouslySetInnerHTML={{ __html: skillNetworkSvg }}
+          />
         </motion.div>
 
         {/* Stats grid */}

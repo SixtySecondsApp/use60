@@ -152,6 +152,7 @@ All state lives in one file. Every phase reads and writes to it. Resume works by
   "phase": "build",
   "startedAt": "<ISO>",
   "lastUpdatedAt": "<ISO>",
+  "lastActiveAt": "<ISO>",
 
   "input": {
     "type": "transcript|description|prd|interactive",
@@ -368,6 +369,98 @@ Draft ticket: TSK-XXXX (or "ready to create")
 
 ---
 
+## AUTOMATIC SAFEGUARDS (Run After Every Phase)
+
+These two systems fire automatically after every phase gate transition. They are NOT optional.
+
+### Safeguard 1: Pipeline State Snapshots
+
+After every phase completes, snapshot the entire `pipeline.json` before advancing:
+
+```bash
+mkdir -p .sixty/snapshots
+cp .sixty/pipeline.json .sixty/snapshots/<phase>-$(date -u +%Y%m%dT%H%M%SZ).json
+```
+
+**Example:**
+```
+.sixty/snapshots/
+  discover-20260310T091500Z.json
+  define-20260310T093000Z.json
+  plan-20260310T100000Z.json
+  sync-20260310T101500Z.json
+  build-20260310T140000Z.json
+```
+
+**Recovery**: If `pipeline.json` gets corrupted or a phase goes wrong:
+```bash
+# List available snapshots
+ls .sixty/snapshots/
+
+# Restore to a specific phase
+cp .sixty/snapshots/plan-20260310T100000Z.json .sixty/pipeline.json
+```
+
+**Cleanup**: Snapshots are deleted during HOUSEKEEPING phase after successful DELIVER.
+
+### Safeguard 2: Session Handoff Brief
+
+After every phase gate transition, auto-generate `.sixty/handoff.md`. This ensures the NEXT Claude session (which loses all conversational context) can pick up exactly where the last one left off.
+
+**Write to `.sixty/handoff.md`** (overwrite each time — this is a living document, not a log):
+
+```markdown
+# Handoff Brief — <project name>
+Generated: <ISO timestamp>
+
+## Current State
+- Phase: <current phase>
+- Branch: <current branch>
+- Stories: X/Y complete
+- Last completed: <last story ID + title>
+
+## Key Decisions Made
+<!-- Why things were built this way, not just what was built -->
+- <Decision 1>: <reasoning>
+- <Decision 2>: <reasoning>
+
+## Patterns Discovered
+<!-- Reusable patterns found during DISCOVER/BUILD that future stories should follow -->
+- <Pattern>: <where it lives, how to reuse>
+
+## What Didn't Work
+<!-- Failed approaches, so the next session doesn't retry them -->
+- <Approach>: <why it failed>
+
+## What To Do Next
+<!-- Explicit next action, not "continue" -->
+- Next story: <ID> — <title>
+- Watch out for: <known risk or blocker>
+- Dependencies needed: <anything unresolved>
+
+## Open Questions
+<!-- Things that need human input or investigation -->
+- <Question 1>
+```
+
+**Resume protocol**: When `--resume` is used, read `.sixty/handoff.md` BEFORE reading `pipeline.json`. The handoff has the context; pipeline.json has the data.
+
+---
+
+### Safeguard 3: Activity Timestamp
+
+Every time ANY phase step runs, update `pipeline.json.lastActiveAt`:
+
+```json
+{
+  "lastActiveAt": "<ISO timestamp>"
+}
+```
+
+This field is used by staleness detection in `/60/go` (see go.md).
+
+---
+
 ## PHASE EXECUTION
 
 ### Phase 0: LAUNCH (new projects only)
@@ -482,18 +575,22 @@ Runs automatically after DELIVER. No human gate needed.
 /60/ship --resume
 ```
 
-1. Read `.sixty/pipeline.json`
-2. Determine current phase from `phaseGates`
-3. Print 3-line summary:
+1. **Read `.sixty/handoff.md` FIRST** — this has the context the previous session captured (decisions, patterns, what didn't work, what to do next). Internalize it before proceeding.
+2. Read `.sixty/pipeline.json` for structured state data
+3. Print summary:
    ```
    Resuming: "<project>" (started Xh ago)
    Phase: BUILD (5/9 stories complete)
    Last: US-005 — Webhook signature verification
+   Next: US-006 — <from handoff.md>
+   Watch out: <risks from handoff.md>
    ```
 4. Continue from current phase
 
 If BUILD phase: pick next incomplete story and continue the loop.
 If any earlier phase: re-run that phase (they're idempotent).
+
+**If handoff.md is missing**: Fall back to pipeline.json only, but log a warning. This means state was likely lost or the pipeline was started before handoff briefs were implemented.
 
 ---
 

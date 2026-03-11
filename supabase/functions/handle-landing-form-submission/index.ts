@@ -59,7 +59,7 @@ serve(async (req) => {
     // Validate page_id exists and is published
     const { data: page, error: pageError } = await supabase
       .from('published_landing_pages')
-      .select('id, org_id, status')
+      .select('id, org_id, user_id, status, auto_create_contacts, title, slug')
       .eq('id', page_id)
       .maybeSingle();
 
@@ -122,6 +122,73 @@ serve(async (req) => {
     }
 
     console.log(`[handle-landing-form-submission] Saved submission for page ${page_id} from ${ipAddress}`);
+
+    // US-013: Auto-create contact in CRM if enabled on the page
+    if (page.auto_create_contacts && form_data.email) {
+      try {
+        const email = String(form_data.email).trim().toLowerCase();
+        const name = String(form_data.name || '').trim();
+        const company = String(form_data.company || '').trim();
+
+        // Check if contact already exists by email within this org
+        const { data: existingContact } = await supabase
+          .from('contacts')
+          .select('id, owner_id')
+          .eq('email', email)
+          .eq('org_id', page.org_id)
+          .maybeSingle();
+
+        let contactId: string;
+
+        if (existingContact) {
+          contactId = existingContact.id;
+          console.log(`[handle-landing-form-submission] Contact already exists: ${contactId}`);
+        } else {
+          // Create new contact owned by the page owner
+          const { data: newContact, error: contactError } = await supabase
+            .from('contacts')
+            .insert({
+              email,
+              first_name: name.split(' ')[0] || null,
+              last_name: name.split(' ').slice(1).join(' ') || null,
+              company: company || null,
+              owner_id: page.user_id,
+              org_id: page.org_id,
+              source: 'landing_page',
+            })
+            .select('id')
+            .single();
+
+          if (contactError) {
+            console.error('[handle-landing-form-submission] Contact creation failed:', contactError.message);
+          } else {
+            contactId = newContact.id;
+            console.log(`[handle-landing-form-submission] Created contact: ${contactId}`);
+          }
+        }
+
+        // Log activity for the contact
+        if (contactId!) {
+          const { error: activityError } = await supabase
+            .from('activities')
+            .insert({
+              user_id: page.user_id,
+              org_id: page.org_id,
+              contact_id: contactId,
+              activity_type: 'landing_page_lead',
+              title: `Lead captured from landing page: ${page.title || page.slug || 'Untitled'}`,
+              description: `Form submitted from ${source_url || 'published page'}`,
+            });
+
+          if (activityError) {
+            console.error('[handle-landing-form-submission] Activity creation failed:', activityError.message);
+          }
+        }
+      } catch (crmError) {
+        // CRM sync is non-blocking — never fail the submission
+        console.error('[handle-landing-form-submission] CRM sync error:', crmError);
+      }
+    }
 
     return jsonResponse({ success: true }, req);
   } catch (error) {

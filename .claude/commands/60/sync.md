@@ -18,6 +18,47 @@ Tickets are for humans. Every ticket should read like a brief written by a sharp
 
 ---
 
+## DRY-RUN MODE
+
+```bash
+/60/sync --dry-run
+```
+
+Preview everything that WOULD be created, without actually creating anything. No tickets, no branches, no Slack posts.
+
+**Output format:**
+
+```
+DRY RUN — Nothing will be created.
+
+  Dev Hub Project: <Project Name> (<code>)
+
+  Parent Ticket (would create):
+    Title: PRD: <Feature Title>
+    Type: feature | Priority: <priority>
+
+  Subtasks (would create):
+    US-001: <title> — <type>
+    US-002: <title> — <type>
+    US-003: <title> — DEDUPED (matches TSK-0534)
+
+  Branch (would create):
+    feature/<runSlug>
+
+  Slack (would post):
+    Channel: <channel> | Thread: <thread>
+
+  [P]roceed for real  [E]dit plan first  [C]ancel
+```
+
+- **Proceed**: Re-run SYNC without `--dry-run` (creates everything)
+- **Edit**: Go back to `/60/plan --edit` to adjust stories before syncing
+- **Cancel**: Stop. Pipeline state unchanged.
+
+When called from `/60/ship`, dry-run is NOT used (auto-flow). Dry-run is for standalone `/60/sync` calls where you want to verify before creating.
+
+---
+
 ## RULES
 
 1. **One parent ticket per pipeline run.** The parent IS the PRD — context, scope, the why.
