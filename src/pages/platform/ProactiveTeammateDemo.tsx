@@ -431,9 +431,8 @@ async function sendDemoToSlack(
   }
 
   try {
-    const { error } = await supabase.functions.invoke('slack-morning-brief', {
+    const { data, error } = await supabase.functions.invoke('proactive-teammate-demo', {
       body: {
-        demoMode: true,
         demoAction: action,
         userId,
         orgId,
@@ -442,6 +441,11 @@ async function sendDemoToSlack(
 
     if (error) {
       toast.error(`Slack send failed: ${error.message}`);
+      return false;
+    }
+
+    if (data?.error) {
+      toast.error(data.error);
       return false;
     }
 
