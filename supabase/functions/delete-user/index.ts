@@ -101,35 +101,26 @@ serve(async (req) => {
       }
     }
 
-    // Anonymize the profile (skip if already anonymized or no profile)
-    if (userProfile && !isAlreadyAnonymized) {
-      console.log('[delete-user] Anonymizing profile for:', userId)
-      const { error: profileError } = await supabaseAdmin
-        .from('profiles')
-        .update({
-          email: `deleted_${userId}@deleted.local`,
-          avatar_url: null,
-          bio: null,
-          clerk_user_id: null,
-          auth_provider: 'deleted',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userId)
-
-      if (profileError) {
-        console.error('[delete-user] Error anonymizing profile:', profileError)
-        // Non-fatal — continue to auth deletion
+    // 1. Delete organization memberships first (FK-safe order)
+    console.log('[delete-user] Removing organization memberships for:', userId)
+    try {
+      const { error: membershipError } = await supabaseAdmin
+        .from('organization_memberships')
+        .delete()
+        .eq('user_id', userId)
+      if (membershipError) {
+        console.warn('[delete-user] membership deletion failed (non-fatal):', membershipError.message)
       }
+    } catch (memberErr) {
+      console.warn('[delete-user] membership deletion threw (non-fatal):', memberErr)
     }
 
-    // Delete from auth.users to revoke access (user can sign up again with same email)
+    // 2. Delete from auth.users FIRST — this is the critical step that allows re-registration
     console.log('[delete-user] Deleting auth user:', userId)
-    let authWarning: string | null = null
     try {
       const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
       if (authDeleteError) {
-        // Only ignore if auth user truly doesn't exist (404)
         const isNotFound = authDeleteError.status === 404 ||
           (authDeleteError as any)?.code === 'user_not_found' ||
           authDeleteError.message?.includes('not found')
@@ -137,16 +128,55 @@ serve(async (req) => {
         if (isNotFound) {
           console.log('[delete-user] Auth user does not exist (already deleted):', authDeleteError.message)
         } else {
-          // Auth deletion failed — log it but don't block if profile was already anonymized
+          // Auth deletion FAILED — this blocks re-registration, so return error
           console.error('[delete-user] Error deleting auth user:', authDeleteError.message)
-          authWarning = `Auth cleanup incomplete: ${authDeleteError.message || 'Unknown error'}. User profile has been removed.`
+          return new Response(
+            JSON.stringify({
+              error: 'AUTH_DELETION_FAILED',
+              message: `Failed to delete auth record: ${authDeleteError.message}. User cannot re-register until this is resolved.`,
+              userId
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
         }
       } else {
         console.log('[delete-user] Auth user deleted successfully:', userId)
       }
     } catch (authErr: any) {
       console.error('[delete-user] auth.admin.deleteUser threw:', authErr?.message || authErr)
-      authWarning = `Auth cleanup threw: ${authErr?.message || 'Unknown error'}. User profile has been removed.`
+      return new Response(
+        JSON.stringify({
+          error: 'AUTH_DELETION_FAILED',
+          message: `Auth deletion threw: ${authErr?.message || 'Unknown error'}. User cannot re-register until this is resolved.`,
+          userId
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 3. Delete the profile (auth is gone, so try full delete first, fall back to anonymize)
+    if (userProfile) {
+      console.log('[delete-user] Deleting profile for:', userId)
+      const { error: deleteProfileError } = await supabaseAdmin
+        .from('profiles')
+        .delete()
+        .eq('id', userId)
+
+      if (deleteProfileError) {
+        // FK constraint — fall back to anonymization so referencing rows aren't orphaned
+        console.warn('[delete-user] Profile delete failed (FK constraint), anonymizing instead:', deleteProfileError.message)
+        await supabaseAdmin
+          .from('profiles')
+          .update({
+            email: `deleted_${userId}@deleted.local`,
+            avatar_url: null,
+            bio: null,
+            clerk_user_id: null,
+            auth_provider: 'deleted',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId)
+      }
     }
 
     // Reset waitlist entry so user can be re-invited
@@ -178,8 +208,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: authWarning ? 'User removed with warnings' : 'User deleted successfully',
-        warning: authWarning || undefined,
+        message: 'User deleted successfully',
         userId
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
