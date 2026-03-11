@@ -3181,12 +3181,11 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       {/* Table area */}
       {activeTab === 'data' && (
         <div
-          className="flex-1 min-h-[50vh] min-w-0 overflow-hidden px-6 pt-4 pb-16"
-          style={{ '--ops-table-max-height': isFullscreen ? 'calc(100vh - 90px)' : 'calc(100vh - 220px)' } as React.CSSProperties}
+          className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col px-6 pt-4 pb-4"
         >
           {/* Pipeline info banner */}
           {!pipelineBannerDismissed && columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
-            <div className="mb-3 flex items-center gap-3 rounded-lg border border-violet-700/30 bg-violet-900/10 px-4 py-2.5 text-xs text-violet-300">
+            <div className="mb-3 shrink-0 flex items-center gap-3 rounded-lg border border-violet-700/30 bg-violet-900/10 px-4 py-2.5 text-xs text-violet-300">
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
               <span>This table has AI pipeline steps. Click action buttons to process rows, or use <strong>Run All</strong> to process everything. Edit prompts via column header menu.</span>
               <button onClick={() => setPipelineBannerDismissed(true)} className="ml-auto shrink-0 text-violet-400 hover:text-violet-200">
@@ -3246,7 +3245,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
           {/* Pagination controls */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-2 py-3 border-t border-zinc-800/60">
+            <div className="shrink-0 flex items-center justify-between px-2 py-3 border-t border-zinc-800/60">
               <span className="text-xs text-zinc-500">
                 Showing {((currentPage - 1) * OPS_PAGE_SIZE) + 1}–{Math.min(currentPage * OPS_PAGE_SIZE, totalRows)} of {totalRows} rows
               </span>
