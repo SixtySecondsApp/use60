@@ -749,11 +749,10 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           }
         }
 
-        if (ranAnyStep) completedRows++;
-
-        // Refresh UI every 5 rows so user sees progress
-        if (completedRows > 0 && completedRows % 5 === 0) {
-          queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+        if (ranAnyStep) {
+          completedRows++;
+          // Refresh UI after each row so user sees results before next row starts
+          await queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
         }
       }
 
