@@ -79,26 +79,26 @@ export function getCorsHeaders(req: Request): Record<string, string> {
   if (!origin) {
     return {
       'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-cron-secret, x-internal-call',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     };
   }
-  
+
   // Check if origin is allowed
   if (isOriginAllowed(origin)) {
     return {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-cron-secret, x-internal-call',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Credentials': 'true',
     };
   }
-  
+
   // Origin not allowed - return empty origin to block the request
   console.warn(`[CORS] Blocked request from origin: ${origin}`);
   return {
     'Access-Control-Allow-Origin': '',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   };
 }
 

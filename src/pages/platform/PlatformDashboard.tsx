@@ -204,11 +204,11 @@ const platformSections: Record<string, PlatformSection[]> = {
   ],
   'AI & Intelligence': [
     {
-      id: 'godseye',
-      title: 'God\'s Eye',
+      id: 'goldeneye',
+      title: 'GoldenEye',
       description: 'Real-time token flow visualization across all users and LLM endpoints',
       icon: Eye,
-      href: '/platform/godseye',
+      href: '/platform/goldeneye',
       color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30',
       badge: 'New',
     },

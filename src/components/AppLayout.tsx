@@ -287,7 +287,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Auto-collapse sidebar on specific pages for more space
   useEffect(() => {
-    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow'];
+    const collapsedPages = ['/email', '/calendar', '/workflows', '/freepik-flow', '/platform/goldeneye'];
     const shouldCollapse = collapsedPages.includes(location.pathname);
     
     if (shouldCollapse) {
@@ -310,7 +310,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Note: /ops/ pages removed — they use normal page scroll so users can scroll
   // when the mouse is outside the table.
   const isFullHeightPage = useMemo(() => {
-    return location.pathname.startsWith('/copilot');
+    return location.pathname.startsWith('/copilot') || location.pathname.startsWith('/ops/') || location.pathname.startsWith('/landing-page-builder') || location.pathname === '/platform/goldeneye';
   }, [location.pathname]);
 
 

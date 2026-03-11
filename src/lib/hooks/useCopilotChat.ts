@@ -18,6 +18,7 @@ import { CopilotSessionService } from '@/lib/services/copilotSessionService';
 import type { CopilotMessage as PersistedMessage, CopilotMessageMetadata } from '@/lib/types/copilot';
 import { toast } from 'sonner';
 import { getTemporalContext } from '@/lib/utils/temporalContext';
+import { getClientIp } from '@/lib/utils/clientIp';
 
 // =============================================================================
 // Types
@@ -265,6 +266,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
         console.log('[useCopilotChat] Calling copilot-autonomous with org:', options.organizationId);
 
         // Call the edge function
+        const clientIp = await getClientIp();
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/copilot-autonomous`,
           {
@@ -285,6 +287,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
               },
               stream: true,
               ...(sendOpts?.routingContext ? { routingContext: sendOpts.routingContext } : {}),
+              ...(clientIp ? { client_ip: clientIp } : {}),
             }),
             signal: abortControllerRef.current.signal,
           }
