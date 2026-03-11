@@ -5,7 +5,7 @@
  * for each model directly from the GoldenEye page.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Cpu,
   DollarSign,
@@ -21,7 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 import type { LLMEndpoint } from '@/lib/hooks/useGoldenEyeData';
-import { formatCost, getProviderColor, AI_PROVIDERS } from '@/lib/types/aiModels';
+import { getProviderColor, AI_PROVIDERS } from '@/lib/types/aiModels';
 
 interface ModelRoutingPanelProps {
   llmEndpoints: LLMEndpoint[];
@@ -104,116 +104,107 @@ export function ModelRoutingPanel({ llmEndpoints, onConfigChanged }: ModelRoutin
     );
   };
 
-  return (
-    <div className="mt-4 space-y-4 overflow-y-auto max-h-[calc(100vh-12rem)]">
-      {/* Quick link to full model config */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => navigate('/platform/ai/models')}
-        className="w-full text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-700 justify-between"
-      >
-        <span className="flex items-center gap-2">
-          <Cpu className="h-4 w-4" />
-          Full Model Configuration
-        </span>
-        <ExternalLink className="h-3.5 w-3.5" />
-      </Button>
+  // Flatten all endpoints into a single list for grid layout
+  const allEndpoints = Object.entries(endpointsByProvider).flatMap(([provider, endpoints]) =>
+    endpoints.map(ep => ({ ...ep, providerName: (AI_PROVIDERS as any)[provider]?.name || provider, providerKey: provider }))
+  );
 
-      {/* Pricing Matrix */}
-      <div>
-        <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-3 shrink-0">
+        <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
           <DollarSign className="h-3.5 w-3.5" />
           Pricing Matrix (cost per 1M tokens)
         </h3>
-
-        {Object.entries(endpointsByProvider).map(([provider, endpoints]) => (
-          <div key={provider} className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: getProviderColor(provider as any) }}
-              />
-              <p className="text-xs font-medium text-slate-300">
-                {(AI_PROVIDERS as any)[provider]?.name || provider}
-              </p>
-              <Badge variant="outline" className="text-[10px] border-slate-700 text-slate-500">
-                {endpoints.length} models
-              </Badge>
-            </div>
-
-            <div className="space-y-2">
-              {endpoints.map((ep) => {
-                const edit = getEdit(ep);
-                const unsaved = hasUnsavedChanges(ep);
-
-                return (
-                  <div
-                    key={ep.id}
-                    className={`p-2.5 rounded-lg border ${
-                      unsaved ? 'border-amber-500/30 bg-amber-900/10' : 'border-slate-700/50 bg-slate-800/30'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-medium text-slate-200 truncate max-w-[200px]">
-                        {ep.display_name}
-                      </p>
-                      <div className="flex items-center gap-1.5">
-                        {ep.active_request_count > 0 && (
-                          <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-300">
-                            {ep.active_request_count} active
-                          </Badge>
-                        )}
-                        {unsaved && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleSavePricing(ep.id)}
-                            disabled={savingId === ep.id}
-                            className="h-6 px-2 text-[10px] bg-amber-600 hover:bg-amber-700 text-white"
-                          >
-                            {savingId === ep.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Save className="h-3 w-3" />
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-[10px] text-slate-500">Input $/1M</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={edit.input_cost_per_million}
-                          onChange={(e) => updateEdit(ep.id, 'input_cost_per_million', e.target.value)}
-                          className="bg-slate-900 border-slate-700 text-slate-200 h-7 text-xs font-mono"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[10px] text-slate-500">Output $/1M</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={edit.output_cost_per_million}
-                          onChange={(e) => updateEdit(ep.id, 'output_cost_per_million', e.target.value)}
-                          className="bg-slate-900 border-slate-700 text-slate-200 h-7 text-xs font-mono"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-
-        {llmEndpoints.length === 0 && (
-          <p className="text-xs text-slate-500 text-center py-4">No active models found</p>
-        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate('/platform/ai/models')}
+          className="text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-700 h-7 text-xs gap-1.5"
+        >
+          <Cpu className="h-3.5 w-3.5" />
+          Full Config
+          <ExternalLink className="h-3 w-3" />
+        </Button>
       </div>
+
+      {/* Models grid — 3 columns */}
+      <div className="grid grid-cols-3 gap-3">
+        {allEndpoints.map((ep) => {
+          const edit = getEdit(ep);
+          const unsaved = hasUnsavedChanges(ep);
+
+          return (
+            <div
+              key={ep.id}
+              className={`p-2.5 rounded-lg border ${
+                unsaved ? 'border-amber-500/30 bg-amber-900/10' : 'border-slate-700/50 bg-slate-800/30'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: getProviderColor(ep.providerKey as any) }}
+                  />
+                  <p className="text-xs font-medium text-slate-200 truncate">
+                    {ep.display_name}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {ep.active_request_count > 0 && (
+                    <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-300">
+                      {ep.active_request_count} active
+                    </Badge>
+                  )}
+                  {unsaved && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleSavePricing(ep.id)}
+                      disabled={savingId === ep.id}
+                      className="h-6 px-2 text-[10px] bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      {savingId === ep.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Save className="h-3 w-3" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px] text-slate-500">Input $/1M</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={edit.input_cost_per_million}
+                    onChange={(e) => updateEdit(ep.id, 'input_cost_per_million', e.target.value)}
+                    className="bg-slate-900 border-slate-700 text-slate-200 h-7 text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-slate-500">Output $/1M</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={edit.output_cost_per_million}
+                    onChange={(e) => updateEdit(ep.id, 'output_cost_per_million', e.target.value)}
+                    className="bg-slate-900 border-slate-700 text-slate-200 h-7 text-xs font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {llmEndpoints.length === 0 && (
+        <p className="text-xs text-slate-500 text-center py-4">No active models found</p>
+      )}
     </div>
   );
 }

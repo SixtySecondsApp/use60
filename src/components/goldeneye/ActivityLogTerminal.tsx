@@ -12,7 +12,7 @@
 
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
-import { TerminalSquare, ChevronDown, Settings } from 'lucide-react';
+import { TerminalSquare, ChevronDown } from 'lucide-react';
 import type { RecentEvent, LLMEndpoint } from '@/lib/hooks/useGoldenEyeData';
 import { formatTokens } from '@/lib/types/aiModels';
 
@@ -84,7 +84,6 @@ interface ActivityLogTerminalProps {
   events: RecentEvent[];
   llmEndpoints: LLMEndpoint[];
   isPaused: boolean;
-  onOpenModelSettings: () => void;
 }
 
 /** Known dummy token pairs logged by edge functions with hardcoded values */
@@ -204,28 +203,28 @@ function LogRow({ event, rates, fxRate }: LogRowProps) {
 
   return (
     <div
-      className={`grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1fr)_90px_52px] gap-1 px-2 py-1 text-[10px] font-mono border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors ${
+      className={`grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] gap-1 px-2 py-1 text-[10px] font-mono border-b border-slate-800/30 hover:bg-slate-800/30 transition-colors ${
         isFlagged ? 'bg-orange-950/20' : ''
       }`}
     >
       {/* Timestamp */}
-      <span className={isTest ? SALMON : 'text-slate-500'} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <span className={`${isTest ? SALMON : 'text-slate-500'} border-r border-slate-700/40 pr-1`} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {formatTimestamp(event.created_at)}
       </span>
 
       {/* Username */}
-      <span className={`${isTest ? SALMON : userColor(event.user_id, event.user_name)} truncate`} title={event.user_email || undefined}>
+      <span className={`${isTest ? SALMON : userColor(event.user_id, event.user_name)} truncate border-r border-slate-700/40 pr-1`} title={event.user_email || undefined}>
         {isFlagged && <span className="text-orange-400 mr-0.5" title={event.flag_reason}>!</span>}
         {name}
       </span>
 
       {/* Provider / Model */}
-      <span className={`${providerColor} truncate text-left w-full`} title={`${event.provider}/${event.model}`}>
+      <span className={`${providerColor} truncate text-left w-full border-r border-slate-700/40 pr-1`} title={`${event.provider}/${event.model}`}>
         {isTest ? 'TEST ' : ''}{shortenModel(event.model)}
       </span>
 
       {/* Tokens in/out */}
-      <span className="whitespace-nowrap" title={dummy ? 'Estimated — tokens may be approximate' : undefined}>
+      <span className="whitespace-nowrap border-r border-slate-700/40 pr-1" title={dummy ? 'Estimated — tokens may be approximate' : undefined}>
         <span className={isTest ? SALMON : dummy ? 'text-slate-500' : 'text-indigo-300'}>{formatTokens(event.input_tokens)}</span>
         <span className={isTest ? SALMON : 'text-slate-600'}>/</span>
         <span className={isTest ? SALMON : dummy ? 'text-slate-500' : 'text-emerald-300'}>{formatTokens(event.output_tokens)}</span>
@@ -243,7 +242,7 @@ function LogRow({ event, rates, fxRate }: LogRowProps) {
   );
 }
 
-export function ActivityLogTerminal({ events, llmEndpoints, isPaused, onOpenModelSettings }: ActivityLogTerminalProps) {
+export function ActivityLogTerminal({ events, llmEndpoints, isPaused }: ActivityLogTerminalProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [newCount, setNewCount] = useState(0);
@@ -305,26 +304,17 @@ export function ActivityLogTerminal({ events, llmEndpoints, isPaused, onOpenMode
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-slate-600 font-mono">
-            {events.length} events
-          </span>
-          <button
-            onClick={onOpenModelSettings}
-            className="text-slate-500 hover:text-slate-300 transition-colors"
-            title="Model pricing settings"
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <span className="text-[10px] text-slate-600 font-mono">
+          {events.length} events
+        </span>
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1fr)_90px_52px] gap-1 px-2 py-1 text-[9px] font-mono text-slate-600 uppercase tracking-wider border-b border-slate-800/50 shrink-0 bg-[#0d1321]/50">
-        <span>Time</span>
-        <span>User</span>
-        <span>Model</span>
-        <span>In/Out</span>
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] gap-1 pl-2 pr-[18px] py-1 text-[9px] font-mono text-slate-600 uppercase tracking-wider border-b border-slate-800/50 shrink-0 bg-[#0d1321]/50">
+        <span className="border-r border-slate-700/40 pr-1">Time</span>
+        <span className="border-r border-slate-700/40 pr-1">User</span>
+        <span className="border-r border-slate-700/40 pr-1">Model</span>
+        <span className="border-r border-slate-700/40 pr-1">In/Out</span>
         <span className="text-right">GBP</span>
       </div>
 
@@ -357,11 +347,11 @@ export function ActivityLogTerminal({ events, llmEndpoints, isPaused, onOpenMode
       </div>
 
       {/* Sticky 24hr totals footer — same grid as rows */}
-      <div className="shrink-0 grid grid-cols-[70px_minmax(0,1fr)_minmax(0,1fr)_90px_52px] gap-1 px-2 py-1.5 bg-[#0d1321] border-t border-slate-800/50 font-mono text-[10px] items-center">
-        <span className="text-slate-500 uppercase tracking-wider">24hr</span>
-        <span className="text-slate-500 uppercase tracking-wider">Total</span>
-        <span />
-        <span className="whitespace-nowrap">
+      <div className="shrink-0 grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] gap-1 pl-2 pr-[18px] py-1.5 bg-[#0d1321] border-t border-slate-800/50 font-mono text-[10px] items-center">
+        <span className="text-slate-500 uppercase tracking-wider border-r border-slate-700/40 pr-1">24hr</span>
+        <span className="text-slate-500 uppercase tracking-wider border-r border-slate-700/40 pr-1">Total</span>
+        <span className="border-r border-slate-700/40" />
+        <span className="whitespace-nowrap border-r border-slate-700/40 pr-1">
           <span className="text-indigo-300 font-semibold">{formatTokens(totals24h.tokensIn)}</span>
           <span className="text-slate-600">/</span>
           <span className="text-emerald-300 font-semibold">{formatTokens(totals24h.tokensOut)}</span>

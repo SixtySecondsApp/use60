@@ -56,6 +56,7 @@ import CreditPurchaseModal from '@/components/credits/CreditPurchaseModal';
 
 interface CreditMenuTableProps {
   currentTier: IntelligenceTier;
+  children?: React.ReactNode;
 }
 
 // ============================================================================
@@ -364,7 +365,7 @@ function PackComparisonCards() {
 // Main component
 // ============================================================================
 
-export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
+export function CreditMenuTable({ currentTier, children }: CreditMenuTableProps) {
   const { symbol } = useOrgMoney();
   const { data: menu, isLoading, isError, refetch } = useQuery({
     queryKey: ['credit-menu'],
@@ -388,6 +389,8 @@ export function CreditMenuTable({ currentTier }: CreditMenuTableProps) {
     <div className="space-y-6">
       {/* ── Credit Pack Comparison ──────────────────────────────────── */}
       <PackComparisonCards />
+
+      {children}
 
       {/* ── Pricing Table ──────────────────────────────────────────── */}
       <div>
