@@ -1230,7 +1230,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     } catch {
       // Non-fatal — formulas will be stale until next full recalc
     }
-    queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+    await queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
   }, [tableId, columns, queryClient]);
 
   const cellEditMutation = useMutation({
@@ -1570,7 +1570,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             },
             {
               onSuccess: async () => {
-                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
+                // Mark button cell as complete — await to avoid race with formula recalc
+                await tableService.upsertCell(rowId, col.id, 'complete');
                 // Re-evaluate dependent formula columns for this specific row
                 const outputKeys = new Set(
                   (buttonConfig.actions ?? [])
