@@ -40,12 +40,13 @@ jobs:
         run: npx eslint . --ext ts,tsx --report-unused-disable-directives
 
   # ============================================
-  # Typecheck (BLOCKS MERGE)
+  # Typecheck (REPORT ONLY — times out on free runners, Build validates compilation)
   # ============================================
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -197,7 +198,7 @@ jobs:
             body += `| Check | Status | Blocks Merge? |\n`;
             body += `|-------|--------|---------------|\n`;
             body += `| ${icon(lint)} Lint | ${lint} | ${reportOnly(lint)} |\n`;
-            body += `| ${icon(typecheck)} Typecheck | ${typecheck} | ${blocking(typecheck)} |\n`;
+            body += `| ${icon(typecheck)} Typecheck | ${typecheck} | ${reportOnly(typecheck)} |\n`;
             body += `| ${icon(build)} Build | ${build} | ${blocking(build)} |\n`;
             body += `| ${icon(tests)} Unit Tests | ${tests} | ${reportOnly(tests)} |\n`;
             body += `| ${icon(landing)} Landing Page | ${landing} | ${landing === 'skipped' ? 'No changes' : blocking(landing)} |\n\n`;
