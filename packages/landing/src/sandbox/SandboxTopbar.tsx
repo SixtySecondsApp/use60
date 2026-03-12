@@ -29,6 +29,7 @@ const VIEW_LABELS: Record<SandboxView, string> = {
   contacts: 'Contacts',
   meetings: 'Meetings',
   email: 'Email',
+  proposals: 'Proposals',
   copilot: 'Copilot',
 };
 

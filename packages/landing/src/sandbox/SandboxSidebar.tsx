@@ -14,7 +14,6 @@ import {
   Mail,
   Bot,
   FileText,
-  Network,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -37,7 +36,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'meetings', label: 'Meetings', icon: Video },
   { id: 'email', label: 'Follow-Up Drafts', icon: Mail },
   { id: 'proposals', label: 'Proposals', icon: FileText },
-  { id: 'relationships', label: 'Relationships', icon: Network },
   { id: 'copilot', label: 'AI Copilot', icon: Bot },
 ];
 

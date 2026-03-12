@@ -185,7 +185,7 @@ function SandboxAppInner({
     onSignup?.();
   }, [visitorDomain, visitorEmail, visitorName, data.visitorCompany, campaignCode, campaignLinkId, onSignup, submitSignup, trackEvent]);
 
-  const ViewComponent = VIEW_MAP[activeView];
+  const ViewComponent = VIEW_MAP[activeView] ?? VIEW_MAP.dashboard;
 
   return (
     <div className="min-h-full bg-gray-950 relative">
