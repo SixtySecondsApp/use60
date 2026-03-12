@@ -27,6 +27,10 @@ entrypoint = "./functions/process-single-activity/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/process-single-activity/*.html" ]
 
+# Email delivery — uses custom auth (not JWT)
+[functions.send-router]
+verify_jwt = false
+
 # Consolidated webhook routers
 [functions.webhook-crm]
 verify_jwt = false
