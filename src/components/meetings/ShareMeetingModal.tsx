@@ -683,70 +683,7 @@ export const ShareMeetingModal = memo(function ShareMeetingModal({
                     </div>
                   )}
 
-                  {/* Share Content Options */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-200">
-                      Include in share
-                    </p>
-                    <div className="space-y-1.5">
-                      {[
-                        { key: 'include_summary' as const, label: 'AI Summary', icon: FileText, color: 'text-emerald-500', available: hasSummary },
-                        { key: 'include_action_items' as const, label: 'Action Items', icon: ListChecks, color: 'text-blue-500', available: hasActionItems },
-                        { key: 'include_transcript' as const, label: 'Transcript', icon: ScrollText, color: 'text-violet-500', available: hasTranscript },
-                      ].map(({ key, label, icon: Icon, color, available }) => (
-                        <div key={key} className={cn(
-                          "flex items-center justify-between p-2.5 rounded-lg border",
-                          "bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700/50",
-                          !available && "opacity-50"
-                        )}>
-                          <div className="flex items-center gap-2.5">
-                            <Icon className={cn("w-4 h-4", color)} />
-                            <Label htmlFor={key} className="text-sm cursor-pointer">
-                              {label}
-                            </Label>
-                          </div>
-                          <Switch
-                            id={key}
-                            checked={shareOptions[key]}
-                            onCheckedChange={(v) => handleOptionChange(key, v)}
-                            disabled={!available || isSavingOptions}
-                          />
-                        </div>
-                      ))}
-
-                      {(hasRecording || hasFathomVideo) && (
-                        <div className="flex items-center justify-between p-2.5 rounded-lg border bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700/50">
-                          <div className="flex items-center gap-2.5">
-                            <Video className="w-4 h-4 text-orange-500" />
-                            <Label htmlFor="include-recording" className="text-sm cursor-pointer">
-                              Recording {sourceType === 'fathom' && '(Fathom link)'}
-                            </Label>
-                          </div>
-                          <Switch
-                            id="include-recording"
-                            checked={shareOptions.include_recording}
-                            onCheckedChange={(v) => handleOptionChange('include_recording', v)}
-                            disabled={isSavingOptions}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Fathom external link */}
-                  {hasFathomVideo && fathomShareUrl && (
-                    <div className="pt-2 border-t border-gray-200 dark:border-gray-700/50">
-                      <a
-                        href={fathomShareUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        Open in Fathom
-                      </a>
-                    </div>
-                  )}
+                  {/* All content is always included in share — no toggles needed */}
                 </>
               )}
 

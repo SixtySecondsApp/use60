@@ -9,7 +9,6 @@ import {
   Lightbulb,
   ScrollText,
   Video,
-  ExternalLink,
   Sparkles,
   Copy,
   Check,
@@ -18,7 +17,6 @@ import {
   Mail,
   ArrowRight,
   Eye,
-  Play,
   Mic,
   FileText,
   Users,
@@ -33,6 +31,7 @@ import {
 } from '@/lib/utils/transcriptExport';
 import { VoiceRecorderAudioPlayer, type AudioPlayerRef } from '@/components/voice-recorder/VoiceRecorderAudioPlayer';
 import { VideoPlayer, type VideoPlayerHandle } from '@/components/ui/VideoPlayer';
+import FathomPlayerV2, { type FathomPlayerV2Handle } from '@/components/FathomPlayerV2';
 import { TranscriptModal } from '@/components/voice-recorder/TranscriptModal';
 import type { TranscriptSegment, Speaker } from '@/components/voice-recorder/types';
 
@@ -307,6 +306,75 @@ function formatDuration(minutes: number | null): string {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
+/**
+ * Parse meeting summary — handles both plain text and Fathom JSON format.
+ * Fathom stores `{"markdown_formatted":"## Meeting Purpose\n\n..."}` with
+ * Key Takeaways as markdown bullets containing `[**Type:** text](url)`.
+ * Returns a clean summary string and extracted highlights.
+ */
+function parseMeetingSummary(raw: string): { summary: string; extractedHighlights: HighlightItem[] } {
+  let markdown = raw;
+
+  // Try parsing as JSON (Fathom format)
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.markdown_formatted) {
+      markdown = parsed.markdown_formatted;
+    } else if (typeof parsed === 'string') {
+      markdown = parsed;
+    }
+  } catch {
+    // Not JSON — use as-is (60_notetaker plain text)
+    return { summary: raw, extractedHighlights: [] };
+  }
+
+  // Extract Key Takeaways bullets as highlights
+  const highlights: HighlightItem[] = [];
+  const takeawaysMatch = markdown.match(/## Key Takeaways\s*\n([\s\S]*?)(?=\n## |\n\n## |$)/);
+  if (takeawaysMatch) {
+    const bullets = takeawaysMatch[1].match(/- \[.*?\]\(.*?\)/g) || [];
+    for (const bullet of bullets) {
+      // Format: - [**Type:** text](url)
+      const inner = bullet.match(/- \[(.*?)\]\(/)?.[1] || '';
+      const typeMatch = inner.match(/\*\*(.+?):\*\*\s*/);
+      const type = typeMatch?.[1]?.toLowerCase().replace(/\s+/g, '_') || 'key_point';
+      const text = inner.replace(/\*\*.*?\*\*\s*/, '').trim();
+      if (text) {
+        highlights.push({ type, text });
+      }
+    }
+  }
+
+  // Build clean summary: take "Meeting Purpose" and "Topics" sections, skip Key Takeaways
+  const sections = markdown.split(/\n## /);
+  const cleanParts: string[] = [];
+  for (const section of sections) {
+    const heading = section.split('\n')[0].trim();
+    // Skip Key Takeaways (extracted as highlights) and empty sections
+    if (heading.toLowerCase().includes('key takeaway')) continue;
+    // Get content after heading
+    const content = section.substring(heading.length).trim();
+    if (!content) continue;
+    // Clean markdown: strip links [text](url) → text, bold, headers
+    const cleaned = content
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\*\*/g, '')
+      .replace(/#{1,6}\s*/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    if (cleaned) cleanParts.push(cleaned);
+  }
+
+  const summary = cleanParts.join('\n\n').trim() || markdown
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*/g, '')
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return { summary, extractedHighlights: highlights };
+}
+
 function getHighlightBadgeStyle(type: string): { bg: string; text: string; border: string } {
   switch (type) {
     case 'key_point':
@@ -314,11 +382,17 @@ function getHighlightBadgeStyle(type: string): { bg: string; text: string; borde
     case 'question':
       return { bg: 'bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20' };
     case 'decision':
+    case 'solution':
       return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' };
     case 'action_item':
+    case 'next_step':
       return { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20' };
+    case 'problem':
+      return { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' };
+    case 'pivot':
+      return { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' };
     default:
-      return { bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/20' };
+      return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' };
   }
 }
 
@@ -359,6 +433,7 @@ export function PublicMeetingShare() {
   const [videoError, setVideoError] = useState(false);
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
   const videoPlayerRef = useRef<VideoPlayerHandle>(null);
+  const fathomPlayerRef = useRef<FathomPlayerV2Handle>(null);
 
   // Speaker color mapping
   const speakerColorMap = useRef(new Map<string, number>());
@@ -537,6 +612,7 @@ export function PublicMeetingShare() {
     videoPlayerRef.current?.seek(time);
     audioPlayerRef.current?.seek(time);
     audioPlayerRef.current?.play();
+    fathomPlayerRef.current?.seekToTimestamp(time);
     // Scroll video/audio into view
     const playerEl = document.querySelector('[data-player-container]');
     playerEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -579,6 +655,17 @@ export function PublicMeetingShare() {
   const hasAnyMedia = hasVoiceRecording || hasFathomRecording || hasVideo;
   const transcript = voiceRecording?.transcript_segments || [];
   const speakers = voiceRecording?.speakers || [];
+
+  // Parse summary (handles Fathom JSON + markdown) and merge highlights
+  const { cleanSummary, allHighlights } = useMemo(() => {
+    if (!meeting?.summary) return { cleanSummary: '', allHighlights: meeting?.highlights || [] };
+    const { summary, extractedHighlights } = parseMeetingSummary(meeting.summary);
+    // Use DB highlights if available, otherwise use extracted from summary
+    const highlights = (meeting.highlights && meeting.highlights.length > 0)
+      ? meeting.highlights
+      : extractedHighlights;
+    return { cleanSummary: summary, allHighlights: highlights };
+  }, [meeting?.summary, meeting?.highlights]);
 
   // Parse raw transcript_text into structured segments (for 60_notetaker / non-voice meetings)
   // Passes meeting title so bot speaker names (e.g. "60 Notetaker") can be resolved to real people
@@ -946,25 +1033,16 @@ export function PublicMeetingShare() {
                   </div>
                 )}
 
-                {/* Fathom Recording Link */}
+                {/* Fathom Recording — embedded inline */}
                 {hasFathomRecording && meeting.share_url && (
-                  <a
-                    href={meeting.share_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-xl border border-white/[0.06] bg-white/[0.02] flex items-center justify-between p-5 hover:bg-white/[0.04] hover:border-white/[0.08] transition-all duration-200 group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                        <Play className="w-5 h-5 text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-200">Watch Recording</p>
-                        <p className="text-xs text-gray-500">Opens in Fathom</p>
-                      </div>
-                    </div>
-                    <ExternalLink className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors" />
-                  </a>
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden" data-player-container>
+                    <FathomPlayerV2
+                      ref={fathomPlayerRef}
+                      shareUrl={meeting.share_url}
+                      title={meeting.title || 'Meeting Recording'}
+                      className="w-full"
+                    />
+                  </div>
                 )}
               </>
             )}
@@ -1223,7 +1301,7 @@ export function PublicMeetingShare() {
             </div>
 
             {/* AI Summary */}
-            {meeting.summary && (
+            {cleanSummary && (
               <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
                 <div className="flex items-center gap-2.5 mb-4">
                   <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
@@ -1233,11 +1311,11 @@ export function PublicMeetingShare() {
                 </div>
                 <div className={cn(
                   'text-[13px] text-gray-300 leading-[1.7] whitespace-pre-wrap',
-                  !showFullSummary && 'line-clamp-6'
+                  !showFullSummary && 'line-clamp-4'
                 )}>
-                  {meeting.summary}
+                  {cleanSummary}
                 </div>
-                {meeting.summary.length > 400 && (
+                {cleanSummary.length > 300 && (
                   <button
                     onClick={() => setShowFullSummary(!showFullSummary)}
                     className="mt-3 text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors duration-150"
@@ -1249,10 +1327,10 @@ export function PublicMeetingShare() {
             )}
 
             {/* Key Highlights */}
-            {meeting.highlights && meeting.highlights.length > 0 && (() => {
+            {allHighlights.length > 0 && (() => {
               const MAX_VISIBLE = 4;
-              const visibleHighlights = showAllHighlights ? meeting.highlights : meeting.highlights.slice(0, MAX_VISIBLE);
-              const hasMore = meeting.highlights.length > MAX_VISIBLE;
+              const visibleHighlights = showAllHighlights ? allHighlights : allHighlights.slice(0, MAX_VISIBLE);
+              const hasMore = allHighlights.length > MAX_VISIBLE;
               return (
                 <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
                   <div className="flex items-center gap-2.5 mb-4">
@@ -1261,7 +1339,7 @@ export function PublicMeetingShare() {
                     </div>
                     <h2 className="text-sm font-semibold text-gray-100 tracking-tight">Key Highlights</h2>
                     <span className="text-[10px] ml-auto px-2 py-0.5 rounded-full bg-white/[0.04] text-gray-400 border border-white/[0.06] tabular-nums">
-                      {meeting.highlights.length}
+                      {allHighlights.length}
                     </span>
                   </div>
                   <div className="space-y-2">
@@ -1293,7 +1371,7 @@ export function PublicMeetingShare() {
                       {showAllHighlights ? (
                         <>Show less <ChevronUp className="w-3.5 h-3.5" /></>
                       ) : (
-                        <>Show all {meeting.highlights.length} highlights <ChevronDown className="w-3.5 h-3.5" /></>
+                        <>Show all {allHighlights.length} highlights <ChevronDown className="w-3.5 h-3.5" /></>
                       )}
                     </button>
                   )}
