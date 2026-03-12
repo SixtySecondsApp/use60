@@ -30,6 +30,15 @@ export interface PipelineDataSourceConfig {
   synthetic_rows?: Record<string, string>[];
 }
 
+export interface PipelineFormattingRule {
+  id: string;
+  column_key: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty';
+  value: string;
+  style: { backgroundColor: string; textColor: string };
+  scope: 'row' | 'cell';
+}
+
 export interface PipelineTemplate {
   key: string;
   name: string;
@@ -39,6 +48,8 @@ export interface PipelineTemplate {
   steps: PipelineStepDef[];
   columns: PipelineColumnDef[];
   dataSource: PipelineDataSourceConfig;
+  /** Auto-applied formatting rules for row colouring (e.g. review status) */
+  formatting_rules?: PipelineFormattingRule[];
 }
 
 // ── Re-engagement Pipeline ──────────────────────────────────────
@@ -588,6 +599,87 @@ Personalisation hook: {{personalisation_hook}}
 use60 angle: {{use60_angle}}
 Interest areas: {{interest_areas}}`;
 
+// ── Step 3: Review Gate ──────────────────────────────────────────
+
+const REENGAGEMENT_REVIEW_SYSTEM = `You are a quality-control reviewer for a re-engagement email campaign. Your job is to review the personalised email variables generated for each prospect and decide whether they are ready to send, need manual review, or should be rejected entirely.
+
+You are protecting the sales rep's reputation. Bad emails damage trust. Be strict.
+
+=================================================================
+REVIEW CRITERIA — ALL must pass for "approved"
+=================================================================
+
+1. QUALIFICATION CHECK
+   - The prospect must have discussed genuine business challenges that use60 could solve.
+   - There must be NO indication this is an existing client or past client. If the transcript mentions an active engagement, ongoing project, current contract, or any sign they are already paying for services — REJECT.
+   - There must be NO follow-up meetings scheduled or implied. If the conversation ends with "let's reconnect next week", "I'll send over a proposal", "let's book a follow-up" or similar — REJECT. The conversation must be COLD/DORMANT.
+   - If the meeting was internal (team sync, standup, planning) — REJECT.
+
+2. VARIABLE QUALITY CHECK
+   - hook_line: Must reference something SPECIFIC from the meeting, not generic. Must be under 20 words and punchy.
+   - pain_ref: Must be under 15 words, use "your/you" not the prospect's name in third person.
+   - pain_short: Must be under 4 words, casual.
+   - time_ref: Must be vague (no exact month names). Must work grammatically in "We spoke [time_ref] about...".
+   - blocker_ref: Must reference the actual reason they didn't convert, under 15 words.
+   - curiosity_line: Must be unique to this contact, not generic. Under 15 words.
+   - use60_intro: Must be one of the two fixed phrases exactly.
+   - use60_bridge: Must be under 6 words.
+   - pain_reframe: Must be a DIFFERENT angle from pain_ref. Under 18 words.
+
+3. WORDINESS CHECK
+   - If ANY variable exceeds its word limit, mark as needs_review.
+   - If the overall tone feels corporate, stiff, or salesy rather than casual, mark as needs_review.
+   - Variables should sound like a human texting a colleague, not a marketing team drafting copy.
+
+4. COHERENCE CHECK
+   - All variables must be internally consistent — they should tell the same story.
+   - pain_ref, pain_short, and pain_reframe must all relate to the SAME core pain.
+   - blocker_ref must match the actual blocker_type.
+
+=================================================================
+DECISION LOGIC
+=================================================================
+
+"approved" — ALL criteria pass. Variables are punchy, specific, coherent, and the prospect is genuinely qualified with no active relationship or follow-up meetings.
+
+"needs_review" — The prospect IS qualified but one or more variables have issues:
+  - A variable is too wordy or generic
+  - Tone feels off (too corporate, too vague)
+  - Minor coherence issues
+  - Edge case where you're 70-90% confident but not 100%
+
+"not_qualified" — The prospect should NOT receive this email:
+  - Linked to existing/past client relationship
+  - Follow-up meeting was scheduled (conversation isn't dormant)
+  - Internal meeting / not a real prospect
+  - Transcript too garbled to extract meaningful context
+
+=================================================================
+OUTPUT FORMAT
+=================================================================
+
+Return ONLY this JSON. Nothing else.
+
+{
+  "review_status": "approved" | "needs_review" | "not_qualified",
+  "review_notes": "1-2 sentences explaining your decision. If needs_review, specify which variables need fixing and why. If not_qualified, explain why."
+}
+
+IMPORTANT: Be strict. When in doubt between approved and needs_review, choose needs_review. When in doubt between needs_review and not_qualified, choose needs_review. The rep can always override — but a bad email that goes out cannot be unsent.`;
+
+const REENGAGEMENT_REVIEW_USER = `Review the following prospect and their generated email variables.
+
+Contact: {{first_name}} {{last_name}} at {{company}}
+Meeting date: {{meeting_date}}
+Months ago: {{months_ago}}
+Blocker type: {{blocker_type}}
+
+Transcript analysis:
+{{transcript_analysis}}
+
+Generated email variables:
+{{email_variables}}`;
+
 const REENGAGEMENT_PROMPT_3_SYSTEM = `You are a sales rep writing a short, warm re-engagement email. Use the provided merge variables to compose the email. Keep it under 150 words. No subject line — just the body. Write in first person, casual-professional tone. Don't be salesy. Reference something specific from the original meeting. End with a soft CTA (e.g. "Would it make sense to grab 15 minutes?").
 
 Output the email body as plain text — no JSON, no markdown, no formatting.
@@ -634,6 +726,13 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
       icon: 'Sparkles',
       color: 'emerald',
       action_column_key: 'personalise_btn',
+    },
+    {
+      title: 'Review',
+      description: 'AI quality-checks variables for wordiness, coherence, and qualification. Marks rows green (approved), yellow (needs review), or red (not qualified).',
+      icon: 'ShieldCheck',
+      color: 'amber',
+      action_column_key: 'review_btn',
     },
     {
       title: 'Write Email',
@@ -716,9 +815,33 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
     { key: 'use60_intro', label: '60 Intro', column_type: 'formula', position: 28, formula_expression: 'JSON_GET(@email_variables, "use60_intro")', is_visible: false },
     { key: 'use60_bridge', label: '60 Bridge', column_type: 'formula', position: 29, formula_expression: 'JSON_GET(@email_variables, "use60_bridge")', is_visible: false },
     { key: 'pain_reframe', label: 'Pain Reframe', column_type: 'formula', position: 30, formula_expression: 'JSON_GET(@email_variables, "pain_reframe")', is_visible: false },
-    // Step 3: Write Email button
+    // Step 3: Review Gate
     {
-      key: 'write_email_btn', label: 'Write Email', column_type: 'action', position: 31,
+      key: 'review_btn', label: 'Review', column_type: 'action', position: 31,
+      action_config: {
+        label: 'Review',
+        color: '#f59e0b',
+        actions: [{
+          type: 'run_prompt',
+          config: {
+            system_prompt: REENGAGEMENT_REVIEW_SYSTEM,
+            user_message_template: REENGAGEMENT_REVIEW_USER,
+            model: 'claude-sonnet-4-5-20250929',
+            provider: 'anthropic',
+            temperature: 0,
+            max_tokens: 512,
+            output_column_key: 'review_output',
+          },
+        }],
+        condition: { column_key: 'email_variables', operator: 'is_not_empty' },
+      },
+    },
+    { key: 'review_output', label: 'Review (JSON)', column_type: 'text', position: 32, is_visible: false },
+    { key: 'review_status', label: 'Review Status', column_type: 'formula', position: 33, formula_expression: 'JSON_GET(@review_output, "review_status")' },
+    { key: 'review_notes', label: 'Review Notes', column_type: 'formula', position: 34, formula_expression: 'JSON_GET(@review_output, "review_notes")' },
+    // Step 4: Write Email button
+    {
+      key: 'write_email_btn', label: 'Write Email', column_type: 'action', position: 35,
       action_config: {
         label: 'Write Email',
         color: '#f59e0b',
@@ -734,10 +857,36 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
             output_column_key: 'email_draft',
           },
         }],
-        condition: { column_key: 'email_variables', operator: 'is_not_empty' },
+        condition: { column_key: 'review_status', operator: 'equals', value: 'approved' },
       },
     },
-    { key: 'email_draft', label: 'Email Draft', column_type: 'text', position: 32 },
+    { key: 'email_draft', label: 'Email Draft', column_type: 'text', position: 36 },
+  ],
+  formatting_rules: [
+    {
+      id: 'review-approved',
+      column_key: 'review_status',
+      operator: 'equals',
+      value: 'approved',
+      style: { backgroundColor: 'rgba(34,197,94,0.15)', textColor: '#4ade80' },
+      scope: 'row',
+    },
+    {
+      id: 'review-needs-review',
+      column_key: 'review_status',
+      operator: 'equals',
+      value: 'needs_review',
+      style: { backgroundColor: 'rgba(234,179,8,0.15)', textColor: '#facc15' },
+      scope: 'row',
+    },
+    {
+      id: 'review-not-qualified',
+      column_key: 'qualified',
+      operator: 'not_equals',
+      value: 'true',
+      style: { backgroundColor: 'rgba(239,68,68,0.15)', textColor: '#f87171' },
+      scope: 'row',
+    },
   ],
   dataSource: {
     type: 'meetings',

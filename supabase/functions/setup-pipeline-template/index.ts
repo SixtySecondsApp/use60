@@ -811,6 +811,23 @@ serve(async (req: Request) => {
       }
     }
 
+    // ── 7. Auto-create default view with formatting rules (if template provides them) ──
+    const formattingRules = template_config.formatting_rules
+    if (!isAppendMode && formattingRules && formattingRules.length > 0) {
+      try {
+        await supabase.from('dynamic_table_views').insert({
+          table_id: tableId,
+          created_by: user.id,
+          name: 'Default',
+          is_default: true,
+          formatting_rules: formattingRules,
+        })
+        console.log(`[setup-pipeline-template] Created default view with ${formattingRules.length} formatting rules`)
+      } catch (viewErr) {
+        console.warn('[setup-pipeline-template] Default view creation failed (non-fatal):', viewErr)
+      }
+    }
+
     console.log(`[setup-pipeline-template] Done. Rows: ${sourceRows.length}, Append: ${isAppendMode}`)
 
     return new Response(

@@ -583,6 +583,13 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     });
   }, [tableId, table, currentUserId, views.length, columns, isViewsLoading, queryClient]);
 
+  // Auto-select default view when no view is active but views exist
+  useEffect(() => {
+    if (embedded || activeViewId || isViewsLoading || views.length === 0) return;
+    const defaultView = views.find((v) => v.is_default) || views[0];
+    if (defaultView) setActiveViewId(defaultView.id);
+  }, [embedded, activeViewId, isViewsLoading, views]);
+
   // Rows: server-side filter + primary sort, then client-side multi-sort if needed
   const rows = useMemo(() => {
     const base = tableData?.rows ?? [];
@@ -849,10 +856,15 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       searchParams.delete('action');
       setSearchParams(searchParams, { replace: true });
     } else if (action === 'export') {
-      // Trigger CSV export — include ALL columns (visible + hidden), exclude action buttons
-      const exportCols = columns.filter((c) => c.column_type !== 'action');
-      OpsTableService.generateCSVExport(rows, exportCols, table.name || 'export');
-      toast.success(`Exported ${rows.length} rows to CSV`);
+      // Trigger CSV export — include ALL columns (visible + hidden), exclude action buttons and transcripts
+      const exportCols = columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
+      // Default to approved-only rows when review_status column exists
+      const hasReviewStatus = columns.some((c) => c.key === 'review_status');
+      const exportRows = hasReviewStatus
+        ? rows.filter((r) => (r.cells['review_status']?.value ?? '').trim().toLowerCase() === 'approved')
+        : rows;
+      OpsTableService.generateCSVExport(exportRows, exportCols, table.name || 'export');
+      toast.success(`Exported ${exportRows.length}${hasReviewStatus ? ' approved' : ''} rows to CSV`);
       searchParams.delete('action');
       setSearchParams(searchParams, { replace: true });
     }
@@ -2355,8 +2367,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               exportRows = filteredData.rows;
             }
             const exportCols = (result.columns as string[])
-              ? columns.filter((c) => (result.columns as string[]).includes(c.key))
-              : columns.filter((c) => c.column_type !== 'action');
+              ? columns.filter((c) => (result.columns as string[]).includes(c.key) && c.key !== 'transcript_text')
+              : columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
             OpsTableService.generateCSVExport(
               exportRows,
               exportCols,
@@ -3085,6 +3097,28 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                   <Upload className="h-3.5 w-3.5 mr-2" />
                   Import CSV
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  const exportCols = columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
+                  const hasReviewStatus = columns.some((c) => c.key === 'review_status');
+                  const exportRows = hasReviewStatus
+                    ? rows.filter((r) => (r.cells['review_status']?.value ?? '').trim().toLowerCase() === 'approved')
+                    : rows;
+                  OpsTableService.generateCSVExport(exportRows, exportCols, table?.name || 'export');
+                  toast.success(`Exported ${exportRows.length} approved rows to CSV`);
+                }}>
+                  <Download className="h-3.5 w-3.5 mr-2" />
+                  {columns.some((c) => c.key === 'review_status') ? 'Export CSV (Approved Only)' : 'Export CSV'}
+                </DropdownMenuItem>
+                {columns.some((c) => c.key === 'review_status') && (
+                  <DropdownMenuItem onClick={() => {
+                    const exportCols = columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
+                    OpsTableService.generateCSVExport(rows, exportCols, `${table?.name || 'export'}-all`);
+                    toast.success(`Exported all ${rows.length} rows to CSV`);
+                  }}>
+                    <Download className="h-3.5 w-3.5 mr-2" />
+                    Export CSV (All Rows)
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => setShowCampaignWizard(true)}>
                   <Send className="h-3.5 w-3.5 mr-2" />
                   Create Campaign
@@ -4226,7 +4260,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         onPushToAttio={() => setShowAttioPush(true)}
         onExportCSV={async () => {
           const selectedRowData = rows.filter((r) => selectedRows.has(r.id));
-          const allExportCols = columns.filter((c) => c.column_type !== 'action');
+          const allExportCols = columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
           const toastId = toast.loading('Building CSV with encoded tags...');
 
           try {
