@@ -1,7 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { sendEmail } from '../../_shared/ses.ts';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../../_shared/corsHelper.ts';
-import { verifyCronSecret } from '../../_shared/edgeAuth.ts';
 
 interface SendInvitationRequest {
   to_email: string;
@@ -114,13 +113,46 @@ export async function handleOrganizationInvitation(req: Request): Promise<Respon
   const preflightResponse = handleCorsPreflightRequest(req);
   if (preflightResponse) return preflightResponse;
 
-  // Auth: require cron secret
-  const cronSecret = Deno.env.get('CRON_SECRET');
-  if (!verifyCronSecret(req, cronSecret)) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+  const cors = getCorsHeaders(req);
+
+  // Auth: require valid JWT (called from frontend by authenticated users)
+  // The send-router edge function is JWT-protected by default, so the
+  // Authorization header contains a valid Supabase JWT. We verify the user
+  // exists to ensure the request is from an authenticated session.
+  try {
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.toLowerCase().startsWith('bearer ')) {
+      console.error('[organization-invitation] Missing or invalid Authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: missing authentication token' }),
+        { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.slice(7).trim();
+    const { data: authData, error: authError } = await supabaseAuth.auth.getUser(token);
+
+    if (authError || !authData?.user) {
+      console.error('[organization-invitation] JWT verification failed:', authError?.message);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: invalid or expired session' }),
+        { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[organization-invitation] Authenticated user:', authData.user.id);
+  } catch (authErr) {
+    console.error('[organization-invitation] Auth verification error:', authErr);
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized: authentication check failed' }),
+      { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
@@ -154,10 +186,10 @@ export async function handleOrganizationInvitation(req: Request): Promise<Respon
     let emailText: string;
 
     try {
-      const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-      const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const sbUrl = Deno.env.get('SUPABASE_URL')!;
+      const sbKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      const supabaseAdmin = createClient(sbUrl, sbKey, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
 
