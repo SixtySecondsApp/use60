@@ -24,13 +24,13 @@ jobs:
       - name: Check for test credentials
         id: check
         run: |
-          if [ -n "${{ secrets.TEST_USER_EMAIL }}" ] && [ -n "${{ secrets.TEST_USER_PASSWORD }}" ]; then
+          if [ -n "${{ secrets.TEST_USER_EMAIL }}" ] && [ -n "${{ secrets.STAGING_SERVICE_ROLE_KEY }}" ]; then
             echo "has_credentials=true" >> $GITHUB_OUTPUT
-            echo "E2E test credentials configured"
+            echo "E2E credentials configured (magic link auth)"
           else
             echo "has_credentials=false" >> $GITHUB_OUTPUT
-            echo "E2E test credentials not configured — skipping E2E tests"
-            echo "To enable, add TEST_USER_EMAIL and TEST_USER_PASSWORD as GitHub secrets"
+            echo "E2E credentials not configured — skipping E2E tests"
+            echo "To enable, add TEST_USER_EMAIL and STAGING_SERVICE_ROLE_KEY as GitHub secrets"
           fi
 
   # ============================================
@@ -61,10 +61,10 @@ jobs:
         env:
           CI: true
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
-          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-          BASE_URL: https://caerqjzvuerejfrdtygb.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SERVICE_ROLE_KEY }}
           VITE_SUPABASE_URL: https://caerqjzvuerejfrdtygb.supabase.co
           VITE_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          BASE_URL: ${{ secrets.STAGING_APP_URL || 'https://caerqjzvuerejfrdtygb.supabase.co' }}
         run: |
           npx playwright test --reporter=list --reporter=junit --output=test-results-e2e.xml 2>&1 | tee playwright-output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
@@ -111,9 +111,9 @@ jobs:
             if (hasCreds !== 'true') {
               body += `:next_track_button: **Skipped** — test credentials not configured\n\n`;
               body += `To enable E2E tests, add these GitHub secrets:\n`;
-              body += `- \`TEST_USER_EMAIL\`\n`;
-              body += `- \`TEST_USER_PASSWORD\`\n`;
-              body += `- \`STAGING_SUPABASE_ANON_KEY\`\n\n`;
+              body += `- \`TEST_USER_EMAIL\` — test account email\n`;
+              body += `- \`STAGING_SERVICE_ROLE_KEY\` — staging Supabase service role key (generates magic links)\n`;
+              body += `- \`STAGING_SUPABASE_ANON_KEY\` — staging anon key\n\n`;
             } else if (e2eResult === 'success') {
               body += `:white_check_mark: **All E2E tests passed**\n\n`;
             } else if (e2eResult === 'failure') {
