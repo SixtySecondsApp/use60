@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Zap, Check, ArrowLeft, Sparkles, PartyPopper, Loader2,
+  Zap, Check, ArrowLeft, Sparkles, PartyPopper,
   Search, Mail, User, Building2, Globe, Newspaper, PenTool,
   Brain, CheckCircle2, Circle, Target,
 } from 'lucide-react';
@@ -160,7 +160,6 @@ export function TestSetupStep() {
   const [agents, setAgents] = useState<AgentStatus[]>(INITIAL_AGENTS);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [streamedContent, setStreamedContent] = useState('');
-  const [isFinishing, setIsFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const activityIdRef = useRef(0);
@@ -634,6 +633,11 @@ If you lack personalization data, do NOT ask the user for details. Instead, offe
       setAgentStatus('writer', 'done');
       setPhase('done');
       addActivity('Email ready for review', 'complete');
+
+      // Auto-complete the step as soon as the email is generated
+      if (user?.id && activeOrgId) {
+        completeStep(user.id, activeOrgId, 'test').catch(() => {});
+      }
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       simulationTimersRef.current.forEach(clearTimeout);
@@ -641,16 +645,6 @@ If you lack personalization data, do NOT ask the user for details. Instead, offe
       setError(err.message || 'Failed to generate email');
       setPhase('error');
       toast.error('Failed to generate email. Try again.');
-    }
-  };
-
-  const handleFinishSetup = async () => {
-    if (!user?.id || !activeOrgId) return;
-    setIsFinishing(true);
-    try {
-      await completeStep(user.id, activeOrgId, 'test');
-    } finally {
-      setIsFinishing(false);
     }
   };
 
@@ -681,8 +675,18 @@ If you lack personalization data, do NOT ask the user for details. Instead, offe
         </div>
       </div>
 
+      {/* Already completed — show done state */}
+      {completed && phase === 'idle' && !streamedContent && (
+        <div className="rounded-xl border border-green-200 dark:border-green-700/50 bg-green-50 dark:bg-green-900/10 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-green-700 dark:text-green-400">
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+            You've already completed this step. Nice work!
+          </div>
+        </div>
+      )}
+
       {/* Input form */}
-      {phase === 'idle' && !streamedContent && (
+      {phase === 'idle' && !streamedContent && !completed && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-800/50 p-5 space-y-3">
 
           {/* ICP-sourced suggestions */}
@@ -901,7 +905,7 @@ If you lack personalization data, do NOT ask the user for details. Instead, offe
 
             {/* Email content */}
             <div className="px-4 py-3">
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 max-h-[240px] overflow-y-auto">
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
                 <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line leading-relaxed">
                   {emailContent}
                 </p>
@@ -910,24 +914,11 @@ If you lack personalization data, do NOT ask the user for details. Instead, offe
           </div>
           )}
 
-          {!completed && !researchFailed && (
-            <Button
-              onClick={handleFinishSetup}
-              disabled={isFinishing}
-              className="w-full h-11 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-medium rounded-xl"
-            >
-              {isFinishing ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Finishing...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <PartyPopper className="w-4 h-4" />
-                  Complete Setup & Earn +20 Credits
-                </span>
-              )}
-            </Button>
+          {!researchFailed && (
+            <div className="flex items-center justify-center gap-2 py-2 text-sm font-medium text-green-600 dark:text-green-400">
+              <PartyPopper className="w-4 h-4" />
+              Step complete! +20 credits earned
+            </div>
           )}
         </div>
       )})()}
