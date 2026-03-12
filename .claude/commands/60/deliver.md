@@ -198,8 +198,16 @@ CI Workflow Verification:
 
 **If PR doesn't exist yet:**
 - Skip CI verification now
-- Re-run after PR creation in STEP 4
-- Note: "CI verification deferred — will verify after PR creation"
+- The self-healing CI loop (Step 4b) will handle verification after PR creation
+
+### 2b-5. Auto-Ticked Test Plans
+
+PRs with edge function changes automatically get test plan checkboxes verified by the `verify-test-plan` CI job in `deploy-functions.yml`. This job:
+1. Runs regression tests (`vitest.config.edge.ts`)
+2. Parses results per test group
+3. Updates PR body checkboxes via GitHub API
+
+When DELIVER polls CI status, it should check that `Verify Test Plan` passed and that test plan checkboxes in the PR body are ticked. If any remain unchecked after CI completes, flag them in the DELIVER report as items needing manual verification.
 
 ---
 
@@ -365,6 +373,36 @@ gh pr create --title "<PR title>" --body "<PR body>" --base main
 ```
 
 If `gh` CLI not available, provide the PR body for manual creation.
+
+---
+
+## STEP 4b: Start Self-Healing CI Loop
+
+After the PR is created and CI is running, start the self-healing loop:
+
+```
+/loop 5m /60/ci-heal
+```
+
+This loop will:
+1. Poll PR checks every 5 minutes
+2. If any check fails, read the error logs, fix the code, push
+3. Repeat until all checks pass
+4. Auto-tick test plan checkboxes (via `verify-test-plan` CI job)
+5. Notify the user when the PR is fully green and ready for review
+
+The loop is the **primary mechanism** for handling CI failures. Instead of blocking DELIVER with synchronous retries, the loop runs in the background and self-heals while the user can continue with other work.
+
+### When to skip the loop
+- If all CI checks pass on first run → no loop needed
+- If the PR has no CI workflows triggered → skip
+- If the user explicitly says to skip CI verification
+
+### Loop guardrails (enforced by `/60/ci-heal`)
+- Max 5 fix attempts per check — then escalates to human
+- Never force pushes or skips hooks
+- Only modifies files in scope of the PR
+- Reports infrastructure issues (missing secrets, permission errors) without attempting to fix them
 
 ---
 

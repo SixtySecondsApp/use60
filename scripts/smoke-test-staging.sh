@@ -47,6 +47,9 @@ check_endpoint "analytics-web-vitals" "$STAGING_URL/functions/v1/analytics-web-v
 # Landing form handler (verify_jwt=false)
 check_endpoint "handle-landing-form-submission" "$STAGING_URL/functions/v1/handle-landing-form-submission" "405"
 
+# Proactive meeting prep (verify_jwt=false on staging, GET → 405 expected since it needs POST with cron secret)
+check_endpoint "proactive-meeting-prep" "$STAGING_URL/functions/v1/proactive-meeting-prep" "405"
+
 echo ""
 echo "| Endpoint | Status | Result |"
 echo "|----------|--------|--------|"

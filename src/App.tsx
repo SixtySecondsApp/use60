@@ -80,7 +80,7 @@ import {
   CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GodsEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GoldenEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -429,7 +429,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/meetings-waitlist" element={<PlatformAdminRouteGuard><AppLayout><MeetingsWaitlist /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/waitlist-slack-settings" element={<PlatformAdminRouteGuard><AppLayout><WaitlistSlackSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - God's Eye Token Flow */}
-                <Route path="/platform/godseye" element={<PlatformAdminRouteGuard><AppLayout><GodsEyeAdmin /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/godseye" element={<PlatformAdminRouteGuard><AppLayout><GoldenEyeAdmin /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - AI Configuration */}
                 <Route path="/platform/ai/settings" element={<PlatformAdminRouteGuard><AppLayout><AIProviderSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/ai/models" element={<PlatformAdminRouteGuard><AppLayout><AIModelAdmin /></AppLayout></PlatformAdminRouteGuard>} />
