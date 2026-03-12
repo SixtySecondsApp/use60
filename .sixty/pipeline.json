@@ -1,44 +1,449 @@
 {
   "version": 2,
-  "runSlug": "linkedin-ops-ads-pipeline",
-  "project": "LinkedIn Ad Library → Ops Tables → Ads Manager Pipeline",
-  "description": "Connect Ad Library (intelligence), Ops Tables (creative workspace), and LinkedIn Ads Manager (campaign execution).",
+  "runSlug": "cicd-pipeline-overhaul",
+  "project": "CI/CD Pipeline Overhaul — Ship PRs With Confidence",
+  "description": "Replace aspirational CI/CD with a working pipeline: PR quality gates, automated edge function deployment, changed-function detection, smoke tests, and PR status dashboard.",
   "phase": "build",
-  "startedAt": "2026-03-11T18:30:00.000Z",
-  "lastUpdatedAt": "2026-03-11T20:00:00.000Z",
-  "lastActiveAt": "2026-03-11T20:00:00.000Z",
+  "startedAt": "2026-03-12T11:29:00.000Z",
+  "lastUpdatedAt": "2026-03-12T12:35:00.000Z",
+  "lastActiveAt": "2026-03-12T12:35:00.000Z",
 
   "phaseGates": {
     "launch": { "status": "skipped", "completedAt": null },
-    "discover": { "status": "skipped", "completedAt": null },
-    "define": { "status": "complete", "completedAt": "2026-03-11T18:30:00.000Z" },
-    "plan": { "status": "complete", "completedAt": "2026-03-11T18:50:00.000Z" },
+    "discover": { "status": "complete", "completedAt": "2026-03-12T12:00:00.000Z" },
+    "define": { "status": "complete", "completedAt": "2026-03-12T12:10:00.000Z" },
+    "plan": { "status": "complete", "completedAt": "2026-03-12T12:20:00.000Z" },
     "sync": { "status": "skipped", "completedAt": null },
-    "build": { "status": "complete", "completedAt": "2026-03-11T20:00:00.000Z" },
+    "build": { "status": "complete", "completedAt": "2026-03-12T12:35:00.000Z" },
     "deliver": { "status": "pending", "completedAt": null },
     "housekeeping": { "status": "pending", "completedAt": null }
   },
 
-  "prdFile": "tasks/prd-linkedin-ops-ads-pipeline.md",
-  "branch": "feature/linkedin-ops-ads-pipeline",
+  "branch": null,
+
+  "input": {
+    "type": "description",
+    "source": "interactive",
+    "extractedRequirements": [
+      "PR quality gate: lint + typecheck + build must block merge",
+      "Failing tests report but don't block merge (new, may be flaky)",
+      "Delete 63 stale failing tests, write better ones later",
+      "Changed-function detection: build _shared/ dependency graph, deploy only affected functions",
+      "Auto-deploy changed edge functions to staging on PR (--no-verify-jwt)",
+      "Auto-deploy changed edge functions to production on merge to main",
+      "Migration dry-run output posted as PR comment",
+      "Smoke tests after staging deployment (health + critical endpoints)",
+      "PR comment bot: summarizes lint, typecheck, build, tests, migrations, deployed functions",
+      "Extend security scanning to PRs targeting main (not just staging)",
+      "Edge function syntax validation (Deno check/lint) in CI",
+      "Delete aspirational deploy.yml and memory-optimized-deploy.yml",
+      "Fix SLACK_WEBHOOK_URL secret for db-migrations.yml"
+    ],
+    "constraints": [
+      "Staging requires --no-verify-jwt (ES256 JWT issue)",
+      "Production does NOT use --no-verify-jwt",
+      "Use dorny/paths-filter (NOT tj-actions/changed-files — supply chain compromised)",
+      "Frontend deploys via Vercel (not Docker/K8s)",
+      "487 edge functions — full deploy takes 10-15 min",
+      "esm.sh imports must pin @supabase/supabase-js@2.43.4"
+    ]
+  },
+
+  "team": {
+    "tier": 3,
+    "composition": {
+      "architect": "opus",
+      "reviewer": "opus",
+      "manager": "opus",
+      "workers": ["sonnet", "sonnet", "sonnet"]
+    },
+    "parallelGroups": {
+      "A": "Cleanup + PR quality gate (CI-012, CI-001, CI-002, CI-006, CI-011)",
+      "B": "Edge function deploy pipeline (CI-003, CI-004, CI-005, CI-007, CI-013)",
+      "C": "E2E testing (CI-008, CI-009)",
+      "D": "Aggregator (CI-010)"
+    }
+  },
 
   "stories": [
-    { "id": "LAP-001", "title": "Schema migration: add linkedin_analytics column type", "status": "complete", "group": 1 },
-    { "id": "LAP-002", "title": "Multi-select UI in Ad Library", "status": "complete", "group": 1 },
-    { "id": "LAP-003", "title": "from_ad_library import edge function", "status": "complete", "group": 1 },
-    { "id": "LAP-004", "title": "Ad Library Import Wizard", "status": "complete", "group": 2 },
-    { "id": "LAP-005", "title": "Source image auto-detection in AI wizards", "status": "complete", "group": 2 },
-    { "id": "LAP-006", "title": "Ops table to LinkedIn campaign binding UI", "status": "complete", "group": 2 },
-    { "id": "LAP-007", "title": "Column-to-creative mapping wizard", "status": "complete", "group": 3 },
-    { "id": "LAP-008", "title": "Remix All bulk action", "status": "complete", "group": 3 },
-    { "id": "LAP-009", "title": "LinkedIn Analytics column type + wizard", "status": "complete", "group": 3 },
-    { "id": "LAP-010", "title": "create_creatives_from_ops edge function", "status": "complete", "group": 4 },
-    { "id": "LAP-011", "title": "Budget column mapping + validation", "status": "complete", "group": 4 },
-    { "id": "LAP-012", "title": "Analytics-to-ops sync edge function", "status": "complete", "group": 4 },
-    { "id": "LAP-013", "title": "Campaign launch with spend approval gate", "status": "complete", "group": 5 },
-    { "id": "LAP-014", "title": "Auto-sync cron + manual refresh controls", "status": "complete", "group": 5 },
-    { "id": "LAP-015", "title": "Analytics controls + comparison view", "status": "complete", "group": 5 }
+    {
+      "id": "CI-012",
+      "feature": "cicd",
+      "title": "Delete stale tests + aspirational workflows",
+      "type": "cleanup",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CI-001", "CI-002"],
+      "parallelWith": [],
+      "acceptance": [
+        "6 failing test files deleted (QuickAdd, authUtils, session-persistence, LeadAnalyticsCard, fathomApiService, useVersionCheck)",
+        "deploy.yml deleted",
+        "memory-optimized-deploy.yml deleted",
+        "vitest run passes with 0 failures (44 files, 1091+ tests)",
+        "No workflow files reference non-existent Docker/K8s infrastructure"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "tests/unit/QuickAdd.test.tsx",
+        "tests/unit/authUtils.test.ts",
+        "tests/unit/copilot/session-persistence.test.ts",
+        "tests/unit/leads/LeadAnalyticsCard.test.tsx",
+        "tests/unit/services/fathomApiService.test.ts",
+        "tests/unit/useVersionCheck.test.ts",
+        ".github/workflows/deploy.yml",
+        ".github/workflows/memory-optimized-deploy.yml"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-001",
+      "feature": "cicd",
+      "title": "PR Quality Gate — lint + typecheck + build",
+      "type": "ci",
+      "status": "complete",
+      "priority": 2,
+      "group": 1,
+      "dependencies": { "stories": ["CI-012"], "files": [], "schema": [] },
+      "blocks": ["CI-010"],
+      "parallelWith": ["CI-002", "CI-006", "CI-011", "CI-003", "CI-013"],
+      "acceptance": [
+        "New .github/workflows/pr-checks.yml triggers on pull_request to main and staging",
+        "Lint job runs npm run lint — BLOCKS merge on failure",
+        "Typecheck job runs npm run typecheck — BLOCKS merge on failure",
+        "Build job runs npm run build — BLOCKS merge on failure",
+        "All 3 jobs run in parallel with shared npm ci + cache setup",
+        "Uses actions/setup-node@v4 with Node 20 and npm cache"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        ".github/workflows/pr-checks.yml"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-002",
+      "feature": "cicd",
+      "title": "Unit test job in CI (report-only, non-blocking)",
+      "type": "ci",
+      "status": "complete",
+      "priority": 3,
+      "group": 1,
+      "dependencies": { "stories": ["CI-012"], "files": [], "schema": [] },
+      "blocks": ["CI-010"],
+      "parallelWith": ["CI-001", "CI-006", "CI-011"],
+      "acceptance": [
+        "Unit test job added to pr-checks.yml — runs npm run test:run",
+        "Test job reports status but does NOT block merge (continue-on-error: true)",
+        "JUnit reporter configured for GitHub Actions test summary integration",
+        "Coverage uploaded as artifact (not to Codecov yet)",
+        "Test results visible in PR checks tab"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        ".github/workflows/pr-checks.yml"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-003",
+      "feature": "cicd",
+      "title": "Changed edge function detection + _shared/ dependency graph",
+      "type": "ci",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CI-004", "CI-005"],
+      "parallelWith": ["CI-001", "CI-002", "CI-006", "CI-011", "CI-012", "CI-013"],
+      "acceptance": [
+        "scripts/detect-changed-functions.sh takes base branch as arg, outputs JSON list of function names",
+        "Scans git diff for changed files under supabase/functions/",
+        "If _shared/ file changed: traces which functions import it via grep, adds those to deploy list",
+        "Deduplicates output list",
+        "Handles edge case: if _shared/ file is imported by >100 functions, falls back to 'deploy all'",
+        "Tested locally with sample git diffs"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "scripts/detect-changed-functions.sh"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-004",
+      "feature": "cicd",
+      "title": "Auto-deploy changed functions to staging on PR",
+      "type": "ci",
+      "status": "complete",
+      "priority": 4,
+      "group": 2,
+      "dependencies": { "stories": ["CI-003"], "files": ["scripts/detect-changed-functions.sh"], "schema": [] },
+      "blocks": ["CI-005", "CI-007", "CI-010"],
+      "parallelWith": [],
+      "acceptance": [
+        "New .github/workflows/deploy-functions.yml triggers on pull_request when supabase/functions/** changes",
+        "Uses dorny/paths-filter (pinned to commit SHA) to detect changes",
+        "Runs detect-changed-functions.sh to get deploy list",
+        "Deploys each function with --project-ref caerqjzvuerejfrdtygb --no-verify-jwt",
+        "Posts PR comment listing deployed functions",
+        "Concurrency group prevents parallel staging deploys",
+        "Uses SUPABASE_ACCESS_TOKEN secret for auth"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        ".github/workflows/deploy-functions.yml"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-005",
+      "feature": "cicd",
+      "title": "Auto-deploy changed functions to production on merge",
+      "type": "ci",
+      "status": "complete",
+      "priority": 5,
+      "group": 3,
+      "dependencies": { "stories": ["CI-003", "CI-004"], "files": [".github/workflows/deploy-functions.yml"], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CI-007"],
+      "acceptance": [
+        "deploy-functions.yml also triggers on push to main",
+        "Production deploy uses --project-ref ygdpgliavpxeugaajgrb WITHOUT --no-verify-jwt",
+        "Slack notification on success/failure (matching db-migrations.yml pattern)",
+        "Health endpoint check after deployment",
+        "Separate concurrency group from staging deploys"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        ".github/workflows/deploy-functions.yml"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-006",
+      "feature": "cicd",
+      "title": "Migration dry-run PR comments + destructive op warning",
+      "type": "ci",
+      "status": "complete",
+      "priority": 3,
+      "group": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CI-010"],
+      "parallelWith": ["CI-001", "CI-002", "CI-003", "CI-011", "CI-012"],
+      "acceptance": [
+        "db-migrations.yml enhanced: dry-run output posted as PR comment via github-script",
+        "Comment warns if DROP TABLE, DROP COLUMN, or ALTER TYPE detected in migration files",
+        "Comment updates on re-push (single comment, not spam)",
+        "Migration file naming validated: YYYYMMDDHHMMSS_description.sql format",
+        "Notification steps use continue-on-error: true to prevent false failures"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        ".github/workflows/db-migrations.yml"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-007",
+      "feature": "cicd",
+      "title": "Smoke tests after staging deployment",
+      "type": "ci",
+      "status": "complete",
+      "priority": 6,
+      "group": 3,
+      "dependencies": { "stories": ["CI-004"], "files": [".github/workflows/deploy-functions.yml"], "schema": [] },
+      "blocks": ["CI-010"],
+      "parallelWith": ["CI-005"],
+      "acceptance": [
+        "Smoke test job runs after staging deploy in deploy-functions.yml",
+        "Hits health endpoint and verifies 200 response",
+        "Hits 3-5 verify_jwt=false endpoints with known payloads",
+        "Reports pass/fail as PR comment update",
+        "Timeout: 60s per endpoint, 5 min total",
+        "Smoke test failures do NOT block merge (warning only)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        ".github/workflows/deploy-functions.yml",
+        "scripts/smoke-test-staging.sh"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-008",
+      "feature": "cicd",
+      "title": "Replace playwriter with standard Playwright for CI",
+      "type": "testing",
+      "status": "complete",
+      "priority": 7,
+      "group": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": ["CI-009"],
+      "parallelWith": ["CI-001", "CI-002", "CI-003", "CI-004", "CI-006"],
+      "acceptance": [
+        "playwright.config.ts updated: remove deprecated comment, configure headless Chromium",
+        "tests/fixtures/playwriter-setup.ts replaced with standard Playwright test fixtures",
+        "Auth setup uses Supabase test user (scripts/create-playwright-user.sql pattern)",
+        "3-5 critical E2E tests verified working: login, navigation, pipeline view, QuickAdd",
+        "Runs locally with npx playwright test",
+        "No dependency on Chrome extension or playwriter MCP"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "playwright.config.ts",
+        "tests/fixtures/playwriter-setup.ts",
+        "tests/fixtures/auth.setup.ts",
+        "tests/e2e/01-critical-flows.spec.ts",
+        "tests/e2e/navigation.spec.ts"
+      ],
+      "testFiles": ["tests/e2e/01-critical-flows.spec.ts"]
+    },
+    {
+      "id": "CI-009",
+      "feature": "cicd",
+      "title": "E2E tests in CI against staging",
+      "type": "ci",
+      "status": "complete",
+      "priority": 8,
+      "group": 4,
+      "dependencies": { "stories": ["CI-008"], "files": ["playwright.config.ts"], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "E2E job added to pr-checks.yml — runs after build succeeds",
+        "Starts Vite dev server with --mode staging env vars",
+        "Runs Playwright headless against localhost",
+        "Test artifacts (screenshots, traces) uploaded as GitHub Actions artifacts",
+        "E2E job does NOT block merge (continue-on-error: true)",
+        "Only runs 3-5 critical flow tests (not full suite)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        ".github/workflows/pr-checks.yml"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-010",
+      "feature": "cicd",
+      "title": "PR status dashboard comment (aggregate all checks)",
+      "type": "ci",
+      "status": "complete",
+      "priority": 9,
+      "group": 5,
+      "dependencies": { "stories": ["CI-001", "CI-002", "CI-004", "CI-006", "CI-007"], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New job in pr-checks.yml runs after all other jobs complete (needs: [lint, typecheck, build, test, ...])",
+        "Posts single PR comment with table: check name | status | details",
+        "Includes: lint, typecheck, build, unit tests, migration dry-run, deployed functions, smoke tests",
+        "Uses actions/github-script to create or update comment (finds by marker comment)",
+        "Shows bundle size from build output",
+        "Updates on re-push (no comment spam)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        ".github/workflows/pr-checks.yml"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-011",
+      "feature": "cicd",
+      "title": "Landing page CI + extend security scan to main",
+      "type": "ci",
+      "status": "complete",
+      "priority": 3,
+      "group": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CI-001", "CI-002", "CI-006", "CI-012"],
+      "acceptance": [
+        "Landing page build job added to pr-checks.yml when packages/landing/** changes",
+        "Runs npm run build in packages/landing workspace",
+        "security-scan.yml triggers extended to include pull_request to main (not just staging)",
+        "Security scan results visible in PR checks"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        ".github/workflows/pr-checks.yml",
+        ".github/workflows/security-scan.yml"
+      ],
+      "testFiles": []
+    },
+    {
+      "id": "CI-013",
+      "feature": "cicd",
+      "title": "Edge function Deno syntax validation in CI",
+      "type": "ci",
+      "status": "complete",
+      "priority": 4,
+      "group": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["CI-001", "CI-002", "CI-003", "CI-006"],
+      "acceptance": [
+        "Deno lint/check job added to deploy-functions.yml for changed functions only",
+        "Uses denoland/setup-deno@v2 action",
+        "Runs deno check on each changed function's index.ts",
+        "Validates no unpinned esm.sh imports (grep for @supabase/supabase-js@2 without @2.43.4)",
+        "Reports syntax errors in PR comment",
+        "Non-blocking (warning only) — Deno check may have false positives with esm.sh"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        ".github/workflows/deploy-functions.yml",
+        "scripts/validate-edge-functions.sh"
+      ],
+      "testFiles": []
+    }
   ],
 
-  "execution": { "totalStories": 15, "completedStories": 15, "lastUpdated": "2026-03-11T20:00:00.000Z" }
+  "execution": {
+    "totalStories": 13,
+    "completedStories": 13,
+    "lastUpdated": "2026-03-12T12:20:00.000Z",
+    "executionOrder": [
+      { "wave": 1, "stories": ["CI-012", "CI-003", "CI-006", "CI-011", "CI-013", "CI-008"], "parallel": true, "description": "Cleanup + foundations (all independent)" },
+      { "wave": 2, "stories": ["CI-001", "CI-002", "CI-004"], "parallel": true, "description": "PR checks workflow + staging deploy (CI-001/002 need CI-012, CI-004 needs CI-003)" },
+      { "wave": 3, "stories": ["CI-005", "CI-007"], "parallel": true, "description": "Production deploy + smoke tests (both need CI-004)" },
+      { "wave": 4, "stories": ["CI-009"], "parallel": false, "description": "E2E in CI (needs CI-008)" },
+      { "wave": 5, "stories": ["CI-010"], "parallel": false, "description": "PR dashboard (needs CI-001, CI-002, CI-004, CI-006, CI-007)" }
+    ]
+  },
+
+  "research": {
+    "codebaseScout": {
+      "existingWorkflows": 6,
+      "workingWorkflows": ["db-migrations.yml", "security-scan.yml"],
+      "aspirationalWorkflows": ["deploy.yml", "memory-optimized-deploy.yml"],
+      "edgeFunctions": 567,
+      "sharedFiles": 87,
+      "migrations": 694,
+      "testFiles": { "total": 50, "passing": 44, "failing": 6, "passingTests": 1091, "failingTests": 63 },
+      "deploymentMethod": "Vercel (frontend) + manual scripts (edge functions)"
+    },
+    "riskScanner": {
+      "brokenTests": "63 failures across 6 files",
+      "edgeFunctionTestCoverage": "1.3%",
+      "typescriptStrict": false,
+      "nonIdempotentMigrations": 14,
+      "verifyJwtFalse": 19,
+      "branchProtection": false
+    },
+    "githubScout": {
+      "dbMigrationsSlackBroken": "SLACK_WEBHOOK_URL secret empty — staging runs failing on notification step",
+      "supplyChainWarning": "tj-actions/changed-files compromised March 2025 — use dorny/paths-filter",
+      "toolRecommendations": ["dorny/paths-filter@v3", "supabase/setup-cli@v1", "denoland/setup-deno@v2"]
+    },
+    "scopeSizer": {
+      "totalStories": 13,
+      "estimatedHours": { "optimistic": 4.5, "realistic": 6, "pessimistic": 8 },
+      "mvpStories": ["CI-012", "CI-001", "CI-003", "CI-004", "CI-006"],
+      "mvpHours": "2-3"
+    }
+  }
 }
