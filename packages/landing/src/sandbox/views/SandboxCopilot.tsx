@@ -326,7 +326,7 @@ I've also drafted a follow-up email ready for after the call. Want me to show it
 
   return (
     <div className="space-y-4">
-    <div className="flex gap-4 h-[calc(100vh-12rem)]">
+    <div className="flex gap-4 h-[calc(100vh-16rem)] md:h-[calc(100vh-12rem)]">
       {/* Left: Chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
@@ -423,7 +423,7 @@ I've also drafted a follow-up email ready for after the call. Want me to show it
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-900/40 border border-gray-700/30 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition-colors"
                   >
                     <Icon className="w-3 h-3" />
-                    <span className="truncate max-w-[200px]">{label}</span>
+                    <span className="truncate max-w-[140px] sm:max-w-[200px]">{label}</span>
                     <ChevronRight className="w-3 h-3 text-gray-600" />
                   </button>
                 );
@@ -452,8 +452,8 @@ I've also drafted a follow-up email ready for after the call. Want me to show it
         </div>
       </div>
 
-      {/* Right: Sidebar panel (320px) */}
-      <div className="hidden lg:block w-80 flex-shrink-0 space-y-3">
+      {/* Right: Sidebar panel (320px) — hidden on mobile, visible on md+ */}
+      <div className="hidden md:block w-64 lg:w-80 flex-shrink-0 space-y-3">
         {/* Progress / Tool execution */}
         <div className="rounded-2xl border bg-gray-900/40 backdrop-blur-xl border-gray-700/30 p-4">
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
@@ -526,7 +526,7 @@ I've also drafted a follow-up email ready for after the call. Want me to show it
     </div>
 
     {/* Personalized CTA */}
-    <div className="rounded-2xl p-5 bg-gradient-to-r from-[#37bd7e]/10 via-[#37bd7e]/5 to-transparent border border-[#37bd7e]/20 flex items-center justify-between">
+    <div className="rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-[#37bd7e]/10 via-[#37bd7e]/5 to-transparent border border-[#37bd7e]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
       <div>
         <p className="text-sm font-semibold text-white">
           Ask 60 anything about your pipeline
