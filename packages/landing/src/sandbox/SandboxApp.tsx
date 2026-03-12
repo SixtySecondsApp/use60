@@ -24,6 +24,8 @@ const SandboxMeetings = lazy(() => import('./views/SandboxMeetings'));
 const SandboxEmailDraft = lazy(() => import('./views/SandboxEmailDraft'));
 const SandboxCopilot = lazy(() => import('./views/SandboxCopilot'));
 const SandboxProposals = lazy(() => import('./views/SandboxProposals'));
+const SandboxRelationships = lazy(() => import('./views/SandboxRelationships'));
+const SandboxOps = lazy(() => import('./views/SandboxOps'));
 
 interface SandboxAppProps {
   data?: SandboxData;
@@ -49,6 +51,8 @@ const VIEW_MAP: Record<SandboxView, React.LazyExoticComponent<React.ComponentTyp
   meetings: SandboxMeetings,
   email: SandboxEmailDraft,
   proposals: SandboxProposals,
+  relationships: SandboxRelationships,
+  ops: SandboxOps,
   copilot: SandboxCopilot,
 };
 
@@ -58,7 +62,9 @@ const MOBILE_FLOW: { id: SandboxView; label: string; nextLabel: string }[] = [
   { id: 'pipeline', label: 'Deal Pipeline', nextLabel: 'AI meeting prep' },
   { id: 'meetings', label: 'Meeting Intelligence', nextLabel: 'Follow-up emails' },
   { id: 'email', label: 'AI Email Drafts', nextLabel: 'Proposals' },
-  { id: 'proposals', label: 'Proposal Builder', nextLabel: 'Meet your AI copilot' },
+  { id: 'proposals', label: 'Proposal Builder', nextLabel: 'Your network' },
+  { id: 'relationships', label: 'Relationship Map', nextLabel: 'AI Ops table' },
+  { id: 'ops', label: 'AI Outreach Studio', nextLabel: 'Meet your AI copilot' },
   { id: 'copilot', label: 'AI Copilot', nextLabel: '' },
 ];
 
@@ -247,6 +253,8 @@ function SandboxAppInner({
                 : activeView === 'meetings' ? 'Get AI meeting prep for real'
                 : activeView === 'email' ? `Send this email to ${data.emailDraft?.to_name ?? 'your prospect'} for real`
                 : activeView === 'proposals' ? 'Generate proposals from your deal context'
+                : activeView === 'relationships' ? 'Map your real network like this'
+                : activeView === 'ops' ? 'Generate personalized videos for your leads'
                 : activeView === 'copilot' ? 'Ask 60 anything about your pipeline'
                 : 'This is real. Try it free'}
               <span className="text-white/60">&rarr;</span>

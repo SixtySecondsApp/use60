@@ -30,6 +30,8 @@ const VIEW_LABELS: Record<SandboxView, string> = {
   meetings: 'Meetings',
   email: 'Email',
   proposals: 'Proposals',
+  relationships: 'Relationships',
+  ops: 'AI Outreach',
   copilot: 'Copilot',
 };
 

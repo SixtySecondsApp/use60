@@ -236,6 +236,7 @@ export function SandboxExperience({
           >
             <SandboxEntrance
               companyName={companyName}
+              domain={domain}
               isReady={true}
               onComplete={handleEntranceComplete}
             />
