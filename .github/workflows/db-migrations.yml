@@ -175,40 +175,52 @@ jobs:
           npx supabase db push --linked
 
       - name: Notify Slack (success)
-        if: success()
+        if: success() && env.SLACK_BOT_TOKEN != ''
         continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_DEPLOY_CHANNEL_ID: ${{ secrets.SLACK_DEPLOY_CHANNEL_ID }}
         run: |
-          curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          curl -fsSL -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
             -H 'Content-Type: application/json' \
             -d "{
-              \"text\": \"Database migrations applied to *staging* :white_check_mark:\",
+              \"channel\": \"$SLACK_DEPLOY_CHANNEL_ID\",
+              \"text\": \"Database migrations applied to staging\",
               \"blocks\": [
-                {
-                  \"type\": \"section\",
-                  \"text\": {
-                    \"type\": \"mrkdwn\",
-                    \"text\": \":white_check_mark: *Database migrations applied to staging*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$(echo ${{ github.sha }} | cut -c1-7)>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
-                  }
-                }
+                { \"type\": \"header\", \"text\": { \"type\": \"plain_text\", \"text\": \"Migrations Applied\", \"emoji\": true } },
+                { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \":white_check_mark: *Database migrations applied to staging*\" } },
+                { \"type\": \"section\", \"fields\": [
+                  { \"type\": \"mrkdwn\", \"text\": \"*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$SHORT_SHA>\" },
+                  { \"type\": \"mrkdwn\", \"text\": \"*By:*\n${{ github.actor }}\" }
+                ]},
+                { \"type\": \"actions\", \"elements\": [{ \"type\": \"button\", \"text\": { \"type\": \"plain_text\", \"text\": \"View Workflow\" }, \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\" }] }
               ]
             }"
 
       - name: Notify Slack (failure)
-        if: failure()
+        if: failure() && env.SLACK_BOT_TOKEN != ''
         continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_DEPLOY_CHANNEL_ID: ${{ secrets.SLACK_DEPLOY_CHANNEL_ID }}
         run: |
-          curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          curl -fsSL -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
             -H 'Content-Type: application/json' \
             -d "{
-              \"text\": \"Database migration FAILED on *staging* :x:\",
+              \"channel\": \"$SLACK_DEPLOY_CHANNEL_ID\",
+              \"text\": \"Database migration FAILED on staging\",
               \"blocks\": [
-                {
-                  \"type\": \"section\",
-                  \"text\": {
-                    \"type\": \"mrkdwn\",
-                    \"text\": \":x: *Database migration FAILED on staging*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$(echo ${{ github.sha }} | cut -c1-7)>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
-                  }
-                }
+                { \"type\": \"header\", \"text\": { \"type\": \"plain_text\", \"text\": \"Migration Failed\", \"emoji\": true } },
+                { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \":x: *Database migration FAILED on staging*\" } },
+                { \"type\": \"section\", \"fields\": [
+                  { \"type\": \"mrkdwn\", \"text\": \"*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$SHORT_SHA>\" },
+                  { \"type\": \"mrkdwn\", \"text\": \"*By:*\n${{ github.actor }}\" }
+                ]},
+                { \"type\": \"actions\", \"elements\": [{ \"type\": \"button\", \"text\": { \"type\": \"plain_text\", \"text\": \"View Workflow\" }, \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\", \"style\": \"danger\" }] }
               ]
             }"
 
@@ -235,39 +247,51 @@ jobs:
           npx supabase db push --linked
 
       - name: Notify Slack (success)
-        if: success()
+        if: success() && env.SLACK_BOT_TOKEN != ''
         continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_DEPLOY_CHANNEL_ID: ${{ secrets.SLACK_DEPLOY_CHANNEL_ID }}
         run: |
-          curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          curl -fsSL -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
             -H 'Content-Type: application/json' \
             -d "{
-              \"text\": \"Database migrations applied to *production* :white_check_mark:\",
+              \"channel\": \"$SLACK_DEPLOY_CHANNEL_ID\",
+              \"text\": \"Database migrations applied to production\",
               \"blocks\": [
-                {
-                  \"type\": \"section\",
-                  \"text\": {
-                    \"type\": \"mrkdwn\",
-                    \"text\": \":white_check_mark: *Database migrations applied to production*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$(echo ${{ github.sha }} | cut -c1-7)>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
-                  }
-                }
+                { \"type\": \"header\", \"text\": { \"type\": \"plain_text\", \"text\": \"Migrations Applied\", \"emoji\": true } },
+                { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \":white_check_mark: *Database migrations applied to production*\" } },
+                { \"type\": \"section\", \"fields\": [
+                  { \"type\": \"mrkdwn\", \"text\": \"*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$SHORT_SHA>\" },
+                  { \"type\": \"mrkdwn\", \"text\": \"*By:*\n${{ github.actor }}\" }
+                ]},
+                { \"type\": \"actions\", \"elements\": [{ \"type\": \"button\", \"text\": { \"type\": \"plain_text\", \"text\": \"View Workflow\" }, \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\" }] }
               ]
             }"
 
       - name: Notify Slack (failure)
-        if: failure()
+        if: failure() && env.SLACK_BOT_TOKEN != ''
         continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_DEPLOY_CHANNEL_ID: ${{ secrets.SLACK_DEPLOY_CHANNEL_ID }}
         run: |
-          curl -fsSL -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          curl -fsSL -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
             -H 'Content-Type: application/json' \
             -d "{
-              \"text\": \"Database migration FAILED on *production* :x:\",
+              \"channel\": \"$SLACK_DEPLOY_CHANNEL_ID\",
+              \"text\": \"Database migration FAILED on production\",
               \"blocks\": [
-                {
-                  \"type\": \"section\",
-                  \"text\": {
-                    \"type\": \"mrkdwn\",
-                    \"text\": \":x: *Database migration FAILED on production*\n\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$(echo ${{ github.sha }} | cut -c1-7)>\n*By:* ${{ github.actor }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow>\"
-                  }
-                }
+                { \"type\": \"header\", \"text\": { \"type\": \"plain_text\", \"text\": \"Migration Failed\", \"emoji\": true } },
+                { \"type\": \"section\", \"text\": { \"type\": \"mrkdwn\", \"text\": \":x: *Database migration FAILED on production*\" } },
+                { \"type\": \"section\", \"fields\": [
+                  { \"type\": \"mrkdwn\", \"text\": \"*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$SHORT_SHA>\" },
+                  { \"type\": \"mrkdwn\", \"text\": \"*By:*\n${{ github.actor }}\" }
+                ]},
+                { \"type\": \"actions\", \"elements\": [{ \"type\": \"button\", \"text\": { \"type\": \"plain_text\", \"text\": \"View Workflow\" }, \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\", \"style\": \"danger\" }] }
               ]
             }"
