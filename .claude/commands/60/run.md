@@ -23,6 +23,7 @@ When called from `/60/ship`:
    - Architecture Validator: watches for pattern drift between stories
    - Doc Drafter: writes dev + user docs as code lands
    - Test Oracle: validates test coverage per story
+   - CI Monitor: watches GitHub Actions workflow status after each push, alerts if checks fail
 6. Post progress to Slack war room via `send-slack-message` edge function
 7. Update `pipeline.json.stories[].status` and `pipeline.json.execution` counters
 8. Set `pipeline.json.phaseGates.build.status = "complete"` when all stories done
@@ -184,6 +185,8 @@ CHANGED=$(git diff --name-only HEAD -- '*.ts' '*.tsx')
 # Only test changed files (~5-30s)
 npx vitest run --changed HEAD --passWithNoTests
 ```
+
+**Note:** Full E2E tests (Playwright) are NOT run per-story — they run in DELIVER phase and in CI via `pr-e2e.yml`. Per-story gates stay fast (lint + unit only). The CI Monitor background agent watches GitHub Actions for E2E failures after each push and alerts if something breaks.
 
 ### 3a. Commit (Default Behavior)
 
