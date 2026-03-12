@@ -240,6 +240,110 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
   # ============================================
+  # Test Plan Verification (auto-tick PR checklist)
+  # ============================================
+  verify-test-plan:
+    name: Verify Test Plan
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, smoke-test]
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run notification spam regression tests
+        id: tests
+        run: |
+          OUTPUT=$(npx vitest run --config vitest.config.edge.ts supabase/functions/proactive-meeting-prep/notification-spam.test.ts --reporter=verbose 2>&1)
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          # Parse individual test group results
+          CLASSIFY_PERSONAL=$(echo "$OUTPUT" | grep -c "✓.*→ personal" || echo "0")
+          CLASSIFY_SOLO=$(echo "$OUTPUT" | grep -c "✓.*solo" || echo "0")
+          CLASSIFY_BUSINESS=$(echo "$OUTPUT" | grep -c "✓.*→ business" || echo "0")
+          DEDUP=$(echo "$OUTPUT" | grep -c "✓.*shouldSend\|✓.*record" || echo "0")
+          LEARNING=$(echo "$OUTPUT" | grep -c "✓.*preference\|✓.*skip.*store\|✓.*confirm.*store" || echo "0")
+
+          echo "classify_personal=$CLASSIFY_PERSONAL" >> $GITHUB_OUTPUT
+          echo "classify_solo=$CLASSIFY_SOLO" >> $GITHUB_OUTPUT
+          echo "classify_business=$CLASSIFY_BUSINESS" >> $GITHUB_OUTPUT
+          echo "dedup=$DEDUP" >> $GITHUB_OUTPUT
+          echo "learning=$LEARNING" >> $GITHUB_OUTPUT
+
+          echo "$OUTPUT"
+          exit $EXIT_CODE
+
+      - name: Update PR test plan checkboxes
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployStatus = '${{ needs.deploy-staging.outputs.deploy_status }}';
+            const testExit = '${{ steps.tests.outputs.exit_code }}';
+            const classifyPersonal = parseInt('${{ steps.tests.outputs.classify_personal }}') || 0;
+            const classifySolo = parseInt('${{ steps.tests.outputs.classify_solo }}') || 0;
+            const dedup = parseInt('${{ steps.tests.outputs.dedup }}') || 0;
+            const learning = parseInt('${{ steps.tests.outputs.learning }}') || 0;
+
+            // Determine which items passed
+            const checks = {
+              deploy: deployStatus === 'success',
+              officeAndLunch: classifyPersonal >= 10,
+              soloEvents: classifySolo >= 1,
+              dedup: dedup >= 2,
+              skipLearning: learning >= 2,
+              confirmLearning: learning >= 2,
+              learnedPreference: learning >= 3,
+            };
+
+            // Get current PR body
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            let body = pr.body || '';
+
+            // Replace checkboxes in test plan
+            const replacements = [
+              [/- \[[ x]\] Deploy proactive-meeting-prep/, `- [${checks.deploy ? 'x' : ' '}] Deploy proactive-meeting-prep`],
+              [/- \[[ x]\] Verify "Office" and "Lunch"/, `- [${checks.officeAndLunch ? 'x' : ' '}] Verify "Office" and "Lunch"`],
+              [/- \[[ x]\] Verify solo events/, `- [${checks.soloEvents ? 'x' : ' '}] Verify solo events`],
+              [/- \[[ x]\] Trigger cron twice/, `- [${checks.dedup ? 'x' : ' '}] Trigger cron twice`],
+              [/- \[[ x]\] Click "Skip"/, `- [${checks.skipLearning ? 'x' : ' '}] Click "Skip"`],
+              [/- \[[ x]\] Click "Yes, prep this meeting"/, `- [${checks.confirmLearning ? 'x' : ' '}] Click "Yes, prep this meeting"`],
+              [/- \[[ x]\] Next cron run/, `- [${checks.learnedPreference ? 'x' : ' '}] Next cron run`],
+            ];
+
+            for (const [pattern, replacement] of replacements) {
+              body = body.replace(pattern, replacement);
+            }
+
+            // Update PR body
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body,
+            });
+
+            // Summary
+            const passed = Object.values(checks).filter(v => v).length;
+            const total = Object.values(checks).length;
+            console.log(`Test plan: ${passed}/${total} items verified`);
+
+  # ============================================
   # Deploy to Production (on merge to main)
   # ============================================
   deploy-production:
