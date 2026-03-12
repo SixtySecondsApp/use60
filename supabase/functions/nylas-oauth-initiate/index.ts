@@ -6,9 +6,11 @@ import { getNylasClientId } from '../_shared/nylasClient.ts';
 /**
  * Nylas OAuth Initiate
  *
- * Starts the Nylas Hosted OAuth flow for Google provider.
- * Used to access Google Calendar through Nylas's pre-verified GCP app
- * (no CASA assessment needed).
+ * Starts the Nylas Hosted OAuth flow for Google or Microsoft provider.
+ * Used to access Calendar through Nylas's pre-verified apps
+ * (no CASA assessment or Azure app needed).
+ *
+ * Accepts optional `provider` in request body: 'google' (default) or 'microsoft'.
  */
 
 serve(async (req) => {
@@ -27,7 +29,8 @@ serve(async (req) => {
       throw new Error('No authorization header');
     }
 
-    await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({}));
+    const provider = (body.provider === 'microsoft') ? 'microsoft' : 'google';
 
     // Authenticate user
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
@@ -61,7 +64,7 @@ serve(async (req) => {
         user_id: user.id,
         state,
         code_verifier: 'nylas', // marker to identify Nylas flow in callback
-        code_challenge: 'nylas', // placeholder — PKCE not used for Nylas flow
+        code_challenge: provider, // store provider for callback to read
         redirect_uri: redirectUri,
         scope_tier: 'paid',
         expires_at: expiresAt.toISOString(),
@@ -78,11 +81,11 @@ serve(async (req) => {
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('state', state);
-    authUrl.searchParams.set('provider', 'google');
+    authUrl.searchParams.set('provider', provider);
     // Request calendar scopes through Nylas
     authUrl.searchParams.set('scope', 'calendar');
 
-    console.log('[nylas-oauth-initiate] Auth URL generated for user:', user.id);
+    console.log(`[nylas-oauth-initiate] Auth URL generated for user: ${user.id}, provider: ${provider}`);
 
     return new Response(
       JSON.stringify({ authUrl: authUrl.toString(), state }),
