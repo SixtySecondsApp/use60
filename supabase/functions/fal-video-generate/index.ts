@@ -155,7 +155,7 @@ Deno.serve(async (req: Request) => {
           if (imageColumnId && cell.column_id === imageColumnId && cell.value) {
             try {
               const parsed = JSON.parse(cell.value);
-              rowImageUrl = parsed.url || parsed.image_url || parsed.src || undefined;
+              rowImageUrl = parsed.url || parsed.image_url || parsed.storage_url || parsed.src || undefined;
             } catch {
               // Not JSON — treat as raw URL
               rowImageUrl = cell.value;
@@ -259,11 +259,15 @@ Deno.serve(async (req: Request) => {
         // Submit to fal.ai queue
         const queueResult = await fal.submitJob(body.model_id, falInput as any, webhookUrl);
 
-        // Update job record with real fal_request_id
+        // Update job record with real fal_request_id and queue URLs
         if (jobRecord) {
           await svc
             .from('fal_video_jobs')
-            .update({ fal_request_id: queueResult.request_id })
+            .update({
+              fal_request_id: queueResult.request_id,
+              status_url: queueResult.status_url,
+              response_url: queueResult.response_url,
+            })
             .eq('id', jobRecord.id);
         }
 

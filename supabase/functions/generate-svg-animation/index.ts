@@ -244,7 +244,7 @@ Deno.serve(async (req: Request) => {
 
     // ── Parse body ──────────────────────────────────────────────────
     const body: RequestBody = await req.json();
-    const { action, org_id, table_id, column_id, row_ids, complexity: bodyComplexity } = body;
+    const { action, table_id, column_id, row_ids, complexity: bodyComplexity } = body;
 
     if (action !== 'generate') {
       return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
@@ -253,10 +253,27 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    if (!org_id || !table_id || !column_id || !row_ids?.length) {
+    // Resolve org_id — use body value if provided, otherwise look up from JWT user
+    let org_id = body.org_id;
+    if (!org_id) {
+      const { data: membership } = await userClient
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!membership) {
+        return new Response(JSON.stringify({ error: 'No organization found' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      org_id = membership.org_id;
+    }
+
+    if (!table_id || !column_id || !row_ids?.length) {
       return new Response(
         JSON.stringify({
-          error: 'Missing required fields: org_id, table_id, column_id, row_ids',
+          error: 'Missing required fields: table_id, column_id, row_ids',
         }),
         {
           status: 400,
@@ -442,8 +459,8 @@ Deno.serve(async (req: Request) => {
 
         // Write error status to cell
         const errorValue = JSON.stringify({
-          status: 'error',
-          error: message,
+          status: 'failed',
+          error_message: message,
           model_id: `gemini-3.1-pro`,
           complexity,
         });

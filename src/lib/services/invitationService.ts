@@ -78,7 +78,7 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     const name = inviterName || 'A team member';
 
     // Call send-router edge function with dark-themed template
-    const { error } = await supabase.functions.invoke('send-router', {
+    const { data: sendData, error } = await supabase.functions.invoke('send-router', {
       body: {
         action: 'organization_invitation',
         to_email: invitation.email,
@@ -90,8 +90,19 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     });
 
     if (error) {
-      logger.error('[InvitationService] Error sending invitation email:', error);
+      // Log detailed error info for debugging email delivery issues
+      const errorDetail = error instanceof Error ? error.message : JSON.stringify(error);
+      logger.error('[InvitationService] Error sending invitation email:', errorDetail);
+      if (sendData) {
+        logger.error('[InvitationService] Response body:', JSON.stringify(sendData));
+      }
       // Don't throw - invitation still created even if email fails
+      return false;
+    }
+
+    // Check if the send-router returned a non-success response in the body
+    if (sendData && sendData.success === false) {
+      logger.error('[InvitationService] Send-router returned failure:', sendData.error || 'Unknown error');
       return false;
     }
 

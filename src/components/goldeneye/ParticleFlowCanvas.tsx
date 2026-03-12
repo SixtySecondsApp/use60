@@ -70,7 +70,9 @@ interface EndpointPos {
   displayName: string;
   x: number;
   y: number;
+  targetY: number;
   volume: number;
+  visible: boolean;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────
@@ -110,12 +112,6 @@ const SLIDE_LERP = 0.1;
 
 // ─── Tiny helpers ───────────────────────────────────────────────────────
 
-function hash(s: string) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
 function hexRgb(hex: string) {
   const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex);
   return m
@@ -142,6 +138,57 @@ function fmtTokens(n: number) {
 function trunc(s: string, max: number) {
   if (!s) return '';
   return s.length > max ? s.slice(0, max) + '…' : s;
+}
+
+interface HSL { h: number; s: number; l: number }
+
+function hexToHSL(hex: string): HSL {
+  const { r, g, b } = hexRgb(hex);
+  const r1 = r / 255, g1 = g / 255, b1 = b / 255;
+  const max = Math.max(r1, g1, b1), min = Math.min(r1, g1, b1);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === r1) h = ((g1 - b1) / d + (g1 < b1 ? 6 : 0)) * 60;
+  else if (max === g1) h = ((b1 - r1) / d + 2) * 60;
+  else h = ((r1 - g1) / d + 4) * 60;
+  return { h, s, l };
+}
+
+/** Weighted HSL distance — hue (circular) weighted highest, then lightness, then saturation */
+function hslDistance(a: HSL, b: HSL): number {
+  const dh = Math.min(Math.abs(a.h - b.h), 360 - Math.abs(a.h - b.h)) / 180;
+  const ds = a.s - b.s;
+  const dl = a.l - b.l;
+  return Math.sqrt(dh * dh * 2.0 + dl * dl * 1.5 + ds * ds * 0.5);
+}
+
+/** Greedy farthest-point-first traversal — produces an ordering that maximises distance between consecutive picks */
+function computeSpreadOrder(palette: string[]): number[] {
+  const hsl = palette.map(hexToHSL);
+  const picked: number[] = [0];
+  const remaining = new Set(Array.from({ length: palette.length }, (_, i) => i));
+  remaining.delete(0);
+
+  while (remaining.size > 0) {
+    let bestIdx = -1;
+    let bestMinDist = -1;
+    for (const candidate of remaining) {
+      let minDist = Infinity;
+      for (const p of picked) {
+        minDist = Math.min(minDist, hslDistance(hsl[candidate], hsl[p]));
+      }
+      if (minDist > bestMinDist) {
+        bestMinDist = minDist;
+        bestIdx = candidate;
+      }
+    }
+    picked.push(bestIdx);
+    remaining.delete(bestIdx);
+  }
+  return picked;
 }
 
 /** Centre-out ordering: highest volume → middle, 2nd → below, 3rd → above … */
@@ -301,9 +348,20 @@ export function ParticleFlowCanvas({
   const ribbonsRef = useRef<SankeyRibbon[]>([]);
   const endpointsRef = useRef<EndpointPos[]>([]);
   const seenRef = useRef<Set<string>>(new Set());
+  const userColorMap = useRef<Map<string, number>>(new Map());
+  const spreadOrderRef = useRef<number[]>(computeSpreadOrder(PALETTE));
+  const paletteHSLRef = useRef<HSL[]>(PALETTE.map(hexToHSL));
   const frameRef = useRef(0);
   const speedRef = useRef(flowSpeed);
   speedRef.current = flowSpeed;
+
+  // Recompute spread order when palette changes
+  useEffect(() => {
+    spreadOrderRef.current = computeSpreadOrder(PALETTE);
+    paletteHSLRef.current = PALETTE.map(hexToHSL);
+    // Clear user assignments so they get reassigned with the new spread order
+    userColorMap.current.clear();
+  }, [colors]);
 
   // HTML overlays
   const [hover, setHover] = useState<{
@@ -316,12 +374,48 @@ export function ParticleFlowCanvas({
     x: number; y: number; ribbon: SankeyRibbon;
   } | null>(null);
 
+  /** Pick the palette colour that best contrasts with currently visible ribbons */
+  const getUserColor = useCallback((userId: string): number => {
+    const existing = userColorMap.current.get(userId);
+    if (existing !== undefined) return existing;
+
+    // Gather colour indices currently visible on screen
+    const visibleIdxs = new Set(ribbonsRef.current.map(r => r.colorIdx));
+    const spreadOrder = spreadOrderRef.current;
+
+    // Walk spread order, pick first index not currently visible
+    for (const idx of spreadOrder) {
+      if (!visibleIdxs.has(idx)) {
+        userColorMap.current.set(userId, idx);
+        return idx;
+      }
+    }
+
+    // All 10 in use — pick the one with max min-distance to all visible colours
+    const hsl = paletteHSLRef.current;
+    let bestIdx = spreadOrder[0];
+    let bestDist = -1;
+    for (const candidate of spreadOrder) {
+      let minDist = Infinity;
+      for (const visIdx of visibleIdxs) {
+        minDist = Math.min(minDist, hslDistance(hsl[candidate], hsl[visIdx]));
+      }
+      if (minDist > bestDist) {
+        bestDist = minDist;
+        bestIdx = candidate;
+      }
+    }
+
+    userColorMap.current.set(userId, bestIdx);
+    return bestIdx;
+  }, []);
+
   // ── Layout ──
 
-  const LEFT_X = width * 0.14;
+  const LEFT_X = width * 0.091;
   const RIGHT_X = width * 0.86;
-  const TOP = 40;
-  const BOT = 30;
+  const TOP = 20;
+  const BOT = 20;
   const usable = height - TOP - BOT;
   const slotGap = MAX_SLOTS > 1 ? usable / (MAX_SLOTS - 1) : usable;
   const maxW = Math.min(slotGap * MAX_W_RATIO, 44);
@@ -334,14 +428,24 @@ export function ParticleFlowCanvas({
       .slice(0, 12);
     const ordered = centreOut(active, e => e.active_request_count);
     const gap = ordered.length > 1 ? usable / (ordered.length - 1) : 0;
-    endpointsRef.current = ordered.map((e, i) => ({
-      id: e.id,
-      modelId: e.model_id,
-      displayName: e.display_name,
-      x: RIGHT_X,
-      y: TOP + (ordered.length === 1 ? usable / 2 : i * gap),
-      volume: e.active_request_count,
-    }));
+    // Preserve existing positions for smooth transitions
+    const prev = new Map(endpointsRef.current.map(ep => [ep.id, ep]));
+    endpointsRef.current = ordered.map((e, i) => {
+      const initY = TOP + (ordered.length === 1 ? usable / 2 : i * gap);
+      const existing = prev.get(e.id);
+      // New endpoints start at the center of the pane so they animate outward
+      const centerY = TOP + usable / 2;
+      return {
+        id: e.id,
+        modelId: e.model_id,
+        displayName: e.display_name,
+        x: RIGHT_X,
+        y: existing ? existing.y : centerY,
+        targetY: initY,
+        volume: e.active_request_count,
+        visible: true,
+      };
+    });
   }, [llmEndpoints, usable, TOP, RIGHT_X]);
 
   // ── Resolve model string → endpoint ID ──
@@ -368,16 +472,25 @@ export function ParticleFlowCanvas({
     if (seenRef.current.size === 0 && recentEvents.length > 0) {
       for (const e of recentEvents) seenRef.current.add(e.id);
 
-      const initial: SankeyRibbon[] = [];
+      // Build valid ribbons first, then distribute evenly across all MAX_SLOTS positions
+      const valid: { ev: typeof recentEvents[0]; epId: string; ep: EndpointPos; user: typeof activeUsers[0] | undefined }[] = [];
       for (const ev of recentEvents.slice(0, MAX_SLOTS)) {
         const epId = resolve(ev.model);
         if (!epId) continue;
         const ep = endpointsRef.current.find(e => e.id === epId);
         if (!ep) continue;
         const user = activeUsers.find(u => u.user_id === ev.user_id);
-        const idx = initial.length;
-        const tY = TOP + idx * slotGap;
-        initial.push({
+        valid.push({ ev, epId, ep, user });
+        if (valid.length >= MAX_SLOTS) break;
+      }
+      // Build ribbons incrementally into ribbonsRef so getUserColor can see
+      // previously added ribbons when picking contrasting colours
+      ribbonsRef.current = [];
+      const initGap = valid.length > 1 ? usable / (valid.length - 1) : 0;
+      for (let i = 0; i < valid.length; i++) {
+        const { ev, epId, ep, user } = valid[i];
+        const tY = valid.length === 1 ? TOP + usable / 2 : TOP + i * initGap;
+        ribbonsRef.current.push({
           id: ev.id, event: ev,
           userId: ev.user_id,
           userName: user?.user_name || ev.user_name || ev.user_email || 'Unknown',
@@ -385,19 +498,17 @@ export function ParticleFlowCanvas({
           endpointId: epId,
           modelName: ep.displayName,
           totalTokens: ev.input_tokens + ev.output_tokens,
-          colorIdx: hash(ev.user_id) % PALETTE.length,
+          colorIdx: getUserColor(ev.user_id),
           isFlagged: ev.is_flagged || false,
           flagReason: ev.flag_reason || '',
           isTest: ev.feature === 'test_burst',
           growProgress: 1, glowIntensity: 0,
           returnProgress: 1, returnComplete: true,
-          slotIndex: idx, targetY: tY, currentY: tY,
+          slotIndex: i, targetY: tY, currentY: tY,
           displayWidth: 0,
           endpointBaseY: ep.y, endpointStackY: ep.y,
         });
-        if (initial.length >= MAX_SLOTS) break;
       }
-      ribbonsRef.current = initial;
       return;
     }
 
@@ -427,7 +538,7 @@ export function ParticleFlowCanvas({
         endpointId: epId,
         modelName: ep.displayName,
         totalTokens: ev.input_tokens + ev.output_tokens,
-        colorIdx: hash(ev.user_id) % PALETTE.length,
+        colorIdx: getUserColor(ev.user_id),
         isFlagged: ev.is_flagged || false,
         flagReason: ev.flag_reason || '',
         isTest: ev.feature === 'test_burst',
@@ -449,7 +560,19 @@ export function ParticleFlowCanvas({
       const a = Array.from(seenRef.current);
       seenRef.current = new Set(a.slice(a.length - 300));
     }
-  }, [recentEvents, activeUsers, resolve, slotGap, TOP]);
+  }, [recentEvents, activeUsers, resolve, slotGap, TOP, getUserColor]);
+
+  // ── Reposition ribbons when canvas resizes (slotGap / TOP change) ──
+
+  useEffect(() => {
+    const ribbons = ribbonsRef.current;
+    if (ribbons.length === 0) return;
+    const gap = ribbons.length > 1 ? usable / (ribbons.length - 1) : 0;
+    for (let i = 0; i < ribbons.length; i++) {
+      ribbons[i].slotIndex = i;
+      ribbons[i].targetY = ribbons.length === 1 ? TOP + usable / 2 : TOP + i * gap;
+    }
+  }, [slotGap, TOP, usable]);
 
   // ── Render loop ──
 
@@ -469,9 +592,9 @@ export function ParticleFlowCanvas({
     const ribbons = ribbonsRef.current;
     const endpoints = endpointsRef.current;
 
-    // ── Draw endpoints (lozenges) ──
+    // ── Draw endpoints (lozenges) — only visible ones ──
     ctx.textBaseline = 'middle';
-    for (const ep of endpoints) {
+    for (const ep of endpoints.filter(e => e.visible)) {
       const x = ep.x + 14;
       ctx.font = '10px Inter, system-ui, sans-serif';
       const tw = ctx.measureText(ep.displayName).width;
@@ -507,12 +630,75 @@ export function ParticleFlowCanvas({
       r.displayWidth = MIN_W + (maxW - MIN_W) * (r.totalTokens / maxTok);
     }
 
-    // ── Stack ribbons at endpoints ──
+    // ── CentreOut endpoint positioning — clustered around vertical center ──
     const byEp = new Map<string, SankeyRibbon[]>();
     for (const r of ribbons) {
       if (!byEp.has(r.endpointId)) byEp.set(r.endpointId, []);
       byEp.get(r.endpointId)!.push(r);
     }
+
+    // Mark visibility & compute ribbon stack heights
+    const stackHeight = new Map<string, number>();
+    for (const ep of endpoints) {
+      const group = byEp.get(ep.id);
+      ep.visible = !!group && group.length > 0;
+      stackHeight.set(ep.id, group ? group.reduce((s, r) => s + r.displayWidth, 0) : 0);
+    }
+
+    // Use the stable centreOut order from endpointsRef (set in useEffect), filtered to visible
+    // This preserves order across frames and avoids jitter
+    const orderedVisible = endpoints.filter(ep => ep.visible);
+
+    // Layout: stack them sequentially, centered vertically, with 20px gap between stack edges
+    const EP_GAP = 20;
+    if (orderedVisible.length > 0) {
+      const totalStackH = orderedVisible.reduce((s, ep) => s + (stackHeight.get(ep.id) || 0), 0);
+      const totalGaps = Math.max(0, orderedVisible.length - 1) * EP_GAP;
+      const totalNeeded = totalStackH + totalGaps;
+
+      const centerY = TOP + usable / 2;
+      const startY = centerY - totalNeeded / 2;
+
+      let curY = startY;
+      for (const ep of orderedVisible) {
+        const sh = stackHeight.get(ep.id) || 0;
+        ep.targetY = curY + sh / 2;
+        curY += sh + EP_GAP;
+      }
+
+      // Clamp to bounds (account for stack extents)
+      for (const ep of orderedVisible) {
+        const half = (stackHeight.get(ep.id) || 0) / 2;
+        ep.targetY = Math.max(TOP + half, Math.min(TOP + usable - half, ep.targetY));
+      }
+
+      // Re-separate if clamping caused overlaps
+      for (let pass = 0; pass < 5; pass++) {
+        for (let i = 1; i < orderedVisible.length; i++) {
+          const prev = orderedVisible[i - 1];
+          const curr = orderedVisible[i];
+          const prevHalf = (stackHeight.get(prev.id) || 0) / 2;
+          const currHalf = (stackHeight.get(curr.id) || 0) / 2;
+          const minDist = prevHalf + currHalf + EP_GAP;
+          const overlap = (prev.targetY + minDist) - curr.targetY;
+          if (overlap > 0) {
+            curr.targetY = prev.targetY + minDist;
+          }
+        }
+        // Clamp again
+        for (const ep of orderedVisible) {
+          const half = (stackHeight.get(ep.id) || 0) / 2;
+          ep.targetY = Math.max(TOP + half, Math.min(TOP + usable - half, ep.targetY));
+        }
+      }
+    }
+
+    // Smooth lerp endpoint Y toward target
+    for (const ep of endpoints) {
+      ep.y += (ep.targetY - ep.y) * SLIDE_LERP;
+    }
+
+    // ── Stack ribbons at endpoints ──
     byEp.forEach((group, epId) => {
       const ep = endpoints.find(e => e.id === epId);
       if (!ep) return;

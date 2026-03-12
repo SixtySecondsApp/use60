@@ -36,6 +36,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Square,
+  BarChart3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -48,6 +49,9 @@ import { EditColumnSettingsModal } from '@/components/ops/EditColumnSettingsModa
 import { EditApolloSettingsModal } from '@/components/ops/EditApolloSettingsModal';
 import { EditInstantlySettingsModal } from '@/components/ops/EditInstantlySettingsModal';
 import { EditHeyGenVideoSettingsModal } from '@/components/ops/EditHeyGenVideoSettingsModal';
+import { FalVideoColumnWizard } from '@/components/ops/FalVideoColumnWizard';
+import { AiImageColumnWizard } from '@/components/ops/AiImageColumnWizard';
+import { SvgAnimationColumnWizard } from '@/components/ops/SvgAnimationColumnWizard';
 import { EditEmailGenerationModal, type EmailGenerationConfig } from '@/components/ops/EditEmailGenerationModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
@@ -109,12 +113,31 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { useFactProfiles } from '@/lib/hooks/useFactProfiles';
 import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
 import { WebhookSettingsPanel } from '@/components/ops/WebhookSettingsPanel';
+import { LinkedInCampaignBinding } from '@/components/ops/LinkedInCampaignBinding';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatRelativeTime(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
 
 // ---------------------------------------------------------------------------
 // Service singleton
 // ---------------------------------------------------------------------------
 
 const tableService = new OpsTableService(supabase);
+
+const AI_COLUMN_TYPES = ['ai_image', 'fal_video', 'svg_animation'] as const;
+type AiColumnType = typeof AI_COLUMN_TYPES[number];
 
 // ---------------------------------------------------------------------------
 // Normalize formatting rules from DB (handles old + new formats)
@@ -205,12 +228,16 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [showAttioPush, setShowAttioPush] = useState(false);
   const [showAttioSyncHistory, setShowAttioSyncHistory] = useState(false);
   const [isPushingToInstantly, setIsPushingToInstantly] = useState(false);
+  const [isRemixingAll, setIsRemixingAll] = useState(false);
   const [editEnrichmentColumn, setEditEnrichmentColumn] = useState<OpsTableColumn | null>(null);
   const [editFormulaColumn, setEditFormulaColumn] = useState<OpsTableColumn | null>(null);
   const [editButtonColumn, setEditButtonColumn] = useState<OpsTableColumn | null>(null);
   const [editApolloColumn, setEditApolloColumn] = useState<OpsTableColumn | null>(null);
   const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
   const [editHeyGenColumn, setEditHeyGenColumn] = useState<OpsTableColumn | null>(null);
+  const [editFalVideoColumn, setEditFalVideoColumn] = useState<OpsTableColumn | null>(null);
+  const [editAiImageColumn, setEditAiImageColumn] = useState<OpsTableColumn | null>(null);
+  const [editSvgAnimationColumn, setEditSvgAnimationColumn] = useState<OpsTableColumn | null>(null);
   const [createCampaignFromStepColumn, setCreateCampaignFromStepColumn] = useState<OpsTableColumn | null>(null);
   const [editEmailGenColumn, setEditEmailGenColumn] = useState<OpsTableColumn | null>(null);
   const [scheduleDialogColumn, setScheduleDialogColumn] = useState<string | null>(null);
@@ -221,6 +248,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [editingView, setEditingView] = useState<SavedView | null>(null);
   const [groupConfig, setGroupConfig] = useState<GroupConfig | null>(null);
   const [summaryConfig, setSummaryConfig] = useState<Record<string, AggregateType> | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
   const [viewSuggestions, setViewSuggestions] = useState<Array<{
     name: string;
     description: string;
@@ -249,6 +277,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [isLoadingLists, setIsLoadingLists] = useState(false);
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
+
+  // ---- LinkedIn Analytics refresh ----
+  const [isRefreshingAnalytics, setIsRefreshingAnalytics] = useState(false);
 
   // ---- Run All Pipeline ----
   const [isRunningPipeline, setIsRunningPipeline] = useState(false);
@@ -488,6 +519,32 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     [table?.columns],
   );
 
+  // ---- LinkedIn Analytics presence ----
+  const hasLinkedInAnalyticsColumns = useMemo(
+    () => columns.some((c) => c.column_type === 'linkedin_analytics'),
+    [columns],
+  );
+
+  // Compute the most recent last_synced_at across all linkedin_analytics cells in current page
+  const lastAnalyticsSyncedAt = useMemo(() => {
+    if (!hasLinkedInAnalyticsColumns || !tableData?.rows) return null;
+    const analyticsColumnKeys = columns
+      .filter((c) => c.column_type === 'linkedin_analytics')
+      .map((c) => c.key);
+    let latest: Date | null = null;
+    for (const row of tableData.rows) {
+      for (const key of analyticsColumnKeys) {
+        const cell = row.cells[key];
+        const syncedAt = (cell?.metadata as Record<string, unknown> | null)?.last_synced_at;
+        if (typeof syncedAt === 'string') {
+          const d = new Date(syncedAt);
+          if (!latest || d > latest) latest = d;
+        }
+      }
+    }
+    return latest;
+  }, [hasLinkedInAnalyticsColumns, columns, tableData?.rows]);
+
   // Default sort: if table has a meeting_date column and no sort is set, sort desc
   useEffect(() => {
     if (sortState || !columns.length) return;
@@ -496,6 +553,26 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       setSortState({ key: 'meeting_date', dir: 'desc' });
     }
   }, [columns, sortState]);
+
+  // ---- LinkedIn Analytics refresh handler ----
+  const handleRefreshAnalytics = useCallback(async () => {
+    if (!tableId || isRefreshingAnalytics) return;
+    setIsRefreshingAnalytics(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('linkedin-analytics-to-ops', {
+        body: { table_id: tableId },
+      });
+      if (error) throw error;
+      const synced = (data as { synced_cells?: number })?.synced_cells ?? 0;
+      toast.success(`Analytics refreshed — ${synced} cell${synced === 1 ? '' : 's'} updated`);
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to refresh analytics';
+      toast.error(msg);
+    } finally {
+      setIsRefreshingAnalytics(false);
+    }
+  }, [tableId, isRefreshingAnalytics, queryClient]);
 
   // ---- Enrich All handler ----
   const APOLLO_ENRICHABLE_KEYS = new Set(['email', 'phone', 'linkedin_url', 'city', 'website_url', 'funding_stage', 'employees']);
@@ -1067,6 +1144,15 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       toast.success('Column renamed');
     },
     onError: () => toast.error('Failed to rename column'),
+  });
+
+  const updateColumnIntegrationConfigMutation = useMutation({
+    mutationFn: ({ columnId, integrationConfig }: { columnId: string; integrationConfig: Record<string, unknown> }) =>
+      tableService.updateColumn(columnId, { integrationConfig }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+    },
+    onError: () => toast.error('Failed to update column settings'),
   });
 
   const updateEnrichmentMutation = useMutation({
@@ -1939,6 +2025,93 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     },
     [columns, startSingleRowEnrichment, singleRowApolloEnrichment, startApolloOrgEnrichment, singleRowLinkedInEnrichment],
   );
+
+  // ---- Remix All: bulk generate all AI columns for selected rows ----
+  const aiColumns = useMemo(
+    () => columns.filter((c) => AI_COLUMN_TYPES.includes(c.column_type as AiColumnType)),
+    [columns],
+  );
+
+  const handleRemixAll = useCallback(async () => {
+    if (aiColumns.length === 0) {
+      toast.info('No AI columns (image, video, or SVG animation) found in this table');
+      return;
+    }
+    if (selectedRows.size === 0) {
+      toast.info('Select rows first');
+      return;
+    }
+
+    const selectedRowIds = Array.from(selectedRows);
+    const total = aiColumns.length * selectedRowIds.length;
+    setIsRemixingAll(true);
+    const toastId = toast.loading(`Generating ${total} item${total !== 1 ? 's' : ''} across ${aiColumns.length} AI column${aiColumns.length !== 1 ? 's' : ''}...`);
+
+    try {
+      const promises = aiColumns.map(async (col) => {
+        try {
+          if (col.column_type === 'fal_video') {
+            const cfg = col.integration_config as Record<string, unknown> | null;
+            if (!cfg?.model_id) return;
+            const { error } = await supabase.functions.invoke('fal-video-generate', {
+              body: {
+                model_id: cfg.model_id || 'fal-ai/kling-video/v3/pro/text-to-video',
+                prompt_template: cfg.prompt_template,
+                table_id: tableId,
+                row_ids: selectedRowIds,
+                image_column_key: cfg.image_column_key,
+                duration: cfg.duration || '5',
+                aspect_ratio: cfg.aspect_ratio || '16:9',
+                generate_audio: cfg.generate_audio,
+              },
+            });
+            if (error) throw new Error(error.message);
+          } else if (col.column_type === 'ai_image') {
+            const cfg = col.integration_config as Record<string, unknown> | null;
+            if (!cfg?.model_id) return;
+            const { error } = await supabase.functions.invoke('ai-image-generate', {
+              body: {
+                action: 'generate',
+                org_id: '',
+                user_id: '',
+                table_id: tableId,
+                column_id: col.id,
+                row_ids: selectedRowIds,
+                model_id: cfg.model_id,
+                resolution: cfg.resolution,
+                aspect_ratio: cfg.aspect_ratio,
+              },
+            });
+            if (error) throw new Error(error.message);
+          } else if (col.column_type === 'svg_animation') {
+            const cfg = col.integration_config as Record<string, unknown> | null;
+            if (!cfg?.prompt_template) return;
+            const { error } = await supabase.functions.invoke('generate-svg-animation', {
+              body: {
+                action: 'generate',
+                org_id: '',
+                user_id: '',
+                table_id: tableId,
+                column_id: col.id,
+                row_ids: selectedRowIds,
+                complexity: cfg.complexity || 'medium',
+              },
+            });
+            if (error) throw new Error(error.message);
+          }
+        } catch (err) {
+          console.error(`Remix All: failed for column "${col.label}":`, err);
+        }
+      });
+
+      await Promise.all(promises);
+      toast.success(`Remix started — generating ${total} item${total !== 1 ? 's' : ''}`, { id: toastId });
+    } catch (err: any) {
+      toast.error(err?.message || 'Remix All failed', { id: toastId });
+    } finally {
+      setIsRemixingAll(false);
+    }
+  }, [aiColumns, selectedRows, tableId]);
 
   const handleStartEditName = useCallback(() => {
     if (table) {
@@ -2920,6 +3093,32 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
             {/* Right: action buttons */}
             <div className="flex items-center gap-1.5 shrink-0">
+            {/* LinkedIn Analytics refresh — visible when table has linkedin_analytics columns */}
+            {hasLinkedInAnalyticsColumns && (
+              <div className="flex items-center gap-1.5">
+                {lastAnalyticsSyncedAt && (
+                  <span className="text-xs text-gray-500 shrink-0">
+                    Synced {formatRelativeTime(lastAnalyticsSyncedAt)}
+                  </span>
+                )}
+                <button
+                  onClick={handleRefreshAnalytics}
+                  disabled={isRefreshingAnalytics}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-700/40 bg-blue-900/20 px-2.5 py-1.5 text-xs font-medium text-blue-300 transition-colors hover:bg-blue-900/40 hover:text-blue-200 disabled:opacity-50"
+                  title="Refresh LinkedIn analytics data"
+                >
+                  {isRefreshingAnalytics ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <BarChart3 className="h-3.5 w-3.5" />
+                      <RefreshCw className="h-3 w-3" />
+                    </>
+                  )}
+                  Refresh Analytics
+                </button>
+              </div>
+            )}
             {/* Source sync — primary action for sourced tables */}
             {table.source_type === 'hubspot' && (
               <button
@@ -3052,6 +3251,14 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               )}
               Add Row
             </button>
+            {/* LinkedIn Campaign Binding */}
+            {tableId && table && (
+              <LinkedInCampaignBinding
+                tableId={tableId}
+                integrationConfig={table.integration_config}
+                onSaved={() => queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] })}
+              />
+            )}
             {/* Webhook settings */}
             <button
               onClick={() => setShowWebhookPanel(true)}
@@ -3460,6 +3667,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               return { ...instantlySummary, ...(summaryConfig ?? {}) };
             })()}
             onRowExpand={(rowId) => setExpandedRowId(rowId)}
+            compareMode={compareMode}
+            onToggleCompareMode={() => setCompareMode((m) => !m)}
           />
 
           {/* Pagination controls */}
@@ -3574,7 +3783,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             toast.error(msg);
           }
         }}
-        existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
         sourceType={table?.source_type as 'manual' | 'csv' | 'hubspot' | null}
         tableId={tableId}
@@ -3699,6 +3908,15 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           onEditHeygen={activeColumn.column_type === 'heygen_video' ? () => {
             setEditHeyGenColumn(activeColumn);
           } : undefined}
+          onEditFalVideo={activeColumn.column_type === 'fal_video' ? () => {
+            setEditFalVideoColumn(activeColumn);
+          } : undefined}
+          onEditAiImage={activeColumn.column_type === 'ai_image' ? () => {
+            setEditAiImageColumn(activeColumn);
+          } : undefined}
+          onEditSvgAnimation={activeColumn.column_type === 'svg_animation' ? () => {
+            setEditSvgAnimationColumn(activeColumn);
+          } : undefined}
           onEditEmailGeneration={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
             setEditEmailGenColumn(activeColumn);
           } : undefined}
@@ -3710,6 +3928,17 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             setCreateCampaignFromStepColumn(activeColumn);
           } : undefined}
           anchorRect={activeColumnMenu?.anchorRect}
+          analyticsDateRange={activeColumn.column_type === 'linkedin_analytics'
+            ? ((activeColumn.integration_config as { date_range?: string } | null)?.date_range ?? 'last_30_days')
+            : undefined}
+          onChangeDateRange={activeColumn.column_type === 'linkedin_analytics' ? (dateRange) => {
+            const existing = (activeColumn.integration_config as Record<string, unknown> | null) ?? {};
+            updateColumnIntegrationConfigMutation.mutate({
+              columnId: activeColumn.id,
+              integrationConfig: { ...existing, date_range: dateRange },
+            });
+            toast.success(`Date range updated to ${dateRange.replace(/_/g, ' ')}`);
+          } : undefined}
         />
       )}
 
@@ -3811,7 +4040,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           currentModel={editEnrichmentColumn.enrichment_model ?? 'anthropic/claude-3.5-sonnet'}
           currentProvider={editEnrichmentColumn.enrichment_provider ?? 'openrouter'}
           columnLabel={editEnrichmentColumn.label}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
           contextProfileName={contextProfile?.company_name ?? (factProfiles.find((p) => p.is_org_profile)?.company_name || null)}
           contextProfileIsOrg={contextProfile ? contextProfile.is_org_profile : true}
         />
@@ -3831,7 +4060,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             });
           }}
           columnLabel={editFormulaColumn.label}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
           sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
         />
       )}
@@ -3850,7 +4079,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             });
           }}
           columnLabel={editButtonColumn.label}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
       )}
 
@@ -3999,7 +4228,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           columnLabel={editInstantlyColumn.label}
           currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
           orgId={table?.organization_id}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
       )}
 
@@ -4019,8 +4248,83 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           }}
           columnLabel={editHeyGenColumn.label}
           currentConfig={(editHeyGenColumn.integration_config as any) ?? undefined}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
+      )}
+
+      {/* Edit FAL Video Settings */}
+      {editFalVideoColumn && tableId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditFalVideoColumn(null)} />
+          <div className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <FalVideoColumnWizard
+              tableId={tableId}
+              existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              initialConfig={(editFalVideoColumn.integration_config as any) ?? undefined}
+              onComplete={async (config) => {
+                try {
+                  await tableService.updateColumn(editFalVideoColumn.id, { integrationConfig: config as unknown as Record<string, unknown> });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                  toast.success('Video settings updated');
+                } catch {
+                  toast.error('Failed to update video settings');
+                }
+                setEditFalVideoColumn(null);
+              }}
+              onCancel={() => setEditFalVideoColumn(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Edit AI Image Settings */}
+      {editAiImageColumn && tableId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditAiImageColumn(null)} />
+          <div className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <AiImageColumnWizard
+              tableId={tableId}
+              existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              initialConfig={(editAiImageColumn.integration_config as any) ?? undefined}
+              onComplete={async (config) => {
+                try {
+                  await tableService.updateColumn(editAiImageColumn.id, { integrationConfig: config as unknown as Record<string, unknown> });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                  toast.success('Image settings updated');
+                } catch {
+                  toast.error('Failed to update image settings');
+                }
+                setEditAiImageColumn(null);
+              }}
+              onCancel={() => setEditAiImageColumn(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Edit SVG Animation Settings */}
+      {editSvgAnimationColumn && tableId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditSvgAnimationColumn(null)} />
+          <div className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <SvgAnimationColumnWizard
+              tableId={tableId}
+              existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              initialConfig={(editSvgAnimationColumn.integration_config as any) ?? undefined}
+              onComplete={async (config) => {
+                try {
+                  await tableService.updateColumn(editSvgAnimationColumn.id, { integrationConfig: config as unknown as Record<string, unknown> });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                  toast.success('Animation settings updated');
+                } catch {
+                  toast.error('Failed to update animation settings');
+                }
+                setEditSvgAnimationColumn(null);
+              }}
+              onCancel={() => setEditSvgAnimationColumn(null)}
+            />
+          </div>
+        </div>
       )}
 
       {/* Create Instantly Campaign from Step Columns */}
@@ -4120,7 +4424,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             return (campaignConfigCol?.integration_config as any) ?? { instantly_subtype: 'campaign_config' };
           })()}
           orgId={table?.organization_id}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
       )}
 
@@ -4345,6 +4649,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         }}
         onDelete={() => deleteRowsMutation.mutate(Array.from(selectedRows))}
         onDeselectAll={() => setSelectedRows(new Set())}
+        onRemixAll={aiColumns.length > 0 ? handleRemixAll : undefined}
+        aiColumnCount={aiColumns.length}
+        isRemixingAll={isRemixingAll}
       />
 
       {/* HubSpot Push Modal */}

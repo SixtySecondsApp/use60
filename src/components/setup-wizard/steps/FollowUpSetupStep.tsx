@@ -117,9 +117,7 @@ export function FollowUpSetupStep() {
     }
   };
 
-  const handleSkip = async () => {
-    if (!user?.id || !activeOrgId) return;
-    await completeStep(user.id, activeOrgId, 'followups');
+  const handleSkip = () => {
     setCurrentStep('test');
   };
 

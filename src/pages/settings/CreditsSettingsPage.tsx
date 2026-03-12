@@ -19,14 +19,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useCreditBalance, creditKeys } from '@/lib/hooks/useCreditBalance';
-import { grantCredits } from '@/lib/services/creditService';
 import { useOrgId, useOrg } from '@/lib/contexts/OrgContext';
 import CreditPurchaseModal from '@/components/credits/CreditPurchaseModal';
 import { UsageChart } from '@/components/credits/UsageChart';
 import { CreditEstimator } from '@/components/credits/CreditEstimator';
 import { TransactionLog } from '@/components/credits/TransactionLog';
 import { SimpleModelTierSelector } from '@/components/credits/SimpleModelTierSelector';
-import { PackInventory } from '@/components/credits/PackInventory';
 import { StorageUsageCard } from '@/components/credits/StorageUsageCard';
 import { UsageBreakdownChart } from '@/components/credits/UsageBreakdownChart';
 import { AutoTopUpSettings } from '@/components/credits/AutoTopUpSettings';
@@ -39,12 +37,9 @@ import {
   TrendingDown,
   Clock,
   Wallet,
-  Plus,
   BarChart3,
   AlertCircle,
   Brain,
-  ShieldCheck,
-  Package,
   HardDrive,
   RefreshCw,
   CreditCard,
@@ -53,15 +48,12 @@ import {
   Settings,
   Receipt,
   Tag,
-  Star,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
-import { CREDIT_PACKS, STANDARD_PACKS, getPackPrice } from '@/lib/config/creditPacks';
 import type { PackType } from '@/lib/config/creditPacks';
-import { useOrgMoney } from '@/lib/hooks/useOrgMoney';
 
 // ============================================================================
 // Balance color helpers
@@ -87,7 +79,7 @@ function getStatusBg(balance: number, projectedDays: number) {
 // Valid tab values
 // ============================================================================
 
-const VALID_TABS = ['topup', 'inventory', 'usage', 'transactions', 'settings', 'pricing'] as const;
+const VALID_TABS = ['topup', 'usage', 'transactions', 'settings'] as const;
 type TabValue = (typeof VALID_TABS)[number];
 
 function isValidTab(value: string | null): value is TabValue {
@@ -101,7 +93,6 @@ function isValidTab(value: string | null): value is TabValue {
 export default function CreditsSettingsPage() {
   const orgId = useOrgId();
   const { data: balance, isLoading: balanceLoading } = useCreditBalance();
-  const { currencyCode } = useOrgMoney();
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [purchasePack, setPurchasePack] = useState<PackType | undefined>(undefined);
   const [purchaseInitialPack, setPurchaseInitialPack] = useState<PackType | undefined>();
@@ -136,34 +127,20 @@ export default function CreditsSettingsPage() {
     setSearchParams(next, { replace: true });
   };
 
-  // Admin grant credits state
-  const [grantAmount, setGrantAmount] = useState('');
-  const [grantReason, setGrantReason] = useState('');
-  const [isGranting, setIsGranting] = useState(false);
+  // Coupon code state
+  const [couponCode, setCouponCode] = useState('');
+  const [isRedeemingCoupon, setIsRedeemingCoupon] = useState(false);
 
-  const handleGrantCredits = async () => {
-    if (!orgId) return;
-    const amount = parseFloat(grantAmount);
-    if (!amount || amount <= 0 || amount > 10000) {
-      toast.error('Enter a valid amount between 1 and 10,000');
-      return;
-    }
-    setIsGranting(true);
+  const handleRedeemCoupon = async () => {
+    if (!orgId || !couponCode.trim()) return;
+    setIsRedeemingCoupon(true);
     try {
-      const newBalance = await grantCredits(orgId, amount, grantReason);
-      const formatted = newBalance % 1 === 0 ? `${Math.round(newBalance)}` : newBalance.toFixed(1);
-      toast.success(`Granted ${amount} credits. New balance: ${formatted} credits`);
-      setGrantAmount('');
-      setGrantReason('');
-      queryClient.setQueryData(creditKeys.balance(orgId), (old: any) => ({
-        ...(old || { dailyBurnRate: 0, projectedDaysRemaining: -1, usageByFeature: [], recentTransactions: [], lastPurchaseDate: null, autoTopUp: null, storage: null, packInventory: { activePacks: 0, totalRemaining: 0 } }),
-        balance: newBalance,
-      }));
-      queryClient.invalidateQueries({ queryKey: creditKeys.balance(orgId) });
+      // TODO: wire up to coupon redemption endpoint
+      toast.info('Coupon redemption coming soon');
     } catch (err: any) {
-      toast.error(err.message || 'Failed to grant credits');
+      toast.error(err.message || 'Failed to redeem coupon');
     } finally {
-      setIsGranting(false);
+      setIsRedeemingCoupon(false);
     }
   };
 
@@ -296,10 +273,6 @@ export default function CreditsSettingsPage() {
               <CreditCard className="w-3.5 h-3.5" />
               Top Up
             </TabsTrigger>
-            <TabsTrigger value="inventory" className="gap-1.5">
-              <Package className="w-3.5 h-3.5" />
-              Inventory
-            </TabsTrigger>
             <TabsTrigger value="usage" className="gap-1.5">
               <BarChart3 className="w-3.5 h-3.5" />
               Usage
@@ -311,10 +284,6 @@ export default function CreditsSettingsPage() {
             <TabsTrigger value="settings" className="gap-1.5">
               <Settings className="w-3.5 h-3.5" />
               Settings
-            </TabsTrigger>
-            <TabsTrigger value="pricing" className="gap-1.5">
-              <Tag className="w-3.5 h-3.5" />
-              Pricing
             </TabsTrigger>
           </TabsList>
 
@@ -329,73 +298,42 @@ export default function CreditsSettingsPage() {
               <CreditEstimator />
             </div>
 
-            {/* Top Up Credits — pack cards */}
-            {isAdmin && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-[#37bd7e]" />
-                  Top Up Credits
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {STANDARD_PACKS.map((packType) => {
-                    const pack = CREDIT_PACKS[packType];
-                    const { symbol, price, isApproximate } = getPackPrice(packType, currencyCode);
-                    const isPopular = pack.popular;
-
-                    return (
-                      <button
-                        key={packType}
-                        type="button"
-                        onClick={() => { setPurchasePack(packType); setPurchaseInitialPack(packType); setPurchaseModalOpen(true); }}
-                        className={cn(
-                          'relative flex flex-col items-center gap-1.5 rounded-xl border-2 p-5 text-center transition-all',
-                          'hover:border-[#37bd7e] hover:bg-[#37bd7e]/5',
-                          isPopular
-                            ? 'border-blue-500 dark:border-blue-500'
-                            : 'border-gray-200 dark:border-gray-700'
-                        )}
-                      >
-                        {isPopular && (
-                          <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 bg-blue-500/90 dark:bg-blue-600/90 text-white text-[10px] font-medium px-2.5 py-0.5 rounded-full">
-                            <Star className="h-2.5 w-2.5 fill-white" />
-                            Most Popular
-                          </span>
-                        )}
-                        <span className="text-base font-bold text-gray-900 dark:text-white">
-                          {pack.label}
-                        </span>
-                        <span className="text-2xl font-bold text-[#37bd7e]">
-                          {pack.credits}
-                        </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          credits
-                        </span>
-                        <span className="text-lg font-semibold text-gray-900 dark:text-white mt-1">
-                          {isApproximate ? '~' : ''}{symbol}{price}
-                        </span>
-                        <span className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[#37bd7e]">
-                          <CreditCard className="w-3.5 h-3.5" />
-                          Purchase
-                        </span>
-                      </button>
-                    );
-                  })}
+            {/* Credit packs, coupon code, and pricing table */}
+            <CreditMenuTable
+              currentTier={
+                (balance as any)?.intelligenceTier ?? 'medium'
+              }
+            >
+              {/* Coupon Code */}
+              <div className="border border-gray-200 dark:border-gray-800 rounded-xl px-5 py-4">
+                <div className="flex items-end gap-3">
+                  <div className="flex-1 max-w-sm">
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      Coupon Code
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter coupon code"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#37bd7e]/50 uppercase tracking-wider"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleRedeemCoupon}
+                    disabled={isRedeemingCoupon || !couponCode.trim()}
+                    className="bg-[#37bd7e] hover:bg-[#2da76c] text-white"
+                  >
+                    {isRedeemingCoupon ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                    ) : (
+                      <Tag className="w-4 h-4 mr-1.5" />
+                    )}
+                    Redeem
+                  </Button>
                 </div>
               </div>
-            )}
-          </TabsContent>
-
-          {/* ── Tab: Inventory ─────────────────────────────────────── */}
-          <TabsContent value="inventory" className="mt-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                <Package className="w-4 h-4 text-[#37bd7e]" />
-                Credit Pack Inventory
-              </h3>
-              <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-                <PackInventory />
-              </div>
-            </div>
+            </CreditMenuTable>
           </TabsContent>
 
           {/* ── Tab: Usage ──────────────────────────────────────────── */}
@@ -501,71 +439,8 @@ export default function CreditsSettingsPage() {
               </div>
             )}
 
-            {/* Admin Grant Credits */}
-            {isAdmin && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-[#37bd7e]" />
-                  Admin: Grant Credits
-                </h3>
-                <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-4">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Add credits directly to this organization without payment. Appears as &quot;bonus&quot; in the transaction log.
-                  </p>
-                  <div className="flex flex-wrap items-end gap-3">
-                    <div className="flex-1 min-w-[120px] max-w-[200px]">
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                        Amount (credits)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="10000"
-                        step="1"
-                        placeholder="100"
-                        value={grantAmount}
-                        onChange={(e) => setGrantAmount(e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#37bd7e]/50"
-                      />
-                    </div>
-                    <div className="flex-[2] min-w-[200px]">
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                        Reason (optional)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Trial bonus, testing, comp credits"
-                        value={grantReason}
-                        onChange={(e) => setGrantReason(e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#37bd7e]/50"
-                      />
-                    </div>
-                    <Button
-                      onClick={handleGrantCredits}
-                      disabled={isGranting || !grantAmount}
-                      className="bg-[#37bd7e] hover:bg-[#2da76c] text-white"
-                    >
-                      {isGranting ? (
-                        <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
-                      ) : (
-                        <Plus className="w-4 h-4 mr-1.5" />
-                      )}
-                      Grant Credits
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
           </TabsContent>
 
-          {/* ── Tab: Pricing ──────────────────────────────────────────── */}
-          <TabsContent value="pricing" className="mt-4">
-            <CreditMenuTable
-              currentTier={
-                (balance as any)?.intelligenceTier ?? 'medium'
-              }
-            />
-          </TabsContent>
         </Tabs>
       </div>
 

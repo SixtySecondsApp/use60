@@ -139,128 +139,128 @@ export function FlaggingRulesPanel({ rules, onRulesChanged }: FlaggingRulesPanel
   };
 
   return (
-    <div className="mt-4 space-y-4 overflow-y-auto max-h-[calc(100vh-12rem)]">
-      {/* Existing rules */}
-      {rules.map((rule) => {
-        const meta = RULE_TYPE_META[rule.rule_type];
-        const Icon = meta?.icon || Shield;
+    <div className="flex-1 min-h-0 flex flex-col">
+      {/* Rules grid — 3 columns */}
+      <div className="grid grid-cols-3 gap-3">
+        {rules.map((rule) => {
+          const meta = RULE_TYPE_META[rule.rule_type];
+          const Icon = meta?.icon || Shield;
 
-        return (
-          <div
-            key={rule.id}
-            className={`p-3 rounded-lg border ${
-              rule.is_enabled ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-900/30 border-slate-800 opacity-60'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <Icon className="h-4 w-4 text-slate-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-200 truncate">{rule.rule_name}</p>
-                  <p className="text-xs text-slate-500">{meta?.label}</p>
+          return (
+            <div
+              key={rule.id}
+              className={`p-3 rounded-lg border ${
+                rule.is_enabled ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-900/30 border-slate-800 opacity-60'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Icon className="h-4 w-4 text-slate-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-200 truncate">{rule.rule_name}</p>
+                    <p className="text-xs text-slate-500">{meta?.label}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant="outline" className={`text-[10px] ${SEVERITY_COLORS[rule.severity]}`}>
+                    {rule.severity}
+                  </Badge>
+                  <Switch
+                    checked={rule.is_enabled}
+                    onCheckedChange={(checked) => handleToggleRule(rule.id, checked)}
+                  />
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="outline" className={`text-[10px] ${SEVERITY_COLORS[rule.severity]}`}>
-                  {rule.severity}
-                </Badge>
-                <Switch
-                  checked={rule.is_enabled}
-                  onCheckedChange={(checked) => handleToggleRule(rule.id, checked)}
-                />
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-xs text-slate-400">
+                  Threshold: <span className="text-slate-200 font-mono">{rule.threshold_value}</span>
+                  {' '}{meta?.unit}
+                  {rule.time_window_minutes && (
+                    <span className="text-slate-500"> (over {rule.time_window_minutes}min)</span>
+                  )}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDeleteRule(rule.id)}
+                  className="text-red-400/60 hover:text-red-400 hover:bg-red-900/20 h-7 w-7 p-0"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
             </div>
-            <div className="mt-2 flex items-center justify-between">
-              <p className="text-xs text-slate-400">
-                Threshold: <span className="text-slate-200 font-mono">{rule.threshold_value}</span>
-                {' '}{meta?.unit}
-                {rule.time_window_minutes && (
-                  <span className="text-slate-500"> (over {rule.time_window_minutes}min)</span>
-                )}
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleDeleteRule(rule.id)}
-                className="text-red-400/60 hover:text-red-400 hover:bg-red-900/20 h-7 w-7 p-0"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+          );
+        })}
+
+        {rules.length === 0 && !isAdding && (
+          <div className="col-span-3 text-center py-8">
+            <AlertTriangle className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+            <p className="text-sm text-slate-500">No flagging rules configured</p>
           </div>
-        );
-      })}
+        )}
+      </div>
 
-      {rules.length === 0 && !isAdding && (
-        <div className="text-center py-8">
-          <AlertTriangle className="h-8 w-8 text-slate-600 mx-auto mb-2" />
-          <p className="text-sm text-slate-500">No flagging rules configured</p>
-        </div>
-      )}
-
-      {/* Add new rule form */}
-      {isAdding ? (
-        <div className="p-3 rounded-lg border border-emerald-500/20 bg-slate-800/50 space-y-3">
-          <div>
-            <Label className="text-xs text-slate-400">Rule Name</Label>
-            <Input
-              value={newRule.rule_name}
-              onChange={(e) => setNewRule(prev => ({ ...prev, rule_name: e.target.value }))}
-              placeholder="e.g., High token request"
-              className="bg-slate-900 border-slate-700 text-slate-200 h-8 text-sm"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs text-slate-400">Rule Type</Label>
-              <Select
-                value={newRule.rule_type}
-                onValueChange={(v) => setNewRule(prev => ({ ...prev, rule_type: v as keyof typeof RULE_TYPE_META }))}
-              >
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200 h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="per_request_max">Per-Request Max</SelectItem>
-                  <SelectItem value="rate_spike">Rate Spike</SelectItem>
-                  <SelectItem value="budget_percent">Budget %</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs text-slate-400">Severity</Label>
-              <Select
-                value={newRule.severity}
-                onValueChange={(v) => setNewRule(prev => ({ ...prev, severity: v as 'info' | 'warning' | 'critical' }))}
-              >
-                <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200 h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="info">Info</SelectItem>
-                  <SelectItem value="warning">Warning</SelectItem>
-                  <SelectItem value="critical">Critical</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs text-slate-400">
-                Threshold ({RULE_TYPE_META[newRule.rule_type]?.unit})
-              </Label>
-              <Input
-                type="number"
-                value={newRule.threshold_value}
-                onChange={(e) => setNewRule(prev => ({ ...prev, threshold_value: e.target.value }))}
-                placeholder="100000"
-                className="bg-slate-900 border-slate-700 text-slate-200 h-8 text-sm"
-              />
+      {/* Add new rule — spans full width below the grid */}
+      <div className="mt-3 shrink-0">
+        {isAdding ? (
+          <div className="p-3 rounded-lg border border-emerald-500/20 bg-slate-800/50">
+            <div className="grid grid-cols-4 gap-3">
+              <div>
+                <Label className="text-xs text-slate-400">Rule Name</Label>
+                <Input
+                  value={newRule.rule_name}
+                  onChange={(e) => setNewRule(prev => ({ ...prev, rule_name: e.target.value }))}
+                  placeholder="e.g., High token request"
+                  className="bg-slate-900 border-slate-700 text-slate-200 h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-400">Rule Type</Label>
+                <Select
+                  value={newRule.rule_type}
+                  onValueChange={(v) => setNewRule(prev => ({ ...prev, rule_type: v as keyof typeof RULE_TYPE_META }))}
+                >
+                  <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200 h-8 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="per_request_max">Per-Request Max</SelectItem>
+                    <SelectItem value="rate_spike">Rate Spike</SelectItem>
+                    <SelectItem value="budget_percent">Budget %</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-400">
+                  Threshold ({RULE_TYPE_META[newRule.rule_type]?.unit})
+                </Label>
+                <Input
+                  type="number"
+                  value={newRule.threshold_value}
+                  onChange={(e) => setNewRule(prev => ({ ...prev, threshold_value: e.target.value }))}
+                  placeholder="100000"
+                  className="bg-slate-900 border-slate-700 text-slate-200 h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-400">Severity</Label>
+                <Select
+                  value={newRule.severity}
+                  onValueChange={(v) => setNewRule(prev => ({ ...prev, severity: v as 'info' | 'warning' | 'critical' }))}
+                >
+                  <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-200 h-8 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="info">Info</SelectItem>
+                    <SelectItem value="warning">Warning</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {newRule.rule_type === 'rate_spike' && (
-              <div>
+              <div className="mt-2 w-1/4">
                 <Label className="text-xs text-slate-400">Time Window (min)</Label>
                 <Input
                   type="number"
@@ -271,43 +271,41 @@ export function FlaggingRulesPanel({ rules, onRulesChanged }: FlaggingRulesPanel
                 />
               </div>
             )}
+            <div className="flex items-center gap-3 mt-3">
+              <Button
+                size="sm"
+                onClick={handleAddRule}
+                disabled={isSaving}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs"
+              >
+                {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Save Rule
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsAdding(false)}
+                className="text-slate-400 hover:text-slate-200 h-7 text-xs"
+              >
+                Cancel
+              </Button>
+              <p className="text-[10px] text-slate-500 ml-auto">
+                {RULE_TYPE_META[newRule.rule_type]?.description}
+              </p>
+            </div>
           </div>
-
-          <p className="text-[10px] text-slate-500">
-            {RULE_TYPE_META[newRule.rule_type]?.description}
-          </p>
-
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={handleAddRule}
-              disabled={isSaving}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs"
-            >
-              {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-              Save Rule
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsAdding(false)}
-              className="text-slate-400 hover:text-slate-200 h-7 text-xs"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsAdding(true)}
-          className="w-full text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-dashed border-slate-700"
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          Add Rule
-        </Button>
-      )}
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsAdding(true)}
+            className="text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-dashed border-slate-700"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add Rule
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

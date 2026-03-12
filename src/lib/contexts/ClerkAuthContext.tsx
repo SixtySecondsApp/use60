@@ -572,6 +572,7 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children }
     // Actions
     signIn,
     signInWithGoogle: async () => ({ error: { message: 'Google OAuth is not supported with Clerk auth. Use Clerk\'s built-in social login.' } }),
+    signInWithMicrosoft: async () => ({ error: { message: 'Microsoft OAuth is not supported with Clerk auth. Use Clerk\'s built-in social login.' } }),
     signUp,
     signOut,
     resetPassword,

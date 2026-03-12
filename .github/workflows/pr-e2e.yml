@@ -1,0 +1,150 @@
+name: E2E Tests (Playwright)
+
+on:
+  pull_request:
+    branches: [main, staging]
+
+concurrency:
+  group: pr-e2e-${{ github.head_ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # ============================================
+  # Check if E2E credentials are configured
+  # ============================================
+  check-credentials:
+    name: Check E2E Credentials
+    runs-on: ubuntu-latest
+    outputs:
+      has_credentials: ${{ steps.check.outputs.has_credentials }}
+    steps:
+      - name: Check for test credentials
+        id: check
+        run: |
+          if [ -n "${{ secrets.TEST_USER_EMAIL }}" ] && [ -n "${{ secrets.STAGING_SERVICE_ROLE_KEY }}" ]; then
+            echo "has_credentials=true" >> $GITHUB_OUTPUT
+            echo "E2E credentials configured (magic link auth)"
+          else
+            echo "has_credentials=false" >> $GITHUB_OUTPUT
+            echo "E2E credentials not configured — skipping E2E tests"
+            echo "To enable, add TEST_USER_EMAIL and STAGING_SERVICE_ROLE_KEY as GitHub secrets"
+          fi
+
+  # ============================================
+  # Run Playwright E2E Tests
+  # ============================================
+  playwright:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    needs: check-credentials
+    if: needs.check-credentials.outputs.has_credentials == 'true'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        env:
+          CI: true
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SERVICE_ROLE_KEY }}
+          VITE_SUPABASE_URL: https://caerqjzvuerejfrdtygb.supabase.co
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          BASE_URL: ${{ secrets.STAGING_APP_URL || 'https://caerqjzvuerejfrdtygb.supabase.co' }}
+        run: |
+          npx playwright test --reporter=list --reporter=junit --output=test-results-e2e.xml 2>&1 | tee playwright-output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        id: e2e
+        continue-on-error: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+            test-results-e2e.xml
+            playwright-output.txt
+          retention-days: 14
+
+      - name: Upload failure screenshots
+        if: failure() || steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: test-results/**/*.png
+          retention-days: 14
+
+  # ============================================
+  # Post E2E Results to PR
+  # ============================================
+  e2e-status:
+    name: E2E Status
+    runs-on: ubuntu-latest
+    needs: [check-credentials, playwright]
+    if: always()
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const hasCreds = '${{ needs.check-credentials.outputs.has_credentials }}';
+            const e2eResult = '${{ needs.playwright.result }}';
+
+            let body = `## E2E Tests (Playwright)\n\n`;
+
+            if (hasCreds !== 'true') {
+              body += `:next_track_button: **Skipped** — test credentials not configured\n\n`;
+              body += `To enable E2E tests, add these GitHub secrets:\n`;
+              body += `- \`TEST_USER_EMAIL\` — test account email\n`;
+              body += `- \`STAGING_SERVICE_ROLE_KEY\` — staging Supabase service role key (generates magic links)\n`;
+              body += `- \`STAGING_SUPABASE_ANON_KEY\` — staging anon key\n\n`;
+            } else if (e2eResult === 'success') {
+              body += `:white_check_mark: **All E2E tests passed**\n\n`;
+            } else if (e2eResult === 'failure') {
+              body += `:x: **E2E tests failed** — check the [Playwright report](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details\n\n`;
+              body += `Download the \`playwright-report\` and \`playwright-screenshots\` artifacts for debugging.\n\n`;
+            } else {
+              body += `:warning: **E2E tests did not run** (status: ${e2eResult})\n\n`;
+            }
+
+            body += `<!-- pr-e2e-status -->`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes('<!-- pr-e2e-status -->'));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

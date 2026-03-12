@@ -20,6 +20,8 @@ import {
   RefreshCw,
   Pencil,
   Search,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -96,6 +98,377 @@ function formatDate(iso: string): string {
 function pctChange(oldVal: number, newVal: number): number {
   if (oldVal === 0) return newVal === 0 ? 0 : Infinity;
   return Math.abs((newVal - oldVal) / oldVal);
+}
+
+// ============================================================================
+// CSV Helpers
+// ============================================================================
+
+const CSV_COLUMNS = [
+  'action_id', 'display_name', 'description', 'category', 'unit',
+  'cost_low', 'cost_medium', 'cost_high', 'is_active', 'free_with_sub', 'is_flat_rate',
+] as const;
+
+function escapeCsvField(value: string | number | boolean | null): string {
+  const str = String(value ?? '');
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function entriesToCsv(entries: CreditMenuEntry[]): string {
+  const header = CSV_COLUMNS.join(',');
+  const rows = entries.map((e) =>
+    CSV_COLUMNS.map((col) => escapeCsvField(e[col as keyof CreditMenuEntry])).join(',')
+  );
+  return [header, ...rows].join('\n');
+}
+
+function downloadCsv(csv: string, filename: string) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        fields.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+  }
+  fields.push(current);
+  return fields;
+}
+
+interface CsvDiffRow {
+  actionId: string;
+  isNew: boolean;
+  changes: { field: string; oldVal: string; newVal: string }[];
+  parsed: Record<string, string>;
+}
+
+function parseCsvUpload(
+  csvText: string,
+  existing: CreditMenuEntry[]
+): { rows: CsvDiffRow[]; errors: string[] } {
+  const lines = csvText.trim().split(/\r?\n/);
+  if (lines.length < 2) return { rows: [], errors: ['CSV must have a header row and at least one data row.'] };
+
+  const headers = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const actionIdIdx = headers.indexOf('action_id');
+  if (actionIdIdx === -1) return { rows: [], errors: ['CSV must have an "action_id" column.'] };
+
+  const errors: string[] = [];
+  const existingMap = new Map(existing.map((e) => [e.action_id, e]));
+  const diffRows: CsvDiffRow[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const fields = parseCsvLine(line);
+    const parsed: Record<string, string> = {};
+    headers.forEach((h, idx) => { parsed[h] = (fields[idx] ?? '').trim(); });
+
+    const actionId = parsed.action_id;
+    if (!actionId) {
+      errors.push(`Row ${i + 1}: missing action_id`);
+      continue;
+    }
+
+    const existingEntry = existingMap.get(actionId);
+    if (existingEntry) {
+      // Diff existing entry — only flag as changed if pricing columns differ
+      const PRICE_FIELDS = ['cost_low', 'cost_medium', 'cost_high'];
+      const changes: CsvDiffRow['changes'] = [];
+      for (const col of PRICE_FIELDS) {
+        if (!(col in parsed)) continue;
+        const oldNum = Number(existingEntry[col as keyof CreditMenuEntry] ?? 0);
+        const newNum = parseFloat(parsed[col]) || 0;
+        if (oldNum !== newNum) {
+          changes.push({ field: col, oldVal: String(oldNum), newVal: String(newNum) });
+        }
+      }
+      if (changes.length > 0) {
+        diffRows.push({ actionId, isNew: false, changes, parsed });
+      }
+    } else {
+      // New row
+      const changes = CSV_COLUMNS
+        .filter((c) => c !== 'action_id' && c in parsed)
+        .map((c) => ({ field: c, oldVal: '', newVal: parsed[c] }));
+      diffRows.push({ actionId, isNew: true, changes, parsed });
+    }
+  }
+
+  return { rows: diffRows, errors };
+}
+
+// ============================================================================
+// CSV Upload Preview Dialog
+// ============================================================================
+
+interface CsvUploadDialogProps {
+  open: boolean;
+  onClose: () => void;
+  diffRows: CsvDiffRow[];
+  existingEntries: CreditMenuEntry[];
+  parseErrors: string[];
+  onConfirm: (approvedRows: CsvDiffRow[]) => void;
+  applying: boolean;
+}
+
+/** Render a cell value, highlighting if it changed */
+function CsvCell({
+  field,
+  currentVal,
+  diff,
+}: {
+  field: string;
+  currentVal: string;
+  diff: CsvDiffRow | undefined;
+}) {
+  const change = diff?.changes.find((c) => c.field === field);
+  if (!change) {
+    return <span className="text-sm">{currentVal}</span>;
+  }
+  return (
+    <span className="text-sm">
+      <span className="line-through text-red-500 dark:text-red-400 mr-1">{change.oldVal}</span>
+      <span className="text-green-600 dark:text-green-400 font-medium">{change.newVal}</span>
+    </span>
+  );
+}
+
+function CsvUploadDialog({
+  open,
+  onClose,
+  diffRows,
+  existingEntries,
+  parseErrors,
+  onConfirm,
+  applying,
+}: CsvUploadDialogProps) {
+  const [approved, setApproved] = useState<Record<string, boolean>>({});
+
+  // Reset approvals when dialog opens with new data
+  useEffect(() => {
+    if (open) {
+      const initial: Record<string, boolean> = {};
+      diffRows.forEach((r) => { initial[r.actionId] = true; });
+      setApproved(initial);
+    }
+  }, [open, diffRows]);
+
+  const diffMap = new Map(diffRows.map((r) => [r.actionId, r]));
+  const changedIds = new Set(diffRows.map((r) => r.actionId));
+  const newRows = diffRows.filter((r) => r.isNew);
+
+  // Build full row list: existing entries + new rows from CSV
+  const allRows: { actionId: string; displayName: string; category: string; unit: string; costLow: string; costMed: string; costHigh: string; isNew: boolean; hasChanges: boolean }[] = [];
+
+  for (const entry of existingEntries) {
+    const diff = diffMap.get(entry.action_id);
+    allRows.push({
+      actionId: entry.action_id,
+      displayName: String(entry.display_name),
+      category: String(entry.category),
+      unit: String(entry.unit),
+      costLow: String(entry.cost_low),
+      costMed: String(entry.cost_medium),
+      costHigh: String(entry.cost_high),
+      isNew: false,
+      hasChanges: !!diff,
+    });
+  }
+
+  for (const row of newRows) {
+    allRows.push({
+      actionId: row.actionId,
+      displayName: row.parsed.display_name || row.actionId,
+      category: row.parsed.category || '',
+      unit: row.parsed.unit || '',
+      costLow: row.parsed.cost_low || '0',
+      costMed: row.parsed.cost_medium || '0',
+      costHigh: row.parsed.cost_high || '0',
+      isNew: true,
+      hasChanges: true,
+    });
+  }
+
+  const approvedCount = Object.values(approved).filter(Boolean).length;
+  const allApproved = diffRows.length > 0 && approvedCount === diffRows.length;
+
+  const toggleAll = (value: boolean) => {
+    const next: Record<string, boolean> = {};
+    diffRows.forEach((r) => { next[r.actionId] = value; });
+    setApproved(next);
+  };
+
+  const handleConfirm = () => {
+    const approvedRows = diffRows.filter((r) => approved[r.actionId]);
+    onConfirm(approvedRows);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle>CSV Upload Preview</DialogTitle>
+            {diffRows.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => toggleAll(!allApproved)}
+                className="mr-6"
+              >
+                {allApproved ? 'Reject All' : 'Approve All'}
+              </Button>
+            )}
+          </div>
+          {diffRows.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              {approvedCount} of {diffRows.length} change{diffRows.length !== 1 ? 's' : ''} approved
+              {newRows.length > 0 && ` (${newRows.length} new)`}
+            </p>
+          )}
+        </DialogHeader>
+
+        {parseErrors.length > 0 && (
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive space-y-1">
+            {parseErrors.map((e, i) => <p key={i}>{e}</p>)}
+          </div>
+        )}
+
+        {diffRows.length === 0 && parseErrors.length === 0 && (
+          <p className="text-muted-foreground text-sm py-4">No changes detected. All rows match the current data.</p>
+        )}
+
+        <div className="overflow-auto flex-1 border rounded-lg">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12 text-center sticky left-0 bg-background">Y/N</TableHead>
+                <TableHead>Action ID</TableHead>
+                <TableHead>Display Name</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Unit</TableHead>
+                <TableHead className="text-right">Low</TableHead>
+                <TableHead className="text-right">Med</TableHead>
+                <TableHead className="text-right">High</TableHead>
+                <TableHead className="w-16 text-center">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {allRows.map((row) => {
+                const diff = diffMap.get(row.actionId);
+                const isChanged = row.hasChanges;
+                const isApproved = approved[row.actionId];
+
+                return (
+                  <TableRow
+                    key={row.actionId}
+                    className={cn(
+                      !isChanged && 'opacity-50',
+                      isChanged && !isApproved && 'opacity-40',
+                      isChanged && isApproved && row.isNew && 'bg-blue-50/50 dark:bg-blue-950/20',
+                      isChanged && isApproved && !row.isNew && 'bg-amber-50/50 dark:bg-amber-950/20',
+                    )}
+                  >
+                    <TableCell className="text-center sticky left-0 bg-inherit">
+                      {isChanged ? (
+                        <button
+                          onClick={() => setApproved((prev) => ({ ...prev, [row.actionId]: !prev[row.actionId] }))}
+                          className={cn(
+                            'inline-flex items-center justify-center h-7 w-7 rounded-md border text-xs font-bold transition-colors',
+                            isApproved
+                              ? 'bg-green-100 border-green-300 text-green-700 dark:bg-green-900/30 dark:border-green-700 dark:text-green-400'
+                              : 'bg-red-100 border-red-300 text-red-700 dark:bg-red-900/30 dark:border-red-700 dark:text-red-400'
+                          )}
+                        >
+                          {isApproved ? 'Y' : 'N'}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium text-sm">{row.actionId}</TableCell>
+                    <TableCell>
+                      <CsvCell field="display_name" currentVal={row.displayName} diff={diff} />
+                    </TableCell>
+                    <TableCell>
+                      <CsvCell field="category" currentVal={row.category} diff={diff} />
+                    </TableCell>
+                    <TableCell>
+                      <CsvCell field="unit" currentVal={row.unit} diff={diff} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <CsvCell field="cost_low" currentVal={row.costLow} diff={diff} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <CsvCell field="cost_medium" currentVal={row.costMed} diff={diff} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <CsvCell field="cost_high" currentVal={row.costHigh} diff={diff} />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {row.isNew ? (
+                        <Badge variant="outline" className="border-blue-300 text-blue-700 dark:border-blue-600 dark:text-blue-400 text-xs">
+                          NEW
+                        </Badge>
+                      ) : isChanged ? (
+                        <Badge variant="outline" className="border-amber-300 text-amber-700 dark:border-amber-600 dark:text-amber-400 text-xs">
+                          CHANGED
+                        </Badge>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+          </DialogClose>
+          <Button
+            onClick={handleConfirm}
+            disabled={applying || approvedCount === 0}
+          >
+            {applying && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Apply {approvedCount} Change{approvedCount !== 1 ? 's' : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ============================================================================
@@ -1246,6 +1619,15 @@ export default function CreditMenuAdmin() {
   // Pending deactivation confirmation
   const [pendingDeactivate, setPendingDeactivate] = useState<CreditMenuEntry | null>(null);
 
+  // CSV upload state
+  const [csvDiffRows, setCsvDiffRows] = useState<CsvDiffRow[]>([]);
+  const [csvParseErrors, setCsvParseErrors] = useState<string[]>([]);
+  const [showCsvPreview, setShowCsvPreview] = useState(false);
+  const [showCsvDropzone, setShowCsvDropzone] = useState(false);
+  const [csvApplying, setCsvApplying] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
   // Mounted ref for async safety
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -1375,6 +1757,100 @@ export default function CreditMenuAdmin() {
     }
   };
 
+  // ── CSV Download / Upload ─────────────────────────────────────────────────
+
+  const handleDownloadCsv = () => {
+    const csv = entriesToCsv(entries);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(csv, `credit-menu-${date}.csv`);
+    toast.success('CSV downloaded');
+  };
+
+  const processCsvFile = (file: File) => {
+    if (!file.name.endsWith('.csv')) {
+      toast.error('Please upload a .csv file');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const { rows, errors } = parseCsvUpload(text, entries);
+      setCsvDiffRows(rows);
+      setCsvParseErrors(errors);
+      setShowCsvDropzone(false);
+      setShowCsvPreview(true);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleUploadCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processCsvFile(file);
+    // Reset so the same file can be re-selected
+    e.target.value = '';
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processCsvFile(file);
+  };
+
+  const handleCsvConfirm = async (approvedRows: CsvDiffRow[]) => {
+    setCsvApplying(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const row of approvedRows) {
+      try {
+        if (row.isNew) {
+          const payload: NewCreditMenuEntry = {
+            action_id: row.actionId,
+            display_name: row.parsed.display_name || row.actionId,
+            description: row.parsed.description,
+            category: row.parsed.category,
+            unit: row.parsed.unit,
+            cost_low: parseFloat(row.parsed.cost_low) || 0,
+            cost_medium: parseFloat(row.parsed.cost_medium) || 0,
+            cost_high: parseFloat(row.parsed.cost_high) || 0,
+            free_with_sub: row.parsed.free_with_sub === 'true',
+            is_flat_rate: row.parsed.is_flat_rate === 'true',
+          };
+          await adminCreditMenuService.create(payload);
+        } else {
+          const payload: CreditMenuUpdatePayload = {};
+          for (const ch of row.changes) {
+            if (['cost_low', 'cost_medium', 'cost_high'].includes(ch.field)) {
+              (payload as Record<string, number>)[ch.field] = parseFloat(ch.newVal) || 0;
+            } else if (['free_with_sub', 'is_flat_rate'].includes(ch.field)) {
+              (payload as Record<string, boolean>)[ch.field] = ch.newVal === 'true';
+            } else if (['display_name', 'description', 'category', 'unit'].includes(ch.field)) {
+              (payload as Record<string, string>)[ch.field] = ch.newVal;
+            }
+          }
+          await adminCreditMenuService.update(row.actionId, payload);
+        }
+        successCount++;
+      } catch {
+        errorCount++;
+      }
+    }
+
+    setCsvApplying(false);
+    setShowCsvPreview(false);
+
+    if (errorCount === 0) {
+      toast.success(`${successCount} change${successCount !== 1 ? 's' : ''} applied successfully`);
+    } else {
+      toast.error(`${successCount} applied, ${errorCount} failed`);
+    }
+
+    // Reload data
+    await load();
+  };
+
   // ── Group by category ─────────────────────────────────────────────────────
 
   const grouped = entries.reduce<Record<string, CreditMenuEntry[]>>((acc, entry) => {
@@ -1427,6 +1903,23 @@ export default function CreditMenuAdmin() {
           <Button onClick={() => setShowAdd(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Action
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleDownloadCsv}
+            disabled={entries.length === 0}
+            title="Download CSV"
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setShowCsvDropzone(true)}
+            title="Upload CSV"
+          >
+            <Upload className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -1626,6 +2119,55 @@ export default function CreditMenuAdmin() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* CSV Dropzone Dialog */}
+      <Dialog open={showCsvDropzone} onOpenChange={(v) => !v && setShowCsvDropzone(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Upload Credit Menu CSV</DialogTitle>
+          </DialogHeader>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            className={cn(
+              'flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-10 transition-colors cursor-pointer',
+              dragOver
+                ? 'border-primary bg-primary/5'
+                : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+            )}
+            onClick={() => csvInputRef.current?.click()}
+          >
+            <Upload className={cn('h-8 w-8', dragOver ? 'text-primary' : 'text-muted-foreground')} />
+            <p className="text-sm text-muted-foreground text-center">
+              {dragOver ? 'Drop CSV file here' : 'Drag & drop a CSV file here, or click to browse'}
+            </p>
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleUploadCsv}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" onClick={() => setShowCsvDropzone(false)}>Cancel</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* CSV Upload Preview */}
+      <CsvUploadDialog
+        open={showCsvPreview}
+        onClose={() => setShowCsvPreview(false)}
+        diffRows={csvDiffRows}
+        existingEntries={entries}
+        parseErrors={csvParseErrors}
+        onConfirm={handleCsvConfirm}
+        applying={csvApplying}
+      />
 
       {/* Deactivation Confirmation */}
       <AlertDialog
