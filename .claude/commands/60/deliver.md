@@ -26,6 +26,9 @@ REGRESSION SENTINEL — compare feature branch vs main
 FULL TEST SUITE — all 4 tiers
   |
   v
+CI WORKFLOW VERIFICATION — check all GitHub Actions checks pass
+  |
+  v
 DOCUMENTATION — dev docs + user docs + visibility tagging
   |
   v
@@ -126,6 +129,77 @@ Test Results:
   Total: 231 tests, all passing
   Coverage: 74.1% (+5.9% from baseline)
 ```
+
+---
+
+## STEP 2b: CI Workflow Verification
+
+After local tests pass, verify all GitHub Actions CI checks are passing on the feature branch. This catches environment-specific issues that local tests miss.
+
+### 2b-1. Push and Check PR Status
+
+If a PR already exists for this branch, poll its check status:
+
+```bash
+# Get PR number for current branch
+BRANCH=$(git branch --show-current)
+PR_JSON=$(gh pr list --head="$BRANCH" --json number,statusCheckRollup --limit 1)
+
+# If no PR yet, one will be created in STEP 4 — skip CI verification for now
+# and re-verify after PR creation
+```
+
+### 2b-2. Poll GitHub Actions Workflow Status
+
+Wait for all workflows to complete (max 10 minutes):
+
+```bash
+gh pr checks <PR_NUMBER> --watch --fail-level all
+```
+
+Or poll manually:
+```bash
+gh pr checks <PR_NUMBER> --json name,state,conclusion
+```
+
+### 2b-3. Classify Results
+
+```
+CI Workflow Verification:
+  BLOCKING (must pass):
+    Lint (pr-checks.yml):       success | failure
+    Typecheck (pr-checks.yml):  success | failure
+    Build (pr-checks.yml):      success | failure
+
+  REPORTING (informational):
+    Unit Tests (pr-checks.yml): success | failure
+    E2E Tests (pr-e2e.yml):     success | failure | skipped (no creds)
+    Migrations (db-migrations): success | failure | skipped (no changes)
+    Security (security-scan):   success | failure
+
+  STATUS: ALL BLOCKING CHECKS PASS | BLOCKED
+```
+
+### 2b-4. Handle Failures
+
+**If ANY blocking check fails (lint, typecheck, build):**
+1. Parse the failure output from GitHub Actions
+2. Route back to a worker agent for fix
+3. Push fix, wait for CI re-run
+4. Max 3 attempts before flagging for human
+
+**If E2E tests fail:**
+- Flag in DELIVER report as non-blocking
+- Include link to Playwright report artifact
+- Recommend investigating before merge
+
+**If E2E tests skipped (no credentials):**
+- Note in DELIVER report: "E2E not verified in CI — add TEST_USER_EMAIL, TEST_USER_PASSWORD, STAGING_SUPABASE_ANON_KEY secrets to enable"
+
+**If PR doesn't exist yet:**
+- Skip CI verification now
+- Re-run after PR creation in STEP 4
+- Note: "CI verification deferred — will verify after PR creation"
 
 ---
 
@@ -390,6 +464,17 @@ This is the ONE human gate in the entire pipeline. Present everything:
   Coverage:   74.1% (+5.9%)
   Regressions: 0
 
+  CI WORKFLOWS (GitHub Actions)
+  -----------------------------
+  Lint:               success (pr-checks.yml)
+  Typecheck:          success (pr-checks.yml)
+  Build:              success (pr-checks.yml)
+  Unit Tests:         success (pr-checks.yml)
+  Playwright E2E:     success (pr-e2e.yml) — 8/8 passing
+  Migrations:         skipped (no schema changes)
+  Security:           success (security-scan.yml)
+  Status:             ALL BLOCKING CHECKS PASS
+
   DOCUMENTATION
   -------------
   Dev docs:   3 new, 1 updated
@@ -594,3 +679,9 @@ After DELIVER, auto-extract and persist learnings. This file is **cumulative** �
 | Dev Hub update fails | Log warning, continue |
 | Slack unavailable | Terminal output only |
 | Human says 'changes' | Parse feedback, route fixes to worker, re-run DELIVER |
+| CI blocking check fails (lint/typecheck/build) | Route to worker for fix, push, wait for CI re-run, max 3 attempts |
+| CI E2E tests fail but local tests pass | Flag in report, link to Playwright artifacts, non-blocking |
+| CI E2E tests skipped (no credentials) | Note in report: add TEST_USER_EMAIL + TEST_USER_PASSWORD secrets |
+| CI migration dry-run fails | BLOCK DELIVER — must fix schema before proceeding |
+| GitHub Actions unavailable | Log warning, rely on local test results only, flag in report |
+| PR checks still running | Wait up to 10 minutes, then proceed with partial results |

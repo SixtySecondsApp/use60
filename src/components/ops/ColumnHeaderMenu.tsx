@@ -16,6 +16,7 @@ import {
   Mail,
   Zap,
   Calendar,
+  CalendarRange,
 } from 'lucide-react';
 
 interface ColumnHeaderMenuProps {
@@ -52,6 +53,10 @@ interface ColumnHeaderMenuProps {
   refreshSchedule?: string | null;
   onScheduleRefresh?: () => void;
   anchorRect?: DOMRect;
+  /** Current date range for linkedin_analytics columns */
+  analyticsDateRange?: string | null;
+  /** Callback to change date range for linkedin_analytics columns */
+  onChangeDateRange?: (dateRange: string) => void;
 }
 
 export function ColumnHeaderMenu({
@@ -88,6 +93,8 @@ export function ColumnHeaderMenu({
   refreshSchedule,
   onScheduleRefresh,
   anchorRect,
+  analyticsDateRange,
+  onChangeDateRange,
 }: ColumnHeaderMenuProps) {
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(column.label);
@@ -497,6 +504,44 @@ export function ColumnHeaderMenu({
             onClose();
           }}
         />
+      )}
+
+      {/* LinkedIn Analytics: date range picker */}
+      {column.column_type === 'linkedin_analytics' && onChangeDateRange && (
+        <>
+          <Separator />
+          <div className="px-3 py-1.5">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <CalendarRange className="h-3.5 w-3.5 text-blue-400" />
+              <span className="text-xs font-medium text-gray-400">Date range</span>
+            </div>
+            {[
+              { value: 'last_7_days', label: 'Last 7 days' },
+              { value: 'last_30_days', label: 'Last 30 days' },
+              { value: 'last_90_days', label: 'Last 90 days' },
+              { value: 'lifetime', label: 'Lifetime' },
+            ].map((opt) => {
+              const isSelected = (analyticsDateRange ?? 'last_30_days') === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    onChangeDateRange(opt.value);
+                    onClose();
+                  }}
+                  className={`flex w-full items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                    isSelected
+                      ? 'bg-blue-600/20 text-blue-300'
+                      : 'text-gray-300 hover:bg-gray-800 hover:text-gray-100'
+                  }`}
+                >
+                  {isSelected && <Check className="h-3 w-3 shrink-0" />}
+                  <span className={isSelected ? '' : 'pl-[15px]'}>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <Separator />
