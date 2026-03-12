@@ -83,20 +83,9 @@ export function PublicMeetingShare() {
     setError(null);
 
     try {
-      // Fetch meeting by share token
-      const { data, error: fetchError } = await supabase
-        .from('meetings')
-        .select(`
-          id, title, start_time, duration_minutes, summary, action_items,
-          transcript_text, source_type, share_url, share_token, share_views,
-          share_options, voice_recording_id,
-          meeting_attendees (
-            contacts (name, email)
-          )
-        `)
-        .eq('share_token', token)
-        .eq('is_public', true)
-        .maybeSingle();
+      // Use SECURITY DEFINER RPC to bypass RLS for anon users
+      const { data: rpcResult, error: fetchError } = await supabase
+        .rpc('get_shared_meeting', { p_share_token: token });
 
       if (fetchError) {
         console.error('Fetch error:', fetchError);
@@ -105,38 +94,24 @@ export function PublicMeetingShare() {
         return;
       }
 
-      if (!data) {
+      if (!rpcResult || !rpcResult.found) {
         setError('Meeting not found or link has expired.');
         setLoading(false);
         return;
       }
 
-      // Transform attendees from nested structure
-      const attendees = data.meeting_attendees?.map((ma: { contacts: { name?: string; email?: string } }) => ({
-        name: ma.contacts?.name,
-        email: ma.contacts?.email,
-      })).filter((a: { name?: string; email?: string }) => a.name || a.email) || [];
+      const meetingData = rpcResult.meeting;
+      const attendees = rpcResult.attendees || [];
 
       setMeeting({
-        ...data,
+        ...meetingData,
         attendees,
       } as MeetingData);
 
-      // If voice recording, fetch additional data
-      if (data.voice_recording_id) {
-        const { data: vrData } = await supabase
-          .from('voice_recordings')
-          .select('id, duration_seconds, transcript_segments, speakers, share_token')
-          .eq('id', data.voice_recording_id)
-          .maybeSingle();
-
-        if (vrData) {
-          setVoiceRecording(vrData);
-        }
+      // Voice recording data returned by RPC
+      if (rpcResult.voice_recording) {
+        setVoiceRecording(rpcResult.voice_recording);
       }
-
-      // Increment view count
-      incrementViews();
     } catch (err) {
       console.error('Unexpected error:', err);
       setError('An unexpected error occurred.');
