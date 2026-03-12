@@ -832,7 +832,7 @@ export default function PlatformDashboard() {
             </div>
           ) : (
             filteredSections.map(([sectionTitle, items], sectionIndex) => {
-              const isExpanded = expandedSections[sectionTitle] ?? false;
+              const isExpanded = searchQuery ? true : (expandedSections[sectionTitle] ?? false);
 
               return (
                 <motion.div
