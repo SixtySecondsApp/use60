@@ -1,4 +1,5 @@
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useSetupWizardStore } from '@/lib/stores/setupWizardStore';
 import { SetupWizardWelcome } from './SetupWizardWelcome';
@@ -24,7 +25,10 @@ export function SetupWizardDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeWizard(); }}>
-      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden border-gray-200 dark:border-gray-700/50 [&>button]:hidden">
+      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden border-gray-200 dark:border-gray-700/50 [&>button]:hidden" aria-describedby={undefined}>
+        <VisuallyHidden>
+          <DialogTitle>Setup Wizard</DialogTitle>
+        </VisuallyHidden>
         <AnimatePresence mode="wait">
           {showWelcome ? (
             <motion.div

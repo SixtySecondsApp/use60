@@ -2806,6 +2806,9 @@ serve(async (req: Request) => {
 
         let finalResponseText = '';
 
+        // Setup wizard demo calls are free — skip credit deduction for all iterations
+        const isSetupWizard = context?.source === 'setup_wizard';
+
         try {
           const toolsUsed: string[] = [];
           const toolExecutionDetails: ToolExecutionDetail[] = [];
@@ -2902,24 +2905,6 @@ serve(async (req: Request) => {
 
             // Get the final message with complete content
             const finalMessage = await stream.finalMessage();
-
-            // Log cost + deduct org credits for autonomous copilot usage
-            if (userId && finalMessage.usage) {
-              await logAICostEvent(
-                supabase,
-                userId,
-                resolvedOrgForConfig,
-                'anthropic',
-                MODEL,
-                finalMessage.usage.input_tokens,
-                finalMessage.usage.output_tokens,
-                'copilot_autonomous',
-                { request_type: 'copilot_autonomous' },
-                undefined,
-                'copilot-autonomous',
-                clientIp,
-              );
-            }
 
             if (finalMessage.stop_reason === 'end_turn') {
               // Extract final text
@@ -3153,6 +3138,25 @@ serve(async (req: Request) => {
                 'Maximum iterations reached'
               );
             }
+          }
+
+          // Log cost ONCE for the entire request (not per-iteration)
+          // Uses accumulated token totals across all tool-loop iterations
+          if (userId && !isSetupWizard && (analytics.totalInputTokens > 0 || analytics.totalOutputTokens > 0)) {
+            await logAICostEvent(
+              supabase,
+              userId,
+              resolvedOrgForConfig,
+              'anthropic',
+              MODEL,
+              analytics.totalInputTokens,
+              analytics.totalOutputTokens,
+              'copilot_autonomous',
+              { request_type: 'copilot_autonomous', iterations },
+              undefined,
+              'copilot-autonomous',
+              clientIp,
+            );
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
