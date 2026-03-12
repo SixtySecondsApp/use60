@@ -23,9 +23,11 @@ export function useSetupWizard() {
 
   const oauthReturnHandled = useRef(false);
 
-  // Invited members (role='member') share org credits and must not see the
-  // Setup wizard, which grants credits per step (sybil attack vector).
-  const isInvitedMember = userRole === 'member';
+  // Only the org owner (creator) should see the setup wizard.
+  // All other roles (admin, member, readonly) were invited and must NOT
+  // earn setup credits — otherwise a sybil attack via invited admins
+  // could farm 100 credits per invite. (TSK-0499 Bug #4)
+  const isInvitedMember = userRole !== 'owner';
 
   // Fetch progress on mount — skip for invited members
   useEffect(() => {

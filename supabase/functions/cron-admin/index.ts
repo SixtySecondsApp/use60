@@ -347,8 +347,8 @@ serve(async (req) => {
                   to: notification.recipients,
                   subject: notification.subject,
                   text: notification.message,
-                  from: "noreply@use60.com",
-                  fromName: "Sixty",
+                  from: "app@use60.com",
+                  fromName: "60",
                 });
 
                 if (!result.success) {

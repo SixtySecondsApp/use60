@@ -439,7 +439,9 @@ export default function TeamMembersPage() {
     loadMembers();
   }, [activeOrgId, membersRefetchKey]);
 
-  // Load invitations
+  // Load invitations — also refresh when members change (TSK-0499 Bug #6)
+  // When an invited user completes signup, accepted_at is set and the invitation
+  // should disappear from the pending list. membersRefetchKey triggers this.
   useEffect(() => {
     if (!activeOrgId) return;
 
@@ -455,7 +457,7 @@ export default function TeamMembersPage() {
     };
 
     loadInvitations();
-  }, [activeOrgId]);
+  }, [activeOrgId, membersRefetchKey]);
 
   // Check if user is owner
   useEffect(() => {
