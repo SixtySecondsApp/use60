@@ -494,17 +494,57 @@ serve(async (req: Request) => {
         colKeyToId[c.key] = c.id
       }
 
-      // Get existing source_ids to deduplicate
+      // Get existing rows for deduplication (source_id + cell-based fallback)
       const { data: existingRows } = await supabase
         .from('dynamic_table_rows')
-        .select('source_id')
+        .select('id, source_id')
         .eq('table_id', tableId)
-        .not('source_id', 'is', null)
-      const existingSourceIds = new Set((existingRows ?? []).map((r: any) => r.source_id))
+      const existingSourceIds = new Set(
+        (existingRows ?? []).filter((r: any) => r.source_id).map((r: any) => r.source_id)
+      )
 
-      // Filter out meetings already in the table
+      // For rows without source_id, build composite keys from cell values (first_name + last_name + meeting_date)
+      // This handles tables created before source_id tracking was added
+      const dedupColKeys = ['first_name', 'last_name', 'meeting_date']
+      const rowsWithoutSourceId = (existingRows ?? []).filter((r: any) => !r.source_id)
+      const existingCompositeKeys = new Set<string>()
+      if (rowsWithoutSourceId.length > 0) {
+        const dedupColIds = dedupColKeys.map((k) => colKeyToId[k]).filter(Boolean)
+        if (dedupColIds.length > 0) {
+          const rowIds = rowsWithoutSourceId.map((r: any) => r.id)
+          const { data: existingCells } = await supabase
+            .from('dynamic_table_cells')
+            .select('row_id, column_id, value')
+            .in('row_id', rowIds)
+            .in('column_id', dedupColIds)
+          // Build column_id -> key reverse lookup
+          const colIdToKey: Record<string, string> = {}
+          for (const [k, id] of Object.entries(colKeyToId)) { colIdToKey[id] = k }
+          // Build per-row cell maps
+          const rowCellMap: Record<string, Record<string, string>> = {}
+          for (const cell of existingCells ?? []) {
+            if (!rowCellMap[cell.row_id]) rowCellMap[cell.row_id] = {}
+            const key = colIdToKey[cell.column_id]
+            if (key) rowCellMap[cell.row_id][key] = (cell.value ?? '').toString().trim().toLowerCase()
+          }
+          for (const cells of Object.values(rowCellMap)) {
+            const compositeKey = dedupColKeys.map((k) => cells[k] ?? '').join('|')
+            if (compositeKey.replace(/\|/g, '').length > 0) {
+              existingCompositeKeys.add(compositeKey)
+            }
+          }
+          console.log(`[setup-pipeline-template] Built ${existingCompositeKeys.size} composite dedup keys from ${rowsWithoutSourceId.length} rows without source_id`)
+        }
+      }
       const beforeCount = sourceRows.length
-      sourceRows = sourceRows.filter((r: any) => !r.__source_id || !existingSourceIds.has(r.__source_id))
+      sourceRows = sourceRows.filter((r: any) => {
+        // Check source_id match
+        if (r.__source_id && existingSourceIds.has(r.__source_id)) return false
+        // Check composite key match
+        const compositeKey = dedupColKeys.map((k) => (r[k] ?? '').toString().trim().toLowerCase()).join('|')
+        if (compositeKey.replace(/\|/g, '').length > 0 && existingCompositeKeys.has(compositeKey)) return false
+        return true
+      })
       console.log(`[setup-pipeline-template] Append dedup: ${beforeCount} fetched, ${beforeCount - sourceRows.length} already exist, ${sourceRows.length} new`)
 
       if (sourceRows.length === 0) {
