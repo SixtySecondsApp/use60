@@ -2,9 +2,9 @@ name: Security Scanning
 
 on:
   push:
-    branches: [staging]
+    branches: [staging, main]
   pull_request:
-    branches: [staging]
+    branches: [staging, main]
   schedule:
     - cron: '0 0 * * 0'
   workflow_dispatch:

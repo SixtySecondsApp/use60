@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers, Search, Video, Mic } from 'lucide-react';
+import { X, Sparkles, AtSign, Plus, Trash2, Brain, Globe, Play, Loader2, Link, Building2, Users, Code, Layers, Search, Image, Video, Wand2, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import { GENERIC_TEMPLATES, EXA_TEMPLATES, DEAL_ENRICHMENT_TEMPLATES, type EnrichmentTemplate } from './enrichmentTemplates';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -13,9 +13,6 @@ import { ButtonColumnConfigPanel } from './ButtonColumnConfigPanel';
 import { InstantlyColumnWizard } from './InstantlyColumnWizard';
 import { VideoAvatarColumnWizard } from './VideoAvatarColumnWizard';
 import { ElevenLabsAudioColumnWizard } from './ElevenLabsAudioColumnWizard';
-import { FalVideoColumnWizard } from './FalVideoColumnWizard';
-import { AiImageColumnWizard } from './AiImageColumnWizard';
-import { SvgAnimationColumnWizard } from './SvgAnimationColumnWizard';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
 import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
 
@@ -315,6 +312,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
     types.push({ value: 'fal_video', label: 'AI Video (FAL)' });
     types.push({ value: 'ai_image', label: 'AI Image' });
     types.push({ value: 'svg_animation', label: 'SVG Animation' });
+    types.push({ value: 'linkedin_analytics', label: 'LinkedIn Analytics' });
     return types;
   }, [isHubSpotTable, hasHeyGenKey, hasElevenLabsKey]);
   const [label, setLabel] = useState('');
@@ -362,6 +360,26 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
   const [agentSourceExa, setAgentSourceExa] = useState(true);
   const [agentSourceApify, setAgentSourceApify] = useState(false);
 
+  // AI Image Generation state
+  const [aiImageSourceColumn, setAiImageSourceColumn] = useState('');
+  const [aiImagePromptTemplate, setAiImagePromptTemplate] = useState('');
+  const [aiImageModel, setAiImageModel] = useState('fal-ai/flux/schnell');
+
+  // Fal Video Generation state
+  const [falVideoSourceColumn, setFalVideoSourceColumn] = useState('');
+  const [falVideoPromptTemplate, setFalVideoPromptTemplate] = useState('');
+  const [falVideoModel, setFalVideoModel] = useState('fal-ai/wan/v2.1/1.3b/text-to-video');
+
+  // SVG Animation state
+  const [svgSourceColumn, setSvgSourceColumn] = useState('');
+  const [svgPromptTemplate, setSvgPromptTemplate] = useState('');
+  const [svgSourceType, setSvgSourceType] = useState<'text' | 'image'>('text');
+
+  // LinkedIn Analytics state
+  const [linkedinAnalyticsMetric, setLinkedinAnalyticsMetric] = useState('impressions');
+  const [linkedinAnalyticsDateRange, setLinkedinAnalyticsDateRange] = useState('last_30_days');
+  const [linkedinAnalyticsRefreshSchedule, setLinkedinAnalyticsRefreshSchedule] = useState('manual');
+
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -395,6 +413,17 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
   const isButton = columnType === 'button';
   const isInstantly = columnType === 'instantly';
   const isAgentResearch = columnType === 'agent_research';
+  const isAiImage = columnType === 'ai_image';
+  const isFalVideo = columnType === 'fal_video';
+  const isSvgAnimation = columnType === 'svg_animation';
+  const isLinkedInAnalytics = columnType === 'linkedin_analytics';
+
+  // URL / image columns in the current table — for source auto-detection
+  const urlColumns = useMemo(
+    () => existingColumns.filter((c) => c.column_type === 'url' || c.column_type === 'ai_image'),
+    [existingColumns],
+  );
+
   const key = toSnakeCase(label);
   const canAdd =
     label.trim().length > 0
@@ -407,12 +436,12 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
     && (!isLinkedInProperty || linkedinPropertyName.length > 0)
     && (!isButton || (buttonConfig.label.trim().length > 0 && buttonConfig.actions.length > 0))
     && (!isAgentResearch || agentPromptTemplate.trim().length > 0)
+    && (!isAiImage || aiImagePromptTemplate.trim().length > 0)
+    && (!isFalVideo || falVideoPromptTemplate.trim().length > 0)
+    && (!isSvgAnimation || svgPromptTemplate.trim().length > 0)
     && !isInstantly // Instantly uses its own wizard flow, not the standard Add button
     && columnType !== 'heygen_video' // Video Avatar uses its own wizard flow
-    && columnType !== 'elevenlabs_audio' // ElevenLabs Audio uses its own wizard flow
-    && columnType !== 'fal_video' // FAL Video uses its own wizard flow
-    && columnType !== 'ai_image' // AI Image uses its own wizard flow
-    && columnType !== 'svg_animation'; // SVG Animation uses its own wizard flow
+    && columnType !== 'elevenlabs_audio'; // ElevenLabs Audio uses its own wizard flow
 
   // Filter columns for the @mention dropdown (enrichment prompt)
   const filteredColumns = useMemo(() => {
@@ -468,6 +497,18 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
     setAgentSourcePerplexity(true);
     setAgentSourceExa(true);
     setAgentSourceApify(false);
+    setAiImageSourceColumn('');
+    setAiImagePromptTemplate('');
+    setAiImageModel('fal-ai/flux/schnell');
+    setFalVideoSourceColumn('');
+    setFalVideoPromptTemplate('');
+    setFalVideoModel('fal-ai/wan/v2.1/1.3b/text-to-video');
+    setSvgSourceColumn('');
+    setSvgPromptTemplate('');
+    setSvgSourceType('text');
+    setLinkedinAnalyticsMetric('impressions');
+    setLinkedinAnalyticsDateRange('last_30_days');
+    setLinkedinAnalyticsRefreshSchedule('manual');
     setMentionOpen(false);
     setMentionQuery('');
     setMentionIndex(0);
@@ -611,6 +652,34 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
           perplexity: agentSourcePerplexity,
           exa: agentSourceExa,
           apify_linkedin: agentSourceApify,
+        },
+      } : {}),
+      ...(isAiImage ? {
+        integrationConfig: {
+          source_column_key: aiImageSourceColumn || null,
+          prompt_template: aiImagePromptTemplate.trim(),
+          model: aiImageModel,
+        },
+      } : {}),
+      ...(isFalVideo ? {
+        integrationConfig: {
+          source_column_key: falVideoSourceColumn || null,
+          prompt_template: falVideoPromptTemplate.trim(),
+          model: falVideoModel,
+        },
+      } : {}),
+      ...(isSvgAnimation ? {
+        integrationConfig: {
+          source_column_key: svgSourceColumn || null,
+          prompt_template: svgPromptTemplate.trim(),
+          source_type: svgSourceType,
+        },
+      } : {}),
+      ...(isLinkedInAnalytics ? {
+        integrationConfig: {
+          metric: linkedinAnalyticsMetric,
+          date_range: linkedinAnalyticsDateRange,
+          refresh_schedule: linkedinAnalyticsRefreshSchedule,
         },
       } : {}),
     });
@@ -1466,84 +1535,6 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
             </div>
           )}
 
-          {/* FAL Video Wizard */}
-          {columnType === 'fal_video' && tableId && orgId && (
-            <FalVideoColumnWizard
-              tableId={tableId}
-              existingColumns={existingColumns}
-              onComplete={(config) => {
-                onAdd({
-                  key: label.toLowerCase().replace(/\s+/g, '_') || 'fal_video',
-                  label: label || 'AI Video',
-                  columnType: 'fal_video',
-                  integrationConfig: config as unknown as Record<string, unknown>,
-                });
-                onClose();
-              }}
-              onCancel={onClose}
-            />
-          )}
-
-          {columnType === 'fal_video' && (!tableId || !orgId) && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-              <p className="text-sm text-amber-300">
-                Save this table first before adding an AI Video column.
-              </p>
-            </div>
-          )}
-
-          {/* AI Image Wizard */}
-          {columnType === 'ai_image' && tableId && orgId && (
-            <AiImageColumnWizard
-              tableId={tableId}
-              existingColumns={existingColumns}
-              onComplete={(config) => {
-                onAdd({
-                  key: label.toLowerCase().replace(/\s+/g, '_') || 'ai_image',
-                  label: label || 'AI Image',
-                  columnType: 'ai_image',
-                  integrationConfig: config as unknown as Record<string, unknown>,
-                });
-                onClose();
-              }}
-              onCancel={onClose}
-            />
-          )}
-
-          {columnType === 'ai_image' && (!tableId || !orgId) && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-              <p className="text-sm text-amber-300">
-                Save this table first before adding an AI Image column.
-              </p>
-            </div>
-          )}
-
-          {/* SVG Animation Wizard */}
-          {columnType === 'svg_animation' && tableId && orgId && (
-            <SvgAnimationColumnWizard
-              tableId={tableId}
-              existingColumns={existingColumns}
-              onComplete={(config) => {
-                onAdd({
-                  key: label.toLowerCase().replace(/\s+/g, '_') || 'svg_animation',
-                  label: label || 'SVG Animation',
-                  columnType: 'svg_animation',
-                  integrationConfig: config as unknown as Record<string, unknown>,
-                });
-                onClose();
-              }}
-              onCancel={onClose}
-            />
-          )}
-
-          {columnType === 'svg_animation' && (!tableId || !orgId) && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-              <p className="text-sm text-amber-300">
-                Save this table first before adding an SVG Animation column.
-              </p>
-            </div>
-          )}
-
           {/* AI Research Agent Section */}
           {isAgentResearch && (
             <div className="space-y-4">
@@ -1725,6 +1716,392 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
                     </label>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* AI Image Generation Section */}
+          {isAiImage && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2.5 rounded-lg border border-pink-500/20 bg-pink-500/5 px-3.5 py-3">
+                <Image className="mt-0.5 h-4 w-4 shrink-0 text-pink-400" />
+                <p className="text-xs leading-relaxed text-gray-300">
+                  AI Image columns generate images using AI models. Optionally pick a source image URL column to remix from.
+                </p>
+              </div>
+
+              {/* Source Image Column */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Remix from source image <span className="text-gray-500 font-normal">(optional)</span>
+                </label>
+                <select
+                  value={aiImageSourceColumn}
+                  onChange={(e) => {
+                    const col = existingColumns.find(c => c.key === e.target.value);
+                    setAiImageSourceColumn(e.target.value);
+                    if (e.target.value && col && !aiImagePromptTemplate.trim()) {
+                      setAiImagePromptTemplate(`Remix the image from {{${col.key}}} — `);
+                    }
+                  }}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                >
+                  <option value="">None — generate from prompt only</option>
+                  {urlColumns.length > 0 && (
+                    <optgroup label="Detected image URL columns">
+                      {urlColumns.map((col) => (
+                        <option key={col.key} value={col.key}>Remix from: {col.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {existingColumns.filter(c => !urlColumns.includes(c)).map((col) => (
+                    <option key={col.key} value={col.key}>{col.label}</option>
+                  ))}
+                </select>
+                {urlColumns.length > 0 && (
+                  <p className="mt-1 text-xs text-pink-400/80">
+                    {urlColumns.length} image URL column{urlColumns.length !== 1 ? 's' : ''} detected in this table
+                  </p>
+                )}
+              </div>
+
+              {/* Prompt Template */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  <Wand2 className="mr-1.5 inline-block h-4 w-4 text-pink-400" />
+                  Image Prompt
+                </label>
+                <textarea
+                  value={aiImagePromptTemplate}
+                  onChange={(e) => setAiImagePromptTemplate(e.target.value)}
+                  placeholder="e.g. Remix the image from {{image_url}} as a LinkedIn banner for {{company_name}}"
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                />
+                {existingColumns.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {existingColumns.slice(0, 6).map((col) => (
+                      <button
+                        key={col.key}
+                        type="button"
+                        onClick={() => setAiImagePromptTemplate((prev) => `${prev}{{${col.key}}}`)}
+                        className="rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-xs font-medium text-gray-400 hover:border-pink-500/40 hover:text-pink-300"
+                      >
+                        {`{{${col.key}}}`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Model */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">Model</label>
+                <select
+                  value={aiImageModel}
+                  onChange={(e) => setAiImageModel(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-pink-500 focus:ring-1 focus:ring-pink-500/30"
+                >
+                  <option value="fal-ai/flux/schnell">FLUX Schnell (fast)</option>
+                  <option value="fal-ai/flux/dev">FLUX Dev (quality)</option>
+                  <option value="fal-ai/flux-pro">FLUX Pro (best quality)</option>
+                  <option value="fal-ai/ideogram/v2">Ideogram v2 (text in images)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Fal Video Generation Section */}
+          {isFalVideo && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2.5 rounded-lg border border-violet-500/20 bg-violet-500/5 px-3.5 py-3">
+                <Video className="mt-0.5 h-4 w-4 shrink-0 text-violet-400" />
+                <p className="text-xs leading-relaxed text-gray-300">
+                  AI Video columns generate short videos from text or images. Pick a source image column to use image-to-video.
+                </p>
+              </div>
+
+              {/* Source Image Column */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Image-to-Video from <span className="text-gray-500 font-normal">(optional)</span>
+                </label>
+                <select
+                  value={falVideoSourceColumn}
+                  onChange={(e) => {
+                    const col = existingColumns.find(c => c.key === e.target.value);
+                    setFalVideoSourceColumn(e.target.value);
+                    if (e.target.value && col && !falVideoPromptTemplate.trim()) {
+                      setFalVideoPromptTemplate(`Animate {{${col.key}}} — `);
+                    }
+                  }}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30"
+                >
+                  <option value="">None — text-to-video from prompt</option>
+                  {urlColumns.length > 0 && (
+                    <optgroup label="Detected image URL columns">
+                      {urlColumns.map((col) => (
+                        <option key={col.key} value={col.key}>Image-to-Video from: {col.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {existingColumns.filter(c => !urlColumns.includes(c)).map((col) => (
+                    <option key={col.key} value={col.key}>{col.label}</option>
+                  ))}
+                </select>
+                {urlColumns.length > 0 && (
+                  <p className="mt-1 text-xs text-violet-400/80">
+                    {urlColumns.length} image URL column{urlColumns.length !== 1 ? 's' : ''} detected — image-to-video available
+                  </p>
+                )}
+              </div>
+
+              {/* Prompt Template */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  <Wand2 className="mr-1.5 inline-block h-4 w-4 text-violet-400" />
+                  Video Prompt
+                </label>
+                <textarea
+                  value={falVideoPromptTemplate}
+                  onChange={(e) => setFalVideoPromptTemplate(e.target.value)}
+                  placeholder="e.g. Animate {{image_url}} with a smooth zoom, professional LinkedIn style for {{company_name}}"
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30"
+                />
+                {existingColumns.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {existingColumns.slice(0, 6).map((col) => (
+                      <button
+                        key={col.key}
+                        type="button"
+                        onClick={() => setFalVideoPromptTemplate((prev) => `${prev}{{${col.key}}}`)}
+                        className="rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-xs font-medium text-gray-400 hover:border-violet-500/40 hover:text-violet-300"
+                      >
+                        {`{{${col.key}}}`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Model */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">Model</label>
+                <select
+                  value={falVideoModel}
+                  onChange={(e) => setFalVideoModel(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30"
+                >
+                  <option value="fal-ai/wan/v2.1/1.3b/text-to-video">WAN v2.1 1.3B (text-to-video)</option>
+                  <option value="fal-ai/wan/v2.1/14b/text-to-video">WAN v2.1 14B (high quality)</option>
+                  <option value="fal-ai/wan/v2.1/1.3b/image-to-video">WAN v2.1 1.3B (image-to-video)</option>
+                  <option value="fal-ai/kling-video/v1.6/standard/image-to-video">Kling 1.6 Standard (image-to-video)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* SVG Animation Section */}
+          {isSvgAnimation && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3.5 py-3">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                <p className="text-xs leading-relaxed text-gray-300">
+                  SVG Animation columns use AI to generate animated SVG graphics from text descriptions or source images.
+                </p>
+              </div>
+
+              {/* Source Type */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">Source type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: 'text' as const, label: 'Text description', desc: 'Generate from a text prompt' },
+                    { value: 'image' as const, label: 'From image', desc: 'Animate from a source image' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setSvgSourceType(opt.value);
+                        if (opt.value === 'text') setSvgSourceColumn('');
+                      }}
+                      className={`rounded-lg border p-3 text-left transition-colors ${
+                        svgSourceType === opt.value
+                          ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/30'
+                          : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                      }`}
+                    >
+                      <p className={`text-sm font-medium ${svgSourceType === opt.value ? 'text-emerald-200' : 'text-gray-200'}`}>
+                        {opt.label}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Source Column (image mode) */}
+              {svgSourceType === 'image' && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                    Animate from: <span className="text-gray-500 font-normal">(image URL column)</span>
+                  </label>
+                  <select
+                    value={svgSourceColumn}
+                    onChange={(e) => {
+                      const col = existingColumns.find(c => c.key === e.target.value);
+                      setSvgSourceColumn(e.target.value);
+                      if (e.target.value && col && !svgPromptTemplate.trim()) {
+                        setSvgPromptTemplate(`Animate {{${col.key}}} as a clean SVG graphic — `);
+                      }
+                    }}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
+                  >
+                    <option value="">Select source column...</option>
+                    {urlColumns.length > 0 && (
+                      <optgroup label="Detected image URL columns">
+                        {urlColumns.map((col) => (
+                          <option key={col.key} value={col.key}>Animate from: {col.label}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {existingColumns.filter(c => !urlColumns.includes(c)).map((col) => (
+                      <option key={col.key} value={col.key}>{col.label}</option>
+                    ))}
+                  </select>
+                  {urlColumns.length > 0 && (
+                    <p className="mt-1 text-xs text-emerald-400/80">
+                      {urlColumns.length} image URL column{urlColumns.length !== 1 ? 's' : ''} detected in this table
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Prompt Template */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  <Wand2 className="mr-1.5 inline-block h-4 w-4 text-emerald-400" />
+                  Animation Prompt
+                </label>
+                <textarea
+                  value={svgPromptTemplate}
+                  onChange={(e) => setSvgPromptTemplate(e.target.value)}
+                  placeholder={svgSourceType === 'image'
+                    ? 'e.g. Animate {{image_url}} as a clean SVG logo with a subtle pulse effect for {{company_name}}'
+                    : 'e.g. Create an animated SVG icon representing {{industry}} with a minimal, professional style'}
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 outline-none transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30"
+                />
+                {existingColumns.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {existingColumns.slice(0, 6).map((col) => (
+                      <button
+                        key={col.key}
+                        type="button"
+                        onClick={() => setSvgPromptTemplate((prev) => `${prev}{{${col.key}}}`)}
+                        className="rounded border border-gray-700 bg-gray-800/50 px-2 py-0.5 text-xs font-medium text-gray-400 hover:border-emerald-500/40 hover:text-emerald-300"
+                      >
+                        {`{{${col.key}}}`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* LinkedIn Analytics Section */}
+          {isLinkedInAnalytics && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2.5 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3.5 py-3">
+                <BarChart3 className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
+                <p className="text-xs leading-relaxed text-gray-300">
+                  LinkedIn Analytics columns pull ad performance metrics directly from your LinkedIn Ads account for each campaign row.
+                </p>
+              </div>
+
+              {/* Metric selector */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">Metric</label>
+                <select
+                  value={linkedinAnalyticsMetric}
+                  onChange={(e) => setLinkedinAnalyticsMetric(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3.5 py-2.5 text-sm text-gray-100 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
+                >
+                  <optgroup label="Reach">
+                    <option value="impressions">Impressions</option>
+                    <option value="clicks">Clicks</option>
+                    <option value="video_views">Video Views</option>
+                  </optgroup>
+                  <optgroup label="Performance">
+                    <option value="ctr">CTR</option>
+                    <option value="engagement_rate">Engagement Rate</option>
+                    <option value="leads">Leads</option>
+                    <option value="conversions">Conversions</option>
+                  </optgroup>
+                  <optgroup label="Cost">
+                    <option value="spend">Spend</option>
+                    <option value="cpa">CPA (Cost per Action)</option>
+                    <option value="cpl">CPL (Cost per Lead)</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Date range selector */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">Date Range</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'last_7_days', label: 'Last 7 days' },
+                    { value: 'last_30_days', label: 'Last 30 days' },
+                    { value: 'last_90_days', label: 'Last 90 days' },
+                    { value: 'lifetime', label: 'Lifetime' },
+                    { value: 'custom', label: 'Custom' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setLinkedinAnalyticsDateRange(opt.value)}
+                      className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                        linkedinAnalyticsDateRange === opt.value
+                          ? 'border-blue-500 bg-blue-500/15 text-blue-300'
+                          : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Refresh schedule */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">Refresh Schedule</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'manual', label: 'Manual only', desc: 'Refresh on demand' },
+                    { value: 'daily', label: 'Daily auto-sync', desc: 'Sync every day' },
+                    { value: 'both', label: 'Both', desc: 'Daily + on demand' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setLinkedinAnalyticsRefreshSchedule(opt.value)}
+                      className={`rounded-lg border p-2.5 text-left transition-colors ${
+                        linkedinAnalyticsRefreshSchedule === opt.value
+                          ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/30'
+                          : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                      }`}
+                    >
+                      <p className={`text-xs font-medium ${linkedinAnalyticsRefreshSchedule === opt.value ? 'text-blue-200' : 'text-gray-200'}`}>
+                        {opt.label}
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -2117,7 +2494,7 @@ export function AddColumnModal({ isOpen, onClose, onAdd, onAddMultiple, onSucces
         </div>
 
         {/* Footer — hidden for types that use their own wizard */}
-        {columnType !== 'heygen_video' && columnType !== 'elevenlabs_audio' && columnType !== 'fal_video' && columnType !== 'ai_image' && columnType !== 'svg_animation' && !isInstantly && (
+        {columnType !== 'heygen_video' && columnType !== 'elevenlabs_audio' && !isInstantly && (
         <div className="flex items-center justify-end gap-3 border-t border-gray-700/60 px-6 py-4">
           <button
             onClick={onClose}
