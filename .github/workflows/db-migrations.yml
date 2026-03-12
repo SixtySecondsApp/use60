@@ -11,6 +11,10 @@ on:
     # migration file changes. The apply jobs are idempotent (db push
     # exits cleanly when no pending migrations exist).
 
+permissions:
+  contents: read
+  pull-requests: write
+
 concurrency:
   group: db-migrations-${{ github.ref_name }}
   cancel-in-progress: false

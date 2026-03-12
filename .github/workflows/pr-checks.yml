@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main, staging]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 concurrency:
   group: pr-checks-${{ github.head_ref }}
   cancel-in-progress: true
