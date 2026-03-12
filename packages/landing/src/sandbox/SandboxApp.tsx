@@ -203,10 +203,16 @@ function SandboxAppInner({
       </div>
       {/* Mobile topbar: full width */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-20 h-16 flex items-center justify-between bg-gray-950/50 backdrop-blur-sm border-b border-gray-800/50 px-4">
-        <div className="w-8 h-8 rounded-lg bg-[#37bd7e] flex items-center justify-center">
-          <span className="text-white text-sm font-bold">60</span>
-        </div>
-        <span className="text-sm font-medium text-gray-400">sixty</span>
+        <img
+          src="https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Icon.png"
+          alt="60"
+          className="w-8 h-8 rounded-lg"
+        />
+        <img
+          src="https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Dark%20Mode%20Logo.png"
+          alt="sixty"
+          className="h-6"
+        />
       </div>
 
       <main
