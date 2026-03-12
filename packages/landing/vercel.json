@@ -57,6 +57,10 @@
   ],
   "rewrites": [
     {
+      "source": "/t/:path*",
+      "destination": "/index.html"
+    },
+    {
       "source": "/((?!.*\\.\\w+).*)",
       "destination": "/index.html"
     }
