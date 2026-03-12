@@ -23,7 +23,7 @@ export default function Signup() {
   });
   const [existingAccountError, setExistingAccountError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { signUp, signInWithGoogle, isAuthenticated, loading: authLoading } = useAuth();
+  const { signUp, signInWithGoogle, signInWithMicrosoft, isAuthenticated, loading: authLoading } = useAuth();
   const accessCode = useAccessCode();
 
   // Get redirect destination from URL params (e.g., when coming from /invite/:token)
@@ -99,6 +99,31 @@ export default function Signup() {
   }, [searchParams]);
 
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isMicrosoftLoading, setIsMicrosoftLoading] = useState(false);
+
+  const handleMicrosoftSignUp = async () => {
+    // Validate access code before starting OAuth
+    if (!accessCode.isValid) {
+      const isValid = await accessCode.validate();
+      if (!isValid) {
+        toast.error('Please enter a valid access code first');
+        return;
+      }
+    }
+
+    setIsMicrosoftLoading(true);
+    try {
+      const { error } = await signInWithMicrosoft();
+      if (error) {
+        toast.error(error.message || 'Failed to sign up with Microsoft');
+        setIsMicrosoftLoading(false);
+      }
+      // If no error, browser is redirecting to Microsoft — don't reset loading
+    } catch {
+      toast.error('An unexpected error occurred. Please try again.');
+      setIsMicrosoftLoading(false);
+    }
+  };
 
   const handleGoogleSignUp = async () => {
     // Validate access code before starting OAuth
@@ -322,6 +347,25 @@ export default function Signup() {
               </svg>
             )}
             {isGoogleLoading ? 'Redirecting...' : 'Continue with Google'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleMicrosoftSignUp}
+            disabled={isLoading || isGoogleLoading || isMicrosoftLoading || !accessCode.isValid}
+            className="w-full flex items-center justify-center gap-3 bg-gray-700 border border-gray-600 text-white py-2.5 rounded-xl font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed mt-3"
+          >
+            {isMicrosoftLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <svg className="w-5 h-5" viewBox="0 0 21 21">
+                <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+              </svg>
+            )}
+            {isMicrosoftLoading ? 'Redirecting...' : 'Continue with Microsoft'}
           </button>
 
           <div className="relative my-5">

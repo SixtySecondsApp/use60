@@ -2,6 +2,7 @@
 // React Query hooks for billing analytics
 
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase/clientV2';
 import {
   getCurrentMRR,
   getMRRByDateRange,
@@ -141,6 +142,81 @@ export function useMRRMovement(limit: number = 30) {
   return useQuery<MRRMovement[]>({
     queryKey: billingAnalyticsKeys.mrrMovement(limit),
     queryFn: () => getMRRMovement(limit),
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+// ============================================================================
+// Coupon Analytics (SCS-006)
+// ============================================================================
+
+export interface CouponAnalyticsData {
+  activeCoupons: number;
+  totalRedemptions: number;
+  totalDiscountCents: number;
+  perCoupon: Array<{
+    id: string;
+    stripe_coupon_id: string;
+    name: string;
+    discount_type: string;
+    discount_value: number;
+    currency: string | null;
+    times_redeemed: number;
+    is_active: boolean;
+    created_at: string;
+    redemption_count: number;
+    total_discount_cents: number;
+    last_used: string | null;
+  }>;
+}
+
+/**
+ * Fetch coupon analytics: active coupons, total redemptions, discount given, per-coupon breakdown
+ */
+export function useCouponAnalytics() {
+  return useQuery<CouponAnalyticsData>({
+    queryKey: ['billing', 'coupon-analytics'],
+    queryFn: async () => {
+      // Get all coupons
+      const { data: coupons } = await supabase
+        .from('stripe_coupons')
+        .select('id, stripe_coupon_id, name, discount_type, discount_value, currency, times_redeemed, is_active, created_at');
+
+      // Get redemptions with aggregates
+      const { data: redemptions } = await supabase
+        .from('coupon_redemptions')
+        .select('id, coupon_id, discount_amount_cents, applied_at, removed_at');
+
+      const activeCoupons = (coupons || []).filter((c) => c.is_active).length;
+      const totalRedemptions = (redemptions || []).length;
+      const totalDiscountCents = (redemptions || []).reduce(
+        (sum, r) => sum + (r.discount_amount_cents || 0),
+        0
+      );
+
+      // Per-coupon breakdown
+      const perCoupon = (coupons || []).map((c) => {
+        const couponRedemptions = (redemptions || []).filter((r) => r.coupon_id === c.id);
+        return {
+          ...c,
+          redemption_count: couponRedemptions.length,
+          total_discount_cents: couponRedemptions.reduce(
+            (s, r) => s + (r.discount_amount_cents || 0),
+            0
+          ),
+          last_used:
+            couponRedemptions.length > 0
+              ? couponRedemptions
+                  .sort(
+                    (a, b) =>
+                      new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime()
+                  )[0].applied_at
+              : null,
+        };
+      });
+
+      return { activeCoupons, totalRedemptions, totalDiscountCents, perCoupon };
+    },
     staleTime: 1000 * 60 * 5,
   });
 }

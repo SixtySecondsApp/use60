@@ -58,6 +58,7 @@ export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/Cre
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
 export const GoldenEyeAdmin = lazyWithRetry(() => import('@/pages/platform/GoldenEyeAdmin'));
 export const CreditMenuAdmin = lazyWithRetry(() => import('@/pages/platform/CreditMenuAdmin'));
+export const CouponAdmin = lazyWithRetry(() => import('@/pages/platform/CouponAdmin'));
 export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo/EnrichmentComparison'));
 export const ResearchComparisonDemo = lazyWithRetry(() => import('@/pages/demo/ResearchComparison'));
 export const GeminiModelComparison = lazyWithRetry(() => import('@/pages/demo/GeminiModelComparison'));
@@ -171,6 +172,7 @@ export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
 export const PipelineGalleryPage = lazyWithRetry(() => import('@/pages/PipelineGalleryPage'));
 export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));
+export const LinkedInAdLibraryPage = lazyWithRetry(() => import('@/pages/LinkedInAdLibraryPage'));
 export const ProspectingPage = lazyWithRetry(() => import('@/pages/ProspectingPage'));
 export const FactProfilesPage = lazyWithRetry(() => import('@/pages/FactProfilesPage'));
 export const ProfilesPage = lazyWithRetry(() => import('@/pages/ProfilesPage'));

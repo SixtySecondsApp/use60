@@ -449,7 +449,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       
       {/* Quick Add FAB - Only shown for admins in internal view */}
-      {location.pathname !== '/workflows' && location.pathname !== '/platform/demo' && !isViewingAsExternal && !isOpsFullscreen && isUserAdmin(userData) && (
+      {location.pathname !== '/workflows' && location.pathname !== '/platform/demo' && location.pathname !== '/platform/goldeneye' && !isViewingAsExternal && !isOpsFullscreen && isUserAdmin(userData) && (
         <motion.button
           type="button"
           whileHover={{ scale: 1.05 }}
@@ -784,7 +784,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <div className={cn(
         'fixed left-0 right-0 h-16 bg-white/80 dark:bg-gray-950/50 backdrop-blur-sm border-b border-[#E2E8F0] dark:border-gray-800/50 z-[90]',
         'hidden lg:flex items-center justify-between px-6',
-        isCollapsed ? 'lg:left-[80px]' : 'lg:left-[256px]',
+        isCollapsed ? 'lg:left-[96px]' : 'lg:left-[256px]',
         'transition-all duration-300 ease-in-out',
         isImpersonating ? 'top-[44px]' : 'top-0'
       )}>
@@ -970,7 +970,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           ? 'text-indigo-700 dark:text-white' : 'text-[#64748B] dark:text-gray-400/80'
                       )}
                     >
-                      <item.icon className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4')} />
+                      <item.icon className={cn('w-4 h-4')} />
                     </motion.div>
                     <AnimatePresence>
                       {!isCollapsed && (
@@ -1093,7 +1093,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
               )}
             >
-              <LifeBuoy className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+              <LifeBuoy className={cn('w-4 h-4 flex-shrink-0')} />
               <AnimatePresence>
                 {!isCollapsed && (
                   <motion.span
@@ -1122,7 +1122,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     : 'text-[#64748B] hover:bg-slate-50 dark:text-gray-400/80 dark:hover:bg-gray-800/20'
                 )}
               >
-                <Shield className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+                <Shield className={cn('w-4 h-4 flex-shrink-0')} />
                 <AnimatePresence>
                   {!isCollapsed && (
                     <motion.span
@@ -1152,7 +1152,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             >
               {isImpersonating ? (
                 <>
-                  <UserX className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+                  <UserX className={cn('w-4 h-4 flex-shrink-0')} />
                   <AnimatePresence>
                     {!isCollapsed && (
                       <motion.span
@@ -1168,7 +1168,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </>
               ) : (
                 <>
-                  <LogOut className={cn(isCollapsed ? 'w-5 h-5' : 'w-4 h-4 flex-shrink-0')} />
+                  <LogOut className={cn('w-4 h-4 flex-shrink-0')} />
                   <AnimatePresence>
                     {!isCollapsed && (
                       <motion.span

@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { toast } from 'sonner';
 import { useUser } from '@/lib/hooks/useUser';
 import { performEmailSync, SyncPeriod, SyncResult } from '@/lib/services/emailSyncService';
 import { calculateAllDealsHealth } from '@/lib/services/dealHealthService';
@@ -53,10 +54,20 @@ export function useEmailSync() {
       }
 
       if (result.errors.length > 0) {
-        setError(result.errors.join('; '));
+        const errorMsg = result.errors.join('; ');
+        setError(errorMsg);
+        toast.error('Email sync completed with errors', { description: errorMsg });
+      } else if (result.emailsStored > 0) {
+        toast.success(`Synced ${result.emailsStored} emails from ${result.crmEmailsMatched} CRM matches`);
+      } else if (result.crmContactCount === 0) {
+        toast.warning('No CRM contacts found. Add contacts first to sync emails.');
+      } else if (result.emailsStored === 0 && result.crmContactCount > 0) {
+        toast.info('No matching emails found for your CRM contacts.');
       }
     } catch (err: any) {
-      setError(err.message || 'Email sync failed');
+      const errorMsg = err.message || 'Email sync failed';
+      setError(errorMsg);
+      toast.error('Email sync failed', { description: errorMsg });
       setSyncStatus(null);
     } finally {
       setLoading(false);

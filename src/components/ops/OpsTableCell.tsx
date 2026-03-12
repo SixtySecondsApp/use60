@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink, Send, Clock, MessageSquare, Eye, Radio, Link2 } from 'lucide-react';
+import { Mail, Linkedin, Building2, AlertCircle, Loader2, User, Phone, Check, X, ChevronDown, FunctionSquare, Zap, Play, Sparkles, Copy, CheckCheck, ExternalLink, Send, Clock, MessageSquare, Eye, Radio, Link2, BarChart3, Trophy, AlertTriangle } from 'lucide-react';
 import type { InstantlyColumnConfig } from '@/lib/types/instantly';
 import type { DropdownOption, ButtonConfig } from '@/lib/services/opsTableService';
 import { AgentColumnCell } from './AgentColumnCell';
@@ -65,6 +65,18 @@ interface OpsTableCellProps {
   onRunAgentResearch?: () => void;
   /** Callback to retry agent research with optional depth override */
   onRetryAgentResearch?: (depth?: 'low' | 'medium' | 'high') => void;
+  /** Quartile boundaries for linkedin_analytics conditional formatting */
+  analyticsQuartile?: {
+    q1: number; // bottom 25% threshold
+    q3: number; // top 25% threshold
+    isTopPerformer: boolean;
+    isBottomPerformer: boolean;
+  } | null;
+  /** Compare mode: highlight best/worst performer in this column */
+  compareInfo?: {
+    isBest: boolean;
+    isWorst: boolean;
+  } | null;
 }
 
 /**
@@ -97,6 +109,8 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
   columnKey,
   onRunAgentResearch,
   onRetryAgentResearch,
+  analyticsQuartile,
+  compareInfo,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(cell.value ?? '');
@@ -1793,6 +1807,109 @@ export const OpsTableCell: React.FC<OpsTableCellProps> = ({
         onGenerate={integrationConfig ? () => handleGenerateAiImage() : undefined}
         onCellUpdate={onEdit}
       />
+    );
+  }
+
+  // LinkedIn Analytics column — formatted metric value + label + date range
+  if (columnType === 'linkedin_analytics') {
+    const config = integrationConfig as { metric?: string; date_range?: string; refresh_schedule?: string } | null | undefined;
+    const metric = config?.metric ?? 'impressions';
+    const dateRange = config?.date_range ?? 'last_30_days';
+
+    const METRIC_LABELS: Record<string, string> = {
+      impressions: 'Impressions',
+      clicks: 'Clicks',
+      ctr: 'CTR',
+      spend: 'Spend',
+      leads: 'Leads',
+      cpa: 'CPA',
+      cpl: 'CPL',
+      conversions: 'Conversions',
+      video_views: 'Video Views',
+      engagement_rate: 'Engagement Rate',
+    };
+
+    const DATE_RANGE_LABELS: Record<string, string> = {
+      last_7_days: 'Last 7 days',
+      last_30_days: 'Last 30 days',
+      last_90_days: 'Last 90 days',
+      lifetime: 'Lifetime',
+      custom: 'Custom',
+    };
+
+    const PERCENTAGE_METRICS = new Set(['ctr', 'engagement_rate']);
+    const CURRENCY_METRICS = new Set(['spend', 'cpa', 'cpl']);
+
+    function formatLinkedInMetricValue(raw: string | null, metricKey: string): string {
+      if (raw == null || raw === '') return '';
+      const num = parseFloat(raw);
+      if (isNaN(num)) return raw;
+      if (PERCENTAGE_METRICS.has(metricKey)) {
+        return `${num.toFixed(1)}%`;
+      }
+      if (CURRENCY_METRICS.has(metricKey)) {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+      }
+      return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(num);
+    }
+
+    const metricLabel = METRIC_LABELS[metric] ?? metric;
+    const dateRangeLabel = DATE_RANGE_LABELS[dateRange] ?? dateRange;
+
+    if (!cell.value) {
+      return (
+        <div className="w-full h-full flex items-center gap-1.5">
+          <BarChart3 className="w-3 h-3 text-blue-500/50 shrink-0" />
+          <span className="text-gray-600 text-xs italic">No data</span>
+        </div>
+      );
+    }
+
+    const formatted = formatLinkedInMetricValue(cell.value, metric);
+
+    // Conditional formatting: quartile highlighting
+    const isTopPerformer = analyticsQuartile?.isTopPerformer ?? false;
+    const isBottomPerformer = analyticsQuartile?.isBottomPerformer ?? false;
+
+    // Compare mode: best/worst border
+    const isBest = compareInfo?.isBest ?? false;
+    const isWorst = compareInfo?.isWorst ?? false;
+
+    const bgClass = isTopPerformer
+      ? 'bg-emerald-950/60 dark:bg-emerald-950/60'
+      : isBottomPerformer
+        ? 'bg-red-950/60 dark:bg-red-950/60'
+        : '';
+    const borderClass = isBest
+      ? 'ring-1 ring-inset ring-emerald-500/70'
+      : isWorst
+        ? 'ring-1 ring-inset ring-red-500/70'
+        : '';
+    const valueColorClass = isTopPerformer
+      ? 'text-emerald-300'
+      : isBottomPerformer
+        ? 'text-red-300'
+        : 'text-gray-100';
+
+    return (
+      <div
+        className={`w-full h-full flex flex-col justify-center cursor-default rounded-sm px-0.5 ${bgClass} ${borderClass}`}
+        onClick={startEditing}
+      >
+        <div className="flex items-center gap-1.5">
+          {isBest ? (
+            <Trophy className="w-3 h-3 text-emerald-400 shrink-0" />
+          ) : isWorst ? (
+            <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+          ) : (
+            <BarChart3 className="w-3 h-3 text-blue-400 shrink-0" />
+          )}
+          <span className={`text-sm font-medium tabular-nums ${valueColorClass}`}>{formatted}</span>
+        </div>
+        <span className="text-[11px] text-gray-500 mt-0.5 truncate">
+          {metricLabel} · {dateRangeLabel}
+        </span>
+      </div>
     );
   }
 

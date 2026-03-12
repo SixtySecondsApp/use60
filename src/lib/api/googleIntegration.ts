@@ -8,6 +8,7 @@ export interface GoogleIntegration {
   scopes: string;
   scope_tier: 'free' | 'paid';
   is_active: boolean;
+  service_preferences: GoogleServiceStatus | null;
   created_at: string;
   updated_at: string;
 }
@@ -166,7 +167,7 @@ export class GoogleIntegrationAPI {
 
   /**
    * Get service-specific status from service_preferences column.
-   * Falls back to all-enabled if the column doesn't exist yet (pre-migration).
+   * Falls back to all-enabled if the column hasn't been populated yet.
    */
   static async getServiceStatus(): Promise<GoogleServiceStatus> {
     const { data: { user } } = await supabase.auth.getUser();
@@ -176,7 +177,7 @@ export class GoogleIntegrationAPI {
 
     const { data, error } = await supabase
       .from('google_integrations')
-      .select('*')
+      .select('id, user_id, is_active, service_preferences')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .maybeSingle();
@@ -186,8 +187,8 @@ export class GoogleIntegrationAPI {
     }
 
     const prefs = data.service_preferences;
-    if (!prefs) {
-      // Column not yet populated — default all enabled
+    if (!prefs || typeof prefs !== 'object') {
+      // Column NULL or not yet populated — default all enabled
       return { gmail: true, calendar: true, drive: true };
     }
 
@@ -210,7 +211,7 @@ export class GoogleIntegrationAPI {
     // Read current preferences first
     const { data: current, error: readError } = await supabase
       .from('google_integrations')
-      .select('*')
+      .select('id, user_id, is_active, service_preferences')
       .eq('user_id', user.id)
       .eq('is_active', true)
       .maybeSingle();
@@ -227,14 +228,46 @@ export class GoogleIntegrationAPI {
 
     const updatedPrefs = { ...currentPrefs, [service]: enabled };
 
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from('google_integrations')
       .update({ service_preferences: updatedPrefs })
-      .eq('user_id', user.id)
-      .eq('is_active', true);
+      .eq('id', current.id)
+      .select('id, service_preferences')
+      .maybeSingle();
 
     if (updateError) {
       throw new Error(updateError.message || `Failed to update ${service} preference`);
+    }
+
+    if (!updated) {
+      throw new Error(`Failed to persist ${service} preference — no rows updated`);
+    }
+  }
+
+  /**
+   * Bulk-update all service preferences in a single write.
+   * Avoids sequential read-modify-write cycles that can race.
+   */
+  static async updateServicePreferences(prefs: GoogleServiceStatus): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: updated, error } = await supabase
+      .from('google_integrations')
+      .update({ service_preferences: prefs })
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .select('id, service_preferences')
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message || 'Failed to update service preferences');
+    }
+
+    if (!updated) {
+      throw new Error('Failed to persist service preferences — no rows updated');
     }
   }
 
@@ -391,6 +424,7 @@ export const googleApi = {
   getHealth: GoogleIntegrationAPI.getIntegrationHealth,
   disconnect: GoogleIntegrationAPI.disconnectIntegration,
   toggleService: GoogleIntegrationAPI.toggleService,
+  updateServicePreferences: GoogleIntegrationAPI.updateServicePreferences,
   refreshTokens: GoogleIntegrationAPI.refreshTokensIfNeeded,
   testConnection: GoogleIntegrationAPI.testConnection,
 };

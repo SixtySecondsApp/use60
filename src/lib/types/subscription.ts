@@ -90,6 +90,7 @@ export interface OrganizationSubscription {
   custom_max_ai_tokens: number | null;
   custom_max_storage_mb: number | null;
   admin_notes: string | null;
+  discount_info?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -407,4 +408,149 @@ export interface PlanValidationResult {
   isValid: boolean;
   errors: string[];
   warnings: string[];
+}
+
+// ============================================================================
+// COUPON & PROMOTION CODE TYPES
+// ============================================================================
+
+export type CouponDiscountType = 'percent_off' | 'amount_off';
+export type CouponDuration = 'once' | 'repeating' | 'forever';
+
+export interface StripeCoupon {
+  id: string;
+  stripe_coupon_id: string;
+  name: string;
+  discount_type: CouponDiscountType;
+  discount_value: number;
+  currency: string | null;
+  duration: CouponDuration;
+  duration_in_months: number | null;
+  max_redemptions: number | null;
+  times_redeemed: number;
+  redeem_by: string | null;
+  applies_to_products: string[];
+  is_active: boolean;
+  metadata: Record<string, unknown>;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined
+  promotion_code_count?: number;
+}
+
+export interface StripePromotionCode {
+  id: string;
+  coupon_id: string;
+  stripe_promotion_code_id: string;
+  code: string;
+  is_active: boolean;
+  max_redemptions: number | null;
+  times_redeemed: number;
+  expires_at: string | null;
+  customer_restriction: string | null;
+  first_time_only: boolean;
+  minimum_amount_cents: number | null;
+  minimum_amount_currency: string | null;
+  created_at: string;
+}
+
+export interface CouponRedemption {
+  id: string;
+  coupon_id: string | null;
+  org_id: string;
+  stripe_promotion_code_id: string | null;
+  promotion_code: string | null;
+  stripe_subscription_id: string | null;
+  stripe_checkout_session_id: string | null;
+  discount_amount_cents: number | null;
+  applied_at: string;
+  removed_at: string | null;
+}
+
+export interface CreateCouponInput {
+  name: string;
+  discount_type: CouponDiscountType;
+  discount_value: number;
+  currency?: string;
+  duration: CouponDuration;
+  duration_in_months?: number;
+  max_redemptions?: number;
+  redeem_by?: string;
+  applies_to_products?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreatePromotionCodeInput {
+  coupon_id: string;
+  code: string;
+  max_redemptions?: number;
+  expires_at?: string;
+  first_time_only?: boolean;
+  minimum_amount_cents?: number;
+  minimum_amount_currency?: string;
+}
+
+export interface DiscountInfo {
+  coupon_name: string;
+  discount_type: CouponDiscountType;
+  discount_value: number;
+  duration: CouponDuration;
+  duration_in_months: number | null;
+  promotion_code: string | null;
+  applied_at: string;
+  expires_at: string | null;
+}
+
+export interface CouponAnalytics {
+  total_active_coupons: number;
+  total_redemptions_7d: number;
+  total_redemptions_30d: number;
+  total_redemptions_all: number;
+  total_discount_given_cents: number;
+  redemption_rate: number;
+  estimated_mrr_reduction_cents: number;
+  per_coupon: Array<{
+    coupon_id: string;
+    coupon_name: string;
+    stripe_coupon_id: string;
+    discount_type: CouponDiscountType;
+    discount_value: number;
+    redemptions: number;
+    total_discount_cents: number;
+    last_used_at: string | null;
+  }>;
+}
+
+// ============================================================================
+// COUPON MANAGEMENT REQUEST TYPES
+// ============================================================================
+
+export interface CreateCouponRequest {
+  name: string;
+  discount_type: CouponDiscountType;
+  discount_value: number;
+  currency?: string;
+  duration: CouponDuration;
+  duration_in_months?: number;
+  max_redemptions?: number;
+  redeem_by?: string;
+  applies_to_products?: string[];
+  metadata?: Record<string, string>;
+}
+
+export interface CreatePromotionCodeRequest {
+  coupon_id: string;
+  code?: string;
+  max_redemptions?: number;
+  expires_at?: string;
+  customer_restriction?: string;
+  first_time_only?: boolean;
+  minimum_amount_cents?: number;
+  minimum_amount_currency?: string;
+}
+
+export interface ApplyToSubscriptionRequest {
+  org_id: string;
+  stripe_coupon_id: string;
 }

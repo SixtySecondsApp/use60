@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { Sigma } from 'lucide-react';
 import type { UsageTotals, UsageBucket } from '@/lib/hooks/useGoldenEyeData';
 
 interface UsageTotalsBarProps {
@@ -113,21 +114,21 @@ function TotalCard({ label, bucket, accent, fxRate }: TotalCardProps) {
   const displayOut = useAnimatedNumber(bucket.tokensOut);
 
   return (
-    <div className="flex-1 px-4 py-3 min-w-[220px]">
+    <div className="px-3 py-2">
       <p className="text-[10px] text-slate-500 uppercase tracking-wider font-mono leading-tight">{label}</p>
-      <div className="flex items-baseline gap-1.5 mt-1">
-        <span className={`text-lg font-semibold font-mono ${accent}`}>
+      <div className="flex items-baseline gap-1.5 mt-0.5">
+        <span className={`text-sm font-semibold font-mono ${accent}`}>
           {formatCompactTokens(displayIn)}
         </span>
         <span className="text-[9px] text-slate-600 font-mono">/</span>
-        <span className={`text-lg font-semibold font-mono ${accent}`}>
+        <span className={`text-sm font-semibold font-mono ${accent}`}>
           {formatCompactTokens(displayOut)}
         </span>
         <span className="text-[9px] text-slate-500 font-mono">in/out</span>
+        <span className="text-[10px] font-semibold text-slate-300 font-mono ml-auto">
+          {formatGbp(bucket.cost, fxRate)}
+        </span>
       </div>
-      <p className="text-[10px] font-semibold text-slate-300 font-mono mt-0.5">
-        {formatGbp(bucket.cost, fxRate)}
-      </p>
     </div>
   );
 }
@@ -136,8 +137,12 @@ export function UsageTotalsBar({ usageTotals }: UsageTotalsBarProps) {
   const fxRate = useFxRate();
 
   return (
-    <div className="shrink-0 bg-[#0f172a] border-t border-slate-800/50 pb-[100px]">
-      <div className="flex items-center divide-x divide-slate-800/50">
+    <div className="rounded-lg border border-slate-700/50 bg-slate-900/60 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700/50">
+        <Sigma className="h-3.5 w-3.5 text-slate-400" />
+        <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Sum Stats</span>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-y divide-slate-800/50">
         <TotalCard
           label="All Time"
           bucket={usageTotals.all_time}

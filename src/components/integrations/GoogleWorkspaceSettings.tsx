@@ -65,18 +65,8 @@ export function GoogleWorkspaceSettings() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Collect all changes upfront to avoid mid-loop state mutation issues
-      const serviceKeys: (keyof GoogleServiceStatus)[] = ['gmail', 'calendar', 'drive'];
-      const changes: { key: keyof GoogleServiceStatus; enabled: boolean }[] = [];
-      for (const key of serviceKeys) {
-        if (localServices[key] !== services[key]) {
-          changes.push({ key, enabled: localServices[key] });
-        }
-      }
-      // Write each change directly via the API with the desired value
-      for (const { key, enabled } of changes) {
-        await googleApi.toggleService(key, enabled);
-      }
+      // Bulk-update all service preferences in a single write
+      await googleApi.updateServicePreferences(localServices);
       // Re-fetch from DB to ensure store is in sync
       await checkConnection();
       toast.success('Settings saved successfully');
@@ -247,25 +237,7 @@ export function GoogleWorkspaceSettings() {
             />
           </div>
 
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/50">
-            <div className="flex items-center space-x-3">
-              <ListTodo className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Google Tasks</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Sync tasks bidirectionally
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => navigate('/settings/task-sync')}
-              className="text-xs"
-            >
-              Manage
-            </Button>
-          </div>
+          {/* Google Tasks / Task Auto-Sync hidden — SET-001 */}
         </div>
 
         {hasChanges && (

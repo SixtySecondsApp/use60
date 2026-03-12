@@ -81,12 +81,19 @@ export interface UsageTotals {
   last_24h: UsageBucket;
 }
 
+export interface ModelBreakdownEntry {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+}
+
 export interface GoldenEyeData {
   activeUsers: ActiveUser[];
   recentEvents: RecentEvent[];
   llmEndpoints: LLMEndpoint[];
   anomalyRules: AnomalyRule[];
   usageTotals: UsageTotals;
+  modelBreakdown: ModelBreakdownEntry[];
   isLoading: boolean;
   error: string | null;
   lastUpdated: Date | null;
@@ -135,6 +142,7 @@ export function useGoldenEyeData(pollIntervalMs = 5_000): GoldenEyeData {
     last_7d: { tokensIn: 0, tokensOut: 0, cost: 0 },
     last_24h: { tokensIn: 0, tokensOut: 0, cost: 0 },
   });
+  const [modelBreakdown, setModelBreakdown] = useState<ModelBreakdownEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -445,6 +453,37 @@ export function useGoldenEyeData(pollIntervalMs = 5_000): GoldenEyeData {
         last_24h: sumTokensAndCost(totals24h.data),
       });
 
+      // Aggregate per-model token breakdown (top 6 + "Other")
+      if (totalsAllTime.data) {
+        const modelMap = new Map<string, { input_tokens: number; output_tokens: number }>();
+        for (const row of totalsAllTime.data) {
+          const key = row.model || 'unknown';
+          const existing = modelMap.get(key) ?? { input_tokens: 0, output_tokens: 0 };
+          modelMap.set(key, {
+            input_tokens: existing.input_tokens + (row.input_tokens || 0),
+            output_tokens: existing.output_tokens + (row.output_tokens || 0),
+          });
+        }
+        const sorted = Array.from(modelMap.entries())
+          .map(([model, tokens]) => ({ model, ...tokens }))
+          .sort((a, b) => (b.input_tokens + b.output_tokens) - (a.input_tokens + a.output_tokens));
+
+        if (sorted.length > 6) {
+          const top6 = sorted.slice(0, 6);
+          const other = sorted.slice(6).reduce(
+            (acc, e) => ({
+              model: 'Other',
+              input_tokens: acc.input_tokens + e.input_tokens,
+              output_tokens: acc.output_tokens + e.output_tokens,
+            }),
+            { model: 'Other', input_tokens: 0, output_tokens: 0 }
+          );
+          setModelBreakdown([...top6, other]);
+        } else {
+          setModelBreakdown(sorted);
+        }
+      }
+
       // Compute per-user GBP cost using blended rate from all-time totals
       const USD_TO_GBP = 0.79;
       if (userMapRef) {
@@ -567,6 +606,7 @@ export function useGoldenEyeData(pollIntervalMs = 5_000): GoldenEyeData {
     llmEndpoints,
     anomalyRules,
     usageTotals,
+    modelBreakdown,
     isLoading,
     error,
     lastUpdated,

@@ -340,13 +340,10 @@ const builtIntegrations: IntegrationConfig[] = [
   },
   {
     id: 'microsoft-365',
-    name: 'Microsoft 365',
-    description: 'Outlook, Calendar & OneDrive.',
+    name: 'Microsoft Calendar',
+    description: 'Sync your Outlook Calendar events.',
     permissions: [
-      { title: 'View and send email', description: 'Send emails via Outlook.' },
       { title: 'Access calendar', description: 'Schedule meetings and sync events.' },
-      { title: 'Access files', description: 'Share and attach files from OneDrive.' },
-      { title: 'Read contacts', description: 'Import contacts from Outlook.' },
     ],
     brandColor: 'blue',
     iconBgColor: 'bg-gray-50 dark:bg-gray-800',

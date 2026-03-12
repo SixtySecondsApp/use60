@@ -1,0 +1,172 @@
+{
+  "feature": {
+    "id": "goldeneye-model-ratio",
+    "name": "GoldenEye Leaderboard Spacing + Model Ratio Donut",
+    "status": "planned",
+    "createdAt": "2026-03-11T00:00:00Z",
+    "complexity": {
+      "total": 1.5,
+      "tier": 1,
+      "label": "Trivial"
+    }
+  },
+
+  "stories": [
+    {
+      "id": "GE-001",
+      "feature": "goldeneye-model-ratio",
+      "title": "Match leaderboard row spacing to activity log",
+      "type": "ui",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["GE-002"],
+
+      "acceptance": [
+        "Leaderboard header cells use py-1 (matching ActivityLogTerminal)",
+        "Leaderboard body cells use py-1 (matching ActivityLogTerminal)",
+        "No text clipping or overflow issues at reduced padding",
+        "Sticky header still works correctly when scrolling"
+      ],
+
+      "estimatedMinutes": 5,
+
+      "files": [
+        "src/pages/platform/GoldenEyeAdmin.tsx"
+      ],
+
+      "implementation": {
+        "changes": [
+          {
+            "file": "src/pages/platform/GoldenEyeAdmin.tsx",
+            "description": "Change py-1.5 to py-1 on leaderboard <th> elements (lines 438-443) and <td> elements (lines 453-467). Do NOT change py-1.5 in banner divs (lines 392, 410) or the leaderboard header bar py-2 (line 430)."
+          }
+        ]
+      }
+    },
+    {
+      "id": "GE-002",
+      "feature": "goldeneye-model-ratio",
+      "title": "Add per-model token aggregation query to useGoldenEyeData",
+      "type": "data",
+      "status": "pending",
+      "priority": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": ["src/lib/hooks/useGoldenEyeData.ts"],
+        "schema": ["ai_cost_events"]
+      },
+      "blocks": ["GE-003"],
+      "parallelWith": ["GE-001"],
+
+      "acceptance": [
+        "New query in fetchFullData groups ai_cost_events by model with SUM of input_tokens and output_tokens",
+        "New state modelBreakdown exposed from hook: Array<{ model: string; input_tokens: number; output_tokens: number }>",
+        "Top 6 models by total tokens returned; remainder grouped as 'Other'",
+        "Query refreshes on the heavy poll cycle (30s), not the lightweight 3s poll"
+      ],
+
+      "estimatedMinutes": 10,
+
+      "files": [
+        "src/lib/hooks/useGoldenEyeData.ts"
+      ],
+
+      "implementation": {
+        "changes": [
+          {
+            "file": "src/lib/hooks/useGoldenEyeData.ts",
+            "description": "Add ModelBreakdown interface. Add useState for modelBreakdown. In fetchFullData, add a new query: supabase.from('ai_cost_events').select('model, input_tokens, output_tokens') then aggregate client-side with a Map<model, {in, out}> since Supabase JS doesn't support GROUP BY directly. Sort by total tokens descending, take top 6, sum remainder as 'Other'. Add modelBreakdown to return object."
+          }
+        ]
+      }
+    },
+    {
+      "id": "GE-003",
+      "feature": "goldeneye-model-ratio",
+      "title": "Create ModelRatioChart donut with stat flags",
+      "type": "component",
+      "status": "pending",
+      "priority": 2,
+
+      "dependencies": {
+        "stories": ["GE-002"],
+        "files": ["src/lib/hooks/useGoldenEyeData.ts"],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+
+      "acceptance": [
+        "New component ModelRatioChart.tsx in src/components/goldeneye/",
+        "Donut chart (Recharts PieChart with innerRadius) showing token volume per model",
+        "Top 6 models + 'Other' bucket with DEFAULT_SANKEY_COLORS palette",
+        "Stat flags pointing to each segment showing tokens in / tokens out",
+        "Center label showing total token count",
+        "Animation disabled (isAnimationActive={false}) to prevent jitter on 3s poll",
+        "Integrated into left panel below leaderboard with shrink-0 fixed height",
+        "Left panel restructured: leaderboard keeps flex-1 min-h-0, chart gets shrink-0",
+        "Matches GoldenEye dark theme (bg-slate-900/60, text-[10px], border-slate-700/50)"
+      ],
+
+      "estimatedMinutes": 30,
+
+      "files": [
+        "src/components/goldeneye/ModelRatioChart.tsx",
+        "src/pages/platform/GoldenEyeAdmin.tsx"
+      ],
+
+      "implementation": {
+        "changes": [
+          {
+            "file": "src/components/goldeneye/ModelRatioChart.tsx",
+            "description": "New file. Import PieChart, Pie, Cell, Tooltip, ResponsiveContainer from recharts. Import DEFAULT_SANKEY_COLORS from ParticleFlowCanvas. Props: modelBreakdown array from hook. Render donut with innerRadius ~40, outerRadius ~65 (sized for 440px panel). Custom tooltip with dark theme bg-[#1f2937]. Stat flags as positioned labels outside each segment showing 'In: XXk / Out: XXk'. Center text showing total tokens formatted compact."
+          },
+          {
+            "file": "src/pages/platform/GoldenEyeAdmin.tsx",
+            "description": "Import ModelRatioChart. Restructure left panel (line 428-480): wrap leaderboard in flex-1 min-h-0, add ModelRatioChart below with shrink-0. Pass modelBreakdown from useGoldenEyeData. Add gap-2 between sections."
+          }
+        ]
+      }
+    }
+  ],
+
+  "execution": {
+    "totalStories": 3,
+    "completedStories": 0,
+    "estimatedMinutes": 45,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": ["GE-001", "GE-002"],
+        "reason": "Independent: spacing is CSS-only, query is hook-only"
+      },
+      {
+        "group": 2,
+        "stories": ["GE-003"],
+        "reason": "Depends on GE-002 for modelBreakdown data"
+      }
+    ]
+  },
+
+  "team": {
+    "tier": 1,
+    "workers": "sonnet x1",
+    "reviewer": "opus"
+  },
+
+  "references": {
+    "donutPattern": "src/components/meetings/analytics/TalkTimeChart.tsx",
+    "colorPalette": "src/components/goldeneye/ParticleFlowCanvas.tsx (DEFAULT_SANKEY_COLORS)",
+    "spacingReference": "src/components/goldeneye/ActivityLogTerminal.tsx (py-1)",
+    "dataHook": "src/lib/hooks/useGoldenEyeData.ts",
+    "mainPage": "src/pages/platform/GoldenEyeAdmin.tsx"
+  }
+}

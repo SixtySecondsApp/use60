@@ -44,7 +44,7 @@ interface IntegrationState {
   setLoading: (loading: boolean) => void;
 
   // Nylas
-  connectNylas: () => Promise<string>;
+  connectNylas: (provider?: 'google' | 'microsoft') => Promise<string>;
 
   // Microsoft actions
   checkMicrosoftConnection: () => Promise<void>;
@@ -232,15 +232,16 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
     }
   },
 
-  connectNylas: async (): Promise<string> => {
+  connectNylas: async (provider: 'google' | 'microsoft' = 'google'): Promise<string> => {
+    const stateKey = provider === 'microsoft' ? 'microsoft' : 'google';
     set(state => ({
-      google: { ...state.google, isLoading: true, error: null }
+      [stateKey]: { ...state[stateKey], isLoading: true, error: null }
     }));
 
     try {
       const origin = window.location.origin;
       const { data, error } = await supabase.functions.invoke('nylas-oauth-initiate', {
-        body: { origin }
+        body: { origin, provider }
       });
 
       if (error) {
@@ -264,8 +265,8 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
     } catch (error: any) {
       const errMsg = error.message || 'Failed to initiate Nylas connection';
       set(state => ({
-        google: {
-          ...state.google,
+        [stateKey]: {
+          ...state[stateKey],
           isLoading: false,
           error: errMsg
         }
@@ -445,13 +446,15 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
     set(state => ({ microsoft: { ...state.microsoft, isLoading: true, error: null } }));
 
     try {
-      const { data: integration, error } = await supabase
-        .from('microsoft_integrations')
-        .select('id, email, is_active, token_status, scopes')
+      // Check Nylas for Microsoft calendar integration
+      const { data: nylasInt } = await supabase
+        .from('nylas_integrations')
+        .select('id, email')
+        .eq('provider', 'microsoft')
         .eq('is_active', true)
         .maybeSingle();
 
-      if (error || !integration) {
+      if (!nylasInt) {
         set(state => ({ microsoft: { ...initialMicrosoftState } }));
         return;
       }
@@ -460,9 +463,9 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
         microsoft: {
           ...state.microsoft,
           isConnected: true,
-          email: integration.email,
-          services: { email: true, calendar: true, drive: true },
-          status: integration.token_status === 'valid' ? 'connected' : 'error',
+          email: nylasInt.email,
+          services: { email: false, calendar: true, drive: false },
+          status: 'connected',
           isLoading: false,
           error: null,
         },
@@ -481,24 +484,8 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
   },
 
   connectMicrosoft: async (): Promise<string> => {
-    set(state => ({ microsoft: { ...state.microsoft, isLoading: true, error: null } }));
-
-    try {
-      const origin = window.location.origin;
-      const { data, error } = await supabase.functions.invoke('oauth-initiate/microsoft', {
-        body: { origin },
-      });
-
-      if (error) throw new Error(error.message || 'Failed to initiate Microsoft OAuth');
-      if (!data?.url) throw new Error('No authorization URL received');
-
-      return data.url;
-    } catch (error: any) {
-      set(state => ({
-        microsoft: { ...state.microsoft, isLoading: false, error: error.message },
-      }));
-      throw error;
-    }
+    // Route through Nylas for calendar access (no Azure app needed)
+    return get().connectNylas('microsoft');
   },
 
   disconnectMicrosoft: async () => {
@@ -509,8 +496,9 @@ export const useIntegrationStore = create<IntegrationState>((set, get) => ({
 
     try {
       await supabase
-        .from('microsoft_integrations')
+        .from('nylas_integrations')
         .update({ is_active: false })
+        .eq('provider', 'microsoft')
         .eq('is_active', true);
 
       set(() => ({ microsoft: { ...initialMicrosoftState } }));

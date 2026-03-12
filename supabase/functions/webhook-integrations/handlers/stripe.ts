@@ -181,6 +181,14 @@ async function processStripeEvent(
         await handlePaymentIntentFailed(supabase, event.data.object);
         break;
 
+      case "customer.discount.created":
+        await handleDiscountCreated(supabase, event.data.object);
+        break;
+
+      case "customer.discount.deleted":
+        await handleDiscountDeleted(supabase, event.data.object);
+        break;
+
       default:
         console.log(`Unhandled event type: ${eventType}`);
         return {
@@ -1040,6 +1048,201 @@ async function handlePaymentIntentFailed(
   }
 
   console.log(`[Webhook] Auto top-up failed for org ${orgId}: ${errorMessage}`);
+}
+
+// ============================================================================
+// DISCOUNT CREATED
+// ============================================================================
+async function handleDiscountCreated(
+  supabase: SupabaseClient,
+  discount: unknown
+): Promise<void> {
+  const d = discount as any;
+
+  const customerId = typeof d.customer === 'string' ? d.customer : d.customer?.id;
+  if (!customerId) {
+    console.warn('[Webhook] Discount created event missing customer ID');
+    return;
+  }
+
+  // Find org by stripe_customer_id
+  const { data: orgSub, error: orgError } = await supabase
+    .from('organization_subscriptions')
+    .select('org_id')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle();
+
+  if (orgError) {
+    console.error('[Webhook] Error finding org for discount:', orgError);
+    return;
+  }
+  if (!orgSub) {
+    console.warn(`[Webhook] No org found for Stripe customer ${customerId}`);
+    return;
+  }
+
+  const orgId = orgSub.org_id;
+
+  // Build discount_info JSONB
+  const discountInfo: Record<string, unknown> = {
+    stripe_discount_id: d.id,
+    coupon_id: d.coupon?.id ?? null,
+    coupon_name: d.coupon?.name ?? null,
+    percent_off: d.coupon?.percent_off ?? null,
+    amount_off: d.coupon?.amount_off ?? null,
+    currency: d.coupon?.currency ?? null,
+    duration: d.coupon?.duration ?? null,
+    duration_in_months: d.coupon?.duration_in_months ?? null,
+    start: d.start ?? null,
+    end: d.end ?? null,
+  };
+
+  // Update organization_subscriptions.discount_info
+  const { error: updateError } = await supabase
+    .from('organization_subscriptions')
+    .update({ discount_info: discountInfo })
+    .eq('stripe_customer_id', customerId);
+
+  if (updateError) {
+    console.error('[Webhook] Error updating discount_info:', updateError);
+    // Non-fatal: continue with redemption tracking
+  } else {
+    console.log(`[Webhook] Updated discount_info for org ${orgId}`);
+  }
+
+  // Find matching coupon in stripe_coupons table
+  const stripeCouponId = d.coupon?.id;
+  let localCouponId: string | null = null;
+
+  if (stripeCouponId) {
+    const { data: coupon, error: couponError } = await supabase
+      .from('stripe_coupons')
+      .select('id, times_redeemed')
+      .eq('stripe_coupon_id', stripeCouponId)
+      .maybeSingle();
+
+    if (couponError) {
+      console.error('[Webhook] Error finding stripe_coupons:', couponError);
+    }
+
+    if (coupon) {
+      localCouponId = coupon.id;
+
+      // Increment times_redeemed
+      const { error: incrError } = await supabase
+        .from('stripe_coupons')
+        .update({ times_redeemed: (coupon.times_redeemed ?? 0) + 1 })
+        .eq('id', coupon.id);
+
+      if (incrError) {
+        console.error('[Webhook] Error incrementing times_redeemed:', incrError);
+      }
+    }
+  }
+
+  // Check for promotion_code on the discount object
+  const promotionCodeId = d.promotion_code
+    ? (typeof d.promotion_code === 'string' ? d.promotion_code : d.promotion_code?.id)
+    : null;
+  const promotionCodeStr = d.promotion_code?.code ?? null;
+
+  // Insert coupon_redemptions record
+  const redemptionData: Record<string, unknown> = {
+    coupon_id: localCouponId,
+    org_id: orgId,
+    stripe_subscription_id: d.subscription ?? null,
+    applied_at: new Date().toISOString(),
+  };
+
+  if (promotionCodeId) {
+    redemptionData.stripe_promotion_code_id = promotionCodeId;
+  }
+  if (promotionCodeStr) {
+    redemptionData.promotion_code = promotionCodeStr;
+  }
+
+  const { error: redemptionError } = await supabase
+    .from('coupon_redemptions')
+    .insert(redemptionData);
+
+  if (redemptionError) {
+    console.error('[Webhook] Error inserting coupon_redemptions:', redemptionError);
+  } else {
+    console.log(`[Webhook] Recorded coupon redemption for org ${orgId}, coupon ${stripeCouponId}`);
+  }
+}
+
+// ============================================================================
+// DISCOUNT DELETED
+// ============================================================================
+async function handleDiscountDeleted(
+  supabase: SupabaseClient,
+  discount: unknown
+): Promise<void> {
+  const d = discount as any;
+
+  const customerId = typeof d.customer === 'string' ? d.customer : d.customer?.id;
+  if (!customerId) {
+    console.warn('[Webhook] Discount deleted event missing customer ID');
+    return;
+  }
+
+  // Find org by stripe_customer_id
+  const { data: orgSub, error: orgError } = await supabase
+    .from('organization_subscriptions')
+    .select('org_id')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle();
+
+  if (orgError) {
+    console.error('[Webhook] Error finding org for discount deletion:', orgError);
+    return;
+  }
+  if (!orgSub) {
+    console.warn(`[Webhook] No org found for Stripe customer ${customerId} (discount deleted)`);
+    return;
+  }
+
+  const orgId = orgSub.org_id;
+
+  // Clear discount_info to empty object
+  const { error: updateError } = await supabase
+    .from('organization_subscriptions')
+    .update({ discount_info: {} })
+    .eq('stripe_customer_id', customerId);
+
+  if (updateError) {
+    console.error('[Webhook] Error clearing discount_info:', updateError);
+  } else {
+    console.log(`[Webhook] Cleared discount_info for org ${orgId}`);
+  }
+
+  // Find matching coupon_redemptions row and set removed_at
+  const stripeCouponId = d.coupon?.id;
+  if (stripeCouponId) {
+    // Look up local coupon first to get coupon_id
+    const { data: coupon } = await supabase
+      .from('stripe_coupons')
+      .select('id')
+      .eq('stripe_coupon_id', stripeCouponId)
+      .maybeSingle();
+
+    if (coupon) {
+      // Update the most recent active redemption for this org + coupon
+      const { error: redemptionError } = await supabase
+        .from('coupon_redemptions')
+        .update({ removed_at: new Date().toISOString() })
+        .eq('org_id', orgId)
+        .eq('coupon_id', coupon.id)
+        .is('removed_at', null);
+
+      if (redemptionError) {
+        console.error('[Webhook] Error updating coupon_redemptions removed_at:', redemptionError);
+      } else {
+        console.log(`[Webhook] Marked coupon redemption as removed for org ${orgId}`);
+      }
+    }
+  }
 }
 
 // ============================================================================
