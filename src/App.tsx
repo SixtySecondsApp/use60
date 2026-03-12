@@ -637,11 +637,11 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/autonomy" element={<InternalRouteGuard><AppLayout><AutonomyDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/search" element={<AppLayout><SearchResultsPage /></AppLayout>} />
                 <Route path="/intelligence/competitive" element={<AppLayout><CompetitiveIntelPage /></AppLayout>} />
-                <Route path="/linkedin" element={<AppLayout><Suspense fallback={null}><LinkedInHubPage /></Suspense></AppLayout>} />
+                <Route path="/linkedin" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><LinkedInHubPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 {/* Legacy LinkedIn routes → redirect to hub tabs */}
-                <Route path="/intelligence/ads" element={<Navigate to="/linkedin?tab=ad_library" replace />} />
-                <Route path="/intelligence/linkedin-revenue" element={<Navigate to="/linkedin?tab=revenue" replace />} />
-                <Route path="/intelligence/linkedin-analytics" element={<Navigate to="/linkedin?tab=analytics" replace />} />
+                <Route path="/intelligence/ads" element={<InternalRouteGuard><Navigate to="/linkedin?tab=ad_library" replace /></InternalRouteGuard>} />
+                <Route path="/intelligence/linkedin-revenue" element={<InternalRouteGuard><Navigate to="/linkedin?tab=revenue" replace /></InternalRouteGuard>} />
+                <Route path="/intelligence/linkedin-analytics" element={<InternalRouteGuard><Navigate to="/linkedin?tab=analytics" replace /></InternalRouteGuard>} />
                 <Route path="/coaching" element={<InternalRouteGuard><AppLayout><CoachingDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/coaching/rep/:userId" element={<InternalRouteGuard><AppLayout><CoachingRepDetailPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/methodology" element={<OrgAdminRouteGuard><AppLayout><SalesMethodologySettings /></AppLayout></OrgAdminRouteGuard>} />

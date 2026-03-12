@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, memo } from 'react';
-import { Copy, Check, Clock } from 'lucide-react';
+import { Copy, Check, Clock, Download } from 'lucide-react';
+import { formatVoiceTranscript, downloadTranscriptTxt } from '@/lib/utils/transcriptExport';
 import {
   Dialog,
   DialogContent,
@@ -89,9 +90,7 @@ export const TranscriptModal = memo(function TranscriptModal({
 
   // Handle copy transcript
   const handleCopyTranscript = useCallback(async () => {
-    const plainText = transcript
-      .map(segment => `[${segment.time}] ${segment.speaker}: ${segment.text}`)
-      .join('\n\n');
+    const plainText = formatVoiceTranscript(transcript);
 
     try {
       await navigator.clipboard.writeText(plainText);
@@ -101,6 +100,14 @@ export const TranscriptModal = memo(function TranscriptModal({
       console.error('Failed to copy transcript:', err);
     }
   }, [transcript]);
+
+  // Handle download transcript as .txt
+  const handleDownloadTranscript = useCallback(() => {
+    downloadTranscriptTxt({
+      title: title || 'Transcript',
+      transcriptText: formatVoiceTranscript(transcript),
+    });
+  }, [transcript, title]);
 
   // Handle segment click
   const handleSegmentClick = useCallback((segment: TranscriptSegment) => {
@@ -125,27 +132,36 @@ export const TranscriptModal = memo(function TranscriptModal({
             <DialogTitle className="text-gray-900 dark:text-gray-100">
               {title}
             </DialogTitle>
-            <button
-              onClick={handleCopyTranscript}
-              className={cn(
-                'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all',
-                copied
-                  ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-              )}
-            >
-              {copied ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4" />
-                  Copy
-                </>
-              )}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleCopyTranscript}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all',
+                  copied
+                    ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                )}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleDownloadTranscript}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+              >
+                <Download className="w-4 h-4" />
+                Export
+              </button>
+            </div>
           </div>
         </DialogHeader>
 
