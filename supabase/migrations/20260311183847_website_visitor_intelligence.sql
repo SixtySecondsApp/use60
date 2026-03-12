@@ -35,28 +35,28 @@ ALTER TABLE visitor_snippet_configs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "visitor_snippet_configs_select_org" ON visitor_snippet_configs;
 CREATE POLICY "visitor_snippet_configs_select_org" ON visitor_snippet_configs
   FOR SELECT USING (
-    org_id IN (SELECT org_id FROM organization_members WHERE user_id = auth.uid())
+    org_id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid())
     OR public.is_service_role()
   );
 
 DROP POLICY IF EXISTS "visitor_snippet_configs_insert_org" ON visitor_snippet_configs;
 CREATE POLICY "visitor_snippet_configs_insert_org" ON visitor_snippet_configs
   FOR INSERT WITH CHECK (
-    org_id IN (SELECT org_id FROM organization_members WHERE user_id = auth.uid())
+    org_id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid())
     OR public.is_service_role()
   );
 
 DROP POLICY IF EXISTS "visitor_snippet_configs_update_org" ON visitor_snippet_configs;
 CREATE POLICY "visitor_snippet_configs_update_org" ON visitor_snippet_configs
   FOR UPDATE USING (
-    org_id IN (SELECT org_id FROM organization_members WHERE user_id = auth.uid())
+    org_id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid())
     OR public.is_service_role()
   );
 
 DROP POLICY IF EXISTS "visitor_snippet_configs_delete_org" ON visitor_snippet_configs;
 CREATE POLICY "visitor_snippet_configs_delete_org" ON visitor_snippet_configs
   FOR DELETE USING (
-    org_id IN (SELECT org_id FROM organization_members WHERE user_id = auth.uid())
+    org_id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid())
     OR public.is_service_role()
   );
 
@@ -110,7 +110,7 @@ ALTER TABLE website_visitors ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "website_visitors_select_org" ON website_visitors;
 CREATE POLICY "website_visitors_select_org" ON website_visitors
   FOR SELECT USING (
-    org_id IN (SELECT org_id FROM organization_members WHERE user_id = auth.uid())
+    org_id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid())
     OR public.is_service_role()
   );
 
@@ -125,7 +125,7 @@ CREATE POLICY "website_visitors_update_service" ON website_visitors
 DROP POLICY IF EXISTS "website_visitors_delete_org" ON website_visitors;
 CREATE POLICY "website_visitors_delete_org" ON website_visitors
   FOR DELETE USING (
-    org_id IN (SELECT org_id FROM organization_members WHERE user_id = auth.uid())
+    org_id IN (SELECT org_id FROM organization_memberships WHERE user_id = auth.uid())
     OR public.is_service_role()
   );
 
