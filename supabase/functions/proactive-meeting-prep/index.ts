@@ -68,6 +68,13 @@ const PERSONAL_TITLE_PATTERNS = [
   /\bpersonal\b/i,
   /\bblock(ed)?\s*(time|out|calendar)\b/i,
   /\b(focus time|do not disturb|busy|out of office)\b/i,
+  /^(office|lunch|breakfast|dinner|break|commute|travel|errand)$/i,   // Single-word non-meeting events
+  /\b(wfh|work from home|working from home|remote day)\b/i,          // Remote work markers
+  /\b(school|nursery|creche|nanny)\b/i,                              // Childcare (broader than school run)
+  /\b(walk|run|swim|exercise|workout|class)\b/i,                     // Exercise/fitness
+  /\b(nap|sleep|rest|meditation|mindfulness)\b/i,                    // Wellness
+  /\b(travel time|commute time|driving|transit)\b/i,                 // Travel time blocks
+  /\b(prep time|admin|admin time|emails|slack)\b/i,                  // Admin blocks
 ];
 
 // Titles that indicate a task/reminder disguised as a calendar event — skip silently
@@ -116,8 +123,16 @@ function classifyMeetingRelevance(
   // If there's an active deal, it's business
   if (hasDeal) return 'business';
 
+  // Solo events (0-1 attendees) are time blocks, not meetings — skip silently
+  const attendeeCount = meeting.attendees_count || (meeting.attendees || []).filter((a: any) => !a.self).length;
+  if (attendeeCount <= 1) return 'personal';
+
   // Check title against personal patterns
   if (PERSONAL_TITLE_PATTERNS.some(p => p.test(title))) return 'personal';
+
+  // Google Calendar native event types — these are explicit non-meeting signals
+  const eventType = (meeting as any).event_type || (meeting as any).eventType;
+  if (eventType && ['outOfOffice', 'focusTime', 'workingLocation'].includes(eventType)) return 'personal';
 
   // Check title against business patterns
   if (BUSINESS_TITLE_PATTERNS.some(p => p.test(title))) return 'business';
@@ -492,9 +507,37 @@ async function prepMeetingsForUserInternal(
       }
       // ── END: Internal meeting routing ──────────────────────────────────────
 
+      // ── Learned preference check ──────────────────────────────────────────
+      // Check if user has a stored preference for this meeting title
+      const normalizedTitle = meeting.title.trim().toLowerCase();
+      const { data: learnedPref } = await supabase
+        .from('learning_preferences')
+        .select('preference_value, confidence')
+        .eq('user_id', userId)
+        .in('preference_key', [
+          `skip_meeting_title:${normalizedTitle}`,
+          `prep_meeting_title:${normalizedTitle}`,
+        ])
+        .gte('confidence', 0.5)
+        .order('confidence', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (learnedPref?.preference_value === 'skip_prep') {
+        console.log(`[MeetingPrep] Learned preference: skip prep for "${meeting.title}"`);
+        results.push({ meetingId: meeting.id, title: meeting.title, prepGenerated: false, slackNotified: false });
+        continue;
+      }
+      let effectiveSkipRelevance = skipRelevanceCheck;
+      if (learnedPref?.preference_value === 'always_prep') {
+        // User previously confirmed this type — skip classification, go straight to prep
+        effectiveSkipRelevance = true;
+      }
+      // ── END: Learned preference check ─────────────────────────────────────
+
       // Check business relevance before generating external meeting prep
       // Skip when user already confirmed via Slack button (skipRelevanceCheck=true)
-      if (!skipRelevanceCheck) {
+      if (!effectiveSkipRelevance) {
         const { hasKnownContacts, hasDeal } = await quickRelevanceCheck(supabase, meeting);
         const relevance = classifyMeetingRelevance(meeting.title, hasKnownContacts, hasDeal, meeting);
 
@@ -512,6 +555,9 @@ async function prepMeetingsForUserInternal(
         if (relevance === 'unknown') {
           console.log(`[MeetingPrep] Unknown relevance, asking user: ${meeting.title}`);
           const asked = await sendRelevanceQuestion(supabase, userId, meeting, orgId);
+          if (asked && orgId) {
+            await recordNotificationSent(supabase, 'meeting_prep', orgId, userId, undefined, undefined, meeting.id);
+          }
           results.push({
             meetingId: meeting.id,
             title: meeting.title,
@@ -555,6 +601,7 @@ async function prepMeetingsForUserInternal(
             });
 
             console.log(`[MeetingPrep] Orchestrator triggered for: ${meeting.title}`);
+            await recordNotificationSent(supabase, 'meeting_prep', orgId, userId, undefined, undefined, meeting.id);
             results.push({
               meetingId: meeting.id,
               title: meeting.title,
@@ -580,6 +627,9 @@ async function prepMeetingsForUserInternal(
       let slackNotified = false;
       if (prepResult.success) {
         slackNotified = await sendPrepNotification(supabase, userId, meeting, prepResult.brief, orgId || prepResult.organizationId);
+        if (slackNotified && orgId) {
+          await recordNotificationSent(supabase, 'meeting_prep', orgId, userId, undefined, undefined, meeting.id);
+        }
       }
 
       // Log engagement event
@@ -761,7 +811,7 @@ async function sendRelevanceQuestion(
             type: 'button',
             text: { type: 'plain_text', text: 'Skip', emoji: true },
             action_id: 'meeting_prep_skip',
-            value: JSON.stringify({ meeting_id: meeting.id }),
+            value: JSON.stringify({ meeting_id: meeting.id, user_id: userId, org_id: orgId }),
           },
         ],
       },

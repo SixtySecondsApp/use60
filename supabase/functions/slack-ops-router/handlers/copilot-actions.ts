@@ -388,6 +388,59 @@ async function handleMeetingPrepConfirm(
     });
   }
 
+  // Store the user's positive preference so we learn from it
+  if (value.meeting_id && value.user_id) {
+    try {
+      const { data: meeting } = await supabase
+        .from('calendar_events')
+        .select('title')
+        .eq('id', value.meeting_id)
+        .maybeSingle();
+
+      if (meeting?.title) {
+        const normalizedTitle = meeting.title.trim().toLowerCase();
+        const prefKey = `prep_meeting_title:${normalizedTitle}`;
+
+        const { data: existing } = await supabase
+          .from('learning_preferences')
+          .select('id, sample_count, confidence')
+          .eq('user_id', value.user_id)
+          .eq('preference_key', prefKey)
+          .maybeSingle();
+
+        if (existing) {
+          const newCount = (existing.sample_count || 1) + 1;
+          const newConfidence = Math.min(0.99, (existing.confidence || 0.5) + 0.1);
+          await supabase
+            .from('learning_preferences')
+            .update({
+              sample_count: newCount,
+              confidence: newConfidence,
+              last_evidence: { meeting_id: value.meeting_id, title: meeting.title, action: 'confirm' },
+            })
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('learning_preferences')
+            .insert({
+              user_id: value.user_id,
+              org_id: value.org_id || 'unknown',
+              preference_key: prefKey,
+              preference_value: 'always_prep',
+              confidence: 0.60,
+              sample_count: 1,
+              category: 'notification',
+              source_action_type: 'meeting_prep_confirm',
+              last_evidence: { meeting_id: value.meeting_id, title: meeting.title, action: 'confirm' },
+            });
+        }
+      }
+    } catch (err) {
+      // Non-fatal: don't break the confirm flow
+      console.error('[SlackActions] Failed to store confirm preference:', err);
+    }
+  }
+
   try {
     // Trigger meeting prep for this user's upcoming meetings
     const { data, error } = await supabase.functions.invoke('proactive-meeting-prep', {
@@ -432,8 +485,63 @@ async function handleMeetingPrepSkip(
   supabase: any,
   slackAuth: any,
   interaction: SlackInteraction,
-  value: { meeting_id?: string }
+  value: { meeting_id?: string; user_id?: string; org_id?: string }
 ): Promise<void> {
+  // Store the user's preference so we learn from it
+  if (value.meeting_id && value.user_id) {
+    try {
+      // Get the meeting title to learn the pattern
+      const { data: meeting } = await supabase
+        .from('calendar_events')
+        .select('title')
+        .eq('id', value.meeting_id)
+        .maybeSingle();
+
+      if (meeting?.title) {
+        const normalizedTitle = meeting.title.trim().toLowerCase();
+        const prefKey = `skip_meeting_title:${normalizedTitle}`;
+
+        // Upsert: increment sample_count and boost confidence if already exists
+        const { data: existing } = await supabase
+          .from('learning_preferences')
+          .select('id, sample_count, confidence')
+          .eq('user_id', value.user_id)
+          .eq('preference_key', prefKey)
+          .maybeSingle();
+
+        if (existing) {
+          const newCount = (existing.sample_count || 1) + 1;
+          const newConfidence = Math.min(0.99, (existing.confidence || 0.5) + 0.1);
+          await supabase
+            .from('learning_preferences')
+            .update({
+              sample_count: newCount,
+              confidence: newConfidence,
+              last_evidence: { meeting_id: value.meeting_id, title: meeting.title, action: 'skip' },
+            })
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('learning_preferences')
+            .insert({
+              user_id: value.user_id,
+              org_id: value.org_id || 'unknown',
+              preference_key: prefKey,
+              preference_value: 'skip_prep',
+              confidence: 0.60,
+              sample_count: 1,
+              category: 'notification',
+              source_action_type: 'meeting_prep_skip',
+              last_evidence: { meeting_id: value.meeting_id, title: meeting.title, action: 'skip' },
+            });
+        }
+      }
+    } catch (err) {
+      // Non-fatal: don't break the skip flow
+      console.error('[SlackActions] Failed to store skip preference:', err);
+    }
+  }
+
   // Update the original message to show it was skipped
   if (interaction.response_url) {
     await fetch(interaction.response_url, {
@@ -441,7 +549,7 @@ async function handleMeetingPrepSkip(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         replace_original: true,
-        text: '👍 Skipped. I\'ll learn your preferences over time.',
+        text: '👍 Skipped — I\'ll remember this for next time.',
       }),
     });
   }
