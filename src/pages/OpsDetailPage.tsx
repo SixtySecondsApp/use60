@@ -2684,7 +2684,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   // ---- Render ----
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Top section: back nav + query bar + metadata */}
       <div className={`shrink-0 border-b border-gray-800 bg-gray-950 px-6 ${isFullscreen ? 'pb-3 pt-3' : 'pb-4 pt-5'}`}>
         {/* Back button — hidden in fullscreen and embedded mode */}
