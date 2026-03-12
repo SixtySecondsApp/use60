@@ -344,7 +344,7 @@ function NodeDetailPanel({
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
-      className="absolute right-0 top-0 bottom-0 w-80 bg-gray-900/95 backdrop-blur-lg border-l border-gray-800/50 p-5 overflow-y-auto"
+      className="absolute right-0 top-0 bottom-0 w-full sm:w-80 bg-gray-900/95 backdrop-blur-lg border-l border-gray-800/50 p-4 sm:p-5 overflow-y-auto z-10"
     >
       <div className="space-y-5">
         {/* Header */}
@@ -463,9 +463,9 @@ export default function SandboxRelationships() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800/50">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-gray-800/50">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
             <Network className="w-4.5 h-4.5 text-indigo-400" />
           </div>
           <div>
@@ -475,7 +475,7 @@ export default function SandboxRelationships() {
         </div>
 
         {/* Simple filter toggle */}
-        <div className="flex items-center gap-1 p-1 bg-gray-800/50 border border-gray-700/50 rounded-lg">
+        <div className="flex items-center gap-1 p-1 bg-gray-800/50 border border-gray-700/50 rounded-lg self-start sm:self-auto">
           {(['all', 'contacts', 'companies'] as EntityFilter[]).map((f) => (
             <button
               key={f}
@@ -493,7 +493,7 @@ export default function SandboxRelationships() {
       </div>
 
       {/* Stats bar */}
-      <div className="flex items-center gap-6 px-6 py-3 border-b border-gray-800/30">
+      <div className="flex flex-wrap items-center gap-4 sm:gap-6 px-4 sm:px-6 py-3 border-b border-gray-800/30">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-amber-400" />
           <span className="text-xs text-gray-400">{hotContacts} hot leads</span>
@@ -510,7 +510,7 @@ export default function SandboxRelationships() {
 
       {/* Graph + Detail panel */}
       <div className="flex-1 relative overflow-hidden">
-        <div className={`h-full transition-all duration-300 ${selectedNodeData ? 'mr-80' : ''}`}>
+        <div className={`h-full transition-all duration-300 ${selectedNodeData ? 'sm:mr-80' : ''}`}>
           <RelationshipGraph
             nodes={nodes}
             edges={edges}

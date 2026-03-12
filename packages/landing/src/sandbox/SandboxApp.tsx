@@ -251,7 +251,7 @@ function SandboxAppInner({
 
       {/* Mobile bottom tab bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-950/95 backdrop-blur-md border-t border-gray-800/50">
-        <nav className="flex items-center justify-around h-14 px-2">
+        <nav className="flex items-center justify-around h-14 px-1 overflow-x-auto scrollbar-hide">
           {MOBILE_TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeView === tab.id;
@@ -259,12 +259,12 @@ function SandboxAppInner({
               <button
                 key={tab.id}
                 onClick={() => navigateToView(tab.id)}
-                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors ${
+                className={`flex flex-col items-center gap-0.5 px-2 sm:px-3 py-1.5 rounded-lg transition-colors flex-shrink-0 ${
                   isActive ? 'text-[#37bd7e]' : 'text-gray-500'
                 }`}
               >
-                <Icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{tab.label}</span>
+                <Icon className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+                <span className="text-[9px] sm:text-[10px] font-medium">{tab.label}</span>
               </button>
             );
           })}

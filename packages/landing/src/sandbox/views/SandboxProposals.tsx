@@ -181,7 +181,7 @@ export default function SandboxProposals() {
                 onClick={() => handleViewProposal(proposal)}
                 className="group rounded-xl border border-gray-700/30 bg-gray-900/40 backdrop-blur-xl p-4 cursor-pointer hover:border-gray-600/50 hover:bg-gray-800/40 transition-all"
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
                   <div className="flex items-start gap-3 min-w-0">
                     <div
                       className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -199,7 +199,7 @@ export default function SandboxProposals() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 flex-shrink-0">
+                  <div className="flex items-center gap-3 flex-shrink-0 ml-13 sm:ml-0">
                     <span className="text-sm font-medium text-gray-300">
                       ${(proposal.value / 1000).toFixed(0)}K
                     </span>
@@ -207,7 +207,7 @@ export default function SandboxProposals() {
                       <StatusIcon className="w-3 h-3" />
                       {status.label}
                     </span>
-                    <span className="text-[11px] text-gray-600">{relativeTime}</span>
+                    <span className="hidden sm:inline text-[11px] text-gray-600">{relativeTime}</span>
                     <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors" />
                   </div>
                 </div>
@@ -238,7 +238,7 @@ export default function SandboxProposals() {
         </div>
 
         {/* CTA */}
-        <div className="rounded-2xl p-5 bg-gradient-to-r from-[#37bd7e]/10 via-[#37bd7e]/5 to-transparent border border-[#37bd7e]/20 flex items-center justify-between">
+        <div className="rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-[#37bd7e]/10 via-[#37bd7e]/5 to-transparent border border-[#37bd7e]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-white">
               Proposals generated from your deal context in seconds
@@ -280,7 +280,7 @@ export default function SandboxProposals() {
         </div>
       </div>
 
-      <div className="flex gap-4 h-[calc(100vh-14rem)]">
+      <div className="flex gap-4 h-[calc(100vh-18rem)] md:h-[calc(100vh-14rem)]">
         {/* Left: Proposal preview */}
         <div
           ref={previewRef}
@@ -348,7 +348,7 @@ export default function SandboxProposals() {
         </div>
 
         {/* Right: Generation progress sidebar */}
-        <div className="hidden lg:block w-72 flex-shrink-0 space-y-3">
+        <div className="hidden md:block w-56 lg:w-72 flex-shrink-0 space-y-3">
           {/* Progress steps */}
           <div className="rounded-2xl border bg-gray-900/40 backdrop-blur-xl border-gray-700/30 p-4">
             <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
