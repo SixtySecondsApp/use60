@@ -439,14 +439,7 @@ export default function AgentDashboardTab() {
             </div>
           </div>
 
-          {/* Settings Link */}
-          <button
-            onClick={() => navigate('/settings/proactive-agent')}
-            className="w-full flex items-center gap-2.5 bg-white dark:bg-gray-900/50 border border-transparent dark:border-gray-800/50 rounded-xl p-4 shadow-sm dark:shadow-none text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors group"
-          >
-            <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
-            <span>Agent Settings</span>
-          </button>
+          {/* Agent Settings link hidden — SET-001 (proactive-agent route disabled) */}
         </div>
       </div>
     </motion.div>
