@@ -23,6 +23,8 @@ import {
   errorResponse,
   jsonResponse,
 } from '../_shared/corsHelper.ts';
+// US-032: Surface engagement pattern insights as CC items
+import { writePatternInsightsToCC } from '../_shared/commandCentre/patternInsights.ts';
 
 // =============================================================================
 // Config
@@ -231,10 +233,136 @@ async function recalculateOrgPatterns(
     const count = (contactCount as number) ?? 0;
     console.log(`[agent-engagement-patterns] Org ${orgId}: ${count} contacts recalculated`);
 
+    // US-032: Surface notable engagement patterns as CC insight items
+    if (count > 0) {
+      try {
+        await surfaceEngagementInsights(supabase, orgId);
+      } catch (ccErr) {
+        // CC failure must not break the engagement patterns flow
+        console.error(`[agent-engagement-patterns] CC write failed for org ${orgId}:`, String(ccErr));
+      }
+    }
+
     return { org_id: orgId, contacts_processed: count };
 
   } catch (err) {
     console.error(`[agent-engagement-patterns] Exception for org ${orgId}:`, err);
     return { org_id: orgId, contacts_processed: 0, error: String(err) };
+  }
+}
+
+// =============================================================================
+// US-032: Surface notable engagement patterns as CC insights
+// =============================================================================
+
+/**
+ * After batch recalculation, query engagement patterns for notable signals
+ * and write them to the Command Centre as insight items.
+ *
+ * Notable patterns:
+ *   - Contacts with rapidly declining response trend
+ *   - Contacts with significantly faster response times (positive signal)
+ *   - High-value deal contacts going dark (no engagement in 14+ days)
+ */
+async function surfaceEngagementInsights(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+): Promise<void> {
+  // Find contacts with falling response trends that are linked to active deals
+  const { data: fallingTrends } = await supabase
+    .from('contact_engagement_patterns')
+    .select('contact_id, avg_response_time_hours, response_trend, email_count, contacts:contact_id (full_name, deals:deal_id (id, title, value, stage, status))')
+    .eq('org_id', orgId)
+    .eq('response_trend', 'declining')
+    .gt('email_count', 3)
+    .order('avg_response_time_hours', { ascending: false })
+    .limit(10);
+
+  // Find contacts with improving trends (positive insight)
+  const { data: improvingTrends } = await supabase
+    .from('contact_engagement_patterns')
+    .select('contact_id, avg_response_time_hours, response_trend, email_count, contacts:contact_id (full_name, deals:deal_id (id, title, value, stage, status))')
+    .eq('org_id', orgId)
+    .eq('response_trend', 'improving')
+    .gt('email_count', 5)
+    .order('avg_response_time_hours', { ascending: true })
+    .limit(5);
+
+  const insights: Array<{
+    title: string;
+    description: string;
+    evidence: Record<string, unknown>;
+    suggested_action?: string;
+    confidence: number;
+    severity: 'info' | 'warning' | 'critical';
+    affected_deal_ids?: string[];
+  }> = [];
+
+  // Process declining contacts
+  for (const pattern of fallingTrends || []) {
+    const contact = (pattern as any).contacts;
+    if (!contact?.full_name) continue;
+
+    // Only surface if linked to an active deal
+    const deals = (contact.deals || []).filter((d: any) =>
+      d.status !== 'closed_won' && d.status !== 'closed_lost'
+    );
+    if (deals.length === 0) continue;
+
+    const avgHours = Math.round((pattern.avg_response_time_hours || 0) * 10) / 10;
+    const topDeal = deals[0];
+
+    insights.push({
+      title: `${contact.full_name}'s response time is declining`,
+      description: `${contact.full_name} (${topDeal.title}) is taking longer to respond — avg ${avgHours}h over ${pattern.email_count} emails with a declining trend. Consider a different engagement approach.`,
+      evidence: {
+        contact_name: contact.full_name,
+        avg_response_time_hours: avgHours,
+        email_count: pattern.email_count,
+        trend: 'declining',
+        deal_name: topDeal.title,
+      },
+      suggested_action: `Review engagement approach for ${contact.full_name} on the ${topDeal.title} deal`,
+      confidence: Math.min(0.85, 0.5 + (pattern.email_count || 0) * 0.05),
+      severity: avgHours > 48 ? 'warning' : 'info',
+      affected_deal_ids: deals.map((d: any) => d.id),
+    });
+  }
+
+  // Process improving contacts (positive insight)
+  for (const pattern of improvingTrends || []) {
+    const contact = (pattern as any).contacts;
+    if (!contact?.full_name) continue;
+
+    const deals = (contact.deals || []).filter((d: any) =>
+      d.status !== 'closed_won' && d.status !== 'closed_lost'
+    );
+    if (deals.length === 0) continue;
+
+    const avgHours = Math.round((pattern.avg_response_time_hours || 0) * 10) / 10;
+    const topDeal = deals[0];
+
+    insights.push({
+      title: `${contact.full_name} is engaging faster`,
+      description: `${contact.full_name} (${topDeal.title}) is responding faster — avg ${avgHours}h with an improving trend. This may signal buying readiness.`,
+      evidence: {
+        contact_name: contact.full_name,
+        avg_response_time_hours: avgHours,
+        email_count: pattern.email_count,
+        trend: 'improving',
+        deal_name: topDeal.title,
+      },
+      suggested_action: `Capitalize on momentum — schedule a meeting with ${contact.full_name}`,
+      confidence: Math.min(0.8, 0.5 + (pattern.email_count || 0) * 0.04),
+      severity: 'info',
+      affected_deal_ids: deals.map((d: any) => d.id),
+    });
+  }
+
+  if (insights.length > 0) {
+    const written = await writePatternInsightsToCC(orgId, 'engagement-patterns', insights);
+    if (written > 0) {
+      console.log(`[agent-engagement-patterns] Org ${orgId}: ${written} CC insight item(s) written`);
+    }
   }
 }

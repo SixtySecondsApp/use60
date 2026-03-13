@@ -8,6 +8,8 @@ import { parseIntent, buildCapabilityList } from '../_shared/slackIntentParser.t
 import { reactionStateMachine } from '../_shared/slackReactions.ts';
 // CC-015: Slash command router — maps /60 subcommands to pre-resolved intents
 import { parseSlashCommand } from '../_shared/slack-copilot/slashCommands.ts';
+// US-031: Brain morning brief "more" reply handler
+import { isBrainBriefThread, handleBrainBriefReply } from './handlers/brainBriefReply.ts';
 
 // Helper for logging sync operations to integration_sync_logs table
 async function logSyncOperation(
@@ -410,6 +412,20 @@ async function handleDirectMessage(
   if (existingMsg) {
     console.log('[slack-events] Duplicate DM event, skipping:', eventId);
     return;
+  }
+
+  // US-031: Check if this is a reply in a brain morning brief thread
+  if (event.thread_ts && event.thread_ts !== event.ts) {
+    try {
+      const isBriefThread = await isBrainBriefThread(botToken, channel, event.thread_ts);
+      if (isBriefThread) {
+        console.log('[slack-events] Brain brief thread reply detected, routing to handler');
+        await handleBrainBriefReply(supabase, botToken, channel, event.thread_ts, userId, orgId, text);
+        return;
+      }
+    } catch (err) {
+      console.warn('[slack-events] Brain brief reply check failed, falling through to copilot:', err);
+    }
   }
 
   // Reaction state machine for processing indicators
