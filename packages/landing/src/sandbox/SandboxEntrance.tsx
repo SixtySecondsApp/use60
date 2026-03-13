@@ -8,12 +8,15 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, CheckCircle2 } from 'lucide-react';
+import { getLogoDevUrl } from './data/sandboxTypes';
 
 const EASE_OUT_EXPO: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 interface SandboxEntranceProps {
   /** Company name from research */
   companyName: string;
+  /** Company domain for logo lookup */
+  domain?: string;
   /** When true, the entrance has loaded and should begin revealing */
   isReady: boolean;
   /** Called when entrance animation completes and sandbox should mount */
@@ -28,7 +31,8 @@ const BUILD_STEPS = [
   { label: 'Launching your command center', delay: 1600 },
 ];
 
-export function SandboxEntrance({ companyName, isReady, onComplete }: SandboxEntranceProps) {
+export function SandboxEntrance({ companyName, domain, isReady, onComplete }: SandboxEntranceProps) {
+  const [logoError, setLogoError] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<number>(0);
   const [isDone, setIsDone] = useState(false);
 
@@ -76,9 +80,18 @@ export function SandboxEntrance({ companyName, isReady, onComplete }: SandboxEnt
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.5, ease: EASE_OUT_EXPO }}
-              className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-[#37bd7e]/20 to-emerald-500/20 border border-[#37bd7e]/20 flex items-center justify-center"
+              className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-[#37bd7e]/20 to-emerald-500/20 border border-[#37bd7e]/20 flex items-center justify-center overflow-hidden"
             >
-              <Sparkles className="w-7 h-7 text-[#37bd7e]" />
+              {domain && !logoError ? (
+                <img
+                  src={getLogoDevUrl(domain, 64)}
+                  alt={companyName}
+                  className="w-10 h-10 object-contain"
+                  onError={() => setLogoError(true)}
+                />
+              ) : (
+                <Sparkles className="w-7 h-7 text-[#37bd7e]" />
+              )}
             </motion.div>
 
             <motion.h2

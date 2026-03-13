@@ -1,5 +1,6 @@
 import { getCorsHeaders } from '../_shared/corsHelper.ts'
 
+import { handleMeetingShareInvite } from './handlers/meeting-share-invite.ts'
 import { handleOrgDeactivationEmail } from './handlers/org-deactivation-email.ts'
 import { handleOrgMemberDeactivationEmail } from './handlers/org-member-deactivation-email.ts'
 import { handleOrgNotificationSlack } from './handlers/org-notification-slack.ts'
@@ -15,6 +16,7 @@ import { handleSlackTaskNotification } from './handlers/slack-task-notification.
 import { handleWaitlistInvite } from './handlers/waitlist-invite.ts'
 
 const HANDLERS: Record<string, (req: Request) => Promise<Response>> = {
+  meeting_share_invite: handleMeetingShareInvite,
   org_deactivation_email: handleOrgDeactivationEmail,
   org_member_deactivation_email: handleOrgMemberDeactivationEmail,
   org_notification_slack: handleOrgNotificationSlack,

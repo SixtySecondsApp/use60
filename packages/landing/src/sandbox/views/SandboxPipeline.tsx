@@ -172,7 +172,7 @@ function StageColumn({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: stageIndex * 0.06, duration: 0.4 }}
-      className="flex-1 min-w-[280px] sm:min-w-[300px] rounded-2xl bg-gray-900/40 backdrop-blur-xl border border-gray-700/30"
+      className="flex-1 min-w-[260px] sm:min-w-[300px] rounded-2xl bg-gray-900/40 backdrop-blur-xl border border-gray-700/30"
     >
       <div className="h-[2.5px] rounded-t-2xl" style={{ background: `linear-gradient(90deg, ${meta.color}, ${meta.color}80)` }} />
 
@@ -661,7 +661,7 @@ export default function SandboxPipeline() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold text-white">Sales Pipeline</h2>
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">
@@ -669,7 +669,7 @@ export default function SandboxPipeline() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-gray-900/50 border border-gray-800/50">
+          <div className="hidden sm:flex items-center gap-0.5 p-0.5 rounded-lg bg-gray-900/50 border border-gray-800/50">
             {[
               { icon: LayoutGrid, label: 'Board' },
               { icon: Table2, label: 'Table' },
@@ -701,7 +701,7 @@ export default function SandboxPipeline() {
       </div>
 
       {/* Summary metrics strip */}
-      <div className="flex items-center gap-4 mb-5 px-1">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4 mb-5 px-1">
         <div className="flex items-center gap-2 text-xs">
           <span className="text-gray-500">Total:</span>
           <span className="font-semibold text-white">${(totalValue / 1000).toFixed(0)}K</span>
@@ -749,7 +749,7 @@ export default function SandboxPipeline() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8, duration: 0.5 }}
-          className="mt-4 rounded-2xl p-5 bg-gradient-to-r from-[#37bd7e]/10 via-[#37bd7e]/5 to-transparent border border-[#37bd7e]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+          className="mt-4 rounded-2xl p-4 sm:p-5 bg-gradient-to-r from-[#37bd7e]/10 via-[#37bd7e]/5 to-transparent border border-[#37bd7e]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
         >
           <div>
             <p className="text-sm font-semibold text-white">

@@ -41,7 +41,8 @@ import {
   Pencil,
   Check,
   RefreshCw,
-  MessageSquare
+  MessageSquare,
+  Copy,
 } from 'lucide-react'
 import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary'
 import { VideoPlayer, type VideoPlayerHandle } from '@/components/ui/VideoPlayer'
@@ -50,6 +51,8 @@ import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsigh
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard'
 import { AskAIChat } from '@/components/meetings/AskAIChat'
 import { MeetingContent } from '@/components/meetings/MeetingContent'
+import { ShareMeetingModal } from '@/components/meetings/ShareMeetingModal'
+import { downloadTranscriptTxt, copyToClipboard } from '@/lib/utils/transcriptExport'
 import type { RecordingStatus, MeetingPlatform } from '@/lib/types/meetingBaaS'
 
 // Speaker color configs for transcript redesign (same palette as MeetingDetail)
@@ -220,6 +223,8 @@ export const RecordingDetail: React.FC = () => {
   const [resolvedThumbnailUrl, setResolvedThumbnailUrl] = useState<string | null>(null)
   const [isLoadingVideo, setIsLoadingVideo] = useState(false)
   const [showProposalWizard, setShowProposalWizard] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [transcriptCopied, setTranscriptCopied] = useState(false)
   const [linkedMeetingId, setLinkedMeetingId] = useState<string | null>(null)
   const [hasStructuredSummary, setHasStructuredSummary] = useState(false)
   const [linkedMeetingTitle, setLinkedMeetingTitle] = useState<string>('')
@@ -661,6 +666,55 @@ export const RecordingDetail: React.FC = () => {
       videoRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }, [])
+
+  // Handle transcript copy
+  const handleCopyTranscript = useCallback(async () => {
+    if (!recording) return
+    let text: string | null = null
+    if (recording.transcript_json?.utterances) {
+      text = recording.transcript_json.utterances
+        .map((u: any) => {
+          const speaker = getSpeakerName(u)
+          const ts = formatTimestamp(u.start)
+          return `[${ts}] ${speaker}: ${u.text}`
+        })
+        .join('\n\n')
+    } else if (recording.transcript_text) {
+      text = recording.transcript_text
+    }
+    if (!text) return
+    const ok = await copyToClipboard(text)
+    if (ok) {
+      toast.success('Transcript copied to clipboard')
+      setTranscriptCopied(true)
+      setTimeout(() => setTranscriptCopied(false), 2000)
+    } else {
+      toast.error('Failed to copy transcript')
+    }
+  }, [recording, getSpeakerName])
+
+  // Handle transcript download
+  const handleDownloadTranscript = useCallback(() => {
+    if (!recording) return
+    let text: string | null = null
+    if (recording.transcript_json?.utterances) {
+      text = recording.transcript_json.utterances
+        .map((u: any) => {
+          const speaker = getSpeakerName(u)
+          const ts = formatTimestamp(u.start)
+          return `[${ts}] ${speaker}: ${u.text}`
+        })
+        .join('\n\n')
+    } else if (recording.transcript_text) {
+      text = recording.transcript_text
+    }
+    if (!text) return
+    downloadTranscriptTxt({
+      title: recording.meeting_title || recording.title || 'Recording',
+      date: recording.scheduled_start || recording.created_at,
+      transcriptText: text,
+    })
+  }, [recording, getSpeakerName])
 
   // Fetch signed video URL and resolved thumbnail URL when recording is ready
   const hasVideo = !!(recording?.recording_s3_key || recording?.recording_s3_url)
@@ -1107,6 +1161,25 @@ export const RecordingDetail: React.FC = () => {
 
                 {/* Transcript Tab */}
                 <TabsContent value="transcript" className="px-4 sm:px-6 pb-4 sm:pb-6 mt-0">
+                  {/* Copy/Export buttons */}
+                  {(recording.transcript_json?.utterances || recording.transcript_text) && (
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={handleCopyTranscript}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        {transcriptCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        {transcriptCopied ? 'Copied' : 'Copy'}
+                      </button>
+                      <button
+                        onClick={handleDownloadTranscript}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Export .txt
+                      </button>
+                    </div>
+                  )}
                   {recording.transcript_json?.utterances ? (() => {
                     // Build stable speaker → config map
                     const speakerConfigMap = new Map<string, typeof SPEAKER_CONFIGS[number]>();
@@ -1201,14 +1274,38 @@ export const RecordingDetail: React.FC = () => {
                     const getFirstName = (name: string) => name.trim().split(/\s+/)[0];
                     let prevSpeakerText: string | null = null;
 
+                    // Resolve bot speaker names (e.g. "60 Notetaker") to real people
+                    const BOT_NAMES = new Set(['60 notetaker', '60_notetaker', 'notetaker', 'ai notetaker', 'meeting bot', 'bot']);
+                    const isBotName = (n: string) => BOT_NAMES.has(n.toLowerCase().trim());
+                    const allRawLines = recording.transcript_text.split('\n');
+                    const allSpeakersSet = new Set<string>();
+                    for (const l of allRawLines) {
+                      const m = l.match(/^\[?\d{1,2}:\d{2}:\d{2}\]?\s+([^:]+):/);
+                      if (m) allSpeakersSet.add(m[1].trim());
+                    }
+                    const realSpkrs = Array.from(allSpeakersSet).filter(s => !isBotName(s));
+                    let botReplace: string | null = null;
+                    const mTitle = recording.meeting_title || '';
+                    if (Array.from(allSpeakersSet).some(s => isBotName(s)) && mTitle) {
+                      const titleParts = mTitle.split(/\s+and\s+/i).map(s => s.trim()).filter(Boolean);
+                      for (const tp of titleParts) {
+                        const tpL = tp.toLowerCase();
+                        if (!realSpkrs.some(rs => rs.toLowerCase().includes(tpL) || tpL.includes(rs.toLowerCase()))) {
+                          botReplace = tp;
+                          break;
+                        }
+                      }
+                    }
+
                     return (
                       <div className="max-h-[600px] overflow-y-auto pr-1 scrollbar-custom">
                         <div className="text-sm space-y-0">
-                          {recording.transcript_text.split('\n').map((line, idx) => {
+                          {allRawLines.map((line, idx) => {
                             // New format: [HH:MM:SS] Speaker: text
                             const tsMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/);
                             if (tsMatch) {
-                              const [, ts, speaker, text] = tsMatch;
+                              const [, ts, rawSpeaker, text] = tsMatch;
+                              const speaker = (isBotName(rawSpeaker.trim()) && botReplace) ? botReplace : rawSpeaker.trim();
                               const secs = parseTimestampToSeconds(ts);
                               const cfg = getConfig(speaker);
                               const firstName = getFirstName(speaker);
@@ -1258,7 +1355,8 @@ export const RecordingDetail: React.FC = () => {
                             // Legacy format: Speaker: text (no timestamp)
                             const speakerMatch = line.match(/^([^:]+):\s*(.*)$/);
                             if (speakerMatch) {
-                              const [, speaker, text] = speakerMatch;
+                              const [, rawSp, text] = speakerMatch;
+                              const speaker = (isBotName(rawSp.trim()) && botReplace) ? botReplace : rawSp.trim();
                               const cfg = getConfig(speaker);
                               const firstName = getFirstName(speaker);
                               const isContinuation = prevSpeakerText === speaker;
@@ -1363,7 +1461,7 @@ export const RecordingDetail: React.FC = () => {
             }}
             onEmailClick={() => toast.info('Email follow-up requires OAuth setup — coming soon')}
             onBookCallClick={() => toast.info('Book call feature coming soon')}
-            onShareClick={() => toast.info('Share feature coming soon')}
+            onShareClick={() => linkedMeetingId ? setShowShareModal(true) : toast.info('Share requires a linked meeting — processing may still be in progress')}
           />
 
           {/* Attendees / Speakers */}
@@ -1848,6 +1946,22 @@ export const RecordingDetail: React.FC = () => {
           open={showProposalWizard}
           onOpenChange={setShowProposalWizard}
           meetingIds={[linkedMeetingId]}
+        />
+      )}
+
+      {/* Share Meeting Modal */}
+      {linkedMeetingId && (
+        <ShareMeetingModal
+          open={showShareModal}
+          onOpenChange={setShowShareModal}
+          meetingId={linkedMeetingId}
+          meetingTitle={recording?.meeting_title || recording?.title || 'Recording'}
+          sourceType={null}
+          fathomShareUrl={null}
+          voiceRecordingId={null}
+          hasSummary={!!recording?.summary}
+          hasActionItems={meetingActionItems.length > 0}
+          hasTranscript={!!(recording?.transcript_json?.utterances || recording?.transcript_text)}
         />
       )}
     </div>

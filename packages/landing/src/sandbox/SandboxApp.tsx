@@ -1,21 +1,14 @@
 /**
  * SandboxApp
  *
- * Full-screen interactive sandbox — focused on 5 core screens.
- * Sidebar (collapsible), topbar, routable views. No locked pages.
+ * Full-screen interactive sandbox — focused on 6 core screens.
+ * Desktop: sidebar + topbar + free navigation.
+ * Mobile: guided "Next" flow with waitlist CTA on final step.
  */
 
 import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  LayoutDashboard,
-  Kanban,
-  Video,
-  Mail,
-  Bot,
-  FileText,
-  Network,
-} from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { SandboxDataProvider, useSandboxData } from './data/SandboxDataProvider';
 import { SandboxSidebar } from './SandboxSidebar';
 import { SandboxTopbar } from './SandboxTopbar';
@@ -32,6 +25,7 @@ const SandboxEmailDraft = lazy(() => import('./views/SandboxEmailDraft'));
 const SandboxCopilot = lazy(() => import('./views/SandboxCopilot'));
 const SandboxProposals = lazy(() => import('./views/SandboxProposals'));
 const SandboxRelationships = lazy(() => import('./views/SandboxRelationships'));
+const SandboxOps = lazy(() => import('./views/SandboxOps'));
 
 interface SandboxAppProps {
   data?: SandboxData;
@@ -58,8 +52,21 @@ const VIEW_MAP: Record<SandboxView, React.LazyExoticComponent<React.ComponentTyp
   email: SandboxEmailDraft,
   proposals: SandboxProposals,
   relationships: SandboxRelationships,
+  ops: SandboxOps,
   copilot: SandboxCopilot,
 };
+
+/** Guided mobile flow: order + labels for each step */
+const MOBILE_FLOW: { id: SandboxView; label: string; nextLabel: string }[] = [
+  { id: 'dashboard', label: 'Your Command Centre', nextLabel: 'See your pipeline' },
+  { id: 'pipeline', label: 'Deal Pipeline', nextLabel: 'AI meeting prep' },
+  { id: 'meetings', label: 'Meeting Intelligence', nextLabel: 'Follow-up emails' },
+  { id: 'email', label: 'AI Email Drafts', nextLabel: 'Proposals' },
+  { id: 'proposals', label: 'Proposal Builder', nextLabel: 'Your network' },
+  { id: 'relationships', label: 'Relationship Map', nextLabel: 'AI Ops table' },
+  { id: 'ops', label: 'AI Outreach Studio', nextLabel: 'Meet your AI copilot' },
+  { id: 'copilot', label: 'AI Copilot', nextLabel: '' },
+];
 
 function ViewLoader() {
   return (
@@ -103,17 +110,6 @@ export function SandboxApp({
     </SandboxDataProvider>
   );
 }
-
-/** Mobile bottom tab bar */
-const MOBILE_TABS: { id: SandboxView; label: string; icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-  { id: 'pipeline', label: 'Deals', icon: Kanban },
-  { id: 'meetings', label: 'Meetings', icon: Video },
-  { id: 'email', label: 'Email', icon: Mail },
-  { id: 'proposals', label: 'Proposals', icon: FileText },
-  { id: 'relationships', label: 'Relationships', icon: Network },
-  { id: 'copilot', label: 'Copilot', icon: Bot },
-];
 
 /** Inner component that has access to SandboxDataProvider context */
 function SandboxAppInner({
@@ -162,6 +158,16 @@ function SandboxAppInner({
     [setActiveView, trackViewChange]
   );
 
+  // Mobile guided flow — current step index
+  const mobileStepIndex = MOBILE_FLOW.findIndex((s) => s.id === activeView);
+  const currentStep = mobileStepIndex >= 0 ? mobileStepIndex : 0;
+  const isLastStep = currentStep === MOBILE_FLOW.length - 1;
+
+  const handleMobileNext = useCallback(() => {
+    if (isLastStep) return; // handled by waitlist CTA
+    const nextView = MOBILE_FLOW[currentStep + 1]?.id;
+    if (nextView) navigateToView(nextView);
+  }, [currentStep, isLastStep, navigateToView]);
 
   // Build a signup handler that captures all demo context
   const handleSignup = useCallback(() => {
@@ -185,7 +191,7 @@ function SandboxAppInner({
     onSignup?.();
   }, [visitorDomain, visitorEmail, visitorName, data.visitorCompany, campaignCode, campaignLinkId, onSignup, submitSignup, trackEvent]);
 
-  const ViewComponent = VIEW_MAP[activeView];
+  const ViewComponent = VIEW_MAP[activeView] ?? VIEW_MAP.dashboard;
 
   return (
     <div className="min-h-full bg-gray-950 relative">
@@ -203,12 +209,16 @@ function SandboxAppInner({
       </div>
       {/* Mobile topbar: full width */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-20 h-16 flex items-center justify-between bg-gray-950/50 backdrop-blur-sm border-b border-gray-800/50 px-4">
-        <div className="w-8 h-8 rounded-lg bg-[#37bd7e] flex items-center justify-center">
-          <span className="text-white text-sm font-bold">60</span>
-        </div>
-        <span className="text-sm font-medium text-gray-400 truncate max-w-[200px]">
-          {data.visitorCompany?.name || 'sixty'}
-        </span>
+        <img
+          src="https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Icon.png"
+          alt="60"
+          className="w-8 h-8 rounded-lg"
+        />
+        <img
+          src="https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Dark%20Mode%20Logo.png"
+          alt="sixty"
+          className="h-6"
+        />
       </div>
 
       <main
@@ -231,60 +241,70 @@ function SandboxAppInner({
           </AnimatePresence>
         </div>
 
+        {/* Desktop-only floating CTA */}
         {(onSignup || visitorEmail) && (
-          <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50">
+          <div className="hidden md:block fixed bottom-6 right-6 z-50">
             <button
               onClick={handleSignup}
-              className="flex items-center gap-2 px-4 md:px-5 py-2.5 md:py-3 rounded-xl bg-[#37bd7e] hover:bg-[#2da76c] text-white text-sm font-semibold shadow-lg shadow-[#37bd7e]/25 hover:shadow-[#37bd7e]/40 hover:scale-[1.02] transition-all duration-200 max-w-[calc(100vw-2rem)] truncate"
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-[#37bd7e] hover:bg-[#2da76c] text-white text-sm font-semibold shadow-lg shadow-[#37bd7e]/25 hover:shadow-[#37bd7e]/40 hover:scale-[1.02] transition-all duration-200"
             >
-              <span className="truncate">
-                <span className="hidden md:inline">
-                  {activeView === 'dashboard' ? `Get this dashboard for ${data.visitorCompany?.name ?? 'your company'}`
-                    : activeView === 'pipeline' ? 'Track your real pipeline like this'
-                    : activeView === 'meetings' ? 'Get AI meeting prep for real'
-                    : activeView === 'email' ? `Send this email for real`
-                    : activeView === 'proposals' ? 'Generate proposals from your deal context'
-                    : activeView === 'relationships' ? 'Map your deal relationships like this'
-                    : activeView === 'copilot' ? 'Ask 60 anything about your pipeline'
-                    : 'This is real. Try it free'}
-                </span>
-                <span className="md:hidden">
-                  {activeView === 'dashboard' ? 'Try it free'
-                    : activeView === 'pipeline' ? 'Track your pipeline'
-                    : activeView === 'meetings' ? 'Get AI meeting prep'
-                    : activeView === 'email' ? 'Send this email'
-                    : activeView === 'proposals' ? 'Generate proposals'
-                    : activeView === 'relationships' ? 'Map relationships'
-                    : activeView === 'copilot' ? 'Ask 60 anything'
-                    : 'Try it free'}
-                </span>
-              </span>
-              <span className="text-white/60 shrink-0">&rarr;</span>
+              {activeView === 'dashboard' ? `Get this dashboard for ${data.visitorCompany?.name ?? 'your company'}`
+                : activeView === 'pipeline' ? 'Track your real pipeline like this'
+                : activeView === 'meetings' ? 'Get AI meeting prep for real'
+                : activeView === 'email' ? `Send this email to ${data.emailDraft?.to_name ?? 'your prospect'} for real`
+                : activeView === 'proposals' ? 'Generate proposals from your deal context'
+                : activeView === 'relationships' ? 'Map your real network like this'
+                : activeView === 'ops' ? 'Generate personalized videos for your leads'
+                : activeView === 'copilot' ? 'Ask 60 anything about your pipeline'
+                : 'This is real. Try it free'}
+              <span className="text-white/60">&rarr;</span>
             </button>
           </div>
         )}
       </main>
 
-      {/* Mobile bottom tab bar */}
+      {/* Mobile guided flow bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-950/95 backdrop-blur-md border-t border-gray-800/50">
-        <nav className="flex items-center justify-around h-14 px-2">
-          {MOBILE_TABS.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeView === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => navigateToView(tab.id)}
-                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors ${
-                  isActive ? 'text-[#37bd7e]' : 'text-gray-500'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{tab.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+        <div className="px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {/* Progress dots */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              {MOBILE_FLOW.map((step, i) => (
+                <div
+                  key={step.id}
+                  className="h-1 rounded-full transition-all duration-300"
+                  style={{
+                    width: i === currentStep ? '24px' : '8px',
+                    background: i <= currentStep ? '#37bd7e' : 'rgba(255,255,255,0.1)',
+                  }}
+                />
+              ))}
+            </div>
+            <span className="text-[11px] text-gray-500 font-medium">
+              {currentStep + 1} / {MOBILE_FLOW.length}
+            </span>
+          </div>
+
+          {/* Next button or Waitlist CTA */}
+          {isLastStep ? (
+            <button
+              onClick={handleSignup}
+              className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl bg-[#37bd7e] hover:bg-[#2da76c] text-white text-sm font-semibold shadow-lg shadow-[#37bd7e]/25 active:scale-[0.98] transition-all duration-150"
+            >
+              <Sparkles className="w-4 h-4" />
+              Join the Waitlist
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              onClick={handleMobileNext}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/[0.06] text-white text-sm font-semibold active:scale-[0.98] transition-all duration-150"
+            >
+              {MOBILE_FLOW[currentStep]?.nextLabel ?? 'Next'}
+              <ArrowRight className="w-4 h-4 text-[#37bd7e]" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Social proof sticky bar — appears after 90s */}
