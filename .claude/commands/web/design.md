@@ -157,6 +157,39 @@ Once approved, save the locked style guide:
 
 ---
 
+## V8 LEARNINGS: LIGHT/DARK MODE & VISUAL POLISH
+
+### Light/Dark Mode Toggle
+- Use Tailwind's class-based dark mode: `darkMode: ['class']` in tailwind config
+- Toggle via `document.documentElement.classList.add/remove('dark')` — do NOT use a wrapper `<div className="dark">` as it conflicts with HTML-level theme scripts that run before React hydration
+- Accent colors can differ per theme for better contrast: e.g., blue in light mode, emerald/green in dark mode. Use `text-blue-600 dark:text-emerald-500` pattern throughout
+
+### Fixing "Washed Out" Feel
+- Borders: use `border-gray-200` not `border-gray-100` (too subtle reads as no border)
+- Alternate section backgrounds: white vs `gray-50` in light mode, `#0a0a0a` vs `#111` in dark mode
+- Add subtle shadows on product mockup images (`shadow-lg` or `shadow-xl`) to lift them off the page
+- Input styling: use `bg-gray-50` not plain white in light mode, `bg-white/5` in dark mode — gives fields visual weight
+
+### Style Guide Additions for Dual-Mode Pages
+When locking a style guide for a page with both light and dark modes, include per-mode tokens:
+
+```json
+{
+  "palette": {
+    "accent1": {
+      "light": { "value": "#2563eb", "tailwind": "blue-600" },
+      "dark": { "value": "#10b981", "tailwind": "emerald-500" }
+    },
+    "sectionAlt": {
+      "light": { "value": "#f9fafb", "tailwind": "gray-50" },
+      "dark": { "value": "#111111", "tailwind": "[#111]" }
+    }
+  }
+}
+```
+
+---
+
 ## ANTI-CONVERGENCE ENFORCEMENT
 
 These rules from `/frontend-design` are non-negotiable:

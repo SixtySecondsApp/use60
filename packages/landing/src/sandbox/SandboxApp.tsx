@@ -206,7 +206,9 @@ function SandboxAppInner({
         <div className="w-8 h-8 rounded-lg bg-[#37bd7e] flex items-center justify-center">
           <span className="text-white text-sm font-bold">60</span>
         </div>
-        <span className="text-sm font-medium text-gray-400">sixty</span>
+        <span className="text-sm font-medium text-gray-400 truncate max-w-[200px]">
+          {data.visitorCompany?.name || 'sixty'}
+        </span>
       </div>
 
       <main
@@ -233,17 +235,31 @@ function SandboxAppInner({
           <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50">
             <button
               onClick={handleSignup}
-              className="flex items-center gap-2 px-4 md:px-5 py-2.5 md:py-3 rounded-xl bg-[#37bd7e] hover:bg-[#2da76c] text-white text-sm font-semibold shadow-lg shadow-[#37bd7e]/25 hover:shadow-[#37bd7e]/40 hover:scale-[1.02] transition-all duration-200"
+              className="flex items-center gap-2 px-4 md:px-5 py-2.5 md:py-3 rounded-xl bg-[#37bd7e] hover:bg-[#2da76c] text-white text-sm font-semibold shadow-lg shadow-[#37bd7e]/25 hover:shadow-[#37bd7e]/40 hover:scale-[1.02] transition-all duration-200 max-w-[calc(100vw-2rem)] truncate"
             >
-              {activeView === 'dashboard' ? `Get this dashboard for ${data.visitorCompany?.name ?? 'your company'}`
-                : activeView === 'pipeline' ? 'Track your real pipeline like this'
-                : activeView === 'meetings' ? 'Get AI meeting prep for real'
-                : activeView === 'email' ? `Send this email to ${data.emailDraft?.to_name ?? 'your prospect'} for real`
-                : activeView === 'proposals' ? 'Generate proposals from your deal context'
-                : activeView === 'relationships' ? 'Map your deal relationships like this'
-                : activeView === 'copilot' ? 'Ask 60 anything about your pipeline'
-                : 'This is real. Try it free'}
-              <span className="text-white/60">&rarr;</span>
+              <span className="truncate">
+                <span className="hidden md:inline">
+                  {activeView === 'dashboard' ? `Get this dashboard for ${data.visitorCompany?.name ?? 'your company'}`
+                    : activeView === 'pipeline' ? 'Track your real pipeline like this'
+                    : activeView === 'meetings' ? 'Get AI meeting prep for real'
+                    : activeView === 'email' ? `Send this email for real`
+                    : activeView === 'proposals' ? 'Generate proposals from your deal context'
+                    : activeView === 'relationships' ? 'Map your deal relationships like this'
+                    : activeView === 'copilot' ? 'Ask 60 anything about your pipeline'
+                    : 'This is real. Try it free'}
+                </span>
+                <span className="md:hidden">
+                  {activeView === 'dashboard' ? 'Try it free'
+                    : activeView === 'pipeline' ? 'Track your pipeline'
+                    : activeView === 'meetings' ? 'Get AI meeting prep'
+                    : activeView === 'email' ? 'Send this email'
+                    : activeView === 'proposals' ? 'Generate proposals'
+                    : activeView === 'relationships' ? 'Map relationships'
+                    : activeView === 'copilot' ? 'Ask 60 anything'
+                    : 'Try it free'}
+                </span>
+              </span>
+              <span className="text-white/60 shrink-0">&rarr;</span>
             </button>
           </div>
         )}

@@ -65,7 +65,7 @@ export function SandboxEntrance({ companyName, isReady, onComplete }: SandboxEnt
           {/* Glow background */}
           <div
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-              w-[500px] h-[400px] rounded-full pointer-events-none
+              w-[90vw] max-w-[500px] h-[70vh] max-h-[400px] rounded-full pointer-events-none
               bg-[radial-gradient(ellipse,rgba(55,189,126,0.12),transparent_70%)]
               blur-3xl"
           />

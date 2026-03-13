@@ -193,6 +193,31 @@ Analyzed: [date]
 
 ---
 
+## V8 LEARNINGS: REFERENCE ANALYSIS APPROACH
+
+When analyzing reference sites, extract these six dimensions systematically:
+
+1. **Section architecture** — ordered section types, count, flow logic
+2. **Visual style** — color mode, palette strategy, typography, spacing, atmosphere
+3. **Copy patterns** — headline length/style, body tone, CTA language
+4. **Component patterns** — recurring UI components, layout primitives, interaction patterns
+5. **Conversion architecture** — CTA placement, form design, trust signals, demo strategy
+6. **Technical patterns** — animation approach, responsive strategy, performance tradeoffs
+
+### Known Reference Patterns
+
+**Harmonic.ai pattern** (light mode B2B SaaS):
+- Light mode default, clean and professional
+- Short aspirational headlines (3-6 words)
+- Email-only demo request forms (low friction)
+- Logo trust bar immediately after hero section
+- 3-step feature narrative (problem -> capability -> outcome)
+- Inline testimonials between feature sections (trust at point of interest, not isolated)
+- Persistent header CTA (always visible conversion path)
+- Dark footer for visual grounding
+
+---
+
 ## MULTIPLE REFERENCES
 
 If given multiple URLs, analyze each and produce a synthesis:

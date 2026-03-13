@@ -172,7 +172,7 @@ function StageColumn({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: stageIndex * 0.06, duration: 0.4 }}
-      className="flex-1 min-w-[300px] rounded-2xl bg-gray-900/40 backdrop-blur-xl border border-gray-700/30"
+      className="flex-1 min-w-[280px] sm:min-w-[300px] rounded-2xl bg-gray-900/40 backdrop-blur-xl border border-gray-700/30"
     >
       <div className="h-[2.5px] rounded-t-2xl" style={{ background: `linear-gradient(90deg, ${meta.color}, ${meta.color}80)` }} />
 
@@ -253,7 +253,7 @@ function DealDetailPanel({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="fixed top-16 right-0 bottom-0 z-[61] w-full max-w-md bg-gray-950/95 backdrop-blur-xl border-l border-gray-800/50 overflow-y-auto"
+        className="fixed top-16 right-0 bottom-0 z-[61] w-full max-w-[calc(100vw-2rem)] md:max-w-md bg-gray-950/95 backdrop-blur-xl border-l border-gray-800/50 overflow-y-auto"
       >
         {/* Header */}
         <div className="sticky top-0 z-10 bg-gray-950/90 backdrop-blur-lg border-b border-gray-800/50 px-5 py-4">
@@ -749,7 +749,7 @@ export default function SandboxPipeline() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8, duration: 0.5 }}
-          className="mt-4 rounded-2xl p-5 bg-gradient-to-r from-[#37bd7e]/10 via-[#37bd7e]/5 to-transparent border border-[#37bd7e]/20 flex items-center justify-between"
+          className="mt-4 rounded-2xl p-5 bg-gradient-to-r from-[#37bd7e]/10 via-[#37bd7e]/5 to-transparent border border-[#37bd7e]/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
         >
           <div>
             <p className="text-sm font-semibold text-white">
