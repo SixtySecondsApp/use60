@@ -2,23 +2,38 @@
  * AbilityDetailSheet Component
  *
  * Side panel detail view for abilities in the marketplace.
- * Shows full description, integration requirements, delivery channels,
- * and activity stats with enable/disable toggle.
+ * Shows full description, trigger flow diagram, integration requirements,
+ * delivery channel toggles with Switch components, timing threshold editing,
+ * live stats panel, and test panel.
+ *
+ * US-018: AbilityTriggerFlow integration
+ * US-019: AbilityStatsPanel integration
+ * US-020: Inline threshold editing + channel toggles
  */
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
 import { useAbilityPrerequisites } from '@/hooks/useAbilityPrerequisites';
 import { useAgentAbilityPreferences } from '@/hooks/useAgentAbilityPreferences';
 import { getSequenceTypeForEventType, USE_CASE_CATEGORIES, type AbilityDefinition } from '@/lib/agent/abilityRegistry';
 import { cn } from '@/lib/utils';
-import { Check, Lock, MessageSquare, Mail, Bell, Zap, Clock, TrendingUp, FlaskConical, ChevronDown } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Check, Lock, MessageSquare, Mail, Bell, Zap, FlaskConical, ChevronDown, Clock } from 'lucide-react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { AbilityTestPanel } from '@/components/agent/marketplace/AbilityTestPanel';
+import { AbilityTriggerFlow } from '@/components/agent/marketplace/AbilityTriggerFlow';
+import { AbilityStatsPanel } from '@/components/agent/marketplace/AbilityStatsPanel';
 
 // =============================================================================
 // Types
@@ -36,45 +51,41 @@ interface AbilityDetailSheetProps {
 }
 
 type DeliveryChannel = 'slack' | 'email' | 'in-app';
+type ThresholdUnit = 'minutes' | 'hours';
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-function getTriggerTypeExplanation(triggerType: string): string {
-  switch (triggerType) {
-    case 'event':
-      return 'Automatically when a specific event occurs';
-    case 'cron':
-      return 'On a scheduled basis';
-    case 'chain':
-      return 'When triggered by another ability';
-    case 'manual':
-      return 'When you manually activate it';
-    default:
-      return 'Based on configured triggers';
-  }
+interface ThresholdConfig {
+  value: number;
+  unit: ThresholdUnit;
 }
 
-function formatTimeAgo(timestamp: string): string {
-  const now = new Date();
-  const past = new Date(timestamp);
-  const diffMs = now.getTime() - past.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
+// Channel configuration with integration requirements
+const CHANNEL_CONFIG: Record<DeliveryChannel, {
+  icon: typeof MessageSquare;
+  label: string;
+  activeColor: string;
+  integrationId?: string;
+}> = {
+  slack: {
+    icon: MessageSquare,
+    label: 'Slack',
+    activeColor: 'data-[state=checked]:bg-purple-600',
+    integrationId: 'slack',
+  },
+  email: {
+    icon: Mail,
+    label: 'Email',
+    activeColor: 'data-[state=checked]:bg-blue-600',
+    integrationId: 'google-workspace',
+  },
+  'in-app': {
+    icon: Bell,
+    label: 'In-App',
+    activeColor: 'data-[state=checked]:bg-green-600',
+  },
+};
 
-  if (diffDays > 0) return `${diffDays}d ago`;
-  if (diffHours > 0) return `${diffHours}h ago`;
-  if (diffMins > 0) return `${diffMins}m ago`;
-  return 'Just now';
-}
-
-function getSuccessRateColor(rate: number): string {
-  if (rate >= 80) return 'text-green-400';
-  if (rate >= 50) return 'text-amber-400';
-  return 'text-red-400';
-}
+// Abilities that support timing threshold configuration (cron-based)
+const THRESHOLD_ABLE_TRIGGER_TYPES = new Set(['cron', 'event']);
 
 // =============================================================================
 // Component
@@ -96,6 +107,10 @@ export function AbilityDetailSheet({
     email: true,
     'in-app': true,
   });
+
+  // Timing threshold state (US-020)
+  const [threshold, setThreshold] = useState<ThresholdConfig>({ value: 90, unit: 'minutes' });
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [testOpen, setTestOpen] = useState(false);
 
@@ -124,7 +139,50 @@ export function AbilityDetailSheet({
     }
   }, [ability]);
 
-  // Save delivery channels to localStorage
+  // Load threshold from localStorage
+  useEffect(() => {
+    if (!ability) return;
+
+    const key = `agent-ability-threshold-${ability.id}`;
+    const stored = localStorage.getItem(key);
+
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setThreshold(parsed);
+      } catch (e) {
+        console.error('[AbilityDetailSheet] Failed to parse threshold from localStorage:', e);
+      }
+    } else {
+      // Set a sensible default based on the ability
+      setThreshold(getDefaultThreshold(ability.eventType));
+    }
+  }, [ability]);
+
+  // Debounced save for threshold changes
+  const saveThreshold = useCallback((config: ThresholdConfig) => {
+    if (!ability) return;
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    debounceRef.current = setTimeout(() => {
+      const key = `agent-ability-threshold-${ability.id}`;
+      localStorage.setItem(key, JSON.stringify(config));
+    }, 500);
+  }, [ability]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
+
+  // Save delivery channels to localStorage (US-020: uses Switch toggles)
   const handleChannelToggle = (channel: DeliveryChannel) => {
     if (!ability) return;
 
@@ -136,6 +194,23 @@ export function AbilityDetailSheet({
 
     const key = `agent-ability-channels-${ability.id}`;
     localStorage.setItem(key, JSON.stringify(updated));
+  };
+
+  // Handle threshold value change
+  const handleThresholdValueChange = (value: string) => {
+    const numValue = parseInt(value, 10);
+    if (isNaN(numValue) || numValue < 0) return;
+
+    const updated = { ...threshold, value: numValue };
+    setThreshold(updated);
+    saveThreshold(updated);
+  };
+
+  // Handle threshold unit change
+  const handleThresholdUnitChange = (unit: string) => {
+    const updated = { ...threshold, unit: unit as ThresholdUnit };
+    setThreshold(updated);
+    saveThreshold(updated);
   };
 
   // Determine enable/disable state
@@ -168,13 +243,16 @@ export function AbilityDetailSheet({
   // Find use case category for badge
   const useCase = USE_CASE_CATEGORIES.find((c) => c.id === ability.useCase);
 
-  // Calculate success rate
-  const successRate = stats && stats.totalRuns > 0
-    ? Math.round((stats.successCount / stats.totalRuns) * 100)
-    : null;
-
   // Check if all integrations are connected
   const allIntegrationsReady = checks.every((c) => c.isConnected);
+
+  // Build a set of connected integration IDs for channel disabled state
+  const connectedIntegrations = new Set(
+    checks.filter((c) => c.isConnected).map((c) => c.integration.integrationId)
+  );
+
+  // Determine if timing threshold is relevant for this ability
+  const showThreshold = THRESHOLD_ABLE_TRIGGER_TYPES.has(ability.triggerType);
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -241,23 +319,44 @@ export function AbilityDetailSheet({
             </p>
           </div>
 
-          {/* Trigger Info */}
-          <div className="space-y-2 bg-white/5 rounded-lg p-4">
-            <div className="flex items-center gap-2 text-sm text-gray-300">
-              <Clock className="w-4 h-4 text-gray-400" />
-              <span className="font-medium">Triggers {getTriggerTypeExplanation(ability.triggerType)}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-gray-300">
-              <TrendingUp className="w-4 h-4 text-gray-400" />
-              <span>Runs {ability.stepCount} step{ability.stepCount !== 1 ? 's' : ''}</span>
-            </div>
-            {ability.hasApproval && (
-              <div className="flex items-center gap-2 text-sm text-amber-400">
-                <Bell className="w-4 h-4" />
-                <span>Requires your approval before executing</span>
-              </div>
-            )}
+          {/* US-018: Trigger Flow Diagram */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
+              How It Works
+            </h3>
+            <AbilityTriggerFlow ability={ability} />
           </div>
+
+          {/* US-020: Timing Threshold (for time-based abilities) */}
+          {showThreshold && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
+                Timing
+              </h3>
+              <div className="flex items-center gap-3 bg-white/5 rounded-lg p-3">
+                <Clock className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-sm text-gray-300 shrink-0">Run</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={threshold.value}
+                  onChange={(e) => handleThresholdValueChange(e.target.value)}
+                  className="w-20 h-8 text-sm bg-white/5 border-white/10 text-gray-200"
+                />
+                <Select value={threshold.unit} onValueChange={handleThresholdUnitChange}>
+                  <SelectTrigger className="w-28 h-8 text-sm bg-white/5 border-white/10 text-gray-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="minutes">minutes</SelectItem>
+                    <SelectItem value="hours">hours</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-gray-400 shrink-0">before</span>
+              </div>
+            </div>
+          )}
 
           {/* Required Integrations Section */}
           {ability.requiredIntegrations && ability.requiredIntegrations.length > 0 && (
@@ -323,132 +422,63 @@ export function AbilityDetailSheet({
             </div>
           )}
 
-          {/* Delivery Channels Section */}
+          {/* US-020: Delivery Channel Toggles (Switch-based) */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
               Delivery Channels
             </h3>
             <div className="space-y-2">
-              {/* Slack */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
-                <div className="flex items-center gap-3">
-                  <MessageSquare className={cn(
-                    'w-4 h-4',
-                    deliveryChannels.slack ? 'text-purple-400' : 'text-gray-500'
-                  )} />
-                  <span className="text-sm text-gray-300">Slack</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant={deliveryChannels.slack ? 'default' : 'outline'}
-                  className={cn(
-                    'h-7 px-3 text-xs',
-                    deliveryChannels.slack
-                      ? 'bg-purple-500 hover:bg-purple-600 text-white'
-                      : 'border-gray-600 text-gray-400 hover:bg-white/5'
-                  )}
-                  onClick={() => handleChannelToggle('slack')}
-                >
-                  {deliveryChannels.slack ? 'Active' : 'Inactive'}
-                </Button>
-              </div>
+              {(Object.keys(CHANNEL_CONFIG) as DeliveryChannel[]).map((channel) => {
+                const config = CHANNEL_CONFIG[channel];
+                const ChannelIcon = config.icon;
+                const isActive = deliveryChannels[channel];
 
-              {/* Email */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
-                <div className="flex items-center gap-3">
-                  <Mail className={cn(
-                    'w-4 h-4',
-                    deliveryChannels.email ? 'text-blue-400' : 'text-gray-500'
-                  )} />
-                  <span className="text-sm text-gray-300">Email</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant={deliveryChannels.email ? 'default' : 'outline'}
-                  className={cn(
-                    'h-7 px-3 text-xs',
-                    deliveryChannels.email
-                      ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                      : 'border-gray-600 text-gray-400 hover:bg-white/5'
-                  )}
-                  onClick={() => handleChannelToggle('email')}
-                >
-                  {deliveryChannels.email ? 'Active' : 'Inactive'}
-                </Button>
-              </div>
+                // Check if the required integration for this channel is connected
+                const requiresIntegration = config.integrationId;
+                const isIntegrationConnected = !requiresIntegration || connectedIntegrations.has(requiresIntegration);
+                const isDisabled = !isIntegrationConnected;
 
-              {/* In-App */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
-                <div className="flex items-center gap-3">
-                  <Bell className={cn(
-                    'w-4 h-4',
-                    deliveryChannels['in-app'] ? 'text-green-400' : 'text-gray-500'
-                  )} />
-                  <span className="text-sm text-gray-300">In-App</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant={deliveryChannels['in-app'] ? 'default' : 'outline'}
-                  className={cn(
-                    'h-7 px-3 text-xs',
-                    deliveryChannels['in-app']
-                      ? 'bg-green-500 hover:bg-green-600 text-white'
-                      : 'border-gray-600 text-gray-400 hover:bg-white/5'
-                  )}
-                  onClick={() => handleChannelToggle('in-app')}
-                >
-                  {deliveryChannels['in-app'] ? 'Active' : 'Inactive'}
-                </Button>
-              </div>
+                return (
+                  <div
+                    key={channel}
+                    className={cn(
+                      'flex items-center justify-between p-3 rounded-lg bg-white/5',
+                      isDisabled && 'opacity-50'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <ChannelIcon className={cn(
+                        'w-4 h-4',
+                        isActive && !isDisabled ? getChannelIconColor(channel) : 'text-gray-500'
+                      )} />
+                      <div className="flex flex-col">
+                        <span className="text-sm text-gray-300">{config.label}</span>
+                        {isDisabled && (
+                          <span className="text-[10px] text-gray-500">
+                            Requires {config.integrationId === 'google-workspace' ? 'Gmail' : 'Slack'} connection
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Switch
+                      checked={isActive}
+                      onCheckedChange={() => handleChannelToggle(channel)}
+                      disabled={isDisabled}
+                      className={cn(config.activeColor)}
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Stats Section */}
-          {stats && stats.totalRuns > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
-                Activity
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                {/* Last Run */}
-                {stats.lastRunAt && (
-                  <div className="bg-white/5 rounded-lg p-3 space-y-1">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">
-                      Last Run
-                    </p>
-                    <p className="text-sm font-medium text-gray-300">
-                      {formatTimeAgo(stats.lastRunAt)}
-                    </p>
-                  </div>
-                )}
-
-                {/* Total Runs */}
-                <div className="bg-white/5 rounded-lg p-3 space-y-1">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">
-                    Total Runs
-                  </p>
-                  <p className="text-sm font-medium text-gray-300">
-                    {stats.totalRuns.toLocaleString()}
-                  </p>
-                </div>
-
-                {/* Success Rate */}
-                {successRate !== null && (
-                  <div className="bg-white/5 rounded-lg p-3 space-y-1 col-span-2">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">
-                      Success Rate
-                    </p>
-                    <p className={cn(
-                      'text-lg font-semibold',
-                      getSuccessRateColor(successRate)
-                    )}>
-                      {successRate}%
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* US-019: Live Stats Panel */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
+              Activity
+            </h3>
+            <AbilityStatsPanel ability={ability} />
+          </div>
 
           {/* Test This Ability Section */}
           <Collapsible open={testOpen} onOpenChange={setTestOpen}>
@@ -478,4 +508,42 @@ export function AbilityDetailSheet({
       </SheetContent>
     </Sheet>
   );
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function getChannelIconColor(channel: DeliveryChannel): string {
+  switch (channel) {
+    case 'slack':
+      return 'text-purple-400';
+    case 'email':
+      return 'text-blue-400';
+    case 'in-app':
+      return 'text-green-400';
+  }
+}
+
+function getDefaultThreshold(eventType: string): ThresholdConfig {
+  switch (eventType) {
+    case 'pre_meeting_90min':
+      return { value: 90, unit: 'minutes' };
+    case 'pre_meeting_nudge':
+      return { value: 30, unit: 'minutes' };
+    case 'morning_brief':
+    case 'sales_assistant_digest':
+      return { value: 1, unit: 'hours' };
+    case 'deal_risk_scan':
+    case 'overdue_deal_scan':
+    case 'ghost_deal_scan':
+    case 'stale_deal_alert':
+      return { value: 24, unit: 'hours' };
+    case 'campaign_daily_check':
+      return { value: 24, unit: 'hours' };
+    case 'coaching_weekly':
+      return { value: 168, unit: 'hours' };
+    default:
+      return { value: 60, unit: 'minutes' };
+  }
 }

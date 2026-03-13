@@ -18,7 +18,16 @@ export type EventType =
   | 'stale_deal_revival'
   | 'campaign_daily_check'
   | 'coaching_weekly'
-  | 'deal_risk_scan';
+  | 'deal_risk_scan'
+  // Brain event types (US-007 to US-013)
+  | 'calendar_event_created'
+  | 'meeting_completed'
+  | 'deal_created'
+  | 'deal_stage_changed'
+  | 'contact_created'
+  | 'task_overdue'
+  | 'deal_stalled'
+  | 'deal_risk_rescore';
 
 export type EventSource =
   | 'webhook:meetingbaas'
@@ -31,7 +40,16 @@ export type EventSource =
   | 'slack:button'
   | 'slack:approval'
   | 'orchestrator:chain'
-  | 'manual';
+  | 'orchestrator:trigger-handoff'
+  | 'manual'
+  // Brain trigger sources (US-007 to US-013)
+  | 'trigger:brain_pre_call'
+  | 'trigger:brain_post_call'
+  | 'trigger:brain_deal_created'
+  | 'trigger:brain_deal_stage'
+  | 'trigger:brain_contact_created'
+  | 'trigger:brain_task_overdue'
+  | 'trigger:brain_stale_deal';
 
 export type StepCriticality = 'critical' | 'best-effort';
 

@@ -13,6 +13,8 @@ type CommandCentreFilter = 'all' | 'review' | 'drafts' | 'working' | 'done';
 type CommandCentreSortField = 'urgency' | 'created_at' | 'due_date' | 'priority' | 'ai_status';
 type CommandCentreSortOrder = 'asc' | 'desc';
 
+export type CCActiveTab = 'inbox' | 'actions';
+
 interface CommandCentreState {
   // Selection
   selectedTaskId: string | null;
@@ -30,6 +32,10 @@ interface CommandCentreState {
   sidebarCollapsed: boolean;
   contextOpen: boolean;
   focusedTaskIndex: number;
+
+  // Inbox tab state
+  ccActiveTab: CCActiveTab;
+  inboxPendingCount: number;
 
   // Actions
   setSelectedTaskId: (id: string | null) => void;
@@ -51,6 +57,10 @@ interface CommandCentreState {
   addToSelection: (id: string) => void;
   selectRange: (ids: string[]) => void;
   clearSelection: () => void;
+
+  // Inbox actions
+  setCCActiveTab: (tab: CCActiveTab) => void;
+  setInboxPendingCount: (count: number) => void;
 }
 
 const DEFAULTS = {
@@ -63,6 +73,8 @@ const DEFAULTS = {
   sidebarCollapsed: false,
   contextOpen: false,
   focusedTaskIndex: 0,
+  ccActiveTab: 'inbox' as CCActiveTab,
+  inboxPendingCount: 0,
 };
 
 export const useCommandCentreStore = create<CommandCentreState>()(
@@ -78,6 +90,8 @@ export const useCommandCentreStore = create<CommandCentreState>()(
       sidebarCollapsed: DEFAULTS.sidebarCollapsed,
       contextOpen: DEFAULTS.contextOpen,
       focusedTaskIndex: DEFAULTS.focusedTaskIndex,
+      ccActiveTab: DEFAULTS.ccActiveTab,
+      inboxPendingCount: DEFAULTS.inboxPendingCount,
 
       // Actions
       setSelectedTaskId: (id: string | null) => {
@@ -163,12 +177,22 @@ export const useCommandCentreStore = create<CommandCentreState>()(
       clearSelection: () => {
         set({ selectedTaskIds: [] });
       },
+
+      // Inbox actions
+      setCCActiveTab: (tab: CCActiveTab) => {
+        set({ ccActiveTab: tab });
+      },
+
+      setInboxPendingCount: (count: number) => {
+        set({ inboxPendingCount: count });
+      },
     }),
     {
       name: 'command-centre-ui',
       partialize: (state) => ({
         sidebarCollapsed: state.sidebarCollapsed,
         contextOpen: state.contextOpen,
+        ccActiveTab: state.ccActiveTab,
       }),
     }
   )

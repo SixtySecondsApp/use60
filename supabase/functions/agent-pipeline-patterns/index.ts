@@ -20,6 +20,8 @@ import {
   jsonResponse,
 } from '../_shared/corsHelper.ts';
 import { logAICostEvent } from '../_shared/costTracking.ts';
+// US-032: Surface pattern insights as CC items
+import { writePatternInsightsToCC } from '../_shared/commandCentre/patternInsights.ts';
 
 // =============================================================================
 // Config
@@ -215,6 +217,28 @@ async function analyseOrg(
         affected_deal_ids: pattern.affected_deal_ids,
         actionable_deals: pattern.actionable_deals,
       });
+  }
+
+  // US-032: Surface top patterns as CC insight items (rate limited: max 2/user/week)
+  if (allPatterns.length > 0) {
+    try {
+      const ccInsights = allPatterns.map(p => ({
+        title: p.title,
+        description: p.description,
+        evidence: p.supporting_evidence,
+        suggested_action: p.actionable_deals[0]?.recommended_action,
+        confidence: p.confidence,
+        severity: p.severity,
+        affected_deal_ids: p.affected_deal_ids,
+      }));
+      const written = await writePatternInsightsToCC(orgId, 'pipeline-patterns', ccInsights);
+      if (written > 0) {
+        console.log(`[agent-pipeline-patterns] Org ${orgId}: ${written} CC insight item(s) written`);
+      }
+    } catch (ccErr) {
+      // CC failure must not break the pipeline patterns flow
+      console.error(`[agent-pipeline-patterns] CC write failed for org ${orgId}:`, String(ccErr));
+    }
   }
 
   console.log(`[agent-pipeline-patterns] Org ${orgId}: ${allPatterns.length} patterns detected`);

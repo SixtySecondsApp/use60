@@ -1,12 +1,16 @@
 import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, X, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Brain, X, ChevronRight, ArrowLeft, Inbox, Zap } from 'lucide-react';
 import { ActionGrid } from '@/components/quick-add/ActionGrid';
 import { QuickAddComponent } from '@/components/quick-add';
 import { useUserPermissions } from '@/contexts/UserPermissionsContext';
 import { useQuickAddVersionReadOnly } from '@/lib/hooks/useQuickAddVersion';
+import { useCommandCentreStore } from '@/lib/stores/commandCentreStore';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { quickAddFormVariants } from './animations';
+import { CommandCenterInbox } from './CommandCenterInbox';
 import type { QuickAddAction, QuickAddPrefill } from './useCommandCenterState';
+import type { CCActiveTab } from '@/lib/stores/commandCentreStore';
 
 const actionLabels: Record<string, string> = {
   outbound: 'Outbound',
@@ -40,6 +44,10 @@ export function CommandCenterCompact({
     const version = effectiveUserType === 'external' ? externalVersion : internalVersion;
     return version === 'v2' ? 'v2' : 'v1';
   }, [effectiveUserType, internalVersion, externalVersion]);
+
+  const ccActiveTab = useCommandCentreStore((s) => s.ccActiveTab);
+  const setCCActiveTab = useCommandCentreStore((s) => s.setCCActiveTab);
+  const inboxPendingCount = useCommandCentreStore((s) => s.inboxPendingCount);
 
   return (
     <div className="flex flex-col">
@@ -77,7 +85,7 @@ export function CommandCenterCompact({
                 : 'Command Center'}
             </h2>
             {!activeQuickAddAction && (
-              <p className="text-gray-500 text-xs">Quick actions & AI assistant</p>
+              <p className="text-gray-500 text-xs">Intelligence inbox & quick actions</p>
             )}
           </div>
         </div>
@@ -90,10 +98,10 @@ export function CommandCenterCompact({
         </button>
       </div>
 
-      {/* Content — min-height prevents layout jitter when contact modal opens over a form */}
-      <div className={`overflow-y-auto p-5 ${activeQuickAddAction ? 'min-h-[20rem]' : ''}`}>
-        <AnimatePresence mode="wait">
-          {activeQuickAddAction ? (
+      {/* Content */}
+      {activeQuickAddAction ? (
+        <div className="overflow-y-auto p-5 min-h-[20rem]">
+          <AnimatePresence mode="wait">
             <motion.div
               key="quick-add"
               variants={quickAddFormVariants}
@@ -113,38 +121,81 @@ export function CommandCenterCompact({
                 }}
               />
             </motion.div>
-          ) : (
-            <div className="space-y-5">
-              <ActionGrid onActionSelect={(id) => onSelectAction(id as QuickAddAction)} />
-
-              {/* Chat with Copilot button */}
-              <motion.button
-                type="button"
-                onClick={onOpenChat}
-                whileHover={{ scale: 1.01, y: -1 }}
-                whileTap={{ scale: 0.99 }}
-                className="w-full flex items-center justify-between px-5 py-4 rounded-xl bg-gradient-to-r from-violet-500/20 to-purple-500/20 border border-violet-500/30 hover:border-violet-500/50 group transition-all duration-300"
+          </AnimatePresence>
+        </div>
+      ) : (
+        <Tabs
+          value={ccActiveTab}
+          onValueChange={(v) => setCCActiveTab(v as CCActiveTab)}
+          className="flex flex-col"
+        >
+          {/* Tab bar */}
+          <div className="px-5 pt-4">
+            <TabsList className="w-full grid grid-cols-2 bg-gray-800/50">
+              <TabsTrigger
+                value="inbox"
+                className="gap-1.5 text-xs data-[state=active]:bg-gray-700/80 data-[state=active]:text-white"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
-                    <Brain className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-white">Chat with Copilot</p>
-                    <p className="text-xs text-gray-400">Get AI-powered assistance</p>
-                  </div>
-                </div>
-                <motion.div
-                  animate={{ x: [0, 4, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity, repeatType: 'loop', ease: 'easeInOut' }}
-                >
-                  <ChevronRight className="w-5 h-5 text-violet-400 group-hover:text-violet-300 transition-colors" />
-                </motion.div>
-              </motion.button>
+                <Inbox className="w-3.5 h-3.5" />
+                Inbox
+                {inboxPendingCount > 0 && (
+                  <span className="ml-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-violet-500 text-white text-[10px] font-semibold px-1">
+                    {inboxPendingCount > 99 ? '99+' : inboxPendingCount}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="actions"
+                className="gap-1.5 text-xs data-[state=active]:bg-gray-700/80 data-[state=active]:text-white"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Actions
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* Inbox tab */}
+          <TabsContent value="inbox" className="mt-0">
+            <div className="overflow-y-auto p-4 max-h-[60vh]">
+              <CommandCenterInbox />
             </div>
-          )}
-        </AnimatePresence>
-      </div>
+          </TabsContent>
+
+          {/* Actions tab (existing quick-add grid + copilot button) */}
+          <TabsContent value="actions" className="mt-0">
+            <div className="overflow-y-auto p-5">
+              <div className="space-y-5">
+                <ActionGrid onActionSelect={(id) => onSelectAction(id as QuickAddAction)} />
+
+                {/* Chat with Copilot button */}
+                <motion.button
+                  type="button"
+                  onClick={onOpenChat}
+                  whileHover={{ scale: 1.01, y: -1 }}
+                  whileTap={{ scale: 0.99 }}
+                  className="w-full flex items-center justify-between px-5 py-4 rounded-xl bg-gradient-to-r from-violet-500/20 to-purple-500/20 border border-violet-500/30 hover:border-violet-500/50 group transition-all duration-300"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                      <Brain className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-white">Chat with Copilot</p>
+                      <p className="text-xs text-gray-400">Get AI-powered assistance</p>
+                    </div>
+                  </div>
+                  <motion.div
+                    animate={{ x: [0, 4, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity, repeatType: 'loop', ease: 'easeInOut' }}
+                  >
+                    <ChevronRight className="w-5 h-5 text-violet-400 group-hover:text-violet-300 transition-colors" />
+                  </motion.div>
+                </motion.button>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   );
 }

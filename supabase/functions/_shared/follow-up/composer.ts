@@ -24,6 +24,7 @@
 
 import type { FollowUpContext } from '../rag/types.ts';
 import type { ComposedEmail } from './types.ts';
+import { loadUserPreferences } from '../preferences/loadPreferences.ts';
 
 // ============================================================================
 // Constants
@@ -96,6 +97,10 @@ export interface ComposeInput {
   senderLastName?: string;
   orgName?: string;
   regenerateGuidance?: string;
+  /** US-029: User ID for loading learned preferences (optional for backward compat) */
+  userId?: string;
+  /** US-029: Contact ID for contact-specific preferences (optional) */
+  contactId?: string;
 }
 
 // ============================================================================
@@ -399,13 +404,34 @@ export async function composeReturnMeetingFollowUp(
   const writingStyleBlock = buildWritingStyleBlock(writingStyle);
   const historicalBlock = buildHistoricalContextBlock(followUpContext);
 
+  // US-029: Load learned preferences if userId is available
+  let preferencesBlock = '';
+  if (input.userId) {
+    try {
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.43.4');
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (supabaseUrl && supabaseKey) {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        preferencesBlock = await loadUserPreferences(
+          supabase,
+          input.userId,
+          'send_email',
+          input.contactId,
+        );
+      }
+    } catch (prefErr) {
+      console.warn('[composer] loadUserPreferences failed (non-fatal):', String(prefErr));
+    }
+  }
+
   const systemPrompt = `You are writing a follow-up email on behalf of a sales rep after a meeting.
 The email should read like the rep wrote it personally — warm, specific,
 and relationship-aware. The recipient should feel like the rep remembers
 everything about their conversations and genuinely cares about their needs.
 
 ${writingStyleBlock}
-
+${preferencesBlock}
 ## RECIPIENT
 - Name: ${recipient.name}
 - Role: ${recipient.role ?? 'Unknown'}
@@ -537,13 +563,34 @@ export async function composeFirstMeetingFollowUp(
 
   const writingStyleBlock = buildWritingStyleBlock(writingStyle);
 
+  // US-029: Load learned preferences if userId is available
+  let preferencesBlock = '';
+  if (input.userId) {
+    try {
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.43.4');
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (supabaseUrl && supabaseKey) {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        preferencesBlock = await loadUserPreferences(
+          supabase,
+          input.userId,
+          'send_email',
+          input.contactId,
+        );
+      }
+    } catch (prefErr) {
+      console.warn('[composer] loadUserPreferences failed (non-fatal):', String(prefErr));
+    }
+  }
+
   const systemPrompt = `You are writing a first-meeting follow-up email on behalf of a sales rep.
 This is the first time the rep has met this prospect. The email should feel personal,
 specific, and efficient — not like a template. It should make the prospect feel heard
 and leave them with a clear next step.
 
 ${writingStyleBlock}
-
+${preferencesBlock}
 ## RECIPIENT
 - Name: ${recipient.name}
 - Role: ${recipient.role ?? 'Unknown'}

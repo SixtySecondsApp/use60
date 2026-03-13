@@ -1,170 +1,569 @@
 {
-  "project": "Pipeline Page Enhancements",
-  "runSlug": "pipeline-enhancements",
-  "branchName": "feature/pipeline-enhancements",
-  "description": "5 UX improvements: overdue badges, ghost risk icon, owner filter, inline table editing, bulk actions bar",
+  "project": "60 Brain — Event-Driven AI Teammate",
+  "runSlug": "60-brain",
+  "branchName": "60-brain",
+  "description": "Wire the AI brain end-to-end: DB triggers → orchestrator → event chains → intelligence inbox + Slack DM. Make abilities transparent, self-healing, and progressively autonomous.",
   "aiDevHubProjectId": null,
-  "createdAt": "2026-03-08T22:00:00.000Z",
+  "createdAt": "2026-03-13T12:00:00.000Z",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Overdue badge on DealCard",
-      "description": "As a rep, I want to see which deals are past their close date so I can prioritise follow-ups",
+      "title": "Ensure agent_trigger_runs table + fix rate limiting",
+      "description": "As a platform engineer, I want the agent_trigger_runs table to exist and rate limiting to work correctly, so that trigger execution is observable and bounded.",
       "acceptanceCriteria": [
-        "Red 'Overdue' badge on DealCard when close_date < today OR expected_close_date < today",
-        "Badge in tags area alongside freshness/dormant badges",
-        "No badge when no close date set",
-        "No badge for Signed/Lost deals",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
+        "Migration creates agent_trigger_runs table if not exists with all required columns",
+        "Index on (organization_id, created_at) for rate limit queries",
+        "Rate limit check handles missing table gracefully (returns error, not silent bypass)",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": false,
-      "notes": "File: src/components/Pipeline/DealCard.tsx",
+      "notes": "Foundation — must exist before any triggers fire",
       "aiDevHubTaskId": null
     },
     {
       "id": "US-002",
-      "title": "Overdue column in PipelineTable",
-      "description": "As a rep, I want to see days overdue in table view so I can sort by urgency",
+      "title": "DB triggers for deal events → agent-trigger",
+      "description": "As a sales rep, I want deal creation and stage changes to automatically trigger agent workflows, so that my pipeline stays active without manual intervention.",
       "acceptanceCriteria": [
-        "New 'Overdue' column showing days past close date",
-        "Dash when not overdue or no close date",
-        "Column is sortable",
-        "Red text for overdue values",
-        "Toggleable via column customiser",
+        "PG trigger on deals INSERT calls agent-trigger via pg_net with event deal_created",
+        "PG trigger on deals UPDATE (stage column) calls agent-trigger with event deal_stage_changed",
+        "Trigger payload includes deal_id, organization_id, owner_id, stage (old+new), value",
+        "Follows ops_rule_event_triggers pattern (debounce, Vault auth)",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-003",
+      "title": "DB triggers for calendar + meeting events → agent-trigger",
+      "description": "As a sales rep, I want new calendar events and completed meetings to automatically trigger prep and follow-up workflows.",
+      "acceptanceCriteria": [
+        "PG trigger on calendar_events INSERT (external attendees) calls agent-trigger with calendar_event_created",
+        "PG trigger on meetings UPDATE (status=completed or recording_url set) calls agent-trigger with meeting_completed",
+        "Calendar payload includes event_id, user_id, org_id, start_time, attendees, title",
+        "Meeting payload includes meeting_id, owner_user_id, org_id, deal_id, recording_url",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-004",
+      "title": "DB triggers for contact + task events → agent-trigger",
+      "description": "As a sales rep, I want new contacts to be auto-enriched and overdue tasks to trigger escalation without checking manually.",
+      "acceptanceCriteria": [
+        "PG trigger on contacts INSERT calls agent-trigger with contact_created",
+        "PG trigger on tasks UPDATE (due_date < now AND completed=false) calls agent-trigger with task_overdue",
+        "Task trigger has debounce (max once per task per 24h)",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-005",
+      "title": "Fleet handoff routes for pre-call chain",
+      "description": "As a platform engineer, I want the pre-call event chain defined in fleet tables so calendar events cascade through research → dossier → notification.",
+      "acceptanceCriteria": [
+        "fleet_event_route: calendar_event_created → pre-meeting-prep sequence",
+        "fleet_sequence_definition: lead_research → company_analysis → pre_meeting_dossier → talking_points → notify_user",
+        "fleet_handoff_routes for each step completion → next step",
+        "Context mapping passes contact_id, company_id, meeting_id, start_time through chain",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-006",
+      "title": "Fleet handoff routes for post-call chain",
+      "description": "As a platform engineer, I want the post-call event chain defined so completed meetings cascade through transcript → actions → follow-up → CRM update.",
+      "acceptanceCriteria": [
+        "fleet_event_route: meeting_completed → post-meeting-followup-pack sequence",
+        "fleet_sequence_definition: transcript_extraction → action_items → followup_email_draft → crm_update → deal_create_or_update → cc_items",
+        "fleet_handoff_routes for each step completion → next step",
+        "Context mapping passes meeting_id, recording_url, deal_id, contact_ids through chain",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-007",
+      "title": "Pre-call: calendar event → lead research",
+      "description": "As a sales rep, I want lead and company research to start automatically when a new meeting with an external attendee appears on my calendar.",
+      "acceptanceCriteria": [
+        "agent-trigger handler for calendar_event_created identifies external attendees",
+        "Triggers lead-research or company-research skill via orchestrator",
+        "Stores results linked to calendar_event_id and contact_id",
+        "Fires handoff event lead_research.complete",
+        "Skips if research exists for contact within last 30 days",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-008",
+      "title": "Pre-call: research complete → pre-meeting dossier",
+      "description": "As a sales rep, I want a meeting dossier auto-generated from research so I walk into calls prepared.",
+      "acceptanceCriteria": [
+        "Handoff from lead_research.complete triggers pre-meeting-dossier skill",
+        "Dossier includes company summary, attendee profiles, deal context, talking points, potential objections",
+        "Stored as command_centre_item with item_type: meeting_prep",
+        "Fires handoff event pre_meeting_dossier.complete",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-009",
+      "title": "Pre-call: dossier ready → CC item + Slack DM",
+      "description": "As a sales rep, I want to be notified when my meeting prep is ready via CC inbox and Slack DM at a configurable time before the call.",
+      "acceptanceCriteria": [
+        "Creates command_centre_item with status ready, priority based on meeting imminence",
+        "Sends Slack DM with Block Kit: meeting title, time, attendees, talking points, View full brief button",
+        "Default timing: 30 minutes before meeting start (configurable per-ability)",
+        "Respects quiet hours and Slack rate limits",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-010",
+      "title": "Post-call: meeting completed → transcript + action items",
+      "description": "As a sales rep, I want meeting transcripts processed and action items extracted automatically after every call.",
+      "acceptanceCriteria": [
+        "agent-trigger handler for meeting_completed triggers transcript extraction if recording_url exists",
+        "Action items stored in command_centre_items with item_type: follow_up",
+        "Each item includes description, assignee, deadline, linked deal/contact",
+        "Fires handoff event action_items.complete",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-011",
+      "title": "Post-call: actions → follow-up draft + CRM update",
+      "description": "As a sales rep, I want follow-up emails drafted and CRM updated automatically after calls, ready for my approval.",
+      "acceptanceCriteria": [
+        "Handoff from action_items.complete triggers draft-followup-email skill",
+        "Email draft stored as CC item with drafted_action containing subject/body/recipients",
+        "CRM update prepared as separate CC item with hasApproval: true",
+        "If no deal exists, creates CC item suggesting deal creation with pre-filled data",
+        "All items require approval (initial tier = approve)",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-012",
+      "title": "Pipeline: deal stage change → risk rescore + next actions",
+      "description": "As a sales rep, I want deal risk auto-reassessed and next best actions suggested when a deal moves stages.",
+      "acceptanceCriteria": [
+        "agent-trigger handler for deal_stage_changed triggers risk rescore",
+        "Risk result creates/updates CC item with item_type: risk_alert if risk is elevated",
+        "Next best actions added as CC items linked to deal_id",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-013",
+      "title": "Pipeline: task overdue, proposal sent, cold deal triggers",
+      "description": "As a sales rep, I want escalation reminders for overdue tasks, follow-up timers for proposals, and re-engagement for cold deals.",
+      "acceptanceCriteria": [
+        "Task overdue → CC item with urgency: high + Slack DM",
+        "Proposal sent → follow-up timer CC item (3 days default)",
+        "Cold deal (no activity >14 days, still open) → CC item + stale-deal-revival sequence",
+        "Each trigger respects per-org ability enablement",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-014",
+      "title": "CC inbox feed component",
+      "description": "As a sales rep, I want to see a feed of AI-generated action items in my Command Center, prioritized by urgency and relevance.",
+      "acceptanceCriteria": [
+        "CommandCenterInbox component queries command_centre_items where status IN (open, ready)",
+        "Sorted by priority_score DESC, urgency, created_at DESC",
+        "Supabase realtime subscription for live updates tracked via realtimeMonitor",
+        "Empty state: Your AI is watching — items will appear as events happen",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 2,
       "passes": false,
-      "notes": "File: src/components/Pipeline/PipelineTable.tsx",
+      "notes": "",
       "aiDevHubTaskId": null
     },
     {
-      "id": "US-003",
-      "title": "Ghost risk icon on DealCard",
-      "description": "As a rep, I want to see ghost risk at a glance so I can re-engage before losing the deal",
+      "id": "US-015",
+      "title": "CC item action cards with approve/dismiss/snooze",
+      "description": "As a sales rep, I want each CC item to have approve/dismiss/snooze actions so I can act quickly.",
       "acceptanceCriteria": [
-        "Lucide Ghost icon on DealCard when ghost_probability > 70",
-        "Shows percentage next to icon",
-        "Purple/violet styling",
-        "Not shown for Signed/Lost deals",
+        "Card shows: icon, title, summary, urgency badge, source agent badge, time ago",
+        "Approve executes drafted_action, Dismiss sets status=dismissed, Snooze sets due_date",
+        "Approve/dismiss triggers autopilot-record-signal",
+        "Expanding card shows full context, action preview, linked entity",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-016",
+      "title": "CC primary view swap — inbox first, chat second",
+      "description": "As a sales rep, I want the Command Center to show my intelligence inbox by default, with copilot chat as a secondary tab.",
+      "acceptanceCriteria": [
+        "CommandCenter restructured with tabs: Inbox (default) and Chat",
+        "Inbox tab renders CommandCenterInbox, Chat tab renders existing copilot",
+        "Unread/pending count badge on Inbox tab",
+        "Tab state persists in Zustand store",
+        "SheetContent uses !top-16 !h-[calc(100vh-4rem)] pattern",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-017",
+      "title": "Approval counter + auto-execute progress badge",
+      "description": "As a sales rep, I want to see how many times I've approved each action type and how close I am to auto-execute.",
+      "acceptanceCriteria": [
+        "CC item card shows badge: Approved X of these · Y more to auto-execute",
+        "Progress reads from autopilot_confidence table",
+        "When promotion_eligible=true, shows highlighted nudge",
+        "Clicking nudge calls autopilot-evaluate",
+        "Badge hidden for items where never_promote=true",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 3,
       "passes": false,
-      "notes": "File: src/components/Pipeline/DealCard.tsx — use Lucide Ghost icon",
+      "notes": "",
       "aiDevHubTaskId": null
     },
     {
-      "id": "US-004",
-      "title": "Owner filter popover in PipelineHeader",
-      "description": "As a manager, I want to filter pipeline by deal owner so I can review individual rep pipelines",
+      "id": "US-018",
+      "title": "Ability card trigger flow visualization",
+      "description": "As a sales rep, I want to see a visual flow of how each ability works — what triggers it, what it does, and how it delivers results.",
       "acceptanceCriteria": [
-        "Owner filter button enabled (remove disabled styling)",
-        "Popover with checkable list of org members",
-        "Members fetched from profiles table",
-        "Filters via owner_ids RPC parameter",
-        "Active filter count on button",
-        "Filter persists in URL params",
+        "AbilityTriggerFlow component renders mini vertical timeline/flow diagram",
+        "Shows: Trigger → Processing steps → Delivery",
+        "Data from abilityRegistry.ts: triggerType, stepCount, eventType, defaultChannels",
+        "Different icons for cron/event/chain trigger types",
+        "Renders inside AbilityDetailSheet popover",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-019",
+      "title": "Ability card live stats panel",
+      "description": "As a sales rep, I want to see when an ability last ran, how often it succeeds, and how many times it's fired.",
+      "acceptanceCriteria": [
+        "RPC fetches stats from agent_trigger_runs + agent_schedule_runs per ability",
+        "Shows: last run (relative), total runs (30 days), success rate %, average duration",
+        "Color-coded: green ≥90%, yellow 70-89%, red <70%",
+        "Never run state if no executions found",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-020",
+      "title": "Ability card inline threshold editing + channel toggles",
+      "description": "As a sales rep, I want to adjust when abilities fire and toggle delivery channels right from the ability card.",
+      "acceptanceCriteria": [
+        "Timing threshold input (number + unit) for time-based abilities",
+        "Changes saved to user_sequence_preferences or agent_triggers per user/org",
+        "Delivery channel toggles (Slack/Email/In-App) using Switch components",
+        "Disabled state for channels requiring unconnected integrations",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-021",
+      "title": "Integration health heartbeat edge function",
+      "description": "As a sales rep, I want the system to check my integrations every 2 hours and alert me via Slack DM if something breaks.",
+      "acceptanceCriteria": [
+        "New integration-health-heartbeat edge function deployed with --no-verify-jwt",
+        "Cron every 2 hours via pg_cron",
+        "Checks: Google Calendar sync freshness, Slack token validity, HubSpot status, Fathom expiry",
+        "Creates CC item via emitCCItem for failures + sends Slack DM",
+        "Deduplicates: max 1 alert per integration per 24h",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-022",
+      "title": "Slack delivery audit trail",
+      "description": "As an admin, I want every Slack message attempt logged so I can diagnose why didn't I get that notification.",
+      "acceptanceCriteria": [
+        "Migration creates slack_delivery_log table",
+        "deliverySlack.ts logs every attempt with success/failure + reason",
+        "Index on (user_id, created_at)",
+        "Queryable from brain health dashboard",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-023",
+      "title": "Circuit breakers for cron jobs",
+      "description": "As a sales rep, I want failing heartbeats to auto-disable and alert me via Slack DM instead of silently failing forever.",
+      "acceptanceCriteria": [
+        "Track consecutive failures per cron job",
+        "After 5 failures: disable cron, send Slack DM",
+        "Auto-retry after 1h cooldown, extend to 4h then 24h on continued failure",
+        "Recovery DM sent when auto-retry succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-024",
+      "title": "Event replay trail on CC items",
+      "description": "As a sales rep, I want to see a visual trace of how each CC item was created — what triggered it, what ran, where anything failed.",
+      "acceptanceCriteria": [
+        "EventReplayTrail component renders horizontal breadcrumb trail",
+        "Each step: icon, label, status (complete/running/failed/skipped)",
+        "Data from sequence_executions + agent_trigger_runs via source_event_id",
+        "Failed steps show error on hover/click",
+        "Show trace link on CC item cards",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 4,
       "passes": false,
-      "notes": "File: src/components/Pipeline/PipelineHeader.tsx — button exists but disabled",
+      "notes": "",
       "aiDevHubTaskId": null
     },
     {
-      "id": "US-005",
-      "title": "Inline edit — probability in PipelineTable",
-      "description": "As a rep, I want to click a probability cell and edit inline so I don't need to open the deal sheet",
+      "id": "US-025",
+      "title": "Graduated autonomy UI in CC inbox + settings",
+      "description": "As a sales rep, I want to see my autonomy level per action type and get in-app promotion proposals.",
       "acceptanceCriteria": [
-        "Click probability cell enters edit mode with number input (0-100)",
-        "Enter or blur to save",
-        "Escape to cancel",
-        "Optimistic update with rollback on error",
-        "Toast on error",
+        "Settings section: AI Autonomy showing each action type with tier, confidence, approval count",
+        "In CC inbox: promotion banner when pending_promotion_nudge=true with Accept/Not Now",
+        "Accept calls promotion engine, Not Now snoozes 7 days",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Backend 80% built — this is the UI layer",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-026",
+      "title": "Implement CC auto-execute action dispatch",
+      "description": "As a platform engineer, I want CC auto-execute to actually dispatch actions instead of being a stub.",
+      "acceptanceCriteria": [
+        "Replace stub in cc-auto-execute (CC12-007) with real dispatch",
+        "Route by drafted_action.type: send_email, update_crm, create_task, send_slack",
+        "Rate limits preserved: 10/day total, 3/day external",
+        "Pre-exec state stored for undo, signal recorded as auto_executed",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Critical for graduated autonomy to work end-to-end",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-027",
+      "title": "Learn from edits — capture edited content on approval",
+      "description": "As a sales rep, I want my edits to AI-generated drafts captured so the system can learn my preferences.",
+      "acceptanceCriteria": [
+        "Edited content saved to hitl_pending_approvals.edited_content on approval",
+        "HITL callback sends edited_content (not original) when edits exist",
+        "Signal recorded as approved_edited in autopilot system",
+        "Both original and edited preserved for diff analysis",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Column exists, just never populated",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-028",
+      "title": "Learn from edits — diff extraction + preference memories",
+      "description": "As a sales rep, I want the system to analyze my edits, extract style preferences, and remember them.",
+      "acceptanceCriteria": [
+        "New extract-edit-feedback edge function triggers on approved HITL with edited_content",
+        "Claude compares original vs edited: what changed, inferred preference, confidence",
+        "Creates copilot_memories with category: preference",
+        "Deduplicates: updates existing preference confidence instead of duplicating",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-029",
+      "title": "Inject learned preferences into draft generation",
+      "description": "As a sales rep, I want future drafts to reflect my learned writing preferences so I edit less over time.",
+      "acceptanceCriteria": [
+        "Draft generation skills fetch recent preference memories before generating",
+        "Preferences injected into system prompt",
+        "Contact-specific preferences override general preferences",
+        "No regression if no preferences exist yet",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-030",
+      "title": "Consolidated morning brain DM",
+      "description": "As a sales rep, I want one Slack DM each morning covering everything: auto-executed actions, integration alerts, meetings, deals, overnight activity.",
+      "acceptanceCriteria": [
+        "Merge slack-morning-brief and agent-morning-briefing into single builder",
+        "Sections: auto-exec overnight, integration alerts, follow-ups, meetings, deals, overnight activity, priorities",
+        "Block Kit with action buttons per section",
+        "Timezone-aware per-user timing, deduplicate (1 brief/day)",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Two parallel systems exist — consolidate into one",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-031",
+      "title": "Morning DM reply more thread handler",
+      "description": "As a sales rep, I want to reply more to my morning brief and get expanded details in a thread.",
+      "acceptanceCriteria": [
+        "Slack handler detects more reply or reaction in morning brief DM thread",
+        "Responds with expanded view per section",
+        "Supports section-specific: more meetings, more deals, more overnight",
+        "Handler registered in slack-events or slack-interactive router",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-032",
+      "title": "Cross-deal pattern intelligence",
+      "description": "As a sales rep, I want the AI to spot patterns across my pipeline and proactively suggest what works.",
+      "acceptanceCriteria": [
+        "Wire agent-pipeline-patterns + agent-engagement-patterns outputs as CC items",
+        "Insights with item_type: insight, urgency: normal",
+        "Include: pattern description, evidence, suggested action, confidence",
+        "Max 2 pattern insights per user per week",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "aiDevHubTaskId": null
+    },
+    {
+      "id": "US-033",
+      "title": "Brain health dashboard on Agent Demo page",
+      "description": "As an admin, I want to see brain health: cron status, trigger rates, errors, DLQ depth, Slack delivery rates.",
+      "acceptanceCriteria": [
+        "New Brain Health section on Agent Demo page",
+        "Shows: cron jobs with last run + status, trigger rate (24h), error rate, DLQ depth, Slack success rate",
+        "Color-coded: green (healthy), yellow (warnings), red (failures)",
+        "Single RPC aggregating schedule runs, trigger runs, dead letters, delivery log",
+        "Auto-refresh every 30 seconds",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
       "priority": 5,
       "passes": false,
-      "notes": "File: src/components/Pipeline/PipelineTable.tsx",
+      "notes": "",
       "aiDevHubTaskId": null
     },
     {
-      "id": "US-006",
-      "title": "Inline edit — close date in PipelineTable",
-      "description": "As a rep, I want to click a close date cell and pick a new date inline",
+      "id": "US-034",
+      "title": "First 24h onboarding — brain does something visible",
+      "description": "As a new user, I want the brain to do something visible within my first 24 hours so I know it's working.",
       "acceptanceCriteria": [
-        "Click close date cell enters edit mode with date input",
-        "Selecting date saves immediately",
-        "Escape to cancel",
-        "Optimistic update with rollback on error",
-        "Toast on error",
+        "First login or first calendar sync triggers agent-initial-scan",
+        "Creates 2-5 CC items: stale deals, upcoming meetings to prep, contacts needing follow-up",
+        "If calendar connected: prep next meeting immediately",
+        "If no data: CC item says Connect your calendar and I'll prep your first meeting",
+        "Items styled with Welcome badge",
         "Typecheck passes",
         "Verify in browser on localhost:5175"
       ],
-      "priority": 6,
+      "priority": 5,
       "passes": false,
-      "notes": "File: src/components/Pipeline/PipelineTable.tsx",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-007",
-      "title": "BulkActionBar — stage change",
-      "description": "As a rep, I want to select multiple deals and move them to a different stage in one action",
-      "acceptanceCriteria": [
-        "Floating bar at bottom when 1+ deals selected",
-        "Shows selected count",
-        "'Move to Stage' dropdown lists all pipeline stages",
-        "Single DB call updates all selected deals",
-        "Success toast with count",
-        "Selection clears after action",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 7,
-      "passes": false,
-      "notes": "File: src/components/Pipeline/BulkActionBar.tsx — currently returns null",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-008",
-      "title": "BulkActionBar — close as lost",
-      "description": "As a rep, I want to bulk-close stale deals as lost to clean up my pipeline",
-      "acceptanceCriteria": [
-        "'Close as Lost' button in BulkActionBar",
-        "Confirmation dialog before executing",
-        "Updates status to lost and moves to Lost stage",
-        "Success toast with count",
-        "Selection clears after action",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 8,
-      "passes": false,
-      "notes": "File: src/components/Pipeline/BulkActionBar.tsx",
-      "aiDevHubTaskId": null
-    },
-    {
-      "id": "US-009",
-      "title": "BulkActionBar — assign owner",
-      "description": "As a manager, I want to reassign multiple deals to a different rep",
-      "acceptanceCriteria": [
-        "'Assign to' dropdown lists org members",
-        "Single DB call updates owner_id on all selected",
-        "Success toast with count",
-        "Selection clears after action",
-        "Typecheck passes",
-        "Verify in browser on localhost:5175"
-      ],
-      "priority": 9,
-      "passes": false,
-      "notes": "File: src/components/Pipeline/BulkActionBar.tsx",
+      "notes": "",
       "aiDevHubTaskId": null
     }
   ]

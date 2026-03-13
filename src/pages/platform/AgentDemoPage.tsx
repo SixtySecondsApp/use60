@@ -32,7 +32,9 @@ import {
   Sparkles,
   Settings,
   BarChart3,
+  HeartPulse,
 } from 'lucide-react';
+import BrainHealthDashboard from '@/components/agent/BrainHealthDashboard';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -406,6 +408,15 @@ export default function AgentDemoPage() {
           <DemoAnalytics />
         </div>
 
+        {/* Brain Health Dashboard (US-033) */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <HeartPulse className="w-5 h-5" />
+            Brain Health
+          </h2>
+          <BrainHealthDashboard />
+        </div>
+
         {/* Two-column layout: Feed + Settings */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Activity Feed (takes 2 cols) */}
@@ -425,9 +436,9 @@ export default function AgentDemoPage() {
           <CardContent className="pt-6">
             <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-2">Complexity Assessment</h3>
             <div className="text-sm text-amber-700 dark:text-amber-400 space-y-2">
-              <p><strong>What's solid:</strong> Triage rules engine, orchestrator integration (feature-flagged), persona table + RPCs, Slack persona injection, test coverage (24 tests).</p>
-              <p><strong>What's overcomplicated:</strong> AgentPersonaSettings duplicates ProactiveAgentSettings. NotificationPreferences overlaps with sequence toggles already there. Two separate settings UIs for the same agent.</p>
-              <p><strong>Recommendation:</strong> Merge persona settings INTO the existing ProactiveAgentSettings page (add a "Persona" section). Don't create a separate settings page. The activation flow and analytics dashboard are genuinely new value — keep those.</p>
+              <p><strong>What&apos;s solid:</strong> Triage rules engine, orchestrator integration (feature-flagged), persona table + RPCs, Slack persona injection, test coverage (24 tests).</p>
+              <p><strong>What&apos;s overcomplicated:</strong> AgentPersonaSettings duplicates ProactiveAgentSettings. NotificationPreferences overlaps with sequence toggles already there. Two separate settings UIs for the same agent.</p>
+              <p><strong>Recommendation:</strong> Merge persona settings INTO the existing ProactiveAgentSettings page (add a &quot;Persona&quot; section). Don&apos;t create a separate settings page. The activation flow and analytics dashboard are genuinely new value — keep those.</p>
             </div>
           </CardContent>
         </Card>
