@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
+import { ApprovalProgressBadge } from './ApprovalProgressBadge';
+import { EventReplayTrail } from './EventReplayTrail';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -254,6 +256,9 @@ export function CCItemCard({ item, onStatusChange }: CCItemCardProps) {
               {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
             </span>
           </div>
+
+          {/* US-017: Approval progress badge */}
+          <ApprovalProgressBadge actionType={item.drafted_action?.type} />
         </div>
 
         {/* Expand chevron */}
@@ -326,6 +331,9 @@ export function CCItemCard({ item, onStatusChange }: CCItemCardProps) {
                   Confidence: {Math.round(item.confidence_score * 100)}%
                 </div>
               )}
+
+              {/* US-024: Event replay trail */}
+              <EventReplayTrail sourceEventId={item.source_event_id} />
 
               {/* Action buttons */}
               <div className="flex items-center gap-2 pt-1">

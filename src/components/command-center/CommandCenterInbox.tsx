@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Inbox, Loader2 } from 'lucide-react';
+import { Inbox } from 'lucide-react';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
@@ -7,6 +7,7 @@ import { useCommandCentreStore } from '@/lib/stores/commandCentreStore';
 import { realtimeMonitor } from '@/lib/utils/realtimeMonitor';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CCItemCard } from './CCItemCard';
+import { PromotionNudgeBanner } from './PromotionNudgeBanner';
 import type { CommandCentreItem, CCItemStatus } from './CCItemCard';
 
 const CHANNEL_NAME = 'cc-inbox-realtime';
@@ -197,6 +198,9 @@ export function CommandCenterInbox() {
 
   return (
     <div className="space-y-2 p-1">
+      {/* US-025: Promotion nudge banner */}
+      <PromotionNudgeBanner />
+
       {items.map((item) => (
         <CCItemCard
           key={item.id}
