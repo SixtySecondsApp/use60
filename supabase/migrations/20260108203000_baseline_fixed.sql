@@ -36,71 +36,29 @@ ALTER SCHEMA "public" OWNER TO "pg_database_owner";
 
 COMMENT ON SCHEMA "public" IS 'Function volatility fixed: 20250128200000';
 
-CREATE TYPE "public"."activity_priority" AS ENUM (
-    'low',
-    'medium',
-    'high'
-);
-
-ALTER TYPE "public"."activity_priority" OWNER TO "postgres";
-
-CREATE TYPE "public"."activity_status" AS ENUM (
-    'pending',
-    'completed',
-    'cancelled',
-    'no_show'
-);
-
-ALTER TYPE "public"."activity_status" OWNER TO "postgres";
-
-COMMENT ON TYPE "public"."activity_status" IS 'Activity statuses: pending, completed, cancelled, no_show (for tracking no-show meetings)';
-
-CREATE TYPE "public"."activity_type" AS ENUM (
-    'outbound',
-    'meeting',
-    'proposal',
-    'sale',
-    'fathom_meeting'
-);
-
-ALTER TYPE "public"."activity_type" OWNER TO "postgres";
-
-CREATE TYPE "public"."client_status" AS ENUM (
-    'active',
-    'churned',
-    'paused',
-    'signed',
-    'deposit_paid',
-    'notice_given'
-);
-
-ALTER TYPE "public"."client_status" OWNER TO "postgres";
-
-CREATE TYPE "public"."meeting_processing_status" AS ENUM (
-    'pending',
-    'processing',
-    'complete',
-    'failed'
-);
-
-ALTER TYPE "public"."meeting_processing_status" OWNER TO "postgres";
-
-CREATE TYPE "public"."member_role" AS ENUM (
-    'member',
-    'leader',
-    'admin'
-);
-
-ALTER TYPE "public"."member_role" OWNER TO "postgres";
-
-CREATE TYPE "public"."waitlist_status" AS ENUM (
-    'pending',
-    'released',
-    'declined',
-    'converted'
-);
-
-ALTER TYPE "public"."waitlist_status" OWNER TO "postgres";
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'activity_priority') THEN
+    CREATE TYPE "public"."activity_priority" AS ENUM ('low','medium','high');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'activity_status') THEN
+    CREATE TYPE "public"."activity_status" AS ENUM ('pending','completed','cancelled','no_show');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'activity_type') THEN
+    CREATE TYPE "public"."activity_type" AS ENUM ('outbound','meeting','proposal','sale','fathom_meeting');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'client_status') THEN
+    CREATE TYPE "public"."client_status" AS ENUM ('active','churned','paused','signed','deposit_paid','notice_given');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'meeting_processing_status') THEN
+    CREATE TYPE "public"."meeting_processing_status" AS ENUM ('pending','processing','complete','failed');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'member_role') THEN
+    CREATE TYPE "public"."member_role" AS ENUM ('member','leader','admin');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'waitlist_status') THEN
+    CREATE TYPE "public"."waitlist_status" AS ENUM ('pending','released','declined','converted');
+  END IF;
+END $$;
 
 -- ALTER FUNCTION "public"."accept_next_action_suggestion"("p_suggestion_id" "uuid", "p_task_data" "jsonb") OWNER TO "postgres";
 

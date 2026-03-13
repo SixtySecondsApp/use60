@@ -1,449 +1,189 @@
 {
   "version": 2,
-  "runSlug": "cicd-pipeline-overhaul",
-  "project": "CI/CD Pipeline Overhaul — Ship PRs With Confidence",
-  "description": "Replace aspirational CI/CD with a working pipeline: PR quality gates, automated edge function deployment, changed-function detection, smoke tests, and PR status dashboard.",
+  "runSlug": "bettercontact-integration",
+  "project": "BetterContact Integration",
+  "description": "Epic data integration with BetterContact waterfall enrichment API — enrichment + Lead Finder + cascade + deliverability tracking across Ops tables, contacts, and copilot skills",
   "phase": "build",
-  "startedAt": "2026-03-12T11:29:00.000Z",
-  "lastUpdatedAt": "2026-03-12T12:35:00.000Z",
-  "lastActiveAt": "2026-03-12T12:35:00.000Z",
-
-  "phaseGates": {
-    "launch": { "status": "skipped", "completedAt": null },
-    "discover": { "status": "complete", "completedAt": "2026-03-12T12:00:00.000Z" },
-    "define": { "status": "complete", "completedAt": "2026-03-12T12:10:00.000Z" },
-    "plan": { "status": "complete", "completedAt": "2026-03-12T12:20:00.000Z" },
-    "sync": { "status": "skipped", "completedAt": null },
-    "build": { "status": "complete", "completedAt": "2026-03-12T12:35:00.000Z" },
-    "deliver": { "status": "pending", "completedAt": null },
-    "housekeeping": { "status": "pending", "completedAt": null }
-  },
-
-  "branch": null,
-
+  "startedAt": "2026-03-12T00:00:00Z",
+  "lastUpdatedAt": "2026-03-12T00:00:00Z",
   "input": {
     "type": "description",
-    "source": "interactive",
+    "source": "User request + BetterContact API docs (doc.bettercontact.rocks) + 5 research agents",
     "extractedRequirements": [
-      "PR quality gate: lint + typecheck + build must block merge",
-      "Failing tests report but don't block merge (new, may be flaky)",
-      "Delete 63 stale failing tests, write better ones later",
-      "Changed-function detection: build _shared/ dependency graph, deploy only affected functions",
-      "Auto-deploy changed edge functions to staging on PR (--no-verify-jwt)",
-      "Auto-deploy changed edge functions to production on merge to main",
-      "Migration dry-run output posted as PR comment",
-      "Smoke tests after staging deployment (health + critical endpoints)",
-      "PR comment bot: summarizes lint, typecheck, build, tests, migrations, deployed functions",
-      "Extend security scanning to PRs targeting main (not just staging)",
-      "Edge function syntax validation (Deno check/lint) in CI",
-      "Delete aspirational deploy.yml and memory-optimized-deploy.yml",
-      "Fix SLACK_WEBHOOK_URL secret for db-migrations.yml"
+      "BYOK integration — each org enters their own BetterContact API key via Settings > Integrations",
+      "Email + phone enrichment for contacts in Ops tables (async submit → poll/webhook → populate cells)",
+      "Lead Finder as a table source — search BetterContact for new leads by company/people filters, import into Ops tables",
+      "Fire-and-forget UX with notification when enrichment completes",
+      "Email deliverability status column — surface catch_all/deliverable/undeliverable as visible enrichment data",
+      "Smart polling with exponential backoff (2s → 5s → 10s → 30s, cap at 150s Supabase limit)",
+      "Provider attribution tracking — store which BetterContact sub-provider found the email",
+      "Cascade enrichment support — add BetterContact as a step in enrich-router cascade (fallback after Apollo)",
+      "Credit balance check before enrichment (BetterContact GET /account endpoint)",
+      "Copilot skill for natural language enrichment triggers",
+      "Webhook receiver for async results (with polling fallback)",
+      "Custom fields pass-through for row/cell ID mapping back to Ops tables"
     ],
-    "constraints": [
-      "Staging requires --no-verify-jwt (ES256 JWT issue)",
-      "Production does NOT use --no-verify-jwt",
-      "Use dorny/paths-filter (NOT tj-actions/changed-files — supply chain compromised)",
-      "Frontend deploys via Vercel (not Docker/K8s)",
-      "487 edge functions — full deploy takes 10-15 min",
-      "esm.sh imports must pin @supabase/supabase-js@2.43.4"
+    "extractedConstraints": [
+      "BYOK only — no platform-provided API key",
+      "Store API key in integration_credentials table (provider='bettercontact'), never VITE_ prefix",
+      "Follow Apollo/Explorium enrichment patterns (enrich once, column many, cache in source_data.bettercontact)",
+      "Use getCorsHeaders(req) from _shared/corsHelper.ts",
+      "Pin @supabase/supabase-js@2.43.4 on esm.sh",
+      "maybeSingle() for optional records",
+      "Explicit column selection — never select('*')",
+      "Rate limit: 60 req/min per BetterContact API key",
+      "BetterContact API is async only — POST /async returns request_id, GET /async/{id} to poll",
+      "Auth via X-API-Key header to app.bettercontact.rocks/api/v2",
+      "Batch enrichment with custom_fields for row mapping"
+    ],
+    "openQuestions": [],
+    "answeredQuestions": [
+      { "q": "BYOK, platform-provided, or both?", "a": "BYOK only" },
+      { "q": "Lead Finder in MVP?", "a": "Yes, include in v1" },
+      { "q": "Fire-and-forget or stay-on-page UX?", "a": "Fire-and-forget with notification" },
+      { "q": "Include all 5 improvement suggestions?", "a": "Yes, all 5" }
+    ],
+    "improvementsAccepted": [
+      "Lead Finder as table source (not just enrichment)",
+      "Email deliverability status column (catch_all detection)",
+      "Smart polling with exponential backoff",
+      "Provider attribution tracking (email_provider field)",
+      "Cascade enrichment support via enrich-router"
     ]
   },
-
+  "phaseGates": {
+    "launch": { "status": "skipped", "completedAt": null },
+    "discover": { "status": "complete", "completedAt": "2026-03-12T00:00:00Z" },
+    "define": { "status": "complete", "completedAt": "2026-03-12T00:00:00Z" },
+    "plan": { "status": "complete", "completedAt": "2026-03-12T00:00:00Z" },
+    "build": { "status": "complete", "completedAt": "2026-03-12T00:00:00Z" },
+    "deliver": { "status": "pending", "completedAt": null }
+  },
   "team": {
     "tier": 3,
-    "composition": {
-      "architect": "opus",
-      "reviewer": "opus",
-      "manager": "opus",
-      "workers": ["sonnet", "sonnet", "sonnet"]
-    },
-    "parallelGroups": {
-      "A": "Cleanup + PR quality gate (CI-012, CI-001, CI-002, CI-006, CI-011)",
-      "B": "Edge function deploy pipeline (CI-003, CI-004, CI-005, CI-007, CI-013)",
-      "C": "E2E testing (CI-008, CI-009)",
-      "D": "Aggregator (CI-010)"
-    }
+    "reason": "10 stories, 2 external API surfaces (enrichment + lead finder), async webhook architecture (novel), security surface (API key storage, webhook verification, RLS), cascade cross-feature dependency",
+    "workers": { "model": "sonnet", "count": 3, "role": "Parallel story execution" },
+    "reviewer": { "model": "opus", "count": 1, "role": "Quality validation + code review" },
+    "architect": { "model": "opus", "count": 1, "role": "PLAN phase design + architecture decisions" },
+    "manager": { "model": "opus", "count": 1, "role": "Blocker resolution + cross-story coordination" }
   },
-
   "stories": [
     {
-      "id": "CI-012",
-      "feature": "cicd",
-      "title": "Delete stale tests + aspirational workflows",
-      "type": "cleanup",
-      "status": "complete",
-      "priority": 1,
-      "group": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["CI-001", "CI-002"],
-      "parallelWith": [],
-      "acceptance": [
-        "6 failing test files deleted (QuickAdd, authUtils, session-persistence, LeadAnalyticsCard, fathomApiService, useVersionCheck)",
-        "deploy.yml deleted",
-        "memory-optimized-deploy.yml deleted",
-        "vitest run passes with 0 failures (44 files, 1091+ tests)",
-        "No workflow files reference non-existent Docker/K8s infrastructure"
-      ],
-      "estimatedMinutes": 15,
-      "files": [
-        "tests/unit/QuickAdd.test.tsx",
-        "tests/unit/authUtils.test.ts",
-        "tests/unit/copilot/session-persistence.test.ts",
-        "tests/unit/leads/LeadAnalyticsCard.test.tsx",
-        "tests/unit/services/fathomApiService.test.ts",
-        "tests/unit/useVersionCheck.test.ts",
-        ".github/workflows/deploy.yml",
-        ".github/workflows/memory-optimized-deploy.yml"
-      ],
-      "testFiles": []
+      "id": "BC-001",
+      "title": "Integration Credentials & Config Modal",
+      "description": "Add BetterContact as a provider in integration_credentials. Create useBetterContactIntegration hook (clone useExploriumIntegration) and BetterContactConfigModal. Register in Settings > Integrations page with API key input + credit balance display.",
+      "estimate": "2-3h",
+      "dependencies": [],
+      "group": 1
     },
     {
-      "id": "CI-001",
-      "feature": "cicd",
-      "title": "PR Quality Gate — lint + typecheck + build",
-      "type": "ci",
-      "status": "complete",
-      "priority": 2,
-      "group": 1,
-      "dependencies": { "stories": ["CI-012"], "files": [], "schema": [] },
-      "blocks": ["CI-010"],
-      "parallelWith": ["CI-002", "CI-006", "CI-011", "CI-003", "CI-013"],
-      "acceptance": [
-        "New .github/workflows/pr-checks.yml triggers on pull_request to main and staging",
-        "Lint job runs npm run lint — BLOCKS merge on failure",
-        "Typecheck job runs npm run typecheck — BLOCKS merge on failure",
-        "Build job runs npm run build — BLOCKS merge on failure",
-        "All 3 jobs run in parallel with shared npm ci + cache setup",
-        "Uses actions/setup-node@v4 with Node 20 and npm cache"
-      ],
-      "estimatedMinutes": 25,
-      "files": [
-        ".github/workflows/pr-checks.yml"
-      ],
-      "testFiles": []
+      "id": "BC-002",
+      "title": "Database Schema Migration",
+      "description": "Add 'bettercontact' to dynamic_tables source_type CHECK. Create bettercontact_requests table (tracks async enrichment jobs: request_id, table_id, column_id, status, contacts count). Add RLS policies. Add bettercontact_property_name to dynamic_table_columns.",
+      "estimate": "2-3h",
+      "dependencies": [],
+      "group": 1
     },
     {
-      "id": "CI-002",
-      "feature": "cicd",
-      "title": "Unit test job in CI (report-only, non-blocking)",
-      "type": "ci",
-      "status": "complete",
-      "priority": 3,
-      "group": 1,
-      "dependencies": { "stories": ["CI-012"], "files": [], "schema": [] },
-      "blocks": ["CI-010"],
-      "parallelWith": ["CI-001", "CI-006", "CI-011"],
-      "acceptance": [
-        "Unit test job added to pr-checks.yml — runs npm run test:run",
-        "Test job reports status but does NOT block merge (continue-on-error: true)",
-        "JUnit reporter configured for GitHub Actions test summary integration",
-        "Coverage uploaded as artifact (not to Codecov yet)",
-        "Test results visible in PR checks tab"
-      ],
-      "estimatedMinutes": 20,
-      "files": [
-        ".github/workflows/pr-checks.yml"
-      ],
-      "testFiles": []
+      "id": "BC-003",
+      "title": "Copilot Skill Definition",
+      "description": "Create skills/atomic/bettercontact-enrich/SKILL.md with triggers for 'enrich with bettercontact', 'find emails', 'get phone numbers'. Create skills/atomic/bettercontact-lead-finder/SKILL.md for prospecting triggers.",
+      "estimate": "1-2h",
+      "dependencies": [],
+      "group": 1
     },
     {
-      "id": "CI-003",
-      "feature": "cicd",
-      "title": "Changed edge function detection + _shared/ dependency graph",
-      "type": "ci",
-      "status": "complete",
-      "priority": 2,
-      "group": 2,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["CI-004", "CI-005"],
-      "parallelWith": ["CI-001", "CI-002", "CI-006", "CI-011", "CI-012", "CI-013"],
-      "acceptance": [
-        "scripts/detect-changed-functions.sh takes base branch as arg, outputs JSON list of function names",
-        "Scans git diff for changed files under supabase/functions/",
-        "If _shared/ file changed: traces which functions import it via grep, adds those to deploy list",
-        "Deduplicates output list",
-        "Handles edge case: if _shared/ file is imported by >100 functions, falls back to 'deploy all'",
-        "Tested locally with sample git diffs"
-      ],
-      "estimatedMinutes": 30,
-      "files": [
-        "scripts/detect-changed-functions.sh"
-      ],
-      "testFiles": []
+      "id": "BC-004",
+      "title": "Submit Enrichment Edge Function",
+      "description": "Create supabase/functions/bettercontact-enrich/index.ts. Router pattern with actions: submit, status, credits. Submit reads contacts from dynamic_table_rows, posts to BetterContact POST /async with custom_fields containing row_id+column_id for mapping. Creates bettercontact_requests tracking row. Marks cells as pending. Pre-flight credit check.",
+      "estimate": "5-7h",
+      "dependencies": ["BC-002"],
+      "group": 2
     },
     {
-      "id": "CI-004",
-      "feature": "cicd",
-      "title": "Auto-deploy changed functions to staging on PR",
-      "type": "ci",
-      "status": "complete",
-      "priority": 4,
-      "group": 2,
-      "dependencies": { "stories": ["CI-003"], "files": ["scripts/detect-changed-functions.sh"], "schema": [] },
-      "blocks": ["CI-005", "CI-007", "CI-010"],
-      "parallelWith": [],
-      "acceptance": [
-        "New .github/workflows/deploy-functions.yml triggers on pull_request when supabase/functions/** changes",
-        "Uses dorny/paths-filter (pinned to commit SHA) to detect changes",
-        "Runs detect-changed-functions.sh to get deploy list",
-        "Deploys each function with --project-ref caerqjzvuerejfrdtygb --no-verify-jwt",
-        "Posts PR comment listing deployed functions",
-        "Concurrency group prevents parallel staging deploys",
-        "Uses SUPABASE_ACCESS_TOKEN secret for auth"
-      ],
-      "estimatedMinutes": 30,
-      "files": [
-        ".github/workflows/deploy-functions.yml"
-      ],
-      "testFiles": []
+      "id": "BC-005",
+      "title": "Async Result Polling + Webhook Receiver",
+      "description": "Add bettercontact handler to webhook-integrations router. Receive webhook payload, match to bettercontact_requests by request_id, write results into dynamic_table_cells (email, phone, status, provider). Cache full response in source_data.bettercontact. Deduct credits via costTracking. Also implement polling fallback with exponential backoff (2s→5s→10s→30s) for when webhooks fail.",
+      "estimate": "6-8h",
+      "dependencies": ["BC-002", "BC-004"],
+      "group": 3
     },
     {
-      "id": "CI-005",
-      "feature": "cicd",
-      "title": "Auto-deploy changed functions to production on merge",
-      "type": "ci",
-      "status": "complete",
-      "priority": 5,
-      "group": 3,
-      "dependencies": { "stories": ["CI-003", "CI-004"], "files": [".github/workflows/deploy-functions.yml"], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["CI-007"],
-      "acceptance": [
-        "deploy-functions.yml also triggers on push to main",
-        "Production deploy uses --project-ref ygdpgliavpxeugaajgrb WITHOUT --no-verify-jwt",
-        "Slack notification on success/failure (matching db-migrations.yml pattern)",
-        "Health endpoint check after deployment",
-        "Separate concurrency group from staging deploys"
-      ],
-      "estimatedMinutes": 20,
-      "files": [
-        ".github/workflows/deploy-functions.yml"
-      ],
-      "testFiles": []
+      "id": "BC-006",
+      "title": "Email Deliverability Status Column",
+      "description": "Add 'bettercontact_status' enrichment column type that surfaces contact_email_address_status (deliverable/catch_all/catch_all_safe/catch_all_not_safe/undeliverable/not_found) with color-coded badges. Add to enrichmentTemplates.ts with BetterContact-specific templates: Verified Email, Phone Number, Email Deliverability Status, Provider Attribution.",
+      "estimate": "2-3h",
+      "dependencies": ["BC-005"],
+      "group": 3
     },
     {
-      "id": "CI-006",
-      "feature": "cicd",
-      "title": "Migration dry-run PR comments + destructive op warning",
-      "type": "ci",
-      "status": "complete",
-      "priority": 3,
-      "group": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["CI-010"],
-      "parallelWith": ["CI-001", "CI-002", "CI-003", "CI-011", "CI-012"],
-      "acceptance": [
-        "db-migrations.yml enhanced: dry-run output posted as PR comment via github-script",
-        "Comment warns if DROP TABLE, DROP COLUMN, or ALTER TYPE detected in migration files",
-        "Comment updates on re-push (single comment, not spam)",
-        "Migration file naming validated: YYYYMMDDHHMMSS_description.sql format",
-        "Notification steps use continue-on-error: true to prevent false failures"
-      ],
-      "estimatedMinutes": 25,
-      "files": [
-        ".github/workflows/db-migrations.yml"
-      ],
-      "testFiles": []
+      "id": "BC-007",
+      "title": "Frontend Enrichment Trigger + Progress UI",
+      "description": "Wire BetterContact into Ops table enrichment UI. Add as enrichment source option. Fire-and-forget: submit shows toast 'Enrichment submitted', progress tracked via enrichment_jobs table polling, toast notification when complete. Leverage existing EnrichmentProgressBar component.",
+      "estimate": "3-4h",
+      "dependencies": ["BC-004"],
+      "group": 2
     },
     {
-      "id": "CI-007",
-      "feature": "cicd",
-      "title": "Smoke tests after staging deployment",
-      "type": "ci",
-      "status": "complete",
-      "priority": 6,
-      "group": 3,
-      "dependencies": { "stories": ["CI-004"], "files": [".github/workflows/deploy-functions.yml"], "schema": [] },
-      "blocks": ["CI-010"],
-      "parallelWith": ["CI-005"],
-      "acceptance": [
-        "Smoke test job runs after staging deploy in deploy-functions.yml",
-        "Hits health endpoint and verifies 200 response",
-        "Hits 3-5 verify_jwt=false endpoints with known payloads",
-        "Reports pass/fail as PR comment update",
-        "Timeout: 60s per endpoint, 5 min total",
-        "Smoke test failures do NOT block merge (warning only)"
-      ],
-      "estimatedMinutes": 25,
-      "files": [
-        ".github/workflows/deploy-functions.yml",
-        "scripts/smoke-test-staging.sh"
-      ],
-      "testFiles": []
+      "id": "BC-008",
+      "title": "Lead Finder — Search + Import to Table",
+      "description": "Create supabase/functions/bettercontact-lead-finder/index.ts. POST /lead_finder/async with company/people filters. Poll GET /lead_finder/async/{id} for results. Create new Ops table from results (source_type='bettercontact'). Frontend: Add 'BetterContact Lead Finder' as table source option alongside Apollo search. Search form with company name/domain, job title, location filters.",
+      "estimate": "5-7h",
+      "dependencies": ["BC-001", "BC-002"],
+      "group": 2
     },
     {
-      "id": "CI-008",
-      "feature": "cicd",
-      "title": "Replace playwriter with standard Playwright for CI",
-      "type": "testing",
-      "status": "complete",
-      "priority": 7,
-      "group": 4,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": ["CI-009"],
-      "parallelWith": ["CI-001", "CI-002", "CI-003", "CI-004", "CI-006"],
-      "acceptance": [
-        "playwright.config.ts updated: remove deprecated comment, configure headless Chromium",
-        "tests/fixtures/playwriter-setup.ts replaced with standard Playwright test fixtures",
-        "Auth setup uses Supabase test user (scripts/create-playwright-user.sql pattern)",
-        "3-5 critical E2E tests verified working: login, navigation, pipeline view, QuickAdd",
-        "Runs locally with npx playwright test",
-        "No dependency on Chrome extension or playwriter MCP"
-      ],
-      "estimatedMinutes": 45,
-      "files": [
-        "playwright.config.ts",
-        "tests/fixtures/playwriter-setup.ts",
-        "tests/fixtures/auth.setup.ts",
-        "tests/e2e/01-critical-flows.spec.ts",
-        "tests/e2e/navigation.spec.ts"
-      ],
-      "testFiles": ["tests/e2e/01-critical-flows.spec.ts"]
+      "id": "BC-009",
+      "title": "Cascade Enrichment Integration",
+      "description": "Add BetterContact as a cascade step in enrich-router. When Apollo/AI Ark enrichment returns no email, auto-fallback to BetterContact's 20+ provider waterfall. Configurable cascade order in org settings. Update enrich-router/handlers/cascade.ts.",
+      "estimate": "3-4h",
+      "dependencies": ["BC-004", "BC-005"],
+      "group": 4
     },
     {
-      "id": "CI-009",
-      "feature": "cicd",
-      "title": "E2E tests in CI against staging",
-      "type": "ci",
-      "status": "complete",
-      "priority": 8,
-      "group": 4,
-      "dependencies": { "stories": ["CI-008"], "files": ["playwright.config.ts"], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "acceptance": [
-        "E2E job added to pr-checks.yml — runs after build succeeds",
-        "Starts Vite dev server with --mode staging env vars",
-        "Runs Playwright headless against localhost",
-        "Test artifacts (screenshots, traces) uploaded as GitHub Actions artifacts",
-        "E2E job does NOT block merge (continue-on-error: true)",
-        "Only runs 3-5 critical flow tests (not full suite)"
-      ],
-      "estimatedMinutes": 30,
-      "files": [
-        ".github/workflows/pr-checks.yml"
-      ],
-      "testFiles": []
-    },
-    {
-      "id": "CI-010",
-      "feature": "cicd",
-      "title": "PR status dashboard comment (aggregate all checks)",
-      "type": "ci",
-      "status": "complete",
-      "priority": 9,
-      "group": 5,
-      "dependencies": { "stories": ["CI-001", "CI-002", "CI-004", "CI-006", "CI-007"], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": [],
-      "acceptance": [
-        "New job in pr-checks.yml runs after all other jobs complete (needs: [lint, typecheck, build, test, ...])",
-        "Posts single PR comment with table: check name | status | details",
-        "Includes: lint, typecheck, build, unit tests, migration dry-run, deployed functions, smoke tests",
-        "Uses actions/github-script to create or update comment (finds by marker comment)",
-        "Shows bundle size from build output",
-        "Updates on re-push (no comment spam)"
-      ],
-      "estimatedMinutes": 30,
-      "files": [
-        ".github/workflows/pr-checks.yml"
-      ],
-      "testFiles": []
-    },
-    {
-      "id": "CI-011",
-      "feature": "cicd",
-      "title": "Landing page CI + extend security scan to main",
-      "type": "ci",
-      "status": "complete",
-      "priority": 3,
-      "group": 1,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["CI-001", "CI-002", "CI-006", "CI-012"],
-      "acceptance": [
-        "Landing page build job added to pr-checks.yml when packages/landing/** changes",
-        "Runs npm run build in packages/landing workspace",
-        "security-scan.yml triggers extended to include pull_request to main (not just staging)",
-        "Security scan results visible in PR checks"
-      ],
-      "estimatedMinutes": 15,
-      "files": [
-        ".github/workflows/pr-checks.yml",
-        ".github/workflows/security-scan.yml"
-      ],
-      "testFiles": []
-    },
-    {
-      "id": "CI-013",
-      "feature": "cicd",
-      "title": "Edge function Deno syntax validation in CI",
-      "type": "ci",
-      "status": "complete",
-      "priority": 4,
-      "group": 2,
-      "dependencies": { "stories": [], "files": [], "schema": [] },
-      "blocks": [],
-      "parallelWith": ["CI-001", "CI-002", "CI-003", "CI-006"],
-      "acceptance": [
-        "Deno lint/check job added to deploy-functions.yml for changed functions only",
-        "Uses denoland/setup-deno@v2 action",
-        "Runs deno check on each changed function's index.ts",
-        "Validates no unpinned esm.sh imports (grep for @supabase/supabase-js@2 without @2.43.4)",
-        "Reports syntax errors in PR comment",
-        "Non-blocking (warning only) — Deno check may have false positives with esm.sh"
-      ],
-      "estimatedMinutes": 25,
-      "files": [
-        ".github/workflows/deploy-functions.yml",
-        "scripts/validate-edge-functions.sh"
-      ],
-      "testFiles": []
+      "id": "BC-010",
+      "title": "Provider Attribution + Analytics",
+      "description": "Store email_provider from BetterContact response in source_data. Add 'Provider' column option to Ops tables showing which sub-provider found the data. Surface enrichment stats in integration settings: total enriched, success rate, avg credits per lookup, top providers.",
+      "estimate": "2-3h",
+      "dependencies": ["BC-005"],
+      "group": 4
     }
   ],
-
-  "execution": {
-    "totalStories": 13,
-    "completedStories": 13,
-    "lastUpdated": "2026-03-12T12:20:00.000Z",
-    "executionOrder": [
-      { "wave": 1, "stories": ["CI-012", "CI-003", "CI-006", "CI-011", "CI-013", "CI-008"], "parallel": true, "description": "Cleanup + foundations (all independent)" },
-      { "wave": 2, "stories": ["CI-001", "CI-002", "CI-004"], "parallel": true, "description": "PR checks workflow + staging deploy (CI-001/002 need CI-012, CI-004 needs CI-003)" },
-      { "wave": 3, "stories": ["CI-005", "CI-007"], "parallel": true, "description": "Production deploy + smoke tests (both need CI-004)" },
-      { "wave": 4, "stories": ["CI-009"], "parallel": false, "description": "E2E in CI (needs CI-008)" },
-      { "wave": 5, "stories": ["CI-010"], "parallel": false, "description": "PR dashboard (needs CI-001, CI-002, CI-004, CI-006, CI-007)" }
-    ]
-  },
-
-  "research": {
-    "codebaseScout": {
-      "existingWorkflows": 6,
-      "workingWorkflows": ["db-migrations.yml", "security-scan.yml"],
-      "aspirationalWorkflows": ["deploy.yml", "memory-optimized-deploy.yml"],
-      "edgeFunctions": 567,
-      "sharedFiles": 87,
-      "migrations": 694,
-      "testFiles": { "total": 50, "passing": 44, "failing": 6, "passingTests": 1091, "failingTests": 63 },
-      "deploymentMethod": "Vercel (frontend) + manual scripts (edge functions)"
+  "parallelGroups": [
+    { "group": 1, "stories": ["BC-001", "BC-002", "BC-003"], "description": "Foundation — no dependencies, all parallel" },
+    { "group": 2, "stories": ["BC-004", "BC-007", "BC-008"], "description": "Core functions + UI — depends on Group 1" },
+    { "group": 3, "stories": ["BC-005", "BC-006"], "description": "Async results + status columns — depends on submit function" },
+    { "group": 4, "stories": ["BC-009", "BC-010"], "description": "Cascade + analytics — depends on full enrichment pipeline" }
+  ],
+  "apiReference": {
+    "baseUrl": "https://app.bettercontact.rocks/api/v2",
+    "auth": { "type": "header", "key": "X-API-Key" },
+    "rateLimit": "60 req/min per API key",
+    "endpoints": {
+      "submitEnrichment": { "method": "POST", "path": "/async", "async": true },
+      "getResults": { "method": "GET", "path": "/async/{request_id}" },
+      "submitLeadFinder": { "method": "POST", "path": "/lead_finder/async", "async": true },
+      "getLeadFinderResults": { "method": "GET", "path": "/lead_finder/async/{request_id}" },
+      "checkCredits": { "method": "GET", "path": "/account", "authVia": "query_params" }
     },
-    "riskScanner": {
-      "brokenTests": "63 failures across 6 files",
-      "edgeFunctionTestCoverage": "1.3%",
-      "typescriptStrict": false,
-      "nonIdempotentMigrations": 14,
-      "verifyJwtFalse": 19,
-      "branchProtection": false
+    "enrichmentInput": {
+      "required": ["first_name", "last_name"],
+      "optional": ["company", "company_domain", "linkedin_url", "custom_fields"],
+      "flags": ["enrich_email_address", "enrich_phone_number"],
+      "webhook": "optional URL for async callback"
     },
-    "githubScout": {
-      "dbMigrationsSlackBroken": "SLACK_WEBHOOK_URL secret empty — staging runs failing on notification step",
-      "supplyChainWarning": "tj-actions/changed-files compromised March 2025 — use dorny/paths-filter",
-      "toolRecommendations": ["dorny/paths-filter@v3", "supabase/setup-cli@v1", "denoland/setup-deno@v2"]
-    },
-    "scopeSizer": {
-      "totalStories": 13,
-      "estimatedHours": { "optimistic": 4.5, "realistic": 6, "pessimistic": 8 },
-      "mvpStories": ["CI-012", "CI-001", "CI-003", "CI-004", "CI-006"],
-      "mvpHours": "2-3"
+    "enrichmentOutput": {
+      "fields": ["enriched", "email_provider", "contact_first_name", "contact_last_name", "contact_email_address", "contact_email_address_status", "contact_gender", "contact_job_title"],
+      "statuses": ["deliverable", "catch_all", "catch_all_safe", "catch_all_not_safe", "undeliverable", "not_found"],
+      "meta": ["credits_consumed", "credits_left", "summary"]
     }
-  }
+  },
+  "risks": [
+    { "severity": "high", "area": "API Key Security", "issue": "Must store in integration_credentials, never VITE_ prefix", "mitigation": "Follow Explorium BYOK pattern" },
+    { "severity": "high", "area": "Duplicate Enrichment", "issue": "No mechanism to prevent re-enriching same contact", "mitigation": "Check source_data.bettercontact cache + skip_completed flag + force_refresh override" },
+    { "severity": "high", "area": "Credit Burn", "issue": "Mass-enrichment could burn credits fast", "mitigation": "Pre-flight credit check + confirmation dialog for >50 rows + per-org quota" },
+    { "severity": "medium", "area": "Webhook Reliability", "issue": "BetterContact webhook may fail silently", "mitigation": "Polling fallback with exponential backoff" },
+    { "severity": "medium", "area": "Async Complexity", "issue": "Novel pattern vs sync enrichment (Apollo/AI Ark)", "mitigation": "bettercontact_requests tracking table + status polling" },
+    { "severity": "low", "area": "Rate Limiting", "issue": "60 req/min shared across all endpoints", "mitigation": "Queue large batches, respect 429 responses" }
+  ]
 }
