@@ -37,6 +37,7 @@ import {
   PackageCheck,
   Clock,
   Save,
+  Settings2,
   X,
   Eye,
 } from 'lucide-react';
@@ -54,6 +55,7 @@ interface ProposalProgressOverlayProps {
   onOpenChange: (open: boolean) => void;
   onEditSections?: (proposalId: string) => void;
   onSendToClient?: (proposalId: string) => void;
+  onCustomise?: () => void;
 }
 
 type PipelineStatus =
@@ -275,6 +277,7 @@ export default function ProposalProgressOverlay({
   // onEditSections kept in interface for backward compat; inline edit mode (UX-006) now handles editing
   onEditSections: _onEditSections,
   onSendToClient,
+  onCustomise,
 }: ProposalProgressOverlayProps) {
   void _onEditSections;
   const [proposal, setProposal] = useState<ProposalRow | null>(null);
@@ -892,6 +895,18 @@ export default function ProposalProgressOverlay({
                   <DocumentAssemblyAnimation status={status} />
                 </div>
               </div>
+              {onCustomise && (
+                <div className="shrink-0 pt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={onCustomise}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Settings2 className="h-3.5 w-3.5" />
+                    Customise proposal settings
+                  </button>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

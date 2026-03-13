@@ -4,7 +4,8 @@
  * Resolves /t/{code} campaign links OR /t/{domain.com} creator URLs.
  *
  * Route detection:
- * - If :code contains a "." → domain mode → render CreatorView (auth-gated)
+ * - If :code contains a "." + has cid/email params → CreatorView (auth-gated)
+ * - If :code contains a "." without creator params → DomainDemoView (public demo)
  * - If :code is alphanumeric (6-char base62) → prospect mode → existing flow
  *
  * CMP-004: Instant load from pre-enriched data + tracking init
@@ -55,25 +56,95 @@ export default function CampaignLanding() {
   const { code } = useParams<{ code: string }>();
   const [searchParams] = useSearchParams();
 
-  // UCR-001: If code is a domain, render the creator view
+  // UCR-001: If code is a domain, render creator view (with params) or public demo
   if (code && isDomain(code)) {
-    const queryParams: CampaignQueryParams = {
-      fn: searchParams.get('fn') || searchParams.get('f') || undefined,
-      ln: searchParams.get('ln') || searchParams.get('l') || undefined,
-      email: searchParams.get('email') || undefined,
-      cid: searchParams.get('cid') || searchParams.get('id') || undefined,
-      title: searchParams.get('title') || searchParams.get('t') || undefined,
-    };
+    const hasCreatorParams = searchParams.get('cid') || searchParams.get('email');
+    if (hasCreatorParams) {
+      const queryParams: CampaignQueryParams = {
+        fn: searchParams.get('fn') || searchParams.get('f') || undefined,
+        ln: searchParams.get('ln') || searchParams.get('l') || undefined,
+        email: searchParams.get('email') || undefined,
+        cid: searchParams.get('cid') || searchParams.get('id') || undefined,
+        title: searchParams.get('title') || searchParams.get('t') || undefined,
+      };
 
-    return (
-      <Suspense fallback={<div className="min-h-screen bg-zinc-950" />}>
-        <CreatorView domain={code} queryParams={queryParams} />
-      </Suspense>
-    );
+      return (
+        <Suspense fallback={<div className="min-h-screen bg-zinc-950" />}>
+          <CreatorView domain={code} queryParams={queryParams} />
+        </Suspense>
+      );
+    }
+    // Public domain demo — no auth needed
+    return <DomainDemoView domain={code} />;
   }
 
   // Prospect view — existing campaign link resolution
   return <ProspectView code={code} />;
+}
+
+function DomainDemoView({ domain }: { domain: string }) {
+  const [loading, setLoading] = useState(true);
+  const [research, setResearch] = useState<ResearchData | null>(null);
+
+  useEffect(() => {
+    // Generate instant mock data from domain, then optionally upgrade with real research
+    const mockResearch = generateResearchFromUrl(domain);
+    setResearch(mockResearch);
+    setLoading(false);
+
+    // Fire-and-forget: attempt real research upgrade
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (supabaseUrl && anonKey) {
+      fetch(`${supabaseUrl}/functions/v1/demo-research`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${anonKey}`,
+          apikey: anonKey,
+        },
+        body: JSON.stringify({ domain }),
+      })
+        .then(res => res.ok ? res.json() : null)
+        .then(json => {
+          if (json?.success && json.data) {
+            setResearch(json.data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [domain]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <div className="relative">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-500/20 flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-violet-400" />
+            </div>
+            <div className="absolute inset-0 w-14 h-14 rounded-2xl border-2 border-violet-500/30 border-t-violet-400 animate-spin" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-zinc-400 font-medium">Preparing your demo...</p>
+            <p className="text-xs text-zinc-600 mt-1">Researching {domain}</p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (!research) return null;
+
+  return (
+    <div className="min-h-screen bg-zinc-950">
+      <SandboxExperience research={research} />
+    </div>
+  );
 }
 
 function ProspectView({ code }: { code: string | undefined }) {

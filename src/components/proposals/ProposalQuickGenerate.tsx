@@ -1,13 +1,6 @@
 import { useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { FileText, Loader2, Settings2 } from 'lucide-react';
 
 import ProposalProgressOverlay from '@/components/proposals/ProposalProgressOverlay';
-import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { supabase } from '@/lib/supabase/clientV2';
@@ -150,81 +143,16 @@ export function ProposalQuickGenerate({
 
   useImperativeHandle(triggerRef, () => ({ trigger: handleGenerate }), [handleGenerate]);
 
-  const button = (
-    <Button
-      size="sm"
-      variant="default"
-      disabled={isDisabled || loading}
-      onClick={handleGenerate}
-    >
-      {loading ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-      ) : (
-        <FileText className="mr-2 h-4 w-4" />
-      )}
-      Generate Proposal
-    </Button>
-  );
-
-  if (isDisabled) {
-    return (
-      <>
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span tabIndex={0}>{button}</span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              No meeting data available yet
-            </TooltipContent>
-          </Tooltip>
-          {onCustomise && (
-            <button
-              type="button"
-              onClick={onCustomise}
-              className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <Settings2 className="h-3 w-3" />
-              Customise
-            </button>
-          )}
-        </div>
-        {activeProposalId && (
-          <ProposalProgressOverlay
-            proposalId={activeProposalId}
-            open={overlayOpen}
-            onOpenChange={setOverlayOpen}
-          />
-        )}
-      </>
-    );
-  }
-
-  return (
-    <>
-      <div className="flex items-center gap-2">
-        {button}
-        {onCustomise && (
-          <button
-            type="button"
-            onClick={onCustomise}
-            className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <Settings2 className="h-3 w-3" />
-            Customise
-          </button>
-        )}
-      </div>
-
-      {activeProposalId && (
-        <ProposalProgressOverlay
-          proposalId={activeProposalId}
-          open={overlayOpen}
-          onOpenChange={setOverlayOpen}
-        />
-      )}
-    </>
-  );
+  // Headless — the QuickActionsCard triggers generation via the imperative handle.
+  // Only render the progress overlay modal.
+  return activeProposalId ? (
+    <ProposalProgressOverlay
+      proposalId={activeProposalId}
+      open={overlayOpen}
+      onOpenChange={setOverlayOpen}
+      onCustomise={onCustomise}
+    />
+  ) : null;
 }
 
 export default ProposalQuickGenerate;

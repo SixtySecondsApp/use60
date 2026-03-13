@@ -253,7 +253,7 @@ function DealDetailPanel({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="fixed top-16 right-0 bottom-0 z-[61] w-full max-w-md bg-gray-950/95 backdrop-blur-xl border-l border-gray-800/50 overflow-y-auto"
+        className="fixed top-16 right-0 bottom-0 z-[61] w-full max-w-[calc(100vw-2rem)] md:max-w-md bg-gray-950/95 backdrop-blur-xl border-l border-gray-800/50 overflow-y-auto"
       >
         {/* Header */}
         <div className="sticky top-0 z-10 bg-gray-950/90 backdrop-blur-lg border-b border-gray-800/50 px-5 py-4">

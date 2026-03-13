@@ -1,4 +1,5 @@
 import type { ButtonConfig } from '@/lib/services/opsTableService';
+import type { FormattingRule } from '@/lib/utils/conditionalFormatting';
 
 // ── Interfaces ──────────────────────────────────────────────────
 
@@ -9,6 +10,7 @@ export interface PipelineColumnDef {
   position: number;
   width?: number;
   is_source?: boolean;
+  is_visible?: boolean;
   action_config?: ButtonConfig;
   formula_expression?: string;
 }
@@ -30,15 +32,6 @@ export interface PipelineDataSourceConfig {
   synthetic_rows?: Record<string, string>[];
 }
 
-export interface PipelineFormattingRule {
-  id: string;
-  column_key: string;
-  operator: 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty';
-  value: string;
-  style: { backgroundColor: string; textColor: string };
-  scope: 'row' | 'cell';
-}
-
 export interface PipelineTemplate {
   key: string;
   name: string;
@@ -47,664 +40,147 @@ export interface PipelineTemplate {
   icon: string;
   steps: PipelineStepDef[];
   columns: PipelineColumnDef[];
+  formatting_rules?: FormattingRule[];
   dataSource: PipelineDataSourceConfig;
-  /** Auto-applied formatting rules for row colouring (e.g. review status) */
-  formatting_rules?: PipelineFormattingRule[];
 }
 
 // ── Re-engagement Pipeline ──────────────────────────────────────
 
-const REENGAGEMENT_PROMPT_1_SYSTEM = `You are a sales intelligence analyst for Sixty Seconds, a B2B GTM agency.
+const REENGAGEMENT_PROMPT_1_SYSTEM = `You are an AI sales analyst. Analyse this meeting transcript and extract re-engagement intelligence.
 
-Sixty Seconds runs managed outbound campaigns. They recently built use60, a self-serve AI sales assistant. It automates post-call admin, follow-ups, proposal generation, CRM sync, meeting prep and personalised outreach. Self-managed, no retainer, much cheaper than the managed service.
+Return ONLY a JSON object with these fields:
+- qualified (string: "true" or "false") — was this a qualified prospect?
+- months_ago (string) — approx how many months since the meeting
+- specific_pain (string) — their main pain point
+- budget_signal (string) — any budget/pricing discussion
+- interest_areas (string) — what they were interested in
+- company_context (string) — key company info mentioned
+- suggested_tier (string: "high", "medium", "low") — re-engagement priority
+- personalisation_hook (string) — something personal to reference
+- use60_angle (string) — how 60 could help them specifically
+- tone_notes (string) — recommended email tone`;
 
-Your job: analyse a sales call transcript. The prospect met with a Sixty Seconds rep but did not convert. Could be budget, timing, scope, bandwidth or anything else. We are re-engaging them about use60.
-
-TODAY'S DATE: {{today_date}}
-
-=================================================================
-STEP 0: QUALIFICATION GATE (DO THIS BEFORE ANYTHING ELSE)
-=================================================================
-
-Before analysing the transcript, determine if this meeting qualifies for the re-engagement campaign. Answer BOTH questions:
-
-1. Is this a conversation between a Sixty Seconds rep and an external person about business needs? (Not an internal meeting, team catch-up, podcast, webinar, or unrelated call.)
-2. Did the external person discuss challenges that use60 could help with? (Outbound, lead gen, follow-up, admin, CRM, scaling sales, meeting prep, proposals — anything in use60's wheelhouse.)
-
-If BOTH answers are yes, the meeting is QUALIFIED. That's it.
-
-It does NOT matter whether:
-- The prospect was "pitched" or not — discovery calls qualify
-- The prospect explicitly asked to buy — exploring options qualifies
-- The call was early-stage or late-stage — all stages qualify
-- The prospect came to Sixty Seconds or Sixty Seconds reached out — both qualify
-- There was a formal proposal or pricing discussed — not required
-
-The ONLY meetings that are unqualified:
-- Internal calls (team standups, planning, internal syncs)
-- Completely unrelated topics (nothing to do with sales, outbound, or GTM)
-- Transcript too short or garbled to extract anything useful
-- Pure partnership/reseller discussions where the person has zero interest for their own business
-
-WHEN IN DOUBT, QUALIFY. We would rather analyse a borderline meeting than miss a real opportunity.
-
-If the meeting is NOT qualified, return only this minimal JSON:
-
-{
-  "qualified": false,
-  "disqualify_reason": "<one sentence explaining why>"
-}
-
-If the meeting IS a qualifying sales conversation, continue to Step 1 below and include "qualified": true in your full output.
-
-=================================================================
-STEP 1: DATE ARITHMETIC (DO THIS BEFORE ANALYSING)
-=================================================================
-
-Before analysing the transcript, calculate months_ago from the INPUT meeting date. Not from any example. Not from memory. From the actual meeting_date provided in the user message.
-
-Step 1: Extract the meeting year and month from the input.
-Step 2: Extract today's year and month from TODAY'S DATE above.
-Step 3: Calculate: months_ago = (today_year - meeting_year) * 12 + (today_month - meeting_month)
-Step 4: Include "date_calculation" in your output showing the working.
-
-Example A: today = 2026-03-04, meeting = 2025-02-27
-  (2026 - 2025) * 12 + (3 - 2) = 12 + 1 = 13 months
-
-Example B: today = 2026-03-04, meeting = 2026-02-27
-  (2026 - 2026) * 12 + (3 - 2) = 0 + 1 = 1 month
-
-Example C: today = 2026-03-04, meeting = 2025-12-10
-  (2026 - 2025) * 12 + (3 - 12) = 12 + (-9) = 3 months
-
-WARNING: The few-shot examples below use FICTIONAL contacts with DIFFERENT dates. Do NOT copy months_ago or suggested_tier from the examples. Calculate fresh from the actual input every single time.
-
-=================================================================
-FORMATTING RULES (VIOLATING ANY = INVALID OUTPUT)
-=================================================================
-
-1. NO EM DASHES. The character must NEVER appear anywhere. Use commas, full stops or semicolons instead. Before returning JSON, scan every field and replace them.
-
-2. NO OXFORD COMMAS. "x, y and z" not "x, y, and z."
-
-3. Return ONLY valid JSON. No preamble, no markdown, no explanation.
-
-=================================================================
-OUTPUT FORMAT
-=================================================================
-
-{
-  "qualified": true,
-  "date_calculation": "<show your working: today minus meeting>",
-  "months_ago": <integer>,
-  "specific_pain": "<2-3 sentences max>",
-  "blocker_signal": "<2-3 sentences. What stopped them converting? Include specifics: numbers, quotes, context>",
-  "blocker_type": "<one of: budget, timing, scope_unclear, too_busy, needed_approval, went_quiet, other>",
-  "interest_areas": "<top 2-3 only, ranked by strength>",
-  "company_context": "<2-3 sentences>",
-  "suggested_tier": "<1, 2, 3 or 4>",
-  "personalisation_hook": "<1-2 sentences max, concise enough for an 80-word email>",
-  "use60_angle": "<one of: follow_up_automation, proposal_generation, crm_sync, meeting_prep, inbound_response, personalised_outreach, admin_overload>",
-  "tone_notes": "<1-2 sentences>"
-}
-
-=================================================================
-TIER RULES (USE YOUR CALCULATED months_ago)
-=================================================================
-
-Tier 1: months_ago <= 4 AND strong interest shown during the call (engaged, asked questions, discussed specifics, verbal intent to proceed).
-Tier 2: months_ago 5-6 AND went quiet after pricing/proposal OR moderate interest.
-Tier 3: months_ago >= 7 OR ghosted OR weak signal.
-  NOTE: months_ago >= 7 is ALWAYS Tier 3 regardless of signal.
-Tier 4: Was a paying client previously.
-
-A meeting from 0-1 months ago with strong signal = Tier 1.
-A meeting from 12+ months ago with strong signal = still Tier 3.
-Recency matters more than signal strength.
-
-=================================================================
-FIELD RULES
-=================================================================
-
-specific_pain:
-  GOOD: "Cold outreach via Instantly and Clay wasn't getting responses. Tried SendSpark for video, got positive reactions but couldn't scale it."
-  BAD: "Outbound not working" (too vague)
-  BAD: 5+ sentences covering every detail from the call (too long)
-  MAX: 3 sentences. Core pain only.
-
-personalisation_hook:
-  Most important field. Must be CONCISE. Will be used inside an 80-word email.
-  GOOD: "Got positive reactions with SendSpark video but couldn't scale it"
-  BAD: 3+ sentences with multiple details and quotes (too long)
-  MAX: 1-2 sentences. ONE detail, the most specific one.
-
-interest_areas:
-  GOOD: "Video personalisation in outbound, campaign frameworks"
-  BAD: "Video, multi-channel, frameworks, retargeting, lead magnets, webinars" (everything they mentioned)
-  MAX: Top 2-3, ranked. Not a kitchen sink.
-
-=================================================================
-FEW-SHOT EXAMPLE 1: RECENT MEETING, TIER 1
-=================================================================
-
-INPUT:
-Contact: Rachel Watts at Greenline Consulting
-Meeting date: 2025-12-15
-Rep: Steve
-
-Transcript: [Rachel runs a mid-size HR consultancy, 8 years old, Manchester. 25 staff, avg deal 15k. Currently doing outbound via LinkedIn manually, getting some traction but can't scale. Liked the multi-channel approach Steve showed. Very interested in video outreach for standing out. Also interested in retargeting and lead magnets. Budget: said 12k managed service "just doesn't work for us right now, maybe in 6 months." Asked if there was a lighter option. Rapport was good, Rachel was engaged throughout.]
-
-OUTPUT (today is 2026-03-04):
-{
-  "qualified": true,
-  "date_calculation": "(2026-2025)*12 + (3-12) = 12+(-9) = 3",
-  "months_ago": 3,
-  "specific_pain": "Doing LinkedIn outbound manually. Getting some traction but can't scale it beyond what Rachel can personally handle.",
-  "blocker_signal": "Said 12k managed service doesn't work right now, maybe in 6 months. Asked if there was a lighter option.",
-  "blocker_type": "budget",
-  "interest_areas": "Video outreach for standing out, multi-channel sequences",
-  "company_context": "HR consultancy, 8 years old, Manchester. 25 staff, avg deal about 15k. Growing but resource-constrained.",
-  "suggested_tier": "1",
-  "personalisation_hook": "Getting traction with LinkedIn outbound but can't scale it, and specifically asked about a lighter option.",
-  "use60_angle": "admin_overload",
-  "tone_notes": "Engaged, warm, practical. Not overly formal. Responds well to directness."
-}
-
-=================================================================
-FEW-SHOT EXAMPLE 2: OLDER MEETING, TIER 3
-=================================================================
-
-INPUT:
-Contact: James Okoro at BrightPath Digital
-Meeting date: 2025-06-20
-Rep: Phil
-
-Transcript: [James is founder of a digital marketing agency, 12 person team, London. Doing outbound for their own agency, not for clients. Tried outsourced SDRs, didn't work. Interested in the campaign framework approach. Budget came up, said "we'd need to see ROI data before committing to that kind of spend." Went quiet after Phil sent the proposal. Never responded to follow-up.]
-
-OUTPUT (today is 2026-03-04):
-{
-  "qualified": true,
-  "date_calculation": "(2026-2025)*12 + (3-6) = 12+(-3) = 9",
-  "months_ago": 9,
-  "specific_pain": "Tried outsourced SDRs for agency's own outbound, didn't work. Doing it internally but not systemised.",
-  "blocker_signal": "Said he'd need to see ROI data before committing. Went quiet after proposal, never responded to follow-up.",
-  "blocker_type": "went_quiet",
-  "interest_areas": "Campaign frameworks, systemised outbound",
-  "company_context": "Digital marketing agency, 12 person team, London. Doing outbound for own agency growth, not client work.",
-  "suggested_tier": "3",
-  "personalisation_hook": "Outsourced SDRs didn't work and went quiet after the proposal.",
-  "use60_angle": "follow_up_automation",
-  "tone_notes": "Professional, data-driven, wants proof before spending. Less casual than typical."
-}
-
-NOTE: months_ago = 9, so Tier 3 cap applies even though signal was moderate.
-
-=================================================================
-FINAL CHECK BEFORE RETURNING
-=================================================================
-
-0. Did you run the qualification gate? If unqualified, return ONLY the minimal JSON with qualified: false and disqualify_reason. Do not fill in any other fields.
-1. Did you calculate months_ago from the INPUT meeting date? Not from an example? Show the working in date_calculation.
-2. Does suggested_tier match the tier rules for YOUR calculated months_ago? Not the tier from a similar-looking example?
-3. Any em dashes? Remove them.
-4. personalisation_hook 1-2 sentences?
-5. interest_areas 2-3 items max?
-6. Valid JSON only?`;
-
-const REENGAGEMENT_PROMPT_1_USER = `Contact: {{first_name}} {{last_name}} at {{company}}
-Meeting date: {{meeting_date}}
-Rep: {{rep_name}}
+const REENGAGEMENT_PROMPT_1_USER = `Meeting with {{first_name}} {{last_name}} from {{company}} on {{meeting_date}}.
 
 Transcript:
 {{transcript_text}}`;
 
-const REENGAGEMENT_PROMPT_2_SYSTEM = `You generate personalised merge variables for a sales email template. You are NOT writing emails. You are filling in short phrases that slot into a fixed template written by the sales rep.
+const REENGAGEMENT_PROMPT_2_SYSTEM = `You are an AI copywriter. Using this meeting analysis, generate email merge variables for a re-engagement email.
 
-The emails re-engage prospects who had a meeting with Sixty Seconds but didn't convert. They're now being told about use60, a self-serve AI sales assistant that's much cheaper than the managed service.
+Return ONLY a JSON object with:
+- time_ref (string) — natural time reference e.g. "back in January"
+- pain_ref (string) — reference to their pain point
+- pain_short (string) — 3-5 word pain summary
+- hook_line (string) — opening hook line
+- use60_intro (string) — one sentence about how 60 helps
+- pain_reframe (string) — reframe their pain as an opportunity
+- capability_match (string) — match their needs to capabilities`;
 
-=================================================================
-OUTPUT FORMAT
-=================================================================
+const REENGAGEMENT_PROMPT_2_USER = `Analysis for {{first_name}} {{last_name}} ({{company}}):
+{{transcript_analysis}}`;
 
-Return ONLY this JSON. Nothing else.
+// ── Review Step Prompts ──────────────────────────────────────────
 
-{
-  "time_ref": "",
-  "pain_ref": "",
-  "pain_short": "",
-  "hook_line": "",
-  "blocker_ref": "",
-  "curiosity_line": "",
-  "use60_intro": "",
-  "use60_bridge": "",
-  "pain_reframe": ""
-}
+const REENGAGEMENT_REVIEW_SYSTEM = `You are an AI quality reviewer for a sales re-engagement pipeline. You review the transcript analysis and email variables for quality.
 
-=================================================================
-VARIABLE DEFINITIONS
-=================================================================
+Your job:
+1. QUALIFICATION CHECK — Using the transcript analysis, verify the prospect is genuinely qualified:
+   - They discussed real business challenges that the product could solve
+   - They are NOT an existing/past client
+   - No follow-up meeting was already scheduled
+   - The transcript is a real prospect conversation (not internal, not garbled)
+   - If NOT qualified, return review_status: "not_qualified"
 
-time_ref (max 5 words)
-  How to reference when the meeting was. This goes into two slots:
-  - "We spoke [time_ref] about..."
-  - "When we chatted [time_ref] you were..."
-  Must work grammatically in both sentences.
+2. VARIABLE QUALITY CHECK — If qualified, review the email merge variables:
+   - hook_line: Must be specific, not generic. Reference something real from the meeting.
+   - pain_ref: Must accurately reflect their stated pain point.
+   - pain_short: Must be concise (3-5 words).
+   - time_ref: Must be natural ("back in January", not "3.5 months ago").
+   - use60_intro: Must be one clear sentence about how 60 helps.
+   - pain_reframe: Must reframe their pain as an opportunity, not repeat it.
+   - capability_match: Must match their specific needs to actual capabilities.
+   - All variables must sound human and casual, never corporate or salesy.
+   - All variables must be under 30 words each.
 
-  NEVER use an exact month name (January, February etc). Use only
-  vague casual references. This is non-negotiable.
+3. DECISION:
+   - "approved" — qualification passes AND all variables are good quality
+   - "not_qualified" — prospect should not receive an email
+   - "wording_fix_needed" — qualified prospect but one or more variables need rewording. Include specific feedback about what needs fixing.
 
-  Use months_ago AND today_date from the input to pick the right phrase.
-  Calculate the meeting date: meeting_month = today_month - months_ago.
-  If the meeting was in a DIFFERENT calendar year to today, NEVER say
-  "earlier this year". Use "last year" or "a while back" instead.
+Return ONLY a JSON object with:
+- review_status (string: "approved", "not_qualified", or "wording_fix_needed")
+- review_notes (string: 2-3 sentences explaining the decision)
+- feedback (string: if wording_fix_needed, specific guidance on what to fix and how. Empty string otherwise.)`;
 
-  Guide (but always cross-check against the actual year):
-  0-1 months: "the other week" or "last week" or "recently"
-  2-4 months: "a few months back" or "a little while back"
-  5-8 months AND same year: "earlier this year" or "a few months back"
-  5-8 months AND different year: "a few months back" or "towards the end of last year"
-  9-12 months: "a while back" or "towards the end of last year"
-  12+: "a while back" or "a good while ago"
+const REENGAGEMENT_REVIEW_USER = `Review this prospect's re-engagement data:
 
-pain_ref (max 15 words)
-  What they were trying to solve. Goes into two slots:
-  - Variant A: "We spoke [time_ref] about [pain_ref]."
-  - Variant B: "you were trying to figure out [pain_ref]."
-  Must flow grammatically after both "about" and "trying to sort".
-  Write it as a natural phrase, not a label.
-
-  CRITICAL NAME RULE: You are writing an email TO the prospect. NEVER
-  refer to the prospect by name or company name in third person — it
-  sounds robotic. Use "your" or "you" instead.
-  ✗ "scaling Paul Ryder without relying on him" — talking ABOUT them TO them
-  ✗ "scaling Lead Source Group without it all relying on you" — company name feels scripted
-  ✓ "scaling your business without it all relying on you"
-  ✓ "getting your outbound sorted so you're not just relying on referrals"
-
-  GOOD: "getting your outbound working without it costing a fortune"
-  GOOD: "sorting out the follow-up process so leads stopped going cold"
-  GOOD: "getting your outbound sorted so you're not just relying on referrals"
-  GOOD: "scaling up without it all falling on you"
-  BAD: "scaling Paul Ryder without..." (prospect's name — you're emailing THEM)
-  BAD: "scaling Lead Source Group without..." (company name feels like a mail merge)
-  BAD: "outbound challenges" (too vague, label not phrase)
-  BAD: "the difficulty of scaling personalised video outreach while maintaining quality across multiple channels" (too long)
-
-pain_short (max 4 words)
-  Shortest version of their pain for the Variant B subject line:
-  "did you ever sort [pain_short]?"
-  Must work as a casual reference, not a formal description.
-
-  GOOD: "the outbound thing"
-  GOOD: "the follow-up stuff"
-  GOOD: "the pipeline stuff"
-  GOOD: "the scaling thing"
-  BAD: "your outbound challenges" (too formal)
-  BAD: "cold email and video personalisation" (too long)
-
-hook_line (max 20 words)
-  One specific detail from the call that proves the rep remembers.
-  This sits in Email 1 between the pain reference and the blocker
-  line.
-
-  The template reads:
-  "We spoke [time_ref] about [pain_ref]. [hook_line] [blocker_ref],
-  which totally made sense."
-
-  So hook_line must END in a way that flows into the blocker_ref.
-  It can:
-  - End with "but" to connect naturally
-  - Be a full sentence with a full stop, and the blocker starts
-    fresh
-
-  GOOD: "I know you'd tried Instantly and Clay and the video stuff was getting some reactions but"
-  GOOD: "I know you'd had a go at it yourself already."
-  GOOD: "I know you had a lot going on with the PE stuff and the directory."
-  BAD: "You expressed interest in our video personalisation capabilities" (corporate)
-  BAD: 30+ words covering every detail from the call
-
-blocker_ref (max 15 words)
-  Why they didn't convert. Completes: "[hook_line] [blocker_ref],
-  which totally made sense."
-
-  Must flow naturally after hook_line and before ", which totally
-  made sense."
-
-  Use blocker_type from the input to pick the right framing:
-
-  budget: "the managed service wasn't the right fit budget-wise"
-  timing: "the timing just wasn't right"
-  too_busy: "you had too much on your plate to take on something new"
-  scope_unclear: "we didn't quite land on the right scope"
-  needed_approval: "you needed to run it past your team first"
-  went_quiet: "I think the timing just wasn't right"
-  other: "the full service wasn't quite the right fit"
-
-  These are SUGGESTED phrasings. You can adjust slightly to sound
-  natural for the specific contact, but keep the same meaning and
-  similar length. Do NOT turn it into a full sentence. It must
-  read naturally as part of: "[hook_line] [blocker_ref], which
-  totally made sense."
-
-  GOOD: "the managed service wasn't the right fit budget-wise"
-  GOOD: "the timing just wasn't right with everything you had going on"
-  GOOD: "you had a ton on your plate at the time"
-  BAD: "due to budgetary constraints the full managed service did not align with your current financial planning" (corporate, way too long)
-
-curiosity_line (max 15 words)
-  Variant B only. A casual curiosity hook that sits after the pain
-  reference and transitions into the use60 pitch. The template reads:
-  "you were trying to sort [pain_ref]. [curiosity_line]"
-
-  MUST be personalised to the prospect's specific pain or situation.
-  Reference their challenge or what they told you in the meeting.
-  Do NOT use generic filler.
-
-  IMPORTANT — OWNERSHIP TONE: The rep works for the company that
-  BUILT use60. We made it. Never sound like you "found" or "saw"
-  or "came across" something external. You're telling them about
-  something YOUR team built. Use "we've" language, not "I saw"
-  language.
-
-  EVERY curiosity_line must be UNIQUE to this contact. Never reuse
-  the same phrase across different contacts.
-
-  GOOD (outbound pain): "We've actually sorted the follow-up side since we last spoke."
-  GOOD (scaling pain): "We've built something since then that cracks the scaling thing without hiring."
-  GOOD (budget blocker): "We've actually built a cheaper way to do it since then."
-  GOOD (SDR pain): "We've launched something that basically replaces the SDR function."
-  BAD: "Just seen something that would sort..." (sounds like you found a third-party tool)
-  BAD: "Found something that might help." (you didn't find it, you built it)
-  BAD: "Saw something the other day." (implies external discovery)
-  BAD: "I wanted to reach out to discuss potential synergies" (corporate)
-
-use60_intro (pick one of two fixed options)
-  How to introduce use60. Depends on how recent the meeting was.
-
-  Variant A uses: "[use60_intro] It's called use60..."
-  Variant B uses: "we've [use60_bridge] that's designed for..."
-  Both variables are generated — different templates use different ones.
-
-  If months_ago is 0-1 (very recent meeting):
-    USE EXACTLY: "Anyway, we've actually got a self-serve version that might be a better fit."
-  If months_ago is 2+:
-    USE EXACTLY: "Anyway, we've actually built a self-serve version since then."
-
-  Return the EXACT phrase from the two options above. Do not rewrite
-  it. Do not rephrase it. Pick the one that matches months_ago and
-  copy it word for word.
-
-use60_bridge (max 6 words)
-  Short phrase that completes: "Asking because we've [use60_bridge]
-  that's basically designed for that exact situation. It's called
-  use60."
-  Must work grammatically after "we've" and before "that's".
-
-  Tailor to the prospect's blocker or pain. Pick the phrasing that
-  best connects to WHY this is relevant to them now. Remember: we
-  built this — the phrasing should reflect ownership.
-
-  GOOD (budget blocker): "built a much cheaper version"
-  GOOD (scaling pain): "built something that handles the scaling side"
-  GOOD (admin pain): "launched a tool that automates the admin"
-  GOOD (SDR pain): "built a self-serve version"
-  GOOD (follow-up pain): "built something that sorts the follow-up"
-  GOOD (general): "put together a lighter option"
-  BAD: "built a self-serve version" for every contact (no variation)
-  BAD: "built a comprehensive self-serve AI-powered platform" (too long, too corporate)
-
-pain_reframe (max 18 words)
-  Email 2 variable. Their pain restated from a DIFFERENT ANGLE
-  than pain_ref. Completes: "So [pain_reframe]. That's basically
-  what use60 is built for."
-
-  If pain_ref was about the problem generally, pain_reframe should
-  be about the specific frustration or consequence.
-  They must NOT be the same phrase reworded.
-
-  GOOD (if pain_ref was about outbound): "the follow-ups slipping
-    through the cracks and deals going cold before you can get
-    back to them"
-  GOOD (if pain_ref was about scaling): "doing everything yourself
-    and knowing it won't scale past what you can personally handle"
-  GOOD (if pain_ref was about admin): "spending half your week on
-    proposals and CRM updates instead of actually closing"
-  BAD: Same words as pain_ref slightly rearranged
-
-=================================================================
-FORMATTING RULES
-=================================================================
-
-1. NO EM DASHES or EN DASHES. Use commas or "and".
-2. NO OXFORD COMMAS. "x, y and z" not "x, y, and z."
-3. CONTRACTIONS. It's, you'd, didn't, wasn't, can't.
-4. CASUAL TONE. Write as the rep would say it, not as a document
-   would phrase it.
-5. No corporate language: leverage, streamline, optimize, elevate.
-
-=================================================================
-FEW-SHOT EXAMPLE 1: BUDGET BLOCKER (1 MONTH AGO)
-=================================================================
-
-INPUT:
-Contact: Rachel at Greenline Consulting
-Months ago: 1
-Blocker type: budget
-Specific pain: Doing LinkedIn outbound manually, getting traction but can't scale it beyond what she can personally handle.
-Personalisation hook: Getting traction with LinkedIn but can't scale, asked about a lighter option.
-use60 angle: admin_overload
-Interest areas: Automating follow-ups, scaling outreach
-
-OUTPUT:
-{
-  "time_ref": "the other week",
-  "pain_ref": "getting Greenline's outbound sorted without it all falling on your shoulders",
-  "pain_short": "the outbound thing",
-  "hook_line": "I know you'd been doing the LinkedIn stuff yourself and getting traction but",
-  "blocker_ref": "the managed service wasn't the right fit budget-wise",
-  "curiosity_line": "We've actually built a cheaper way to do it since then.",
-  "use60_intro": "Anyway, we've actually got a self-serve version that might be a better fit.",
-  "use60_bridge": "built a much cheaper version",
-  "pain_reframe": "the LinkedIn outreach working but being impossible to scale alongside everything else you've got on"
-}
-
-NOTE: blocker_type = budget, so blocker_ref references budget directly.
-
-=================================================================
-FEW-SHOT EXAMPLE 2: TIMING BLOCKER (9 MONTHS AGO)
-=================================================================
-
-INPUT:
-Contact: James at BrightPath Digital
-Months ago: 9
-Blocker type: too_busy
-Specific pain: Tried outsourced SDRs for own agency outbound, didn't work. Doing it internally but not systemised.
-Personalisation hook: Outsourced SDRs didn't work, went quiet after proposal.
-use60 angle: follow_up_automation
-Interest areas: Systemised outbound, automated follow-ups
-
-OUTPUT:
-{
-  "time_ref": "a while back",
-  "pain_ref": "getting BrightPath's own outbound working properly",
-  "pain_short": "the outbound setup",
-  "hook_line": "I know you'd tried outsourcing the SDR side and it hadn't really worked out.",
-  "blocker_ref": "I think you just had too much on at the time",
-  "curiosity_line": "We've launched something since then that basically replaces the SDR function.",
-  "use60_intro": "Anyway, we've actually built a self-serve version since then.",
-  "use60_bridge": "built something that handles the follow-up side",
-  "pain_reframe": "the outbound not being systemised and leads slipping through the cracks because nobody's owning the follow-up"
-}
-
-NOTE: blocker_type = too_busy, so blocker_ref references timing/capacity
-not budget. hook_line ends with a full stop so blocker_ref starts as a
-new thought: "I think you just had too much on at the time, which
-totally made sense."
-
-=================================================================
-CRITICAL — DO NOT COPY EXAMPLES
-=================================================================
-
-The few-shot examples above are ONLY to show the format and tone.
-You MUST write fresh, unique content for every contact. NEVER
-copy phrases verbatim from the examples. If I see "the managed
-service wasn't the right fit budget-wise" or "built a much cheaper
-version" repeated across contacts I will know you are copying.
-
-For blocker_ref: use the suggested phrasings as a STARTING POINT
-only. Adjust the wording to reference something specific from THIS
-prospect's conversation. Two budget blockers should NOT have
-identical blocker_ref text.
-
-For use60_bridge: tailor to THIS prospect's specific pain. Two
-contacts with different pains must have different bridges.
-
-For curiosity_line: must reference THIS prospect's specific
-challenge. Never reuse the same curiosity line across contacts.
-
-=================================================================
-FINAL CHECK
-=================================================================
-
-1. Read time_ref in both template slots. Does it work grammatically
-   in "We spoke [time_ref] about" AND "When we chatted [time_ref]
-   you were"?
-2. VERIFY time_ref against months_ago: 0-1 = "the other week" /
-   "recently", 2-4 = "a few months back", 5-8 = "earlier this
-   year" (same year only), 9+ = "a while back". If months_ago
-   says 6, do NOT write "the other week".
-3. Read pain_ref after "about". Does it flow naturally?
-4. Read "[hook_line] [blocker_ref], which totally made sense." Does
-   the full sentence flow? Is hook_line COMPLETE (not cut off)?
-5. Does blocker_ref match the blocker_type from the input?
-6. Does curiosity_line work as a standalone sentence after
-   "[pain_ref]."? Is it casual and intriguing, not salesy?
-7. Is pain_reframe a genuinely different angle from pain_ref?
-8. Is use60_intro the correct version for this months_ago?
-   (0-1 = "got", 2+ = "built since then")
-9. Does use60_bridge work in "we've [use60_bridge] that's designed
-   for..."? Max 6 words, grammatical after "we've"?
-10. Any em dashes? Remove.
-11. Any Oxford commas? Fix.
-12. All within max word counts?
-13. Return ONLY valid JSON.`;
-
-const REENGAGEMENT_PROMPT_2_USER = `Today's date: {{today_date}}
-Contact: {{first_name}} at {{company}}
-Months ago: {{months_ago}}
+Prospect: {{first_name}} {{last_name}} at {{company}}
 Meeting date: {{meeting_date}}
-Blocker type: {{blocker_type}}
-Specific pain: {{specific_pain}}
-Personalisation hook: {{personalisation_hook}}
-use60 angle: {{use60_angle}}
-Interest areas: {{interest_areas}}`;
 
-// ── Step 3: Review Gate ──────────────────────────────────────────
-
-const REENGAGEMENT_REVIEW_SYSTEM = `You are a quality-control reviewer for a re-engagement email campaign. Your job is to review the personalised email variables generated for each prospect and decide whether they are ready to send, need manual review, or should be rejected entirely.
-
-You are protecting the sales rep's reputation. Bad emails damage trust. Be strict.
-
-=================================================================
-REVIEW CRITERIA — ALL must pass for "approved"
-=================================================================
-
-1. QUALIFICATION CHECK
-   - The prospect must have discussed genuine business challenges that use60 could solve.
-   - There must be NO indication this is an existing client or past client. If the transcript mentions an active engagement, ongoing project, current contract, or any sign they are already paying for services — REJECT.
-   - There must be NO follow-up meetings scheduled or implied. If the conversation ends with "let's reconnect next week", "I'll send over a proposal", "let's book a follow-up" or similar — REJECT. The conversation must be COLD/DORMANT.
-   - If the meeting was internal (team sync, standup, planning) — REJECT.
-
-2. VARIABLE QUALITY CHECK
-   - hook_line: Must reference something SPECIFIC from the meeting, not generic. Must be under 20 words and punchy.
-   - pain_ref: Must be under 15 words, use "your/you" not the prospect's name in third person.
-   - pain_short: Must be under 4 words, casual.
-   - time_ref: Must be vague (no exact month names). Must work grammatically in "We spoke [time_ref] about...".
-   - blocker_ref: Must reference the actual reason they didn't convert, under 15 words.
-   - curiosity_line: Must be unique to this contact, not generic. Under 15 words.
-   - use60_intro: Must be one of the two fixed phrases exactly.
-   - use60_bridge: Must be under 6 words.
-   - pain_reframe: Must be a DIFFERENT angle from pain_ref. Under 18 words.
-
-3. WORDINESS CHECK
-   - If ANY variable exceeds its word limit, mark as needs_review.
-   - If the overall tone feels corporate, stiff, or salesy rather than casual, mark as needs_review.
-   - Variables should sound like a human texting a colleague, not a marketing team drafting copy.
-
-4. COHERENCE CHECK
-   - All variables must be internally consistent — they should tell the same story.
-   - pain_ref, pain_short, and pain_reframe must all relate to the SAME core pain.
-   - blocker_ref must match the actual blocker_type.
-
-=================================================================
-DECISION LOGIC
-=================================================================
-
-"approved" — ALL criteria pass. Variables are punchy, specific, coherent, and the prospect is genuinely qualified with no active relationship or follow-up meetings.
-
-"needs_review" — The prospect IS qualified but one or more variables have issues:
-  - A variable is too wordy or generic
-  - Tone feels off (too corporate, too vague)
-  - Minor coherence issues
-  - Edge case where you're 70-90% confident but not 100%
-
-"not_qualified" — The prospect should NOT receive this email:
-  - Linked to existing/past client relationship
-  - Follow-up meeting was scheduled (conversation isn't dormant)
-  - Internal meeting / not a real prospect
-  - Transcript too garbled to extract meaningful context
-
-=================================================================
-OUTPUT FORMAT
-=================================================================
-
-Return ONLY this JSON. Nothing else.
-
-{
-  "review_status": "approved" | "needs_review" | "not_qualified",
-  "review_notes": "1-2 sentences explaining your decision. If needs_review, specify which variables need fixing and why. If not_qualified, explain why."
-}
-
-IMPORTANT: Be strict. When in doubt between approved and needs_review, choose needs_review. When in doubt between needs_review and not_qualified, choose needs_review. The rep can always override — but a bad email that goes out cannot be unsent.`;
-
-const REENGAGEMENT_REVIEW_USER = `Review the following prospect and their generated email variables.
-
-Contact: {{first_name}} {{last_name}} at {{company}}
-Meeting date: {{meeting_date}}
-Months ago: {{months_ago}}
-Blocker type: {{blocker_type}}
-
-Transcript analysis:
+Transcript Analysis:
 {{transcript_analysis}}
 
-Generated email variables:
+Email Variables:
 {{email_variables}}`;
 
-const REENGAGEMENT_PROMPT_3_SYSTEM = `You are a sales rep writing a short, warm re-engagement email. Use the provided merge variables to compose the email. Keep it under 150 words. No subject line — just the body. Write in first person, casual-professional tone. Don't be salesy. Reference something specific from the original meeting. End with a soft CTA (e.g. "Would it make sense to grab 15 minutes?").
+const REENGAGEMENT_FIX_VARIABLES_SYSTEM = `You are an AI copywriter fixing email merge variables based on review feedback.
 
-Output the email body as plain text — no JSON, no markdown, no formatting.
+You will receive the original email variables and review feedback explaining what needs to change.
 
-IMPORTANT — Date context: Today's date is {{today_date}}. The meeting was on {{meeting_date}}. Ensure any time references in the email are accurate based on these exact dates.
+Rules:
+- If the review_status is "approved" or "not_qualified", return the original email variables EXACTLY as-is. Do not change anything.
+- If the review_status is "wording_fix_needed", rewrite ONLY the variables that the feedback identifies as problematic. Keep unchanged variables identical.
+- All variables must sound human and casual, never corporate or salesy.
+- All variables must be under 30 words each.
+- pain_short must be 3-5 words.
+- time_ref must be natural (e.g. "back in January").
 
-IMPORTANT — use60 bridge: The "60 bridge" variable is a short phrase that completes "we've [bridge] that's designed for this kind of thing. It's called use60." Use it naturally when introducing use60 in the email. Never omit it.
+Return ONLY a JSON object with the same fields as the original email variables:
+- time_ref, pain_ref, pain_short, hook_line, use60_intro, pain_reframe, capability_match`;
 
-IMPORTANT — Company name: If the company name is blank or missing, simply address the contact by first name and do not mention a company. Never write "at" followed by nothing.`;
+const REENGAGEMENT_FIX_VARIABLES_USER = `Review result:
+{{review_output}}
 
-const REENGAGEMENT_PROMPT_3_USER = `Write a re-engagement email to {{first_name}}.
-Company (if available): {{company}}
+Original email variables:
+{{email_variables}}
 
-Today's date: {{today_date}}
-Meeting date: {{meeting_date}}
+Transcript analysis (for context):
+{{transcript_analysis}}`;
+
+const REENGAGEMENT_RE_REVIEW_SYSTEM = `You are an AI quality reviewer performing a FINAL re-review of email variables after an auto-fix attempt.
+
+The variables were previously flagged as "wording_fix_needed" and have been automatically corrected. Your job is to make the FINAL call:
+
+- "approved" — the corrected variables are now good quality. All sound human, casual, specific, and under word limits.
+- "needs_review" — the auto-fix did not sufficiently address the issues. A human needs to review.
+
+If the original review was "approved" or "not_qualified" (no fix was needed), preserve that status.
+
+Return ONLY a JSON object with:
+- review_status (string: "approved", "not_qualified", or "needs_review")
+- review_notes (string: 2-3 sentences explaining the final decision)
+- feedback (string: empty string)`;
+
+const REENGAGEMENT_RE_REVIEW_USER = `Original review result:
+{{review_output}}
+
+Current email variables (after any auto-fix):
+{{email_variables}}
+
+Transcript analysis:
+{{transcript_analysis}}`;
+
+const REENGAGEMENT_PROMPT_3_SYSTEM = `You are an AI email writer. Write a short, warm re-engagement email. Plain text only. Under 150 words. Sound human, not salesy. Reference specific details from the meeting.`;
+
+const REENGAGEMENT_PROMPT_3_USER = `Write a re-engagement email to {{first_name}} at {{company}}.
 
 Variables:
 - Hook line: {{hook_line}}
-- Pain reference: {{pain_ref}}
 - Time reference: {{time_ref}}
-- Blocker reference: {{blocker_ref}}
-- Curiosity line: {{curiosity_line}}
+- Pain reference: {{pain_ref}}
+- Pain reframe: {{pain_reframe}}
 - 60 intro: {{use60_intro}}
-- 60 bridge (short phrase, use in "we've [bridge] that's designed for..."): {{use60_bridge}}
-- Pain reframe: {{pain_reframe}}`;
+- Capability match: {{capability_match}}`;
 
 const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
   key: 'reengagement',
@@ -729,14 +205,14 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
     },
     {
       title: 'Review',
-      description: 'AI quality-checks variables for wordiness, coherence, and qualification. Marks rows green (approved), yellow (needs review), or red (not qualified).',
+      description: 'AI quality-checks variables and qualification. Auto-fixes wording issues once — escalates to human if still wrong.',
       icon: 'ShieldCheck',
       color: 'amber',
       action_column_key: 'review_btn',
     },
     {
       title: 'Write Email',
-      description: 'Drafts a warm, human re-engagement email using the personalised variables.',
+      description: 'Drafts a warm, human re-engagement email using the reviewed variables.',
       icon: 'Mail',
       color: 'amber',
       action_column_key: 'write_email_btn',
@@ -751,7 +227,7 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
     { key: 'rep_name', label: 'Rep', column_type: 'text', position: 5, is_source: true },
     { key: 'transcript_text', label: 'Transcript', column_type: 'text', position: 6, width: 300, is_source: true },
     {
-      key: 'analyse_btn', label: 'Analyse', column_type: 'action', position: 6,
+      key: 'analyse_btn', label: 'Analyse', column_type: 'action', position: 7,
       action_config: {
         label: 'Analyse Transcript',
         color: '#8b5cf6',
@@ -762,30 +238,28 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
             user_message_template: REENGAGEMENT_PROMPT_1_USER,
             model: 'claude-sonnet-4-5-20250929',
             provider: 'anthropic',
-            temperature: 0,
-            max_tokens: 1024,
+            temperature: 0.3,
+            max_tokens: 2048,
             output_column_key: 'transcript_analysis',
           },
         }],
       },
     },
-    { key: 'transcript_analysis', label: 'Analysis (JSON)', column_type: 'text', position: 7 },
-    // Step 1: Key extracted fields (hidden by default — viewable via row expand)
-    { key: 'qualified', label: 'Qualified', column_type: 'formula', position: 8, formula_expression: 'JSON_GET(@transcript_analysis, "qualified")', is_visible: false },
-    { key: 'date_calculation', label: 'Date Calc', column_type: 'formula', position: 9, formula_expression: 'JSON_GET(@transcript_analysis, "date_calculation")', is_visible: false },
-    { key: 'months_ago', label: 'Months Ago', column_type: 'formula', position: 10, formula_expression: 'JSON_GET(@transcript_analysis, "months_ago")', is_visible: false },
-    { key: 'specific_pain', label: 'Pain Point', column_type: 'formula', position: 11, formula_expression: 'JSON_GET(@transcript_analysis, "specific_pain")', is_visible: false },
-    { key: 'blocker_signal', label: 'Blocker Signal', column_type: 'formula', position: 12, formula_expression: 'JSON_GET(@transcript_analysis, "blocker_signal")', is_visible: false },
-    { key: 'blocker_type', label: 'Blocker Type', column_type: 'formula', position: 13, formula_expression: 'JSON_GET(@transcript_analysis, "blocker_type")', is_visible: false },
-    { key: 'interest_areas', label: 'Interest Areas', column_type: 'formula', position: 14, formula_expression: 'JSON_GET(@transcript_analysis, "interest_areas")', is_visible: false },
-    { key: 'company_context', label: 'Company Context', column_type: 'formula', position: 15, formula_expression: 'JSON_GET(@transcript_analysis, "company_context")', is_visible: false },
-    { key: 'suggested_tier', label: 'Tier', column_type: 'formula', position: 16, formula_expression: 'JSON_GET(@transcript_analysis, "suggested_tier")', is_visible: false },
-    { key: 'personalisation_hook', label: 'Hook', column_type: 'formula', position: 17, formula_expression: 'JSON_GET(@transcript_analysis, "personalisation_hook")', is_visible: false },
-    { key: 'use60_angle', label: 'use60 Angle', column_type: 'formula', position: 18, formula_expression: 'JSON_GET(@transcript_analysis, "use60_angle")', is_visible: false },
-    { key: 'tone_notes', label: 'Tone Notes', column_type: 'formula', position: 19, formula_expression: 'JSON_GET(@transcript_analysis, "tone_notes")', is_visible: false },
-    // Step 2: Personalise button
+    { key: 'transcript_analysis', label: 'Analysis (JSON)', column_type: 'text', position: 8 },
+    { key: 'qualified', label: 'Qualified', column_type: 'formula', position: 9, formula_expression: 'JSON_GET(@transcript_analysis, "qualified")', is_visible: false },
+    { key: 'date_calculation', label: 'Date Calc', column_type: 'formula', position: 10, formula_expression: 'JSON_GET(@transcript_analysis, "date_calculation")', is_visible: false },
+    { key: 'months_ago', label: 'Months Ago', column_type: 'formula', position: 11, formula_expression: 'JSON_GET(@transcript_analysis, "months_ago")', is_visible: false },
+    { key: 'specific_pain', label: 'Pain Point', column_type: 'formula', position: 12, formula_expression: 'JSON_GET(@transcript_analysis, "specific_pain")', is_visible: false },
+    { key: 'blocker_signal', label: 'Blocker Signal', column_type: 'formula', position: 13, formula_expression: 'JSON_GET(@transcript_analysis, "blocker_signal")', is_visible: false },
+    { key: 'blocker_type', label: 'Blocker Type', column_type: 'formula', position: 14, formula_expression: 'JSON_GET(@transcript_analysis, "blocker_type")', is_visible: false },
+    { key: 'interest_areas', label: 'Interest Areas', column_type: 'formula', position: 15, formula_expression: 'JSON_GET(@transcript_analysis, "interest_areas")', is_visible: false },
+    { key: 'company_context', label: 'Company Context', column_type: 'formula', position: 16, formula_expression: 'JSON_GET(@transcript_analysis, "company_context")', is_visible: false },
+    { key: 'suggested_tier', label: 'Tier', column_type: 'formula', position: 17, formula_expression: 'JSON_GET(@transcript_analysis, "suggested_tier")', is_visible: false },
+    { key: 'personalisation_hook', label: 'Hook', column_type: 'formula', position: 18, formula_expression: 'JSON_GET(@transcript_analysis, "personalisation_hook")', is_visible: false },
+    { key: 'use60_angle', label: 'use60 Angle', column_type: 'formula', position: 19, formula_expression: 'JSON_GET(@transcript_analysis, "use60_angle")', is_visible: false },
+    { key: 'tone_notes', label: 'Tone Notes', column_type: 'formula', position: 20, formula_expression: 'JSON_GET(@transcript_analysis, "tone_notes")', is_visible: false },
     {
-      key: 'personalise_btn', label: 'Personalise', column_type: 'action', position: 20,
+      key: 'personalise_btn', label: 'Personalise', column_type: 'action', position: 21,
       action_config: {
         label: 'Personalise',
         color: '#10b981',
@@ -796,52 +270,81 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
             user_message_template: REENGAGEMENT_PROMPT_2_USER,
             model: 'claude-sonnet-4-5-20250929',
             provider: 'anthropic',
-            temperature: 0.6,
-            max_tokens: 768,
+            temperature: 0.3,
+            max_tokens: 2048,
             output_column_key: 'email_variables',
           },
         }],
         condition: { column_key: 'qualified', operator: 'equals', value: 'true' },
       },
     },
-    { key: 'email_variables', label: 'Email Vars (JSON)', column_type: 'text', position: 21 },
-    // Step 2: Key extracted fields (hidden by default — viewable via row expand)
-    { key: 'hook_line', label: 'Hook Line', column_type: 'formula', position: 22, formula_expression: 'JSON_GET(@email_variables, "hook_line")', is_visible: false },
-    { key: 'pain_ref', label: 'Pain Ref', column_type: 'formula', position: 23, formula_expression: 'JSON_GET(@email_variables, "pain_ref")', is_visible: false },
-    { key: 'pain_short', label: 'Pain Short', column_type: 'formula', position: 24, formula_expression: 'JSON_GET(@email_variables, "pain_short")', is_visible: false },
-    { key: 'time_ref', label: 'Time Ref', column_type: 'formula', position: 25, formula_expression: 'JSON_GET(@email_variables, "time_ref")', is_visible: false },
-    { key: 'blocker_ref', label: 'Blocker Ref', column_type: 'formula', position: 26, formula_expression: 'JSON_GET(@email_variables, "blocker_ref")', is_visible: false },
-    { key: 'curiosity_line', label: 'Curiosity Line', column_type: 'formula', position: 27, formula_expression: 'JSON_GET(@email_variables, "curiosity_line")', is_visible: false },
-    { key: 'use60_intro', label: '60 Intro', column_type: 'formula', position: 28, formula_expression: 'JSON_GET(@email_variables, "use60_intro")', is_visible: false },
-    { key: 'use60_bridge', label: '60 Bridge', column_type: 'formula', position: 29, formula_expression: 'JSON_GET(@email_variables, "use60_bridge")', is_visible: false },
-    { key: 'pain_reframe', label: 'Pain Reframe', column_type: 'formula', position: 30, formula_expression: 'JSON_GET(@email_variables, "pain_reframe")', is_visible: false },
-    // Step 3: Review Gate
+    { key: 'email_variables', label: 'Email Vars (JSON)', column_type: 'text', position: 22 },
+    { key: 'hook_line', label: 'Hook Line', column_type: 'formula', position: 23, formula_expression: 'JSON_GET(@email_variables, "hook_line")', is_visible: false },
+    { key: 'pain_ref', label: 'Pain Ref', column_type: 'formula', position: 24, formula_expression: 'JSON_GET(@email_variables, "pain_ref")', is_visible: false },
+    { key: 'pain_short', label: 'Pain Short', column_type: 'formula', position: 25, formula_expression: 'JSON_GET(@email_variables, "pain_short")', is_visible: false },
+    { key: 'time_ref', label: 'Time Ref', column_type: 'formula', position: 26, formula_expression: 'JSON_GET(@email_variables, "time_ref")', is_visible: false },
+    { key: 'blocker_ref', label: 'Blocker Ref', column_type: 'formula', position: 27, formula_expression: 'JSON_GET(@email_variables, "blocker_ref")', is_visible: false },
+    { key: 'curiosity_line', label: 'Curiosity Line', column_type: 'formula', position: 28, formula_expression: 'JSON_GET(@email_variables, "curiosity_line")', is_visible: false },
+    { key: 'use60_intro', label: '60 Intro', column_type: 'formula', position: 29, formula_expression: 'JSON_GET(@email_variables, "use60_intro")', is_visible: false },
+    { key: 'use60_bridge', label: '60 Bridge', column_type: 'formula', position: 30, formula_expression: 'JSON_GET(@email_variables, "use60_bridge")', is_visible: false },
+    { key: 'pain_reframe', label: 'Pain Reframe', column_type: 'formula', position: 31, formula_expression: 'JSON_GET(@email_variables, "pain_reframe")', is_visible: false },
+    // ── Review step columns ──
     {
-      key: 'review_btn', label: 'Review', column_type: 'action', position: 31,
+      key: 'review_btn', label: 'Review', column_type: 'action', position: 32,
       action_config: {
-        label: 'Review',
+        label: 'Review Variables',
         color: '#f59e0b',
-        actions: [{
-          type: 'run_prompt',
-          config: {
-            system_prompt: REENGAGEMENT_REVIEW_SYSTEM,
-            user_message_template: REENGAGEMENT_REVIEW_USER,
-            model: 'claude-sonnet-4-5-20250929',
-            provider: 'anthropic',
-            temperature: 0,
-            max_tokens: 512,
-            output_column_key: 'review_output',
+        icon: 'ShieldCheck',
+        actions: [
+          // Action 1: AI reviews qualification + variable quality
+          {
+            type: 'run_prompt',
+            config: {
+              system_prompt: REENGAGEMENT_REVIEW_SYSTEM,
+              user_message_template: REENGAGEMENT_REVIEW_USER,
+              model: 'claude-sonnet-4-5-20250929',
+              provider: 'anthropic',
+              temperature: 0.2,
+              max_tokens: 1024,
+              output_column_key: 'review_output',
+            },
           },
-        }],
+          // Action 2: If wording_fix_needed, auto-fix variables (reads review_output from DB)
+          {
+            type: 'run_prompt',
+            config: {
+              system_prompt: REENGAGEMENT_FIX_VARIABLES_SYSTEM,
+              user_message_template: REENGAGEMENT_FIX_VARIABLES_USER,
+              model: 'claude-sonnet-4-5-20250929',
+              provider: 'anthropic',
+              temperature: 0.3,
+              max_tokens: 1024,
+              output_column_key: 'email_variables',
+            },
+          },
+          // Action 3: Re-review after fix — makes final approved/needs_review decision
+          {
+            type: 'run_prompt',
+            config: {
+              system_prompt: REENGAGEMENT_RE_REVIEW_SYSTEM,
+              user_message_template: REENGAGEMENT_RE_REVIEW_USER,
+              model: 'claude-sonnet-4-5-20250929',
+              provider: 'anthropic',
+              temperature: 0.2,
+              max_tokens: 512,
+              output_column_key: 'review_output',
+            },
+          },
+        ],
         condition: { column_key: 'email_variables', operator: 'is_not_empty' },
       },
     },
-    { key: 'review_output', label: 'Review (JSON)', column_type: 'text', position: 32, is_visible: false },
-    { key: 'review_status', label: 'Review Status', column_type: 'formula', position: 33, formula_expression: 'JSON_GET(@review_output, "review_status")' },
-    { key: 'review_notes', label: 'Review Notes', column_type: 'formula', position: 34, formula_expression: 'JSON_GET(@review_output, "review_notes")' },
-    // Step 4: Write Email button
+    { key: 'review_output', label: 'Review (JSON)', column_type: 'text', position: 33 },
+    { key: 'review_status', label: 'Review Status', column_type: 'formula', position: 34, formula_expression: 'JSON_GET(@review_output, "review_status")' },
+    { key: 'review_notes', label: 'Review Notes', column_type: 'formula', position: 35, formula_expression: 'JSON_GET(@review_output, "review_notes")' },
+    // ── Write Email step ──
     {
-      key: 'write_email_btn', label: 'Write Email', column_type: 'action', position: 35,
+      key: 'write_email_btn', label: 'Write Email', column_type: 'action', position: 36,
       action_config: {
         label: 'Write Email',
         color: '#f59e0b',
@@ -860,8 +363,11 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
         condition: { column_key: 'review_status', operator: 'equals', value: 'approved' },
       },
     },
-    { key: 'email_draft', label: 'Email Draft', column_type: 'text', position: 36 },
+    { key: 'email_draft', label: 'Email Draft', column_type: 'text', position: 37 },
   ],
+  // ── Conditional formatting rules ──
+  // Order matters: first matching row-scoped rule wins.
+  // Uses equals (not not_equals) so empty/null fields don't trigger colours.
   formatting_rules: [
     {
       id: 'review-approved',
@@ -881,9 +387,17 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
     },
     {
       id: 'review-not-qualified',
+      column_key: 'review_status',
+      operator: 'equals',
+      value: 'not_qualified',
+      style: { backgroundColor: 'rgba(239,68,68,0.15)', textColor: '#f87171' },
+      scope: 'row',
+    },
+    {
+      id: 'analyse-not-qualified',
       column_key: 'qualified',
-      operator: 'not_equals',
-      value: 'true',
+      operator: 'equals',
+      value: 'false',
       style: { backgroundColor: 'rgba(239,68,68,0.15)', textColor: '#f87171' },
       scope: 'row',
     },

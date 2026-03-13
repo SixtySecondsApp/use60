@@ -1022,6 +1022,8 @@ serve(async (req: Request) => {
   const stage3Start = Date.now()
   let renderResult: Record<string, unknown> = {}
 
+  let renderSkipped = false
+
   try {
     renderResult = await retryWithBackoff(
       () => invokeStage(supabase, 'proposal-render-gotenberg', {
@@ -1037,17 +1039,16 @@ serve(async (req: Request) => {
     console.error(`${LOG_PREFIX} Stage 3+4 (render-gotenberg) failed:`, message)
     monitor.recordStage(s3.finish('failed', message))
 
-    clearTimeout(pipelineTimeoutId)
-    await Promise.all([
-      flushMetrics(supabase, proposalId, monitor.finalise()),
-      markFailed(supabase, proposalId, 'stage_3_render', message),
-    ])
-
-    return jsonResponse(partialResult('failed', 'render', message), req, 500)
+    // Render failure is non-fatal — the composed HTML is already stored.
+    // Skip PDF and proceed to delivery so the user gets their proposal.
+    console.warn(
+      `${LOG_PREFIX} PDF render failed — proceeding without PDF (HTML preview available)`,
+    )
+    renderSkipped = true
   }
 
   stageTiming.render_ms = Date.now() - stage3Start
-  const pdfUrl = typeof renderResult.pdf_url === 'string' ? renderResult.pdf_url : null
+  const pdfUrl = renderSkipped ? null : (typeof renderResult.pdf_url === 'string' ? renderResult.pdf_url : null)
 
   console.log(
     `${LOG_PREFIX} Stage 3+4 complete in ${stageTiming.render_ms}ms`,

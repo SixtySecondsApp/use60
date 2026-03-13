@@ -15,6 +15,9 @@ import {
   Bot,
   FileText,
   Network,
+  Table2,
+  ArrowRight,
+  Sparkles,
 } from 'lucide-react';
 import { SandboxDataProvider, useSandboxData } from './data/SandboxDataProvider';
 import { SandboxSidebar } from './SandboxSidebar';
@@ -32,6 +35,7 @@ const SandboxEmailDraft = lazy(() => import('./views/SandboxEmailDraft'));
 const SandboxCopilot = lazy(() => import('./views/SandboxCopilot'));
 const SandboxProposals = lazy(() => import('./views/SandboxProposals'));
 const SandboxRelationships = lazy(() => import('./views/SandboxRelationships'));
+const SandboxOps = lazy(() => import('./views/SandboxOps'));
 
 interface SandboxAppProps {
   data?: SandboxData;
@@ -58,6 +62,7 @@ const VIEW_MAP: Record<SandboxView, React.LazyExoticComponent<React.ComponentTyp
   email: SandboxEmailDraft,
   proposals: SandboxProposals,
   relationships: SandboxRelationships,
+  ops: SandboxOps,
   copilot: SandboxCopilot,
 };
 
@@ -112,8 +117,10 @@ const MOBILE_TABS: { id: SandboxView; label: string; icon: React.ElementType }[]
   { id: 'email', label: 'Email', icon: Mail },
   { id: 'proposals', label: 'Proposals', icon: FileText },
   { id: 'relationships', label: 'Relationships', icon: Network },
+  { id: 'ops', label: 'Outreach', icon: Table2 },
   { id: 'copilot', label: 'Copilot', icon: Bot },
 ];
+
 
 /** Inner component that has access to SandboxDataProvider context */
 function SandboxAppInner({
@@ -241,6 +248,7 @@ function SandboxAppInner({
                 : activeView === 'email' ? `Send this email to ${data.emailDraft?.to_name ?? 'your prospect'} for real`
                 : activeView === 'proposals' ? 'Generate proposals from your deal context'
                 : activeView === 'relationships' ? 'Map your deal relationships like this'
+                : activeView === 'ops' ? 'Generate personalized videos for your leads'
                 : activeView === 'copilot' ? 'Ask 60 anything about your pipeline'
                 : 'This is real. Try it free'}
               <span className="text-white/60">&rarr;</span>

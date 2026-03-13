@@ -133,6 +133,47 @@ Apply anti-convergence rules from style-guide.json:
 - Apply atmosphere effects from `antiConvergence.atmosphereEffects`
 - Never use fonts listed in `antiConvergence.bannedFonts`
 
+### Step 5b: Demo Integration (use60 landing pages)
+
+The primary conversion mechanism for use60 is a live demo, not email booking. The preferred flow:
+
+1. **Hero CTA**: URL input field (not "Book a demo" button) — user enters their company URL
+2. **AgentResearch**: `useDemoResearch()` hook orchestrates research on the entered URL
+3. **SandboxExperience**: Interactive product sandbox from `packages/landing/src/sandbox/`
+
+Key files:
+- `DemoPage.tsx` at `/demo` route — the newest, most polished demo flow
+- `useDemoResearch()` — hook for research orchestration
+- `packages/landing/src/sandbox/` — sandbox experience components
+
+Note: The demo-v2 approach (ProductShowcase + WeekRecap) is older. Prefer the SandboxExperience pattern.
+
+### Step 5c: Component Patterns
+
+**Scroll reveal animations** with framer-motion:
+```tsx
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  viewport={{ once: true }}
+  transition={{ duration: 0.5 }}
+>
+```
+
+**Lazy-load page components** to avoid linter stripping unused imports:
+```tsx
+const FeatureSection = React.lazy(() => import('./FeatureSection'));
+
+// In render:
+<Suspense fallback={<div className="h-96" />}>
+  <FeatureSection />
+</Suspense>
+```
+
+**Product UI mockups** in hero sections are more compelling than static screenshots — build them as styled components that look like a real product interface.
+
+**Inline testimonials** between feature sections (Harmonic pattern) build trust at the point of interest, rather than isolating all social proof in one section.
+
 ### Step 6: Craft Pass
 
 Run the `/frontend-design` Phase 4 checklist:
