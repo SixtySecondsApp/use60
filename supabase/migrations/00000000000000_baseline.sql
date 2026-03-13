@@ -69,7 +69,7 @@ COMMENT ON SCHEMA "public" IS 'Function volatility fixed: 20250128200000';
 -- Name: citext; Type: EXTENSION; Schema: -; Owner: -
 --
 
-CREATE EXTENSION IF NOT EXISTS "citext" WITH SCHEMA "public";
+CREATE EXTENSION IF NOT EXISTS "citext" WITH SCHEMA "extensions";
 --
 -- Name: EXTENSION "citext"; Type: COMMENT; Schema: -; Owner: 
 --
@@ -24999,7 +24999,7 @@ COMMENT ON TABLE "public"."organization_feature_flags" IS 'Per-organization feat
 CREATE TABLE IF NOT EXISTS "public"."organization_invitations" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "org_id" "uuid" NOT NULL,
-    "email" "citext" NOT NULL,
+    "email" "extensions"."citext" NOT NULL,
     "role" "text" DEFAULT 'member'::"text" NOT NULL,
     "invited_by" "uuid",
     "token" "text" DEFAULT "encode"("extensions"."gen_random_bytes"(32), 'hex'::"text") NOT NULL,

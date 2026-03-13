@@ -5,7 +5,7 @@ CREATE TABLE "public"."fireflies_integrations" (
   "id" uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   "user_id" uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   "api_key" text NOT NULL,
-  "fireflies_user_email" citext,
+  "fireflies_user_email" extensions.citext,
   "fireflies_team_id" text,
   "sync_all_team_meetings" boolean DEFAULT false NOT NULL,
   "is_active" boolean DEFAULT true NOT NULL,
