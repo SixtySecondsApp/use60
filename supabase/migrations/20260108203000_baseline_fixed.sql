@@ -36,70 +36,26 @@ ALTER SCHEMA "public" OWNER TO "pg_database_owner";
 
 COMMENT ON SCHEMA "public" IS 'Function volatility fixed: 20250128200000';
 
-CREATE TYPE "public"."activity_priority" AS ENUM (
-    'low',
-    'medium',
-    'high'
-);
-
+DO $$ BEGIN CREATE TYPE "public"."activity_priority" AS ENUM ('low','medium','high'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 ALTER TYPE "public"."activity_priority" OWNER TO "postgres";
 
-CREATE TYPE "public"."activity_status" AS ENUM (
-    'pending',
-    'completed',
-    'cancelled',
-    'no_show'
-);
-
+DO $$ BEGIN CREATE TYPE "public"."activity_status" AS ENUM ('pending','completed','cancelled','no_show'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 ALTER TYPE "public"."activity_status" OWNER TO "postgres";
-
 COMMENT ON TYPE "public"."activity_status" IS 'Activity statuses: pending, completed, cancelled, no_show (for tracking no-show meetings)';
 
-CREATE TYPE "public"."activity_type" AS ENUM (
-    'outbound',
-    'meeting',
-    'proposal',
-    'sale',
-    'fathom_meeting'
-);
-
+DO $$ BEGIN CREATE TYPE "public"."activity_type" AS ENUM ('outbound','meeting','proposal','sale','fathom_meeting'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 ALTER TYPE "public"."activity_type" OWNER TO "postgres";
 
-CREATE TYPE "public"."client_status" AS ENUM (
-    'active',
-    'churned',
-    'paused',
-    'signed',
-    'deposit_paid',
-    'notice_given'
-);
-
+DO $$ BEGIN CREATE TYPE "public"."client_status" AS ENUM ('active','churned','paused','signed','deposit_paid','notice_given'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 ALTER TYPE "public"."client_status" OWNER TO "postgres";
 
-CREATE TYPE "public"."meeting_processing_status" AS ENUM (
-    'pending',
-    'processing',
-    'complete',
-    'failed'
-);
-
+DO $$ BEGIN CREATE TYPE "public"."meeting_processing_status" AS ENUM ('pending','processing','complete','failed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 ALTER TYPE "public"."meeting_processing_status" OWNER TO "postgres";
 
-CREATE TYPE "public"."member_role" AS ENUM (
-    'member',
-    'leader',
-    'admin'
-);
-
+DO $$ BEGIN CREATE TYPE "public"."member_role" AS ENUM ('member','leader','admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 ALTER TYPE "public"."member_role" OWNER TO "postgres";
 
-CREATE TYPE "public"."waitlist_status" AS ENUM (
-    'pending',
-    'released',
-    'declined',
-    'converted'
-);
-
+DO $$ BEGIN CREATE TYPE "public"."waitlist_status" AS ENUM ('pending','released','declined','converted'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 ALTER TYPE "public"."waitlist_status" OWNER TO "postgres";
 
 -- ALTER FUNCTION "public"."accept_next_action_suggestion"("p_suggestion_id" "uuid", "p_task_data" "jsonb") OWNER TO "postgres";
