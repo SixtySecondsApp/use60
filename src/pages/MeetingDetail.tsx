@@ -1183,16 +1183,6 @@ export function MeetingDetail() {
               </div>
             )}
 
-            {/* Proposal generator lives outside Tabs so the ref survives tab switches */}
-            <ProposalQuickGenerate
-              meetingId={meeting.id}
-              contactId={meeting.primary_contact_id}
-              hasRecording={!!meeting.fathom_recording_id || !!meeting.voice_recording_id || !!meeting.video_url || !!meeting.share_url}
-              hasNotes={!!meeting.transcript_text || !!meeting.summary}
-              onCustomise={() => setShowProposalWizard(true)}
-              triggerRef={proposalRef}
-            />
-
             {/* Tabbed Interface: Summary, Transcript, Ask AI, Content */}
             <div className="section-card">
               <Tabs defaultValue="summary" className="w-full">
@@ -1221,6 +1211,14 @@ export function MeetingDetail() {
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('outbound')}>Add Outbound</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('proposal')}>Add Proposal</Button>
                     <Button size="sm" variant="secondary" onClick={() => handleQuickAdd('sale')}>Add Sale</Button>
+                    <ProposalQuickGenerate
+                      meetingId={meeting.id}
+                      contactId={meeting.primary_contact_id}
+                      hasRecording={!!meeting.fathom_recording_id}
+                      hasNotes={!!meeting.transcript_text}
+                      onCustomise={() => setShowProposalWizard(true)}
+                      triggerRef={proposalRef}
+                    />
                   </div>
 
                   {/* AI Structured Summary (classification, outcomes, objections, etc.) */}

@@ -151,44 +151,6 @@ Route to the banner-design or social photos sub-skills from `~/.claude/skills/de
 python3 ~/.claude/skills/design/scripts/icon/generate.py --style "$STYLE" --description "$DESCRIPTION"
 ```
 
-### Step 4b: Integration Logos (logo.dev)
-
-For integration grids, partner logos, or trust bars, use logo.dev CDN — NOT raw S3 bucket URLs (blocked by ad blockers):
-
-```
-https://img.logo.dev/{domain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ&size=128&format=png
-```
-
-Example: `https://img.logo.dev/slack.com?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ&size=128&format=png`
-
-Always implement a fallback (first letter of company name in a styled circle) with loading/error states:
-
-```tsx
-const [imgError, setImgError] = useState(false);
-const logoUrl = `https://img.logo.dev/${domain}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ&size=128&format=png`;
-
-return imgError ? (
-  <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-white/10 flex items-center justify-center text-sm font-medium">
-    {companyName[0]}
-  </div>
-) : (
-  <img src={logoUrl} alt={companyName} onError={() => setImgError(true)} className="w-8 h-8" />
-);
-```
-
-### Step 4c: use60 Brand Assets
-
-Official brand assets for 60/use60 pages:
-
-| Asset | URL |
-|-------|-----|
-| Icon | `https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Icon.png` |
-| Light mode logo | `https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Light%20Mode%20Logo.png` |
-| Dark mode logo | `https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Dark%20Mode%20Logo.png` |
-
-Branding utility: `src/lib/utils/sixtyBranding.ts`
-SVG assets for landing pages: `packages/landing/src/svg/` (hero-orbital, brand-constellation, feature-*, step-*)
-
 ### Step 5: Save Assets
 
 Save all generated assets to `.web/assets/`:

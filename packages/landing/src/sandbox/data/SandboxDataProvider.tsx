@@ -10,10 +10,10 @@ import type { SandboxData, SandboxView } from './sandboxTypes';
 import { getDefaultSandboxData } from './defaultMockData';
 
 /** Total number of sandbox views in the guided flow */
-export const TOTAL_VIEWS = 8;
+export const TOTAL_VIEWS = 7;
 
-/** Guided flow order: dashboard → pipeline → meetings → relationships → email → proposals → ops → copilot */
-const FLOW_ORDER: SandboxView[] = ['dashboard', 'pipeline', 'meetings', 'relationships', 'email', 'proposals', 'ops', 'copilot'];
+/** Guided flow order: dashboard → pipeline → meetings → relationships → email → proposals → copilot */
+const FLOW_ORDER: SandboxView[] = ['dashboard', 'pipeline', 'meetings', 'relationships', 'email', 'proposals', 'copilot'];
 
 interface SandboxContextValue {
   data: SandboxData;

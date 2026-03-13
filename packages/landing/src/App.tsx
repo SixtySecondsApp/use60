@@ -36,19 +36,6 @@ import { lazy, Suspense } from 'react';
 
 const CampaignLanding = lazy(() => import('./pages/CampaignLanding'));
 const DemoPage = lazy(() => import('./pages/DemoPage'));
-const LandingPageV8 = lazy(() => import('./pages/LandingPageV8').then(m => ({ default: m.LandingPageV8 })));
-const LandingPageV9 = lazy(() => import('./pages/LandingPageV9').then(m => ({ default: m.LandingPageV9 })));
-const LandingPageV10 = lazy(() => import('./pages/LandingPageV10').then(m => ({ default: m.LandingPageV10 })));
-const LandingPageV11 = lazy(() => import('./pages/LandingPageV11').then(m => ({ default: m.LandingPageV11 })));
-const LandingPageV12 = lazy(() => import('./pages/LandingPageV12').then(m => ({ default: m.LandingPageV12 })));
-const LandingPageV13 = lazy(() => import('./pages/LandingPageV13').then(m => ({ default: m.LandingPageV13 })));
-const LandingPageV14 = lazy(() => import('./pages/LandingPageV14').then(m => ({ default: m.LandingPageV14 })));
-const LandingPageV15 = lazy(() => import('./pages/LandingPageV15').then(m => ({ default: m.LandingPageV15 })));
-const LandingPageV16 = lazy(() => import('./pages/LandingPageV16').then(m => ({ default: m.LandingPageV16 })));
-const LandingPageV17 = lazy(() => import('./pages/LandingPageV17').then(m => ({ default: m.LandingPageV17 })));
-const LandingPageV18 = lazy(() => import('./pages/LandingPageV18').then(m => ({ default: m.LandingPageV18 })));
-const LandingPageV19 = lazy(() => import('./pages/LandingPageV19').then(m => ({ default: m.LandingPageV19 })));
-const DemoLanding = lazy(() => import('./pages/DemoLanding'));
 import { getAppUrl } from './lib/utils/siteUrl';
 import { trackPageView } from './lib/pageViewTracker';
 import { CookieConsentBanner } from './lib/consent/CookieConsentBanner';
@@ -104,8 +91,8 @@ function App() {
         <Route path="/hero-v11" element={<HeroV11Preview />} />
         {/* Campaign analytics dashboard */}
         {/* Campaign personalized demo links */}
-        <Route path="/t/:code" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><CampaignLanding /></Suspense>} />
-        <Route path="/demo" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><DemoPage /></Suspense>} />
+        <Route path="/t/:code" element={<Suspense fallback={<div className="min-h-screen bg-zinc-950" />}><CampaignLanding /></Suspense>} />
+        <Route path="/demo" element={<Suspense fallback={<div className="min-h-screen bg-zinc-950" />}><DemoPage /></Suspense>} />
         <Route path="/demo-v3" element={<DemoExperience />} />
         <Route path="/demo-v2" element={<DemoExperienceV2 />} />
         {/* Redirect auth routes to app domain */}
@@ -116,19 +103,6 @@ function App() {
         <Route path="/v5" element={<LandingPageV5 />} />
         <Route path="/v6" element={<LandingPageV6 />} />
         <Route path="/v7" element={<LandingPageV7 />} />
-        <Route path="/v8" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV8 /></Suspense>} />
-        <Route path="/v9" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV9 /></Suspense>} />
-        <Route path="/v10" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV10 /></Suspense>} />
-        <Route path="/v11" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV11 /></Suspense>} />
-        <Route path="/v12" element={<Suspense fallback={<div className="min-h-screen bg-[#070b1a]" />}><LandingPageV12 /></Suspense>} />
-        <Route path="/v13" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV13 /></Suspense>} />
-        <Route path="/v14" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV14 /></Suspense>} />
-        <Route path="/v15" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV15 /></Suspense>} />
-        <Route path="/v16" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV16 /></Suspense>} />
-        <Route path="/v17" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV17 /></Suspense>} />
-        <Route path="/v18" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><LandingPageV18 /></Suspense>} />
-        <Route path="/v19" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><LandingPageV19 /></Suspense>} />
-        <Route path="/d/:hash" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><DemoLanding /></Suspense>} />
         <Route path="/v1" element={<LandingPage />} />
         <Route path="/" element={<LandingPageV7 />} />
       </Routes>
