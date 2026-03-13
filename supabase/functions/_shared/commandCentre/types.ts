@@ -18,7 +18,8 @@ export type SourceAgent =
   | 'health-recalculate'
   | 'notification-bridge'
   | 'pipeline_scan'
-  | 'pipeline_hygiene';
+  | 'pipeline_hygiene'
+  | 'integration-health';
 
 // Item types — matches item_type column values in command_centre_items
 export type ItemType =
