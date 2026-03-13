@@ -65,6 +65,8 @@ export function mapDraftedActionToActionType(
       return 'meeting_scheduling';
     case 'send_proposal':
       return 'proposal_send';
+    case 'send_slack':
+      return 'follow_up_email'; // Slack messages use same trust profile as follow-ups
     default:
       return 'follow_up_email';
   }

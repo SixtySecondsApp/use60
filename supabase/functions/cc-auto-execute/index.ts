@@ -12,14 +12,15 @@
  * Pause condition: if ANY item was undone (reverted from completed to ready via
  * auto_exec) in the last hour, the user is skipped entirely for this run.
  *
- * Actual action side-effects (emails, CRM writes, etc.) will be wired in CC12-007.
- * For now execution is simulated by marking the item completed and storing pre-exec
- * state in context.pre_exec_state for future undo support.
+ * Action dispatch (CC12-007 / US-026): executeItem() dispatches real actions via
+ * actionExecutor — send_email, update_crm, create_task, send_slack — and records
+ * an auto_executed signal in the autopilot system. Pre-exec state is stored in
+ * context.pre_exec_state for undo support.
  *
  * Service role is used deliberately: this function reads across multiple users'
  * command_centre_items and action_trust_scores, which RLS would block.
  *
- * Story: CC11-003
+ * Story: CC11-003, US-026
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
@@ -35,6 +36,8 @@ import {
   recordOutcome,
   classifyExecutionTier,
 } from '../_shared/commandCentre/trustScorer.ts';
+import { executeApprovedAction } from '../_shared/commandCentre/actionExecutor.ts';
+import { recordSignal, type ApprovalEvent } from '../_shared/autopilot/signals.ts';
 import type { CommandCentreItem, DraftedAction } from '../_shared/commandCentre/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -142,20 +145,19 @@ async function isUserPaused(
 }
 
 // ---------------------------------------------------------------------------
-// Execute a single item
-//
-// CC12-007 will replace this stub with real action dispatching.
-// For now we record pre-exec state and mark the item completed.
+// Execute a single item — dispatches real action via actionExecutor (CC12-007)
 // ---------------------------------------------------------------------------
 
 async function executeItem(
   supabase: ReturnType<typeof createClient>,
   item: ReadyItem,
 ): Promise<void> {
+  // 1. Store pre-exec state for undo support
   const preExecState = {
     status: item.status,
     resolution_channel: item.resolution_channel,
     context_snapshot: item.context,
+    drafted_action_snapshot: item.drafted_action,
     auto_executed_at: new Date().toISOString(),
   };
 
@@ -164,19 +166,78 @@ async function executeItem(
     pre_exec_state: preExecState,
   };
 
-  const { error } = await supabase
+  // Store pre-exec state before executing (so undo has the snapshot)
+  const { error: preExecError } = await supabase
+    .from('command_centre_items')
+    .update({ context: updatedContext })
+    .eq('id', item.id);
+
+  if (preExecError) {
+    throw new Error(`Pre-exec state save failed: ${preExecError.message}`);
+  }
+
+  // 2. Dispatch real action via actionExecutor
+  const ccItem = {
+    ...item,
+    context: updatedContext,
+    // Fill minimal fields expected by CommandCentreItem
+    source_agent: 'pipeline_scan' as const,
+    priority_factors: {},
+    urgency: 'normal' as const,
+    enrichment_status: 'enriched' as const,
+    enrichment_context: {},
+    confidence_factors: {},
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  } as unknown as CommandCentreItem;
+
+  const result = await executeApprovedAction(supabase, ccItem);
+
+  if (!result.success) {
+    // Revert pre-exec state on failure
+    await supabase
+      .from('command_centre_items')
+      .update({ context: item.context })
+      .eq('id', item.id);
+    throw new Error(`Action dispatch failed: ${result.error}`);
+  }
+
+  // 3. Mark the item completed
+  const { error: completeError } = await supabase
     .from('command_centre_items')
     .update({
       status: 'completed',
       resolution_channel: 'auto_exec',
       resolved_at: new Date().toISOString(),
-      context: updatedContext,
+      context: {
+        ...updatedContext,
+        execution_details: result.executionDetails ?? {},
+      },
     })
     .eq('id', item.id);
 
-  if (error) {
-    throw new Error(`DB update failed: ${error.message}`);
+  if (completeError) {
+    throw new Error(`DB completion update failed: ${completeError.message}`);
   }
+
+  // 4. Record auto_executed signal in autopilot system (fire-and-forget)
+  const actionType = item.drafted_action
+    ? mapDraftedActionToActionType(item.drafted_action.type, item.item_type)
+    : 'unknown';
+
+  const signalEvent: ApprovalEvent = {
+    user_id: item.user_id,
+    org_id: item.org_id,
+    action_type: actionType,
+    agent_name: 'cc-auto-execute',
+    signal: 'auto_executed',
+    confidence_at_proposal: item.confidence_score,
+    deal_id: item.deal_id ?? undefined,
+    contact_id: item.contact_id ?? undefined,
+    autonomy_tier_at_time: 'autonomous',
+  };
+
+  recordSignal(supabase, signalEvent).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------

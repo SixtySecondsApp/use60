@@ -17,6 +17,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { logAICostEvent } from '../costTracking.ts';
 import type { CommandCentreItem, DraftedAction } from './types.ts';
 import { calculateContextRisk, type ContextRiskInput } from '../orchestrator/contextRiskScorer.ts';
+import { loadUserPreferences } from '../preferences/loadPreferences.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,7 +104,7 @@ async function resolveModelConfig(
 // Prompt builders
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(): string {
+function buildSystemPrompt(preferencesSection: string = ''): string {
   return `You are a sales intelligence assistant helping a rep take the next best action.
 
 Your task:
@@ -141,7 +142,7 @@ Rules:
 - payload fields are optional — only include what is relevant to the action_type
 - editable_fields must reference actual payload keys
 - confidence is a float 0.0-1.0 based on how well the context supports the action
-- enriched_summary must cite only facts present in the context — no hallucination`;
+- enriched_summary must cite only facts present in the context — no hallucination${preferencesSection}`;
 }
 
 function buildUserPrompt(item: CommandCentreItem, enrichmentContext: Record<string, unknown>): string {
@@ -362,7 +363,22 @@ export async function synthesiseAndDraft(
       }
     }
 
-    const systemPrompt = buildSystemPrompt();
+    // US-029: Load learned preferences for injection into system prompt
+    let preferencesSection = '';
+    try {
+      const draftType = item.drafted_action?.type ?? item.item_type;
+      preferencesSection = await loadUserPreferences(
+        supabase,
+        item.user_id,
+        draftType,
+        item.contact_id ?? undefined,
+      );
+    } catch (prefErr) {
+      // Preference loading failure must not block drafting
+      console.warn('[cc-drafter] loadUserPreferences failed (non-fatal):', String(prefErr));
+    }
+
+    const systemPrompt = buildSystemPrompt(preferencesSection);
     const userPrompt = buildUserPrompt(item, enrichmentContext);
 
     const rawText = await callProvider(modelConfig, systemPrompt, userPrompt);

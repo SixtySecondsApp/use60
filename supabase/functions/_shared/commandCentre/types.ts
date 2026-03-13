@@ -81,7 +81,7 @@ export interface CommandCentreItem {
 }
 
 export interface DraftedAction {
-  type: 'send_email' | 'update_crm' | 'create_task' | 'schedule_meeting' | 'send_proposal';
+  type: 'send_email' | 'update_crm' | 'create_task' | 'schedule_meeting' | 'send_proposal' | 'send_slack';
   payload: {
     to?: string;
     subject?: string;
@@ -90,6 +90,8 @@ export interface DraftedAction {
     field_updates?: Record<string, unknown>;
     suggested_times?: string[];
     duration_minutes?: number;
+    message?: string;
+    slack_user_id?: string;
   };
   display_text: string;
   editable_fields: string[];

@@ -5,12 +5,16 @@
  * Dispatches drafted actions to the appropriate edge function or direct
  * Supabase write based on the DraftedAction.type.
  *
- * Story: CC12-007
+ * US-026: Real dispatch for send_email, update_crm, create_task, send_slack.
+ * US-027: Supports edited payloads with original/edited tracking.
+ *
+ * Story: CC12-007, US-026, US-027
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { CommandCentreItem } from './types.ts';
 import { recordOutcome, mapDraftedActionToActionType } from './trustScorer.ts';
+import { sendSlackDM } from '../proactive/deliverySlack.ts';
 
 // ---------------------------------------------------------------------------
 // Return type
@@ -65,8 +69,11 @@ export async function executeApprovedAction(
       case 'schedule_meeting':
         return await executeScheduleMeeting(supabase, item, payload);
 
+      case 'send_slack':
+        return await executeSendSlack(supabase, item, payload);
+
       case 'send_proposal':
-        // Proposal sends are surfaced as suggestions only — mark as completed
+        // Proposal sends are surfaced as suggestions only — too risky for auto
         console.log('[cc-executor] send_proposal surfaced, marking completed');
         return {
           success: true,
@@ -257,6 +264,79 @@ async function executeScheduleMeeting(
   };
 }
 
+async function executeSendSlack(
+  supabase: ReturnType<typeof createClient>,
+  item: CommandCentreItem,
+  payload: Record<string, unknown>,
+): Promise<ExecutionResult> {
+  const { message, slack_user_id } = payload as {
+    message?: string;
+    slack_user_id?: string;
+  };
+
+  if (!message) {
+    return { success: false, error: 'send_slack missing required field: message' };
+  }
+
+  // Resolve Slack bot token and user ID for the item owner
+  const targetSlackUserId = slack_user_id ?? await resolveSlackUserId(supabase, item);
+
+  if (!targetSlackUserId) {
+    return { success: false, error: 'Cannot resolve Slack user ID for delivery' };
+  }
+
+  const botToken = await resolveSlackBotToken(supabase, item.org_id);
+  if (!botToken) {
+    return { success: false, error: 'No Slack bot token for org' };
+  }
+
+  const result = await sendSlackDM({
+    botToken,
+    slackUserId: targetSlackUserId,
+    text: message,
+  });
+
+  if (!result.success) {
+    console.error('[cc-executor] sendSlackDM error', { itemId: item.id, error: result.error });
+    return { success: false, error: result.error ?? 'Slack DM failed' };
+  }
+
+  return {
+    success: true,
+    executionDetails: { channelId: result.channelId, ts: result.ts },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Slack helpers
+// ---------------------------------------------------------------------------
+
+async function resolveSlackUserId(
+  supabase: ReturnType<typeof createClient>,
+  item: CommandCentreItem,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('slack_user_mappings')
+    .select('slack_user_id')
+    .eq('sixty_user_id', item.user_id)
+    .eq('org_id', item.org_id)
+    .maybeSingle();
+  return data?.slack_user_id ?? null;
+}
+
+async function resolveSlackBotToken(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('slack_org_settings')
+    .select('bot_access_token')
+    .eq('org_id', orgId)
+    .eq('is_connected', true)
+    .maybeSingle();
+  return data?.bot_access_token ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // recordExecutionOutcome
 // ---------------------------------------------------------------------------
@@ -278,6 +358,93 @@ export async function recordExecutionOutcome(
   const actionType = mapDraftedActionToActionType(draft.type, item.item_type);
 
   await recordOutcome(supabase, item.user_id, actionType, resolvedOutcome);
+}
+
+// ---------------------------------------------------------------------------
+// approveWithEdits — US-027
+// ---------------------------------------------------------------------------
+
+/**
+ * Approves a CC item with optional edits. When edits are provided:
+ *  1. Stores original drafted_action in context.original_drafted_action
+ *  2. Updates drafted_action with the edited payload
+ *  3. Saves edited_content to the item for diff analysis (US-028)
+ *  4. Executes the action using the edited payload
+ *  5. Records 'approved_edited' signal instead of 'approved'
+ *
+ * When no edits: standard approve + execute + 'approved' signal.
+ */
+export async function approveWithEdits(
+  supabase: ReturnType<typeof createClient>,
+  item: CommandCentreItem,
+  editedPayload?: Record<string, unknown>,
+): Promise<ExecutionResult> {
+  const wasEdited = !!editedPayload && Object.keys(editedPayload).length > 0;
+  const draft = item.drafted_action;
+
+  if (!draft) {
+    return { success: false, error: 'No drafted_action on item' };
+  }
+
+  // US-027: If edited, preserve original and store diff metadata
+  if (wasEdited) {
+    // Build edited_content for downstream diff analysis (US-028)
+    const editedContent = {
+      original_payload: draft.payload,
+      edited_payload: { ...draft.payload, ...editedPayload },
+      action_type: draft.type,
+      edited_fields: Object.keys(editedPayload),
+    };
+
+    const updatedContext = {
+      ...item.context,
+      original_drafted_action: draft,
+      edited_at: new Date().toISOString(),
+      edited_content: editedContent,
+    };
+
+    const { error: saveError } = await supabase
+      .from('command_centre_items')
+      .update({ context: updatedContext })
+      .eq('id', item.id);
+
+    if (saveError) {
+      console.error('[cc-executor] approveWithEdits: save error', {
+        itemId: item.id,
+        error: saveError.message,
+      });
+      // Non-fatal — continue with execution
+    }
+
+    // Update in-memory context for execution
+    item.context = updatedContext;
+  }
+
+  // Execute the action (with or without edits)
+  const result = await executeApprovedAction(supabase, item, editedPayload);
+
+  if (result.success) {
+    // Record trust outcome
+    await recordExecutionOutcome(supabase, item, wasEdited ? 'approved_with_edit' : 'approved', wasEdited);
+
+    // Fire extract-edit-feedback for diff analysis (US-028) — fire and forget
+    if (wasEdited && draft.payload) {
+      const editedPayloadMerged = { ...draft.payload, ...editedPayload };
+      supabase.functions.invoke('extract-edit-feedback', {
+        body: {
+          item_id: item.id,
+          user_id: item.user_id,
+          original_content: draft.payload,
+          edited_content: editedPayloadMerged,
+          action_type: draft.type,
+        },
+      }).catch((err: unknown) => {
+        console.warn('[cc-executor] extract-edit-feedback invocation failed (non-fatal)', String(err));
+      });
+    }
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
