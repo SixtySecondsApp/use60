@@ -37,7 +37,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_DATABASE_PASSWORD }}
         run: |
           npx supabase link --project-ref caerqjzvuerejfrdtygb
-          npx supabase db push --linked --dry-run
+          npx supabase db push --linked --dry-run --include-all
 
       - name: Dry-run against production
         if: github.base_ref == 'main'
@@ -46,7 +46,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DATABASE_PASSWORD }}
         run: |
           npx supabase link --project-ref ygdpgliavpxeugaajgrb
-          npx supabase db push --linked --dry-run
+          npx supabase db push --linked --dry-run --include-all
 
   apply-staging:
     name: Apply migrations to staging
@@ -68,7 +68,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_DATABASE_PASSWORD }}
         run: |
           npx supabase link --project-ref caerqjzvuerejfrdtygb
-          npx supabase db push --linked
+          npx supabase db push --linked --include-all
 
       - name: Notify Slack (success)
         if: success()
@@ -128,7 +128,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DATABASE_PASSWORD }}
         run: |
           npx supabase link --project-ref ygdpgliavpxeugaajgrb
-          npx supabase db push --linked
+          npx supabase db push --linked --include-all
 
       - name: Notify Slack (success)
         if: success()
