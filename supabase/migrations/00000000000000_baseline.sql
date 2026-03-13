@@ -25002,7 +25002,7 @@ COMMENT ON TABLE "public"."organization_feature_flags" IS 'Per-organization feat
 CREATE TABLE IF NOT EXISTS "public"."organization_invitations" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "org_id" "uuid" NOT NULL,
-    "email" "citext" NOT NULL,
+    "email" "extensions"."citext" NOT NULL,
     "role" "text" DEFAULT 'member'::"text" NOT NULL,
     "invited_by" "uuid",
     "token" "text" DEFAULT "encode"("extensions"."gen_random_bytes"(32), 'hex'::"text") NOT NULL,
