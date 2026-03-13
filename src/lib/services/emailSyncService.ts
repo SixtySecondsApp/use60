@@ -8,15 +8,6 @@
 import { supabase } from '@/lib/supabase/clientV2';
 import { analyzeEmailWithClaude, EmailAnalysis } from './emailAIAnalysis';
 
-// Helper to get auth headers for edge functions
-async function getAuthHeaders() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) {
-    throw new Error('No active session');
-  }
-  return { Authorization: `Bearer ${session.access_token}` };
-}
-
 export type SyncPeriod = '30days' | '60days' | '90days' | 'all_time';
 
 export interface SyncResult {
@@ -124,17 +115,25 @@ async function fetchGmailEmails(
   // 'all_time' uses no date filter
 
   // Call Gmail edge function to fetch emails
-  const headers = await getAuthHeaders();
-  const { data, error } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'list',
+  // supabase.functions.invoke automatically includes JWT auth header
+  const { data, error } = await supabase.functions.invoke('google-services-router', {
+    body: {
+      action: 'gmail',
+      handlerAction: 'list',
       query,
       maxResults: 500, // Fetch up to 500 emails per sync
     },
-    headers,
   });
 
   if (error) {
     console.error('Error fetching Gmail emails:', error);
     throw new Error(`Failed to fetch Gmail emails: ${error.message}`);
+  }
+
+  // Gmail handler returns HTTP 200 with { success: false, error } on failure
+  if (data && data.success === false) {
+    console.error('Gmail API error:', data.error);
+    throw new Error(data.error || 'Gmail API returned an error');
   }
 
   return data?.messages || [];
@@ -337,13 +336,14 @@ export async function performEmailSync(
       if (!message.payload) {
         // Fetch full message details
         try {
-          const msgHeaders = await getAuthHeaders();
-          const { data: messageData, error: msgError } = await supabase.functions.invoke('google-services-router', { body: { action: 'gmail', handlerAction: 'get',
+          const { data: messageData, error: msgError } = await supabase.functions.invoke('google-services-router', {
+            body: {
+              action: 'gmail',
+              handlerAction: 'get',
               messageId: message.id,
             },
-            headers: msgHeaders,
           });
-          if (!msgError && messageData) {
+          if (!msgError && messageData && messageData.success !== false) {
             fullMessage = messageData;
           }
         } catch (e) {

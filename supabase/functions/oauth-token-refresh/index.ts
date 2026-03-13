@@ -7,6 +7,7 @@ import { handleRefresh as hubspotRefresh } from './providers/hubspot.ts'
 import { handleRefresh as fathomRefresh } from './providers/fathom.ts'
 import { handleRefresh as attioRefresh } from './providers/attio.ts'
 import { handleRefresh as bullhornRefresh } from './providers/bullhorn.ts'
+import { handleRefresh as linkedinRefresh } from './providers/linkedin.ts'
 
 const providerHandlers: Record<string, (req: Request) => Promise<Response>> = {
   google: googleRefresh,
@@ -14,6 +15,7 @@ const providerHandlers: Record<string, (req: Request) => Promise<Response>> = {
   fathom: fathomRefresh,
   attio: attioRefresh,
   bullhorn: bullhornRefresh,
+  linkedin: linkedinRefresh,
 }
 
 serve(async (req) => {

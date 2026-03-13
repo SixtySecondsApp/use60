@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMeetingScorecard } from '@/lib/hooks/useCoachingScorecard';
+import { ScorecardMeetingLink } from './ScorecardMeetingLink';
 import type { MeetingScorecard, ScorecardGrade } from '@/lib/types/meetingIntelligence';
 
 interface RepScorecardViewProps {
@@ -151,6 +152,8 @@ export function RepScorecardView({
                 score={metric.score}
                 weight={metric.weight}
                 feedback={metric.feedback}
+                meetingId={scorecard.meeting_id}
+                skillName={metricId}
               />
             ))}
           </div>
@@ -385,17 +388,34 @@ function MetricScoreBar({
   score,
   weight,
   feedback,
+  meetingId,
+  skillName,
 }: {
   name: string;
   score: number;
   weight: number;
   feedback?: string;
+  meetingId?: string;
+  skillName?: string;
 }) {
+  const isLowScore = score < 70;
+  const scoreDisplay = <span className="font-medium">{Math.round(score)}%</span>;
+
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">
         <span className="capitalize">{name}</span>
-        <span className="font-medium">{Math.round(score)}%</span>
+        {isLowScore && meetingId && skillName ? (
+          <ScorecardMeetingLink
+            meetingId={meetingId}
+            skillName={skillName}
+            score={score}
+          >
+            {scoreDisplay}
+          </ScorecardMeetingLink>
+        ) : (
+          scoreDisplay
+        )}
       </div>
       <div className="h-2 bg-muted rounded-full overflow-hidden">
         <div

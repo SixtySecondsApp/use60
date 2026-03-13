@@ -34,6 +34,8 @@ export interface AuthContextType {
 
   // Actions
   signIn: (email: string, password: string) => Promise<{ error: ExtendedAuthError | null }>;
+  signInWithGoogle: () => Promise<{ error: AuthError | null }>;
+  signInWithMicrosoft: () => Promise<{ error: AuthError | null }>;
   signUp: (email: string, password: string, metadata?: SignUpMetadata) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
@@ -444,6 +446,66 @@ const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
+  // Sign in with Google OAuth
+  const signInWithGoogle = useCallback(async () => {
+    try {
+      logger.log('🔐 Initiating Google OAuth sign-in');
+      justSignedInRef.current = true;
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        justSignedInRef.current = false;
+        logger.error('❌ Google OAuth error:', error);
+        return { error: { message: authUtils.formatAuthError(error) } };
+      }
+
+      // Browser will redirect to Google — no error means redirect is in progress
+      return { error: null };
+    } catch (error: any) {
+      justSignedInRef.current = false;
+      logger.error('❌ Google OAuth exception:', error);
+      return { error: { message: authUtils.formatAuthError(error) } };
+    }
+  }, []);
+
+  // Sign in with Microsoft OAuth (Azure provider via Supabase)
+  const signInWithMicrosoft = useCallback(async () => {
+    try {
+      logger.log('🔐 Initiating Microsoft OAuth sign-in');
+      justSignedInRef.current = true;
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'azure',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: 'openid profile email',
+        },
+      });
+
+      if (error) {
+        justSignedInRef.current = false;
+        logger.error('❌ Microsoft OAuth error:', error);
+        return { error: { message: authUtils.formatAuthError(error) } };
+      }
+
+      return { error: null };
+    } catch (error: any) {
+      justSignedInRef.current = false;
+      logger.error('❌ Microsoft OAuth exception:', error);
+      return { error: { message: authUtils.formatAuthError(error) } };
+    }
+  }, []);
+
   // Sign up function
   const signUp = useCallback(async (email: string, password: string, metadata?: SignUpMetadata) => {
     try {
@@ -554,6 +616,8 @@ const SupabaseAuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Actions
     signIn,
+    signInWithGoogle,
+    signInWithMicrosoft,
     signUp,
     signOut,
     resetPassword,

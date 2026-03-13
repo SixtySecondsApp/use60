@@ -1,0 +1,1236 @@
+{
+  "project": {
+    "name": "sixty-sales-dashboard",
+    "template": null,
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind",
+      "testing": "vitest"
+    },
+    "createdAt": "2026-03-10T10:00:00Z"
+  },
+  "features": [
+    {
+      "id": "linkedin-hub",
+      "name": "LinkedIn Integration Hub",
+      "status": "planned",
+      "prd": "tasks/linkedin/DISCOVERY_REPORT.md",
+      "createdAt": "2026-03-10T10:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "LI-001",
+      "feature": "linkedin-hub",
+      "title": "Add missing token columns to linkedin_org_integrations",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "phase": 0,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "linkedin_org_integrations"
+        ]
+      },
+      "blocks": [
+        "LI-002",
+        "LI-003",
+        "LI-004",
+        "LI-005",
+        "LI-006",
+        "LI-007",
+        "LI-008"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Migration adds access_token_encrypted, refresh_token_encrypted, token_expires_at columns to linkedin_org_integrations",
+        "Migration is idempotent (uses IF NOT EXISTS)",
+        "Dry-run passes on staging: npx supabase db push --linked --dry-run"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/20260310110000_linkedin_add_token_columns.sql"
+      ]
+    },
+    {
+      "id": "LI-002",
+      "feature": "linkedin-hub",
+      "title": "Fix OAuth state single-use and reduce TTL",
+      "type": "backend",
+      "status": "complete",
+      "priority": 2,
+      "phase": 0,
+      "dependencies": {
+        "stories": [
+          "LI-001"
+        ],
+        "files": [],
+        "schema": [
+          "linkedin_oauth_states"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-003",
+        "LI-004"
+      ],
+      "acceptance": [
+        "linkedin_oauth_states gets used_at column via migration",
+        "linkedin-oauth-callback sets used_at on first use, rejects if already used",
+        "State TTL reduced from 10 min to 5 min",
+        "Replayed OAuth callbacks return 400"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260310110001_linkedin_oauth_state_single_use.sql",
+        "supabase/functions/linkedin-oauth-callback/index.ts"
+      ]
+    },
+    {
+      "id": "LI-003",
+      "feature": "linkedin-hub",
+      "title": "Add missing OAuth scopes for campaign write and conversions",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "phase": 0,
+      "dependencies": {
+        "stories": [
+          "LI-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-002",
+        "LI-004"
+      ],
+      "acceptance": [
+        "oauth-initiate/providers/linkedin.ts requests rw_ads and rw_conversions scopes",
+        "Scopes list is documented with which PRD requires each scope",
+        "OAuth flow correctly redirects with new scope set"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "supabase/functions/oauth-initiate/providers/linkedin.ts"
+      ]
+    },
+    {
+      "id": "LI-004",
+      "feature": "linkedin-hub",
+      "title": "Commit untracked migrations and fix RLS INSERT policy",
+      "type": "schema",
+      "status": "complete",
+      "priority": 4,
+      "phase": 0,
+      "dependencies": {
+        "stories": [
+          "LI-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-002",
+        "LI-003"
+      ],
+      "acceptance": [
+        "20260310090740_linkedin_integration_rls_write_policies.sql includes INSERT policy for linkedin_lead_sources",
+        "20260310091242_add_engagement_to_ad_library.sql committed",
+        "20260310092143_linkedin_matched_audiences.sql committed",
+        "20260310100238_add_is_saved_to_ad_library.sql committed",
+        "All 4 pass dry-run on staging"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260310090740_linkedin_integration_rls_write_policies.sql",
+        "supabase/migrations/20260310091242_add_engagement_to_ad_library.sql",
+        "supabase/migrations/20260310092143_linkedin_matched_audiences.sql",
+        "supabase/migrations/20260310100238_add_is_saved_to_ad_library.sql"
+      ]
+    },
+    {
+      "id": "LI-005",
+      "feature": "linkedin-hub",
+      "title": "Add webhook resolution failure logging table and rate limiting",
+      "type": "backend",
+      "status": "complete",
+      "priority": 5,
+      "phase": 0,
+      "dependencies": {
+        "stories": [
+          "LI-001"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-002",
+        "LI-003",
+        "LI-004"
+      ],
+      "acceptance": [
+        "New linkedin_webhook_resolution_failures table created via migration",
+        "webhook-linkedin/index.ts logs failed resolutions to table instead of only console",
+        "In-memory rate limiting added: 10 req/min per IP (same pattern as demo-research)",
+        "Staging webhook rejects unsigned requests when LINKEDIN_CLIENT_SECRET is set"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/20260310110002_linkedin_webhook_failures.sql",
+        "supabase/functions/webhook-linkedin/index.ts"
+      ]
+    },
+    {
+      "id": "LI-006",
+      "feature": "linkedin-hub",
+      "title": "Validate foundation fixes on staging",
+      "type": "testing",
+      "status": "complete",
+      "priority": 6,
+      "phase": 0,
+      "dependencies": {
+        "stories": [
+          "LI-001",
+          "LI-002",
+          "LI-003",
+          "LI-004",
+          "LI-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LI-007"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "npx supabase db push --linked --dry-run passes on staging",
+        "All LinkedIn edge functions deploy successfully to staging",
+        "OAuth connect flow works end-to-end with new scopes",
+        "Webhook receives test payload and processes without error"
+      ],
+      "estimatedMinutes": 30,
+      "files": []
+    },
+    {
+      "id": "LI-007",
+      "feature": "linkedin-hub",
+      "title": "Create LinkedInHub page shell with tab navigation",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 7,
+      "phase": 1,
+      "dependencies": {
+        "stories": [
+          "LI-006"
+        ],
+        "files": [
+          "src/pages/ProspectingHub.tsx",
+          "src/components/prospecting/ProspectingTabs.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "LI-008",
+        "LI-009",
+        "LI-010",
+        "LI-011",
+        "LI-012",
+        "LI-013"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "New LinkedInHub.tsx page at /linkedin with ProspectingHub-style pill tabs",
+        "LinkedInHubTabs.tsx component with tabs: Overview, Leads, Campaigns, Analytics, Revenue, Ad Library, Audiences",
+        "URL param support: /linkedin?tab=campaigns deep-links to correct tab",
+        "routeConfig.ts updated: single /linkedin entry replaces 4 scattered entries",
+        "Old routes (/campaigns, /intelligence/ads, etc.) redirect to /linkedin?tab=<correct>"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/pages/LinkedInHub.tsx",
+        "src/components/linkedin/LinkedInHubTabs.tsx",
+        "src/lib/routes/routeConfig.ts",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "LI-008",
+      "feature": "linkedin-hub",
+      "title": "Build LinkedIn Health Monitor header component",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 8,
+      "phase": 1,
+      "dependencies": {
+        "stories": [
+          "LI-007"
+        ],
+        "files": [
+          "src/lib/hooks/useLinkedInIntegration.ts"
+        ],
+        "schema": [
+          "linkedin_org_integrations"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-009",
+        "LI-010"
+      ],
+      "acceptance": [
+        "LinkedInHealthMonitor.tsx component renders in hub header below tabs",
+        "Shows token expiry countdown (days remaining, red if <7 days)",
+        "Shows last sync timestamp with relative time",
+        "Shows webhook delivery rate (success % last 24h from linkedin_sync_runs)",
+        "Shows connection status badge (connected/disconnected/error)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/linkedin/LinkedInHealthMonitor.tsx",
+        "src/pages/LinkedInHub.tsx"
+      ]
+    },
+    {
+      "id": "LI-009",
+      "feature": "linkedin-hub",
+      "title": "Build LinkedIn Onboarding Wizard",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 9,
+      "phase": 1,
+      "dependencies": {
+        "stories": [
+          "LI-007"
+        ],
+        "files": [
+          "src/lib/hooks/useLinkedInIntegration.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-008",
+        "LI-010"
+      ],
+      "acceptance": [
+        "LinkedInOnboardingWizard.tsx renders when !isConnected on hub page",
+        "Step 1: Connect LinkedIn (triggers OAuth flow)",
+        "Step 2: Select ad accounts from discovered accounts",
+        "Step 3: Enable lead gen form sync (toggles from LinkedInConfigModal)",
+        "Step 4: Quick actions (create campaign / explore ad library / done)",
+        "Wizard is dismissible and remembers dismissal in localStorage"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/LinkedInOnboardingWizard.tsx",
+        "src/pages/LinkedInHub.tsx"
+      ]
+    },
+    {
+      "id": "LI-010",
+      "feature": "linkedin-hub",
+      "title": "Build LinkedIn Overview Dashboard tab",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 10,
+      "phase": 1,
+      "dependencies": {
+        "stories": [
+          "LI-007"
+        ],
+        "files": [
+          "src/lib/hooks/useLinkedInIntegration.ts",
+          "src/lib/hooks/useLinkedInAdManager.ts",
+          "src/lib/hooks/useLinkedInAnalytics.ts",
+          "src/lib/hooks/useAdLibrary.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-008",
+        "LI-009"
+      ],
+      "acceptance": [
+        "LinkedInOverviewTab.tsx renders as default tab in hub",
+        "Connection health card (status, token expiry, scopes)",
+        "Leads this week card (count, top ICP scores, trend arrow)",
+        "Campaign spend card (active count, total spend, top performer name + CTR)",
+        "Recent competitor ads card (last 5 from watchlist with thumbnails)",
+        "Quick action buttons: New Campaign, Search Ads, View Pipeline"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/LinkedInOverviewTab.tsx"
+      ]
+    },
+    {
+      "id": "LI-011",
+      "feature": "linkedin-hub",
+      "title": "Refactor existing LinkedIn pages into hub tab components",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 11,
+      "phase": 1,
+      "dependencies": {
+        "stories": [
+          "LI-007"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-008",
+        "LI-009",
+        "LI-010"
+      ],
+      "acceptance": [
+        "LinkedInLeadsTab.tsx wraps lead source config + recent leads from useLinkedInIntegration",
+        "LinkedInCampaignsTab.tsx wraps CampaignsPage content (removes Helmet, page-level chrome)",
+        "LinkedInAnalyticsTab.tsx wraps LinkedInAnalytics content",
+        "LinkedInRevenueTab.tsx wraps LinkedInRevenue content",
+        "LinkedInAdLibraryTab.tsx wraps AdLibrary content",
+        "Each tab loads data only when active (lazy load pattern)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/LinkedInLeadsTab.tsx",
+        "src/components/linkedin/LinkedInCampaignsTab.tsx",
+        "src/components/linkedin/LinkedInAnalyticsTab.tsx",
+        "src/components/linkedin/LinkedInRevenueTab.tsx",
+        "src/components/linkedin/LinkedInAdLibraryTab.tsx"
+      ]
+    },
+    {
+      "id": "LI-012",
+      "feature": "linkedin-hub",
+      "title": "Build Audiences tab with Ops table push integration",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 12,
+      "phase": 1,
+      "dependencies": {
+        "stories": [
+          "LI-007"
+        ],
+        "files": [
+          "src/lib/hooks/useLinkedInAdManager.ts",
+          "src/lib/services/linkedinAdManagerService.ts"
+        ],
+        "schema": [
+          "linkedin_matched_audiences"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-008",
+        "LI-009",
+        "LI-010",
+        "LI-011"
+      ],
+      "acceptance": [
+        "LinkedInAudiencesTab.tsx shows audience list with status badges (PENDING/PROCESSING/READY/FAILED)",
+        "Create audience dialog with name, type (CONTACT_LIST/COMPANY_LIST)",
+        "Ops table picker: select table, map email/company/domain columns",
+        "Push button triggers push_ops_to_audience action with selected rows",
+        "Status polling shows upload progress until READY or FAILED"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/LinkedInAudiencesTab.tsx"
+      ]
+    },
+    {
+      "id": "LI-013",
+      "feature": "linkedin-hub",
+      "title": "Campaign creation wizard with multi-step form",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 13,
+      "phase": 2,
+      "dependencies": {
+        "stories": [
+          "LI-007",
+          "LI-003"
+        ],
+        "files": [
+          "src/lib/hooks/useLinkedInAdManager.ts"
+        ],
+        "schema": [
+          "linkedin_managed_campaigns"
+        ]
+      },
+      "blocks": [
+        "LI-014"
+      ],
+      "parallelWith": [
+        "LI-016",
+        "LI-017",
+        "LI-018"
+      ],
+      "acceptance": [
+        "CampaignWizard.tsx with steps: Objective, Format, Targeting, Budget/Bid, Schedule, Review",
+        "Objective picker: lead gen, website visits, conversions, engagement, brand awareness, video views",
+        "Format selector: single image, carousel, video, text ad, dynamic ad",
+        "Targeting builder: job title, function, seniority, company, industry, geography",
+        "Budget input: daily/lifetime with currency, bidding strategy (manual CPC/CPM, target cost)",
+        "Review step shows full summary, creates campaign in DRAFT status"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/CampaignWizard.tsx",
+        "src/components/linkedin/LinkedInCampaignsTab.tsx"
+      ]
+    },
+    {
+      "id": "LI-014",
+      "feature": "linkedin-hub",
+      "title": "Creative builder with AI copy generation",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 14,
+      "phase": 2,
+      "dependencies": {
+        "stories": [
+          "LI-013"
+        ],
+        "files": [],
+        "schema": [
+          "linkedin_managed_creatives"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-015",
+        "LI-016",
+        "LI-017"
+      ],
+      "acceptance": [
+        "CreativeBuilder.tsx allows upload/select images and videos",
+        "AI copy generation button generates headline, body, CTA from campaign objective + ICP data",
+        "Preview in desktop feed, mobile feed layouts",
+        "Validation enforces format constraints (creative format must match campaign type)",
+        "Active creative count warning at 15 per campaign"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/CreativeBuilder.tsx"
+      ]
+    },
+    {
+      "id": "LI-015",
+      "feature": "linkedin-hub",
+      "title": "Lead gen form builder and campaign linking",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 15,
+      "phase": 2,
+      "dependencies": {
+        "stories": [
+          "LI-013"
+        ],
+        "files": [],
+        "schema": [
+          "linkedin_managed_lead_forms"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-014",
+        "LI-016",
+        "LI-017"
+      ],
+      "acceptance": [
+        "LeadFormBuilder.tsx with field selection (name, email, company, title, phone, custom)",
+        "Form preview showing LinkedIn lead form appearance",
+        "Form linked to campaign during creative setup",
+        "List, edit, archive existing lead gen forms",
+        "Form responses flow through Lead Response Copilot pipeline (existing)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/linkedin/LeadFormBuilder.tsx"
+      ]
+    },
+    {
+      "id": "LI-016",
+      "feature": "linkedin-hub",
+      "title": "Anomaly detection engine for advertising analytics",
+      "type": "backend",
+      "status": "complete",
+      "priority": 16,
+      "phase": 2,
+      "dependencies": {
+        "stories": [
+          "LI-006"
+        ],
+        "files": [
+          "supabase/functions/linkedin-analytics-sync/index.ts"
+        ],
+        "schema": [
+          "linkedin_campaign_metrics"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-013",
+        "LI-017",
+        "LI-018"
+      ],
+      "acceptance": [
+        "linkedin-analytics-sync detects anomalies: sudden cost spikes (>50% day-over-day), CTR drops (>30%), lead volume declines (>40%)",
+        "Anomaly detection runs after each sync cycle",
+        "Detected anomalies stored in linkedin_campaign_alerts table",
+        "Each alert includes severity, suggested action (pause, adjust targeting, review creative)",
+        "Slack notification for high-severity anomalies via shared deliverySlack infrastructure"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/20260310120000_linkedin_campaign_alerts.sql",
+        "supabase/functions/linkedin-analytics-sync/index.ts",
+        "supabase/functions/linkedin-campaign-quality-alert/index.ts"
+      ]
+    },
+    {
+      "id": "LI-017",
+      "feature": "linkedin-hub",
+      "title": "Demographics pivot UI and CSV export for analytics",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 17,
+      "phase": 2,
+      "dependencies": {
+        "stories": [
+          "LI-007"
+        ],
+        "files": [
+          "src/lib/hooks/useLinkedInAnalytics.ts"
+        ],
+        "schema": [
+          "linkedin_demographic_metrics"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-013",
+        "LI-016",
+        "LI-018"
+      ],
+      "acceptance": [
+        "Demographic pivot selector: job title, function, seniority, industry, company size, geography",
+        "Bar chart and table view for each pivot showing impressions, clicks, spend, leads",
+        "Top-performing segments highlighted with badge",
+        "CSV export button generates download for any analytics view",
+        "Date range filtering with presets (7d, 30d, 90d, custom)"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/linkedin/LinkedInAnalyticsTab.tsx"
+      ]
+    },
+    {
+      "id": "LI-018",
+      "feature": "linkedin-hub",
+      "title": "Revenue campaign quality dashboard and Slack alerts",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 18,
+      "phase": 2,
+      "dependencies": {
+        "stories": [
+          "LI-007"
+        ],
+        "files": [
+          "src/lib/hooks/useLinkedInConversions.ts"
+        ],
+        "schema": [
+          "linkedin_conversion_events"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-013",
+        "LI-016",
+        "LI-017"
+      ],
+      "acceptance": [
+        "Campaign quality view in Revenue tab: lead volume vs meetings vs proposals per campaign",
+        "Campaigns with high leads but poor downstream conversion are flagged with warning badge",
+        "Slack alert fired when campaign quality score drops below threshold",
+        "Alert includes recommendation: pause review, audience review, creative review",
+        "Cost per meeting, cost per deal, ROAS displayed per campaign"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/LinkedInRevenueTab.tsx",
+        "supabase/functions/linkedin-campaign-quality-alert/index.ts"
+      ]
+    },
+    {
+      "id": "LI-019",
+      "feature": "linkedin-hub",
+      "title": "Ad Library battlecard/proposal integration and weekly digest",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 19,
+      "phase": 2,
+      "dependencies": {
+        "stories": [
+          "LI-007"
+        ],
+        "files": [
+          "src/lib/hooks/useAdLibrary.ts",
+          "supabase/functions/linkedin-ad-digest/index.ts"
+        ],
+        "schema": [
+          "linkedin_ad_library_ads"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-013",
+        "LI-014",
+        "LI-015"
+      ],
+      "acceptance": [
+        "Ad Library trend view shows weekly angle frequency changes",
+        "Competitor ad data accessible from battlecard skill via copilot context",
+        "Weekly Slack digest summarizes new ads from tracked competitors",
+        "Digest configurable: frequency, competitors, detail level",
+        "Likely winner scoring surfaces ads with longevity + variant density signals"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/LinkedInAdLibraryTab.tsx",
+        "supabase/functions/linkedin-ad-digest/index.ts"
+      ]
+    },
+    {
+      "id": "LI-020",
+      "feature": "linkedin-hub",
+      "title": "Bidirectional campaign sync drift detection UI",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 20,
+      "phase": 2,
+      "dependencies": {
+        "stories": [
+          "LI-013"
+        ],
+        "files": [
+          "supabase/functions/linkedin-campaign-sync/index.ts"
+        ],
+        "schema": [
+          "linkedin_managed_campaigns"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-016",
+        "LI-017",
+        "LI-018",
+        "LI-019"
+      ],
+      "acceptance": [
+        "Campaign sync detects when a campaign was modified in LinkedIn Campaign Manager",
+        "Drift badge appears on affected campaigns in the list view",
+        "Drift detail dialog shows what changed (targeting, budget, status, creative)",
+        "Accept remote changes button updates local state to match LinkedIn",
+        "Bulk accept for multiple drifted campaigns"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/linkedin/LinkedInCampaignsTab.tsx",
+        "supabase/functions/linkedin-campaign-sync/index.ts"
+      ]
+    },
+    {
+      "id": "LI-021",
+      "feature": "linkedin-hub",
+      "title": "Cross-feature attribution chain schema and service",
+      "type": "schema",
+      "status": "complete",
+      "priority": 21,
+      "phase": 3,
+      "dependencies": {
+        "stories": [
+          "LI-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LI-022"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "New linkedin_attribution_events table: id, org_id, event_type, source_entity_id, source_entity_type, target_entity_id, target_entity_type, metadata JSONB, created_at",
+        "Event types: ad_library_insight, campaign_created, lead_captured, contact_created, deal_created, deal_won",
+        "RLS policies scoped to org membership",
+        "Service function to record attribution events from edge functions"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260310130000_linkedin_attribution_events.sql"
+      ]
+    },
+    {
+      "id": "LI-022",
+      "feature": "linkedin-hub",
+      "title": "Wire attribution into Overview Dashboard and pipeline overlay",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 22,
+      "phase": 3,
+      "dependencies": {
+        "stories": [
+          "LI-021",
+          "LI-010"
+        ],
+        "files": [],
+        "schema": [
+          "linkedin_attribution_events"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-023"
+      ],
+      "acceptance": [
+        "Overview Dashboard shows attribution chain summary card",
+        "Card displays: Ad Library insights \u2192 campaigns created \u2192 leads captured \u2192 deals \u2192 revenue",
+        "Click-through from any node to the source entity",
+        "Pipeline overlay on Analytics tab links campaigns to downstream pipeline outcomes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/linkedin/LinkedInOverviewTab.tsx",
+        "src/components/linkedin/LinkedInAnalyticsTab.tsx"
+      ]
+    },
+    {
+      "id": "LI-023",
+      "feature": "linkedin-hub",
+      "title": "Ops table lead tracking and campaign performance views",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 23,
+      "phase": 3,
+      "dependencies": {
+        "stories": [
+          "LI-012",
+          "LI-021"
+        ],
+        "files": [
+          "src/lib/services/linkedinAdManagerService.ts"
+        ],
+        "schema": [
+          "linkedin_matched_audiences",
+          "dynamic_tables"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "LI-022"
+      ],
+      "acceptance": [
+        "LinkedIn-sourced leads appear in standard Leads Ops table with source=linkedin column populated",
+        "Campaign performance available as read-only standard Ops table (campaign name, spend, leads, meetings, deals)",
+        "Audience push from Ops table shows status in audience management UI",
+        "Source attribution visible on contact records (which campaign/form generated the lead)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/LinkedInAudiencesTab.tsx",
+        "supabase/functions/linkedin-lead-ingest/index.ts"
+      ]
+    },
+    {
+      "id": "LI-024",
+      "feature": "linkedin-hub",
+      "title": "Event-to-Pipeline schema and edge functions",
+      "type": "backend",
+      "status": "complete",
+      "priority": 24,
+      "phase": 4,
+      "dependencies": {
+        "stories": [
+          "LI-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LI-025",
+        "LI-026",
+        "LI-027"
+      ],
+      "parallelWith": [
+        "LI-028"
+      ],
+      "acceptance": [
+        "Migration creates: linkedin_event_connections, linkedin_events, linkedin_event_registrants, linkedin_event_sync_runs tables",
+        "linkedin-event-sync edge function connects to Events Management API and pulls event + registrant data",
+        "Registrants are deduplicated by LinkedIn member ID per event",
+        "Sync is idempotent and supports both one-time import and ongoing updates",
+        "RLS policies scoped to org membership"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/20260310140000_linkedin_events.sql",
+        "supabase/functions/linkedin-event-sync/index.ts"
+      ]
+    },
+    {
+      "id": "LI-025",
+      "feature": "linkedin-hub",
+      "title": "Event registrant prioritization and matching",
+      "type": "backend",
+      "status": "complete",
+      "priority": 25,
+      "phase": 4,
+      "dependencies": {
+        "stories": [
+          "LI-024"
+        ],
+        "files": [],
+        "schema": [
+          "linkedin_event_registrants"
+        ]
+      },
+      "blocks": [
+        "LI-026"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Registrants ranked by ICP fit, account value, existing pipeline, and owner relevance",
+        "Existing contacts/companies matched before new records created (reuse Lead Copilot matching)",
+        "High-priority registrants flagged with priority tier (hot/warm/cold)",
+        "Existing customers and open deals flagged clearly on registrant records"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/linkedin-event-sync/index.ts"
+      ]
+    },
+    {
+      "id": "LI-026",
+      "feature": "linkedin-hub",
+      "title": "Pre-event coordination and post-event follow-up engine",
+      "type": "backend",
+      "status": "complete",
+      "priority": 26,
+      "phase": 4,
+      "dependencies": {
+        "stories": [
+          "LI-025"
+        ],
+        "files": [],
+        "schema": [
+          "linkedin_event_registrants"
+        ]
+      },
+      "blocks": [
+        "LI-027"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Pre-event Slack summary with top registrants, target accounts, open deals",
+        "Post-event segmentation: attended, engaged, no-show, unknown",
+        "Attendee follow-up drafts reference event topic and next logical step",
+        "No-show follow-up emphasizes recap and next engagement opportunity",
+        "Follow-up drafts respect HITL approval (same as Lead Copilot)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/linkedin-event-followup/index.ts"
+      ]
+    },
+    {
+      "id": "LI-027",
+      "feature": "linkedin-hub",
+      "title": "Events tab UI with registrant list and reporting",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 27,
+      "phase": 4,
+      "dependencies": {
+        "stories": [
+          "LI-026",
+          "LI-007"
+        ],
+        "files": [],
+        "schema": [
+          "linkedin_events",
+          "linkedin_event_registrants"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "LinkedInEventsTab.tsx added to hub with event list, registrant table, follow-up status",
+        "Event detail view: registrant count, priority breakdown, follow-up completion rate",
+        "Event-to-pipeline report: registrations \u2192 meetings booked \u2192 deals \u2192 revenue",
+        "Event registrant list available as auto-provisioned Ops table",
+        "Connect event button triggers LinkedIn Events API sync"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/LinkedInEventsTab.tsx",
+        "src/lib/hooks/useLinkedInEvents.ts",
+        "src/lib/services/linkedinEventsService.ts",
+        "src/pages/LinkedInHub.tsx"
+      ]
+    },
+    {
+      "id": "LI-028",
+      "feature": "linkedin-hub",
+      "title": "Graph Import schema and archive parser",
+      "type": "backend",
+      "status": "complete",
+      "priority": 28,
+      "phase": 5,
+      "dependencies": {
+        "stories": [
+          "LI-006"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "LI-029",
+        "LI-030"
+      ],
+      "parallelWith": [
+        "LI-024"
+      ],
+      "acceptance": [
+        "Migration creates user-scoped: linkedin_archive_imports, linkedin_import_contacts, linkedin_import_messages, linkedin_import_relationship_scores",
+        "Parser handles LinkedIn Connections.csv: first name, last name, email, company, position, connected_on",
+        "Parser handles message export files: sender, recipient, date, subject, content",
+        "Import is idempotent per user per import run",
+        "RLS policies scoped to importing user (not org-wide)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/20260310150000_linkedin_graph_import.sql",
+        "supabase/functions/linkedin-graph-import/index.ts"
+      ]
+    },
+    {
+      "id": "LI-029",
+      "feature": "linkedin-hub",
+      "title": "Trust scoring engine and CRM contact matching",
+      "type": "backend",
+      "status": "complete",
+      "priority": 29,
+      "phase": 5,
+      "dependencies": {
+        "stories": [
+          "LI-028"
+        ],
+        "files": [],
+        "schema": [
+          "linkedin_import_contacts",
+          "linkedin_import_messages"
+        ]
+      },
+      "blocks": [
+        "LI-030"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Trust scoring: connection + no messages = weak, inbound-only = low trust, bidirectional = trusted, frequent + recent = strong",
+        "Trust tiers computed: cold, known, trusted, strong",
+        "CRM matching: LinkedIn URL match > name + company heuristics",
+        "Uncertain matches flagged for manual review",
+        "Scores stored in linkedin_import_relationship_scores"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/linkedin-graph-import/index.ts"
+      ]
+    },
+    {
+      "id": "LI-030",
+      "feature": "linkedin-hub",
+      "title": "Network tab UI with archive upload wizard and trust overlay",
+      "type": "frontend",
+      "status": "complete",
+      "priority": 30,
+      "phase": 5,
+      "dependencies": {
+        "stories": [
+          "LI-029",
+          "LI-007"
+        ],
+        "files": [
+          "src/components/ops/CSVImportOpsTableWizard.tsx"
+        ],
+        "schema": [
+          "linkedin_import_relationship_scores"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "LinkedInNetworkTab.tsx added to hub tabs",
+        "Archive upload wizard (reuses CSVImportOpsTableWizard pattern): upload \u2192 parse \u2192 review \u2192 import",
+        "Import summary: total contacts, matched CRM contacts, unmatched, trust tier breakdown",
+        "Trust tier badges on matched contacts in contact detail views",
+        "Clear labeling: 'Your LinkedIn relationship signal' (user-scoped, not org-wide)"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/linkedin/LinkedInNetworkTab.tsx",
+        "src/lib/hooks/useLinkedInGraphImport.ts",
+        "src/lib/services/linkedinGraphImportService.ts",
+        "src/pages/LinkedInHub.tsx"
+      ]
+    }
+  ],
+  "execution": {
+    "totalStories": 30,
+    "completedStories": 30,
+    "currentFeature": "linkedin-hub",
+    "lastUpdated": "2026-03-10T11:15:00Z",
+    "phases": {
+      "0": {
+        "name": "Foundation Fixes",
+        "stories": [
+          "LI-001",
+          "LI-002",
+          "LI-003",
+          "LI-004",
+          "LI-005",
+          "LI-006"
+        ],
+        "estimatedDays": "2-3"
+      },
+      "1": {
+        "name": "Hub Shell + Navigation",
+        "stories": [
+          "LI-007",
+          "LI-008",
+          "LI-009",
+          "LI-010",
+          "LI-011",
+          "LI-012"
+        ],
+        "estimatedDays": "3-5"
+      },
+      "2": {
+        "name": "Polish Existing PRDs",
+        "stories": [
+          "LI-013",
+          "LI-014",
+          "LI-015",
+          "LI-016",
+          "LI-017",
+          "LI-018",
+          "LI-019",
+          "LI-020"
+        ],
+        "estimatedDays": "5-8"
+      },
+      "3": {
+        "name": "Ops Tables + Attribution",
+        "stories": [
+          "LI-021",
+          "LI-022",
+          "LI-023"
+        ],
+        "estimatedDays": "4-6"
+      },
+      "4": {
+        "name": "Event-to-Pipeline Engine",
+        "stories": [
+          "LI-024",
+          "LI-025",
+          "LI-026",
+          "LI-027"
+        ],
+        "estimatedDays": "8-12"
+      },
+      "5": {
+        "name": "Graph Import",
+        "stories": [
+          "LI-028",
+          "LI-029",
+          "LI-030"
+        ],
+        "estimatedDays": "4-6"
+      }
+    },
+    "parallelGroups": [
+      {
+        "group": "P0-fixes",
+        "stories": [
+          "LI-002",
+          "LI-003",
+          "LI-004",
+          "LI-005"
+        ],
+        "after": "LI-001"
+      },
+      {
+        "group": "P1-hub-content",
+        "stories": [
+          "LI-008",
+          "LI-009",
+          "LI-010",
+          "LI-011",
+          "LI-012"
+        ],
+        "after": "LI-007"
+      },
+      {
+        "group": "P2-ad-manager",
+        "stories": [
+          "LI-013",
+          "LI-014",
+          "LI-015"
+        ],
+        "after": "LI-007"
+      },
+      {
+        "group": "P2-analytics-revenue",
+        "stories": [
+          "LI-016",
+          "LI-017",
+          "LI-018",
+          "LI-019",
+          "LI-020"
+        ],
+        "after": "LI-006"
+      },
+      {
+        "group": "P3-attribution",
+        "stories": [
+          "LI-022",
+          "LI-023"
+        ],
+        "after": "LI-021"
+      },
+      {
+        "group": "P4-P5-parallel",
+        "stories": [
+          "LI-024",
+          "LI-028"
+        ],
+        "after": "LI-006",
+        "note": "Events and Graph Import can start simultaneously"
+      }
+    ]
+  }
+}

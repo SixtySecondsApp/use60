@@ -55,6 +55,7 @@ export interface ClerkAuthContextType {
 
   // Actions
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signInWithGoogle: () => Promise<{ error: AuthError | null }>;
   signUp: (email: string, password: string, metadata?: SignUpMetadata) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
@@ -570,6 +571,8 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children }
 
     // Actions
     signIn,
+    signInWithGoogle: async () => ({ error: { message: 'Google OAuth is not supported with Clerk auth. Use Clerk\'s built-in social login.' } }),
+    signInWithMicrosoft: async () => ({ error: { message: 'Microsoft OAuth is not supported with Clerk auth. Use Clerk\'s built-in social login.' } }),
     signUp,
     signOut,
     resetPassword,

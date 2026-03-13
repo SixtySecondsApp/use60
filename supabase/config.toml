@@ -27,6 +27,10 @@ entrypoint = "./functions/process-single-activity/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/process-single-activity/*.html" ]
 
+# Email delivery — uses custom auth (not JWT)
+[functions.send-router]
+verify_jwt = false
+
 # Consolidated webhook routers
 [functions.webhook-crm]
 verify_jwt = false
@@ -55,6 +59,13 @@ verify_jwt = false
 
 # HubSpot integration (OAuth callback + webhooks must accept non-JWT requests)
 [functions.hubspot-oauth-callback]
+verify_jwt = false
+
+# LinkedIn integration (OAuth callback + lead webhooks must accept non-JWT requests)
+[functions.linkedin-oauth-callback]
+verify_jwt = false
+
+[functions.webhook-linkedin]
 verify_jwt = false
 
 # Health check endpoint - public access for monitoring services

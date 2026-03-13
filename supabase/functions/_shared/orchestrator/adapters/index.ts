@@ -72,6 +72,7 @@ import { analysePipelinePatternsAdapter, deliverPatternSlackAdapter } from './pi
 import { roleInferenceAdapter } from './roleInference.ts';
 import { emailRoleInferenceAdapter } from './emailRoleInference.ts';
 import { jobChangeDetectorAdapter } from './jobChangeDetector.ts';
+import { dealHeartbeatScanAdapter } from './dealHeartbeat.ts';
 
 // =============================================================================
 // Stub adapters for steps that don't have full implementations yet
@@ -220,6 +221,9 @@ export const ADAPTER_REGISTRY: AdapterRegistry = {
   // via Apollo enrichment and email domain monitoring, then updates contact_org_history
   // and flags reengagement events.
   'detect-job-changes': jobChangeDetectorAdapter,
+
+  // Deal Heartbeat (PST-005) — triggers deal observation scan after meeting ends
+  'deal-heartbeat-scan': dealHeartbeatScanAdapter,
 };
 
 /**

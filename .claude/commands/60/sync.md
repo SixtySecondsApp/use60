@@ -18,6 +18,47 @@ Tickets are for humans. Every ticket should read like a brief written by a sharp
 
 ---
 
+## DRY-RUN MODE
+
+```bash
+/60/sync --dry-run
+```
+
+Preview everything that WOULD be created, without actually creating anything. No tickets, no branches, no Slack posts.
+
+**Output format:**
+
+```
+DRY RUN — Nothing will be created.
+
+  Dev Hub Project: <Project Name> (<code>)
+
+  Parent Ticket (would create):
+    Title: PRD: <Feature Title>
+    Type: feature | Priority: <priority>
+
+  Subtasks (would create):
+    US-001: <title> — <type>
+    US-002: <title> — <type>
+    US-003: <title> — DEDUPED (matches TSK-0534)
+
+  Branch (would create):
+    feature/<runSlug>
+
+  Slack (would post):
+    Channel: <channel> | Thread: <thread>
+
+  [P]roceed for real  [E]dit plan first  [C]ancel
+```
+
+- **Proceed**: Re-run SYNC without `--dry-run` (creates everything)
+- **Edit**: Go back to `/60/plan --edit` to adjust stories before syncing
+- **Cancel**: Stop. Pipeline state unchanged.
+
+When called from `/60/ship`, dry-run is NOT used (auto-flow). Dry-run is for standalone `/60/sync` calls where you want to verify before creating.
+
+---
+
 ## RULES
 
 1. **One parent ticket per pipeline run.** The parent IS the PRD — context, scope, the why.
@@ -137,14 +178,43 @@ Store returned subtask IDs in `pipeline.json.stories[i].aiDevHubSubtaskId`.
 
 ## STEP 6: Create Git Branch
 
+### CRITICAL: Branch Protection
+
+Before creating ANY branch, check the current state:
+
 ```bash
-git checkout -b feature/<runSlug>
+CURRENT_BRANCH=$(git branch --show-current)
 ```
 
-If branch already exists:
-```bash
-git checkout feature/<runSlug>
-```
+**Decision tree:**
+
+1. **Already on `feature/<runSlug>`** → Do nothing. You're already on the right branch.
+
+2. **Already on a DIFFERENT `feature/*` branch with uncommitted changes** →
+   **STOP. Ask the user.** Do NOT silently switch branches or create a new one.
+   Present:
+   ```
+   You're on branch: feature/<current>
+   This pipeline wants: feature/<runSlug>
+
+   Options:
+   [S]tay on current branch (recommended — keep working here)
+   [N]ew branch from current (branch off your work)
+   [C]heckout the pipeline branch (switch — uncommitted changes will be stashed)
+   ```
+
+3. **Already on a `feature/*` branch with NO uncommitted changes AND pipeline.json.branch matches** →
+   Stay on current branch.
+
+4. **On main/master with no active work** → Safe to create:
+   ```bash
+   git checkout -b feature/<runSlug>
+   ```
+
+5. **Branch `feature/<runSlug>` already exists** →
+   ```bash
+   git checkout feature/<runSlug>
+   ```
 
 Store branch name in `pipeline.json.branch`.
 

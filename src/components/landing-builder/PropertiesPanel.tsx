@@ -7,9 +7,10 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Type, Layout, Image, Palette, ChevronDown, Loader2, Trash2, RefreshCw } from 'lucide-react';
+import { Type, Layout, Image, Palette, ChevronDown, ChevronUp, Loader2, Trash2, RefreshCw, FileText, Plus, X, Upload, Crop, Link, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { LandingSection, LayoutVariant, AssetStatus, AssetStrategy, SectionDividerType } from './types';
+import type { LandingSection, LayoutVariant, AssetStatus, AssetStrategy, SectionDividerType, FormConfig, FormField } from './types';
+import { DEFAULT_CTA_FORM } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,6 +20,10 @@ interface PropertiesPanelProps {
   section: LandingSection | null;
   onSectionUpdate: (sectionId: string, patch: Partial<LandingSection>) => void;
   onRegenerateAsset: (sectionId: string, assetType: 'image' | 'svg') => void;
+  /** Upload a File for this section's image. Returns the public URL. */
+  onUploadAsset?: (sectionId: string, file: File) => Promise<string>;
+  /** Open the crop modal for the current section image */
+  onCropAsset?: (sectionId: string) => void;
 }
 
 const LAYOUT_OPTIONS: { value: LayoutVariant; label: string }[] = [
@@ -236,6 +241,221 @@ function AssetStatusBadge({ status }: { status: AssetStatus }) {
 }
 
 // ---------------------------------------------------------------------------
+// Form field type options
+// ---------------------------------------------------------------------------
+
+const FIELD_TYPE_OPTIONS: { value: FormField['type']; label: string }[] = [
+  { value: 'text', label: 'Text' },
+  { value: 'email', label: 'Email' },
+  { value: 'tel', label: 'Phone' },
+  { value: 'textarea', label: 'Textarea' },
+];
+
+// ---------------------------------------------------------------------------
+// Form editor sub-component
+// ---------------------------------------------------------------------------
+
+function FormEditor({
+  form,
+  onFormChange,
+}: {
+  form: FormConfig | undefined;
+  onFormChange: (form: FormConfig | undefined) => void;
+}) {
+  const enabled = !!form;
+
+  const handleToggle = () => {
+    if (enabled) {
+      onFormChange(undefined);
+    } else {
+      onFormChange({ ...DEFAULT_CTA_FORM, fields: DEFAULT_CTA_FORM.fields.map((f) => ({ ...f })) });
+    }
+  };
+
+  const updateField = (index: number, patch: Partial<FormField>) => {
+    if (!form) return;
+    const fields = form.fields.map((f, i) => (i === index ? { ...f, ...patch } : f));
+    onFormChange({ ...form, fields });
+  };
+
+  const removeField = (index: number) => {
+    if (!form) return;
+    const fields = form.fields.filter((_, i) => i !== index);
+    onFormChange({ ...form, fields });
+  };
+
+  const addField = () => {
+    if (!form) return;
+    const newField: FormField = {
+      name: `field_${Date.now()}`,
+      type: 'text',
+      label: 'New Field',
+      required: false,
+      placeholder: '',
+    };
+    onFormChange({ ...form, fields: [...form.fields, newField] });
+  };
+
+  const moveField = (index: number, direction: 'up' | 'down') => {
+    if (!form) return;
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= form.fields.length) return;
+    const fields = [...form.fields];
+    const temp = fields[index];
+    fields[index] = fields[newIndex];
+    fields[newIndex] = temp;
+    onFormChange({ ...form, fields });
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Enable / Disable toggle */}
+      <div className="flex items-center justify-between">
+        <FieldLabel>Enable Form</FieldLabel>
+        <button
+          type="button"
+          onClick={handleToggle}
+          className={cn(
+            'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+            enabled ? 'bg-violet-500' : 'bg-gray-300 dark:bg-white/10',
+          )}
+        >
+          <span
+            className={cn(
+              'inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform',
+              enabled ? 'translate-x-4.5' : 'translate-x-0.5',
+            )}
+          />
+        </button>
+      </div>
+
+      {form && (
+        <>
+          {/* Field list */}
+          <div className="space-y-2.5">
+            {form.fields.map((field, index) => (
+              <div
+                key={`${field.name}-${index}`}
+                className="rounded-md border border-gray-200 dark:border-white/10 p-2 space-y-1.5"
+              >
+                {/* Field header: move buttons + remove */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-medium text-gray-400 dark:text-slate-500">
+                    Field {index + 1}
+                  </span>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => moveField(index, 'up')}
+                      className="p-0.5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Move up"
+                    >
+                      <ChevronUp className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === form.fields.length - 1}
+                      onClick={() => moveField(index, 'down')}
+                      className="p-0.5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      title="Move down"
+                    >
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeField(index)}
+                      className="p-0.5 rounded text-red-400 hover:text-red-500 transition-colors ml-1"
+                      title="Remove field"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Label */}
+                <TextInput
+                  label="Label"
+                  value={field.label}
+                  onChange={(v) => updateField(index, { label: v })}
+                />
+
+                {/* Placeholder */}
+                <TextInput
+                  label="Placeholder"
+                  value={field.placeholder ?? ''}
+                  onChange={(v) => updateField(index, { placeholder: v })}
+                />
+
+                {/* Type dropdown */}
+                <div>
+                  <FieldLabel>Type</FieldLabel>
+                  <select
+                    value={field.type}
+                    onChange={(e) => updateField(index, { type: e.target.value as FormField['type'] })}
+                    className="w-full px-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500 transition-colors"
+                  >
+                    {FIELD_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Required toggle */}
+                <div className="flex items-center justify-between pt-0.5">
+                  <FieldLabel>Required</FieldLabel>
+                  <button
+                    type="button"
+                    onClick={() => updateField(index, { required: !field.required })}
+                    className={cn(
+                      'relative inline-flex h-4 w-7 items-center rounded-full transition-colors',
+                      field.required ? 'bg-violet-500' : 'bg-gray-300 dark:bg-white/10',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'inline-block h-2.5 w-2.5 rounded-full bg-white transition-transform',
+                        field.required ? 'translate-x-3.5' : 'translate-x-0.5',
+                      )}
+                    />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Add Field button */}
+          <button
+            type="button"
+            onClick={addField}
+            className="flex items-center gap-1.5 w-full px-2 py-1.5 text-[11px] font-medium rounded-md border border-dashed border-gray-300 dark:border-white/10 text-gray-500 dark:text-slate-400 hover:border-violet-400 hover:text-violet-400 transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+            Add Field
+          </button>
+
+          {/* Submit Label */}
+          <TextInput
+            label="Submit Button Label"
+            value={form.submit_label}
+            onChange={(v) => onFormChange({ ...form, submit_label: v })}
+          />
+
+          {/* Success Message */}
+          <TextInput
+            label="Success Message"
+            value={form.success_message}
+            onChange={(v) => onFormChange({ ...form, success_message: v })}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -243,11 +463,21 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   section,
   onSectionUpdate,
   onRegenerateAsset,
+  onUploadAsset,
+  onCropAsset,
 }) => {
   // Local copy of section fields for immediate feedback
   const [localCopy, setLocalCopy] = useState(section?.copy ?? { headline: '', subhead: '', body: '', cta: '' });
   const [localStyle, setLocalStyle] = useState(section?.style ?? { bg_color: '', text_color: '', accent_color: '' });
   const [localLayout, setLocalLayout] = useState<LayoutVariant>(section?.layout_variant ?? 'centered');
+
+  // Upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showPasteUrl, setShowPasteUrl] = useState(false);
+  const [pasteUrlValue, setPasteUrlValue] = useState('');
+  const [pasteUrlLoading, setPasteUrlLoading] = useState(false);
+  const [pasteUrlError, setPasteUrlError] = useState<string | null>(null);
 
   // Sync local state when section prop changes (different section selected)
   const prevSectionIdRef = useRef<string | null>(null);
@@ -304,6 +534,62 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     },
     [section, onSectionUpdate],
   );
+
+  // -----------------------------------------------------------------------
+  // File upload handler
+  // -----------------------------------------------------------------------
+
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !section || !onUploadAsset) return;
+
+      setIsUploading(true);
+      try {
+        await onUploadAsset(section.id, file);
+      } finally {
+        setIsUploading(false);
+        // Reset the input so the same file can be re-selected
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    },
+    [section, onUploadAsset],
+  );
+
+  // -----------------------------------------------------------------------
+  // Paste URL validation + apply
+  // -----------------------------------------------------------------------
+
+  const handlePasteUrlApply = useCallback(async () => {
+    if (!section || !pasteUrlValue.trim()) return;
+    setPasteUrlLoading(true);
+    setPasteUrlError(null);
+
+    try {
+      // Validate URL format
+      const url = new URL(pasteUrlValue.trim());
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('URL must start with http:// or https://');
+      }
+
+      // Test that the URL loads as an image
+      await new Promise<void>((resolve, reject) => {
+        const img = new window.Image();
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Could not load image from URL'));
+        img.src = url.href;
+      });
+
+      // Apply the URL directly to the section
+      onSectionUpdate(section.id, { image_url: url.href, image_status: 'complete' });
+      setPasteUrlValue('');
+      setShowPasteUrl(false);
+    } catch (err) {
+      setPasteUrlError(err instanceof Error ? err.message : 'Invalid URL');
+    } finally {
+      setPasteUrlLoading(false);
+    }
+  }, [section, pasteUrlValue, onSectionUpdate]);
 
   // -----------------------------------------------------------------------
   // Empty state
@@ -452,33 +738,130 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <FieldLabel>Image</FieldLabel>
             <AssetStatusBadge status={section.image_status} />
           </div>
+
+          {/* Thumbnail preview */}
           {section.image_url && (
-            <div className="mb-1.5 rounded-md overflow-hidden border border-gray-200 dark:border-white/10">
+            <div className="mb-1.5 rounded-md overflow-hidden border border-gray-200 dark:border-white/10 relative group">
               <img
                 src={section.image_url}
                 alt={`${section.type} section image`}
                 className="w-full h-20 object-cover"
               />
+              {/* Crop overlay button on hover */}
+              {onCropAsset && (
+                <button
+                  type="button"
+                  onClick={() => onCropAsset(section.id)}
+                  className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Crop image"
+                >
+                  <Crop className="w-4 h-4 text-white" />
+                </button>
+              )}
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => onRegenerateAsset(section.id, 'image')}
-            disabled={section.image_status === 'generating'}
-            className={cn(
-              'flex items-center gap-1.5 w-full px-2 py-1.5 text-[11px] font-medium rounded-md border transition-colors',
-              section.image_status === 'generating'
-                ? 'border-blue-500/30 bg-blue-500/5 text-blue-400 cursor-wait'
-                : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/[0.03]',
+
+          {/* Action buttons row: Regenerate + Upload + Crop */}
+          <div className="flex gap-1.5">
+            {/* Generate / Regenerate */}
+            <button
+              type="button"
+              onClick={() => onRegenerateAsset(section.id, 'image')}
+              disabled={section.image_status === 'generating'}
+              className={cn(
+                'flex items-center gap-1.5 flex-1 px-2 py-1.5 text-[11px] font-medium rounded-md border transition-colors',
+                section.image_status === 'generating'
+                  ? 'border-blue-500/30 bg-blue-500/5 text-blue-400 cursor-wait'
+                  : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/[0.03]',
+              )}
+            >
+              {section.image_status === 'generating' ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3 h-3" />
+              )}
+              {section.image_url ? 'Regen' : 'Generate'}
+            </button>
+
+            {/* Upload image */}
+            {onUploadAsset && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded-md border transition-colors',
+                  isUploading
+                    ? 'border-blue-500/30 bg-blue-500/5 text-blue-400 cursor-wait'
+                    : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/[0.03]',
+                )}
+              >
+                {isUploading ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Upload className="w-3 h-3" />
+                )}
+                Upload
+              </button>
             )}
-          >
-            {section.image_status === 'generating' ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <RefreshCw className="w-3 h-3" />
+
+            {/* Crop existing image */}
+            {section.image_url && onCropAsset && (
+              <button
+                type="button"
+                onClick={() => onCropAsset(section.id)}
+                className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium rounded-md border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors"
+              >
+                <Crop className="w-3 h-3" />
+                Crop
+              </button>
             )}
-            {section.image_url ? 'Regenerate' : 'Generate'} Image
-          </button>
+          </div>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          {/* Paste URL toggle + input */}
+          <div className="mt-1.5">
+            <button
+              type="button"
+              onClick={() => setShowPasteUrl((v) => !v)}
+              className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-slate-500 hover:text-violet-500 transition-colors"
+            >
+              <Link className="w-2.5 h-2.5" />
+              {showPasteUrl ? 'Hide' : 'Paste URL'}
+            </button>
+
+            {showPasteUrl && (
+              <div className="mt-1 flex gap-1">
+                <input
+                  type="text"
+                  value={pasteUrlValue}
+                  onChange={(e) => { setPasteUrlValue(e.target.value); setPasteUrlError(null); }}
+                  placeholder="https://example.com/image.jpg"
+                  className="flex-1 px-2 py-1 text-[11px] rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500 transition-colors"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handlePasteUrlApply(); }}
+                />
+                <button
+                  type="button"
+                  onClick={handlePasteUrlApply}
+                  disabled={pasteUrlLoading || !pasteUrlValue.trim()}
+                  className="flex items-center px-2 py-1 text-[11px] font-medium rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {pasteUrlLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                </button>
+              </div>
+            )}
+            {pasteUrlError && (
+              <p className="mt-0.5 text-[10px] text-red-400">{pasteUrlError}</p>
+            )}
+          </div>
         </div>
 
         {/* SVG controls */}
@@ -544,6 +927,16 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           onChange={(v) => handleStyleChange('accent_color', v)}
         />
       </CollapsibleSection>
+
+      {/* ---- Form (CTA sections only) ---- */}
+      {section.type === 'cta' && (
+        <CollapsibleSection id="form" title="Form" icon={FileText}>
+          <FormEditor
+            form={section.form}
+            onFormChange={(form) => onSectionUpdate(section.id, { form })}
+          />
+        </CollapsibleSection>
+      )}
     </div>
   );
 };

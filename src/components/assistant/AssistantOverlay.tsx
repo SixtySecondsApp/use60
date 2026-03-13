@@ -105,13 +105,7 @@ export function AssistantOverlay({ isOpen, onClose }: AssistantOverlayProps) {
                     Quick Add
                   </button>
                 </div>
-                <button
-                  onClick={() => { navigate('/settings/proactive-agent'); onClose(); }}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-                  title="Agent Settings"
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
+                {/* Proactive Agent settings hidden — SET-001 */}
                 <button
                   type="button"
                   onClick={() => {

@@ -309,6 +309,14 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
     first_name: '', last_name: '', email: '', title: '', company: '', domain: '',
   });
 
+  // ── Inline quick-add state (table view) ──
+  const [showInlineAdd, setShowInlineAdd] = useState(false);
+  const [inlineProspect, setInlineProspect] = useState<ProspectRow & { campaign: string }>({
+    first_name: '', last_name: '', email: '', title: '', company: '', domain: '', campaign: '',
+  });
+  const [inlineCreating, setInlineCreating] = useState(false);
+  const inlineDomainRef = useRef<HTMLInputElement>(null);
+
   // ── Fetch all links flat ──
   const fetchLinks = useCallback(async () => {
     setLoadingLinks(true);
@@ -411,6 +419,42 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
     if (linkSort === field) setLinkSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else { setLinkSort(field); setLinkSortDir('desc'); }
   }, [linkSort]);
+
+  // ── Inline quick-add (single lead from table view) ──
+  const inlineAddLead = useCallback(async () => {
+    const d = inlineProspect.domain.trim();
+    const c = inlineProspect.company.trim();
+    if (!d && !c) return;
+    setInlineCreating(true);
+    try {
+      const prospect: ProspectRow = {
+        first_name: inlineProspect.first_name,
+        last_name: inlineProspect.last_name,
+        email: inlineProspect.email,
+        title: inlineProspect.title,
+        company: c || d.replace(/^www\./, '').split('.')[0].replace(/^\w/, ch => ch.toUpperCase()),
+        domain: d,
+      };
+      const response = await fetch(`${supabaseUrl}/functions/v1/campaign-enrich`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: ANON_KEY, Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({
+          campaign_name: inlineProspect.campaign || null,
+          campaign_source: 'other',
+          prospects: [prospect],
+          expires_in_days: 30,
+        }),
+      });
+      if (!response.ok) throw new Error(`Failed (${response.status})`);
+      setInlineProspect({ first_name: '', last_name: '', email: '', title: '', company: '', domain: '', campaign: '' });
+      setShowInlineAdd(false);
+      fetchLinks();
+    } catch (err) {
+      console.error('Inline add failed:', err);
+    } finally {
+      setInlineCreating(false);
+    }
+  }, [inlineProspect, supabaseUrl, authToken, fetchLinks]);
 
   // ── Campaign create helpers ──
   const addProspect = useCallback(() => {
@@ -536,9 +580,14 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
           </p>
         </div>
         {view === 'table' && (
-          <button onClick={goToCreate} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500/20 to-violet-500/20 border border-violet-500/20 text-sm text-violet-300 hover:border-violet-500/40 transition-all">
-            <Plus className="w-3.5 h-3.5" /> New links
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setShowInlineAdd(!showInlineAdd); setTimeout(() => inlineDomainRef.current?.focus(), 100); }} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/[0.08] text-sm text-zinc-300 hover:bg-white/[0.04] transition-all">
+              <Plus className="w-3.5 h-3.5" /> Add lead
+            </button>
+            <button onClick={goToCreate} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-indigo-500/20 to-violet-500/20 border border-violet-500/20 text-sm text-violet-300 hover:border-violet-500/40 transition-all">
+              <Upload className="w-3.5 h-3.5" /> Bulk import
+            </button>
+          </div>
         )}
       </div>
 
@@ -571,6 +620,47 @@ function ManageTab({ supabaseUrl, authToken }: { supabaseUrl: string; authToken:
               <RefreshCw className={`w-4 h-4 ${loadingLinks ? 'animate-spin' : ''}`} />
             </button>
           </div>
+
+          {/* Inline quick-add form */}
+          <AnimatePresence>
+            {showInlineAdd && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-violet-300">Quick add lead</span>
+                    <button onClick={() => setShowInlineAdd(false)} className="text-zinc-600 hover:text-zinc-400"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <input ref={inlineDomainRef} type="text" value={inlineProspect.domain} onChange={(e) => setInlineProspect({ ...inlineProspect, domain: e.target.value })} placeholder="Domain (e.g. acme.com) *" className={inputCls}
+                      onKeyDown={(e) => { if (e.key === 'Enter') inlineAddLead(); }} />
+                    <input type="text" value={inlineProspect.first_name} onChange={(e) => setInlineProspect({ ...inlineProspect, first_name: e.target.value })} placeholder="First name" className={inputCls}
+                      onKeyDown={(e) => { if (e.key === 'Enter') inlineAddLead(); }} />
+                    <input type="text" value={inlineProspect.last_name} onChange={(e) => setInlineProspect({ ...inlineProspect, last_name: e.target.value })} placeholder="Last name" className={inputCls}
+                      onKeyDown={(e) => { if (e.key === 'Enter') inlineAddLead(); }} />
+                    <input type="text" value={inlineProspect.email} onChange={(e) => setInlineProspect({ ...inlineProspect, email: e.target.value })} placeholder="Email" className={inputCls}
+                      onKeyDown={(e) => { if (e.key === 'Enter') inlineAddLead(); }} />
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <input type="text" value={inlineProspect.title} onChange={(e) => setInlineProspect({ ...inlineProspect, title: e.target.value })} placeholder="Title" className={inputCls}
+                      onKeyDown={(e) => { if (e.key === 'Enter') inlineAddLead(); }} />
+                    <input type="text" value={inlineProspect.company} onChange={(e) => setInlineProspect({ ...inlineProspect, company: e.target.value })} placeholder="Company (auto from domain)" className={inputCls}
+                      onKeyDown={(e) => { if (e.key === 'Enter') inlineAddLead(); }} />
+                    <div>
+                      <input type="text" value={inlineProspect.campaign} onChange={(e) => setInlineProspect({ ...inlineProspect, campaign: e.target.value })} placeholder="Campaign name (optional)" className={inputCls + ' w-full'} list="inline-campaigns"
+                        onKeyDown={(e) => { if (e.key === 'Enter') inlineAddLead(); }} />
+                      <datalist id="inline-campaigns">
+                        {campaignNames.map((n) => <option key={n} value={n} />)}
+                      </datalist>
+                    </div>
+                    <button onClick={inlineAddLead} disabled={(!inlineProspect.domain.trim() && !inlineProspect.company.trim()) || inlineCreating}
+                      className="px-4 py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-xs font-semibold text-white disabled:opacity-30 hover:shadow-lg hover:shadow-violet-500/20 transition-all flex items-center justify-center gap-2">
+                      {inlineCreating ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Creating...</> : <><Plus className="w-3.5 h-3.5" /> Add & enrich</>}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {loadingLinks ? (
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-16 text-center">

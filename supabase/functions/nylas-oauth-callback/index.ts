@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 /**
  * Nylas OAuth Callback
  *
- * Handles redirect from Nylas after user authorizes Google Calendar access.
+ * Handles redirect from Nylas after user authorizes Google or Microsoft Calendar access.
  * Exchanges code for grant_id and stores in nylas_integrations.
  *
  * This endpoint must have verify_jwt = false (redirect from Nylas, no Supabase JWT).
@@ -48,7 +48,7 @@ serve(async (req) => {
     // Look up state (stored by nylas-oauth-initiate, code_verifier='nylas')
     const { data: oauthState, error: stateError } = await supabase
       .from('google_oauth_states')
-      .select('user_id, redirect_uri, created_at')
+      .select('user_id, redirect_uri, created_at, code_challenge')
       .eq('state', state)
       .eq('code_verifier', 'nylas')
       .maybeSingle();
@@ -112,13 +112,16 @@ serve(async (req) => {
     // Get email from the grant
     const grantEmail = tokenData.email || '';
 
+    // Provider stored in code_challenge field by nylas-oauth-initiate
+    const provider = oauthState.code_challenge === 'microsoft' ? 'microsoft' : 'google';
+
     // Upsert into nylas_integrations
     const { error: upsertError } = await supabase
       .from('nylas_integrations')
       .upsert({
         user_id: oauthState.user_id,
         grant_id: grantId,
-        provider: 'google',
+        provider,
         email: grantEmail,
         is_active: true,
       }, {
@@ -130,16 +133,17 @@ serve(async (req) => {
       throw new Error('Failed to save Nylas integration');
     }
 
-    // Update google_integrations scope_tier to 'paid'
-    const { error: updateError } = await supabase
-      .from('google_integrations')
-      .update({ scope_tier: 'paid' })
-      .eq('user_id', oauthState.user_id)
-      .eq('is_active', true);
+    // Update google_integrations scope_tier to 'paid' (only for Google provider)
+    if (provider === 'google') {
+      const { error: updateError } = await supabase
+        .from('google_integrations')
+        .update({ scope_tier: 'paid' })
+        .eq('user_id', oauthState.user_id)
+        .eq('is_active', true);
 
-    if (updateError) {
-      console.warn('[nylas-oauth-callback] Failed to update scope_tier:', updateError.message);
-      // Non-critical — Nylas integration still works
+      if (updateError) {
+        console.warn('[nylas-oauth-callback] Failed to update scope_tier:', updateError.message);
+      }
     }
 
     // Clean up state

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import { Zap, Loader2, Building2 } from 'lucide-react';
-import { ORBIT_RADII, ZOOM_EXTENT, CENTRE_NODE_RADIUS, TIER_COLORS, HEALTH_COLORS, NODE_SIZE_MIN, NODE_SIZE_MAX, COLD_CLUSTER_SIZE, COLD_MAX_DISPLAY, CLUSTER_NODE_RADIUS } from './constants';
+import { ORBIT_RADII, ZOOM_EXTENT, CENTRE_NODE_RADIUS, TIER_COLORS, HEALTH_COLORS, NODE_SIZE_MIN, NODE_SIZE_MAX, COLD_CLUSTER_SIZE, CLUSTER_NODE_RADIUS, CLUSTER_INNER_ORBIT, CLUSTER_RING_GAP, CLUSTER_RING_CAPACITY, CLUSTER_OPACITY_DROP } from './constants';
 import { useGraphData } from './hooks/useGraphData';
 import { useWarmthBackfill } from './hooks/useWarmthBackfill';
 import { useContactEnrich } from './hooks/useContactEnrich';
@@ -10,7 +10,7 @@ import { GraphToolbar } from './GraphToolbar';
 import { GraphDetailPanel } from './GraphDetailPanel';
 import { ClusterDetailPanel } from './ClusterDetailPanel';
 import { SelectionActionBar } from './SelectionActionBar';
-import type { GraphNode, WarmthTier, ContactCategory, ColdCluster } from './types';
+import type { GraphNode, WarmthTier, ContactCategory, ContactSource, ColdCluster } from './types';
 
 interface RelationshipGraphProps {
   onSelectNode?: (node: GraphNode | null) => void;
@@ -31,6 +31,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [hideNoInteraction, setHideNoInteraction] = useState(false);
   const [excludedCategories, setExcludedCategories] = useState<Set<ContactCategory>>(new Set(['employee', 'other']));
+  const [activeSources, setActiveSources] = useState<Set<ContactSource>>(new Set(['app']));
 
   // Multi-select state
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -93,7 +94,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
     }
   }, [multiSelectMode]);
 
-  const { data: contacts = [], isLoading, hasWarmthData } = useGraphData();
+  const { data: contacts = [], isLoading, hasWarmthData } = useGraphData(activeSources);
   const backfill = useWarmthBackfill();
 
   // Contact enrichment (company from email domain + category inference)
@@ -116,7 +117,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
 
   const cx = 0;
   const cy = 0;
-  const maxR = Math.min(dimensions.width, dimensions.height) * 0.42;
+  const maxR = Math.min(dimensions.width, dimensions.height) * 0.63;
 
   // All nodes — tier-based orbital layout with 2 rows per tier, full-circle distribution
   const allNodes: GraphNode[] = useMemo(() => {
@@ -227,37 +228,55 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
   }, [allNodes, excludedIds, hideNoInteraction, excludedCategories, filter, search]);
 
   // Cold contact clustering: group cold contacts into clusters of ~10
-  const { displayNodes, coldClusters, allColdContacts } = useMemo(() => {
+  // Spread across multiple concentric rings radiating outward with decreasing opacity
+  const { displayNodes, coldClusters, allColdContacts, clusterOuterOrbit } = useMemo(() => {
     const coldNodes = nodes.filter((n) => (n.tier ?? 'cold') === 'cold');
     const nonColdNodes = nodes.filter((n) => (n.tier ?? 'cold') !== 'cold');
 
     // If few enough cold contacts, show them all individually
     if (coldNodes.length <= COLD_CLUSTER_SIZE) {
-      return { displayNodes: nodes, coldClusters: [] as ColdCluster[], allColdContacts: coldNodes };
+      return { displayNodes: nodes, coldClusters: [] as ColdCluster[], allColdContacts: coldNodes, clusterOuterOrbit: CLUSTER_INNER_ORBIT };
     }
 
-    // Cap at COLD_MAX_DISPLAY, group into clusters of COLD_CLUSTER_SIZE
-    const capped = coldNodes.slice(0, COLD_MAX_DISPLAY);
+    // Group ALL cold contacts into clusters (no cap)
     const clusters: ColdCluster[] = [];
-    const clusterCount = Math.ceil(capped.length / COLD_CLUSTER_SIZE);
-    // Place clusters at the cold orbit midpoint (0.78 of maxR), evenly around full circle
-    const clusterOrbitR = 0.78 * maxR;
+    const totalClusters = Math.ceil(coldNodes.length / COLD_CLUSTER_SIZE);
 
-    for (let i = 0; i < capped.length; i += COLD_CLUSTER_SIZE) {
-      const idx = i / COLD_CLUSTER_SIZE;
-      const chunk = capped.slice(i, i + COLD_CLUSTER_SIZE);
-      const angle = (idx / clusterCount) * Math.PI * 2;
-      clusters.push({
-        id: `cold-cluster-${idx}`,
-        contacts: chunk,
-        x: Math.cos(angle) * clusterOrbitR,
-        y: Math.sin(angle) * clusterOrbitR,
-        radius: CLUSTER_NODE_RADIUS,
-        angle,
-      });
+    // Distribute clusters across concentric rings with fixed gap between rings
+    const ringCount = Math.ceil(totalClusters / CLUSTER_RING_CAPACITY);
+    // Angular step of the innermost ring (used to offset outer rings by half)
+    const innerRingCount = Math.min(CLUSTER_RING_CAPACITY, totalClusters);
+    const innerAngularStep = (Math.PI * 2) / innerRingCount;
+
+    let clusterIdx = 0;
+    for (let ring = 0; ring < ringCount; ring++) {
+      const orbitR = (CLUSTER_INNER_ORBIT + ring * CLUSTER_RING_GAP) * maxR;
+      const remaining = totalClusters - clusterIdx;
+      const onThisRing = Math.min(CLUSTER_RING_CAPACITY, remaining);
+      // Offset each ring by half the INNER ring's angular step
+      // This places outer clusters exactly between the two nearest inner clusters
+      const angleOffset = ring * (innerAngularStep / 2);
+
+      for (let j = 0; j < onThisRing; j++) {
+        const chunkStart = clusterIdx * COLD_CLUSTER_SIZE;
+        const chunk = coldNodes.slice(chunkStart, chunkStart + COLD_CLUSTER_SIZE);
+        if (chunk.length === 0) break;
+
+        const angle = angleOffset + (j / onThisRing) * Math.PI * 2;
+        clusters.push({
+          id: `cold-cluster-${clusterIdx}`,
+          contacts: chunk,
+          x: Math.cos(angle) * orbitR,
+          y: Math.sin(angle) * orbitR,
+          radius: CLUSTER_NODE_RADIUS,
+          angle,
+        });
+        clusterIdx++;
+      }
     }
 
-    return { displayNodes: nonColdNodes, coldClusters: clusters, allColdContacts: coldNodes };
+    const clusterOuterOrbit = CLUSTER_INNER_ORBIT + Math.max(0, ringCount - 1) * CLUSTER_RING_GAP;
+    return { displayNodes: nonColdNodes, coldClusters: clusters, allColdContacts: coldNodes, clusterOuterOrbit };
   }, [nodes, maxR]);
 
   // Compute deal arcs: connect contacts sharing the same deal
@@ -531,6 +550,19 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
         multiSelectMode={multiSelectMode}
         onToggleMultiSelect={toggleMultiSelect}
         selectedCount={selectedIds.size}
+        activeSources={activeSources}
+        onToggleSource={(source: ContactSource) => {
+          setActiveSources((prev) => {
+            const next = new Set(prev);
+            if (next.has(source)) {
+              // Don't allow removing all sources
+              if (next.size > 1) next.delete(source);
+            } else {
+              next.add(source);
+            }
+            return next;
+          });
+        }}
       />
 
       {/* Backfill banner — shown when contacts exist but no warmth data */}
@@ -740,20 +772,27 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
             />
           ))}
 
-          {/* Connection lines: centre to each cluster */}
-          {coldClusters.map((cluster) => (
-            <line
-              key={`conn-${cluster.id}`}
-              x1={cx}
-              y1={cy}
-              x2={cluster.x}
-              y2={cluster.y}
-              stroke={TIER_COLORS.cold.glow}
-              strokeOpacity={0.06}
-              strokeWidth={0.8}
-              style={{ transition: 'all 0.6s ease' }}
-            />
-          ))}
+          {/* Connection lines: centre to each cluster (fade with distance) */}
+          {coldClusters.map((cluster) => {
+            const dist = Math.sqrt(cluster.x * cluster.x + cluster.y * cluster.y);
+            const innerR = CLUSTER_INNER_ORBIT * maxR;
+            const outerR = clusterOuterOrbit * maxR;
+            const ringProgress = outerR > innerR ? Math.max(0, (dist - innerR) / (outerR - innerR)) : 0;
+            const lineOpacity = Math.max(0.02, 0.06 - ringProgress * 0.04);
+            return (
+              <line
+                key={`conn-${cluster.id}`}
+                x1={cx}
+                y1={cy}
+                x2={cluster.x}
+                y2={cluster.y}
+                stroke={TIER_COLORS.cold.glow}
+                strokeOpacity={lineOpacity}
+                strokeWidth={0.8}
+                style={{ transition: 'all 0.6s ease' }}
+              />
+            );
+          })}
 
           {/* Connection lines: centre to each company mega-cluster */}
           {companyMegaClusters.map((mega) => (
@@ -899,15 +938,24 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
             </g>
           ))}
 
-          {/* Cold cluster nodes */}
+          {/* Cold cluster nodes — multi-ring with fading opacity */}
           {coldClusters.map((cluster) => {
             const isClusterSelected = selectedClusterId === cluster.id;
             const isClusterHovered = hoveredId === cluster.id;
             const r = CLUSTER_NODE_RADIUS + (isClusterSelected ? 4 : isClusterHovered ? 2 : 0);
+
+            // Calculate ring index from distance to derive opacity
+            const dist = Math.sqrt(cluster.x * cluster.x + cluster.y * cluster.y);
+            const innerR = CLUSTER_INNER_ORBIT * maxR;
+            const outerR = clusterOuterOrbit * maxR;
+            const ringProgress = outerR > innerR ? Math.max(0, (dist - innerR) / (outerR - innerR)) : 0;
+            const baseOpacity = Math.max(0.15, 0.6 - ringProgress * CLUSTER_OPACITY_DROP * 4);
+            const nodeOpacity = isClusterSelected || isClusterHovered ? Math.min(0.95, baseOpacity + 0.3) : baseOpacity;
+
             return (
               <g
                 key={cluster.id}
-                style={{ cursor: 'pointer', transition: 'all 0.5s cubic-bezier(0.16,1,0.3,1)', opacity: isClusterSelected || isClusterHovered ? 0.9 : 0.6 }}
+                style={{ cursor: 'pointer', transition: 'all 0.5s cubic-bezier(0.16,1,0.3,1)', opacity: nodeOpacity }}
                 onClick={() => handleClusterClick(cluster)}
                 onMouseEnter={() => setHoveredId(cluster.id)}
                 onMouseLeave={() => setHoveredId(null)}
@@ -920,7 +968,7 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
                   fill="none"
                   stroke={TIER_COLORS.cold.primary}
                   strokeWidth={1}
-                  strokeOpacity={isClusterSelected ? 0.4 : 0.15}
+                  strokeOpacity={isClusterSelected ? 0.4 : 0.15 * (1 - ringProgress * 0.5)}
                   strokeDasharray="3 4"
                 />
                 {/* Main node */}
@@ -946,18 +994,20 @@ export function RelationshipGraph({ onSelectNode }: RelationshipGraphProps) {
                 >
                   {cluster.contacts.length}
                 </text>
-                {/* Label */}
-                <text
-                  x={cluster.x}
-                  y={cluster.y + r + 13}
-                  textAnchor="middle"
-                  fill="#94a3b8"
-                  fontSize="9"
-                  fontFamily="Inter, system-ui, sans-serif"
-                  opacity={isClusterSelected || isClusterHovered ? 0.9 : 0.5}
-                >
-                  cold
-                </text>
+                {/* Label — only show on inner rings */}
+                {ringProgress < 0.4 && (
+                  <text
+                    x={cluster.x}
+                    y={cluster.y + r + 13}
+                    textAnchor="middle"
+                    fill="#94a3b8"
+                    fontSize="9"
+                    fontFamily="Inter, system-ui, sans-serif"
+                    opacity={isClusterSelected || isClusterHovered ? 0.9 : 0.5}
+                  >
+                    cold
+                  </text>
+                )}
               </g>
             );
           })}

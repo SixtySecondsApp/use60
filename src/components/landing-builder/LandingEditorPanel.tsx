@@ -14,6 +14,8 @@ interface LandingEditorPanelProps {
   sections: LandingSection[];
   onSectionsChange: (sections: LandingSection[]) => void;
   onRegenerateAsset: (sectionId: string, assetType: 'image' | 'svg') => void;
+  onUploadAsset?: (sectionId: string, file: File) => Promise<string>;
+  onCropAsset?: (sectionId: string) => void;
   selectedSectionId?: string;
   onSelectSection?: (sectionId: string) => void;
 }
@@ -22,6 +24,8 @@ export const LandingEditorPanel: React.FC<LandingEditorPanelProps> = ({
   sections,
   onSectionsChange,
   onRegenerateAsset,
+  onUploadAsset,
+  onCropAsset,
   selectedSectionId: externalSelectedId,
   onSelectSection: externalOnSelect,
 }) => {
@@ -90,6 +94,8 @@ export const LandingEditorPanel: React.FC<LandingEditorPanelProps> = ({
           section={selectedSection}
           onSectionUpdate={handleSectionUpdate}
           onRegenerateAsset={onRegenerateAsset}
+          onUploadAsset={onUploadAsset}
+          onCropAsset={onCropAsset}
         />
       </div>
     </div>

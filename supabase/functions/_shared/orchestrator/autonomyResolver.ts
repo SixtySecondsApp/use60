@@ -39,6 +39,7 @@ const PRESET_POLICIES: Record<string, Record<string, AutonomyPolicy>> = {
     create_task: 'approve',
     enrich_contact: 'suggest',
     draft_proposal: 'suggest',
+    linkedin_lead_email: 'approve',
   },
   balanced: {
     crm_stage_change: 'approve',
@@ -49,6 +50,7 @@ const PRESET_POLICIES: Record<string, Record<string, AutonomyPolicy>> = {
     create_task: 'auto',
     enrich_contact: 'auto',
     draft_proposal: 'suggest',
+    linkedin_lead_email: 'approve',
   },
   autonomous: {
     crm_stage_change: 'auto',
@@ -59,6 +61,7 @@ const PRESET_POLICIES: Record<string, Record<string, AutonomyPolicy>> = {
     create_task: 'auto',
     enrich_contact: 'auto',
     draft_proposal: 'approve',
+    linkedin_lead_email: 'auto',
   },
 };
 
@@ -215,6 +218,8 @@ export function getActionTypeForSkill(skillName: string): string | null {
     'deliver-campaign-slack': 'send_slack',
     // Enrichment
     'enrich-attendees': 'enrich_contact',
+    // LinkedIn
+    'linkedin-lead-email': 'linkedin_lead_email',
     // Proposals
     'populate-proposal': 'draft_proposal',
     'generate-custom-sections': 'draft_proposal',

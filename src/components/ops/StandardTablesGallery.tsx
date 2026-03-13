@@ -52,7 +52,6 @@ interface StandardTableCardData {
 
 const DEDICATED_ROUTES: Record<string, string> = {
   'standard_leads': '/leads',
-  'standard_deals': '/pipeline',
 };
 
 export function StandardTablesGallery({ onTableClick, existingTables }: StandardTablesGalleryProps) {

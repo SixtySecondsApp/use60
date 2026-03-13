@@ -7,7 +7,7 @@
  * Shows the email draft with editable fields, and Approve / Reject buttons.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Dialog,
@@ -29,6 +29,7 @@ import {
   Send,
   X,
 } from 'lucide-react';
+import { StyleFeedbackPopover } from './StyleFeedbackPopover';
 
 interface ApprovalReviewDialogProps {
   approvalId: string;
@@ -61,6 +62,8 @@ export function ApprovalReviewDialog({ approvalId, open, onClose }: ApprovalRevi
   const [body, setBody] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [hasEdited, setHasEdited] = useState(false);
+  const originalBodyRef = useRef('');
 
   const { data: approval, isLoading, error } = useQuery({
     queryKey: ['hitl-approval', approvalId],
@@ -83,7 +86,10 @@ export function ApprovalReviewDialog({ approvalId, open, onClose }: ApprovalRevi
       const content = approval.edited_content || approval.original_content || {};
       setTo((content as Record<string, string>).to || '');
       setSubject((content as Record<string, string>).subject || '');
-      setBody((content as Record<string, string>).body || '');
+      const originalBody = (content as Record<string, string>).body || '';
+      setBody(originalBody);
+      originalBodyRef.current = originalBody;
+      setHasEdited(false);
     }
   }, [approval]);
 
@@ -231,10 +237,17 @@ export function ApprovalReviewDialog({ approvalId, open, onClose }: ApprovalRevi
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Body</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Body</label>
+                <StyleFeedbackPopover
+                  hasEdited={hasEdited}
+                  originalBody={originalBodyRef.current}
+                  editedBody={body}
+                />
+              </div>
               <Textarea
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
+                onChange={(e) => { setBody(e.target.value); if (!hasEdited) setHasEdited(true); }}
                 placeholder="Email body"
                 className="min-h-[200px] text-sm leading-relaxed resize-none"
               />

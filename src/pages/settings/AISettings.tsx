@@ -343,6 +343,7 @@ export default function AISettings() {
         { value: 'openai/gpt-4-turbo-preview', label: 'GPT-4 Turbo (via OpenRouter)' },
       ],
       gemini: [
+        { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite (Recommended)' },
         { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
         { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
         { value: 'gemini-1.5-pro-latest', label: 'Gemini 1.5 Pro' },
@@ -710,10 +711,7 @@ This Statement of Work outlines the scope, deliverables, and terms for [Project 
             <FileText className="w-4 h-4" />
             Proposal Generation
           </TabsTrigger>
-          <TabsTrigger value="task-sync" className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4" />
-            Task Auto-Sync
-          </TabsTrigger>
+          {/* Task Auto-Sync tab hidden — SET-001 */}
           <TabsTrigger value="sales-assistant" className="flex items-center gap-2">
             <Brain className="w-4 h-4" />
             Sales Assistant
@@ -1318,28 +1316,7 @@ This Statement of Work outlines the scope, deliverables, and terms for [Project 
           </Card>
         </TabsContent>
 
-        <TabsContent value="task-sync" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Task Auto-Sync</CardTitle>
-              <CardDescription>
-                Configure automatic task creation from action items based on importance levels and confidence thresholds.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12">
-                <Sparkles className="w-12 h-12 mx-auto mb-4 text-purple-500" />
-                <p className="text-lg font-medium mb-2">Manage Task Auto-Sync Settings</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                  Control which action items automatically create tasks based on importance classification (Critical, High, Medium, Low).
-                </p>
-                <Button onClick={() => navigate('/settings/task-sync')}>
-                  Go to Task Auto-Sync Settings
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* Task Auto-Sync tab content hidden — SET-001 */}
 
         <TabsContent value="sales-assistant" className="space-y-4">
           <Card>

@@ -297,11 +297,14 @@ export function useUnifiedMeetings(filters: UnifiedMeetingsFilters) {
   const filtered = useMemo(() => {
     let items = unified
 
-    // Hide failed 60 Notetaker recordings by default — opt-in via "Failed" status filter
+    // Hide old failed 60 Notetaker recordings by default — show recent ones (<24h) as "processing"
     if (filters.statusFilter === 'all') {
-      items = items.filter(
-        (item) => item.sourceTable !== 'recordings' || item.status !== 'failed'
-      )
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      items = items.filter((item) => {
+        if (item.sourceTable !== 'recordings' || item.status !== 'failed') return true
+        // Show recent failed recordings (they appear as "processing" to the user)
+        return new Date(item.date) >= twentyFourHoursAgo
+      })
     }
 
     // Search filter

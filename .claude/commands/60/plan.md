@@ -16,12 +16,14 @@ description: Execution planning — story breakdown, dependency graphs, parallel
 
 When called from `/60/ship`:
 1. Read `.sixty/pipeline.json` for DEFINE phase output (PRD, stories outline)
-2. Refine stories: add dependencies, acceptance criteria, test stubs (TDD), parallel groups
-3. Run Dependency Forecaster agent to optimize execution order
-4. Run Test Oracle agent to generate test stubs for each story
-5. Score complexity and compose team (if not already done in DISCOVER)
-6. Write finalized stories to `pipeline.json.stories[]`
-7. Set `pipeline.json.phaseGates.plan.status = "complete"`
+2. **Load learnings from past runs** (see LEARNINGS FEED-FORWARD below)
+3. Refine stories: add dependencies, acceptance criteria, test stubs (TDD), parallel groups
+4. **Apply estimate calibration** from learnings data
+5. Run Dependency Forecaster agent to optimize execution order
+6. Run Test Oracle agent to generate test stubs for each story
+7. Score complexity and compose team (if not already done in DISCOVER)
+8. Write finalized stories to `pipeline.json.stories[]`
+9. Set `pipeline.json.phaseGates.plan.status = "complete"`
 
 When called standalone:
 1. Falls back to `.sixty/plan.json` or legacy `prd.json` behavior
@@ -35,6 +37,80 @@ During PLAN phase, generate test stubs for each story:
 - Store test file paths in `story.testFiles[]`
 - Tests are created BEFORE implementation code
 - BUILD phase workers must make these tests pass
+
+---
+
+## LEARNINGS FEED-FORWARD
+
+Before generating or refining stories, check if `.sixty/learnings.json` exists from past pipeline runs. If it does, apply accumulated intelligence to make this plan better.
+
+### Step 1: Load Learnings
+
+```
+Read .sixty/learnings.json
+If missing → skip (first run, no history)
+If present → extract aggregated data
+```
+
+### Step 2: Calibrate Time Estimates
+
+Use `aggregated.estimateCalibration` multipliers to adjust story estimates:
+
+```
+For each story:
+  calibratedEstimate = baseEstimate * estimateCalibration[story.type]
+
+Example:
+  Schema story estimated at 15min, calibration = 1.2
+  → Adjusted estimate: 18min (schema stories historically take 20% longer)
+
+  API story estimated at 30min, calibration = 0.63
+  → Adjusted estimate: 19min (edge functions are faster than expected)
+```
+
+Report calibration if significant (>15% adjustment):
+```
+Learnings applied from N past runs:
+  schema stories: +20% time (RLS policies add overhead)
+  api stories: -37% time (edge function boilerplate is fast)
+  Overall estimate accuracy: 82%
+```
+
+### Step 3: Inject Recurring Issue Guards
+
+Read `aggregated.topRecurringIssues`. For issues with frequency >= 3, automatically add acceptance criteria to relevant stories:
+
+```
+Example: "Missing empty states" (frequency: 8)
+  → Add to ALL component/UI stories:
+    acceptance: "Empty state rendered when no data exists"
+
+Example: "RLS policy gaps" (frequency: 5)
+  → Add to ALL schema stories:
+    acceptance: "RLS policies tested with different user roles"
+```
+
+### Step 4: Flag Known Blockers
+
+Read `aggregated.topBlockerTypes`. Warn about blockers that have occurred in past runs:
+
+```
+Past run warnings:
+  - missing_secret has blocked 3 past runs (avg 35min lost)
+    → Collect all external service keys during DISCOVER, not BUILD
+  - playwriter_unavailable has blocked 2 past runs
+    → Verify Playwriter MCP access before starting BUILD
+```
+
+### Step 5: Surface Discovered Patterns
+
+Read the most recent run's `discoveredPatterns`. If any are relevant to the current plan's stories, reference them:
+
+```
+Reusable patterns from past runs:
+  - "Webhook idempotency via dedup key" → src/lib/services/stripeWebhookService.ts
+    Relevant to: stories touching webhooks or event processing
+```
 
 ---
 

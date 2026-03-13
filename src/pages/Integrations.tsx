@@ -18,8 +18,6 @@ import {
   ChevronUp,
   ChevronDown,
   Mic,
-  Lock,
-  ArrowRight,
   Globe,
 } from 'lucide-react';
 import { HelpPanel } from '@/components/docs/HelpPanel';
@@ -49,8 +47,10 @@ import { ExplloriumConfigModal } from '@/components/integrations/ExplloriumConfi
 import { BetterContactConfigModal } from '@/components/integrations/BetterContactConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
+import { LinkedInConfigModal } from '@/components/integrations/LinkedInConfigModal';
 import { HeyGenConfigModal } from '@/components/integrations/HeyGenConfigModal';
 import { ElevenLabsConfigModal } from '@/components/integrations/ElevenLabsConfigModal';
+import { FalConfigModal } from '@/components/integrations/FalConfigModal';
 
 // Hooks and stores
 import { useGoogleIntegration, useMicrosoftIntegration, useIntegrationStore } from '@/lib/stores/integrationStore';
@@ -68,8 +68,10 @@ import { useExploriumIntegration } from '@/lib/hooks/useExploriumIntegration';
 import { useBetterContactIntegration } from '@/lib/hooks/useBetterContactIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
 import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
+import { useLinkedInIntegration } from '@/lib/hooks/useLinkedInIntegration';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
 import { useElevenLabsIntegration } from '@/lib/hooks/useElevenLabsIntegration';
+import { useFalIntegration } from '@/lib/hooks/useFalIntegration';
 import { getIntegrationDomain, useIntegrationLogo } from '@/lib/hooks/useIntegrationLogo';
 import { getLogoDevUrl } from '@/lib/utils/logoDev';
 import { useUser } from '@/lib/hooks/useUser';
@@ -184,34 +186,6 @@ function IntegrationCardWithLogo({
   );
 }
 
-function GoogleLimitedFooter({ onUpgrade }: { onUpgrade: () => void }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <CheckSquare className="w-3.5 h-3.5 text-emerald-500" />
-        <span>Gmail send + Calendar</span>
-      </div>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-          <Lock className="w-3.5 h-3.5 text-amber-500" />
-          <span>Gmail read + drafts</span>
-        </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onUpgrade();
-          }}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20"
-        >
-          Upgrade
-          <ArrowRight className="w-3 h-3" />
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function CategorySection({
   category,
@@ -349,13 +323,10 @@ function CategorySection({
 const builtIntegrations: IntegrationConfig[] = [
   {
     id: 'google-workspace',
-    name: 'Google Workspace',
-    description: 'Gmail, Calendar, Drive & Tasks.',
+    name: 'Google Calendar',
+    description: 'Sync your Google Calendar events.',
     permissions: [
-      { title: 'View and send email', description: 'Send emails from contact pages.', paid: true },
-      { title: 'Access calendar', description: 'Schedule meetings and sync events.', paid: false },
-      { title: 'Access files', description: 'Share and attach files from Drive.', paid: true },
-      { title: 'Manage tasks', description: 'Sync tasks bidirectionally.', paid: true },
+      { title: 'Access calendar', description: 'Schedule meetings and sync events.' },
     ],
     brandColor: 'blue',
     iconBgColor: 'bg-gray-50 dark:bg-gray-800',
@@ -372,13 +343,10 @@ const builtIntegrations: IntegrationConfig[] = [
   },
   {
     id: 'microsoft-365',
-    name: 'Microsoft 365',
-    description: 'Outlook, Calendar & OneDrive.',
+    name: 'Microsoft Calendar',
+    description: 'Sync your Outlook Calendar events.',
     permissions: [
-      { title: 'View and send email', description: 'Send emails via Outlook.' },
       { title: 'Access calendar', description: 'Schedule meetings and sync events.' },
-      { title: 'Access files', description: 'Share and attach files from OneDrive.' },
-      { title: 'Read contacts', description: 'Import contacts from Outlook.' },
     ],
     brandColor: 'blue',
     iconBgColor: 'bg-gray-50 dark:bg-gray-800',
@@ -637,6 +605,20 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'fal-ai',
+    name: 'fal.ai',
+    description: 'Generate AI videos with Kling, Veo, Wan models.',
+    permissions: [
+      { title: 'Generate videos', description: 'Create AI videos using Kling, Veo, and Wan models.' },
+      { title: 'Use platform or own credits', description: 'Run video generation via platform key or your own fal.ai account.' },
+    ],
+    brandColor: 'violet',
+    iconBgColor: 'bg-violet-50 dark:bg-violet-900/20',
+    iconBorderColor: 'border-violet-100 dark:border-violet-800/40',
+    fallbackIcon: <Video className="w-6 h-6 text-violet-600 dark:text-violet-400" />,
+    isBuilt: true,
+  },
+  {
     id: 'apify',
     name: 'Apify',
     description: 'Run any web scraping actor from the Apify marketplace.',
@@ -649,6 +631,21 @@ const builtIntegrations: IntegrationConfig[] = [
     iconBgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
     iconBorderColor: 'border-emerald-100 dark:border-emerald-800/40',
     fallbackIcon: <Bot className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    description: 'Receive leads from LinkedIn Lead Gen Forms and Events.',
+    permissions: [
+      { title: 'Lead ingestion', description: 'Automatically receive and process LinkedIn leads.' },
+      { title: 'Auto-response', description: 'AI-drafted emails sent to new leads for approval.' },
+      { title: 'Contact matching', description: 'Match leads to existing contacts and companies.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    iconBorderColor: 'border-blue-100 dark:border-blue-800/40',
+    fallbackIcon: <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />,
     isBuilt: true,
   },
 ];
@@ -784,11 +781,9 @@ export default function Integrations() {
 
   // Integration states
   const {
-    isConnected: googleConnected,
     status: googleStatus,
     isLoading: googleLoading,
     checkConnection: checkGoogleConnection,
-    connect: connectGoogle,
   } = useGoogleIntegration();
 
   // Nylas calendar connection status
@@ -865,6 +860,11 @@ export default function Integrations() {
   } = useApifyIntegration();
 
   const {
+    isConnected: linkedinConnected,
+    loading: linkedinLoading,
+  } = useLinkedInIntegration();
+
+  const {
     isConnected: heygenConnected,
     loading: heygenLoading,
   } = useHeyGenIntegration();
@@ -873,6 +873,11 @@ export default function Integrations() {
     isConnected: elevenlabsConnected,
     loading: elevenlabsLoading,
   } = useElevenLabsIntegration();
+
+  const {
+    isConfigured: falConfigured,
+    isLoading: falLoading,
+  } = useFalIntegration();
 
   // Modal states
   const [activeConnectModal, setActiveConnectModal] = useState<string | null>(null);
@@ -945,8 +950,8 @@ export default function Integrations() {
       case 'google-workspace':
         if (googleStatus === 'error') return 'error';
         if (googleStatus === 'refreshing') return 'syncing';
-        if (googleConnected && !nylasCalendarConnected) return 'limited';
-        return googleConnected ? 'active' : 'inactive';
+        // Calendar via Nylas — connected means Nylas grant is active
+        return nylasCalendarConnected ? 'active' : 'inactive';
       case 'microsoft-365':
         if (microsoftStatus === 'error') return 'error';
         if (microsoftStatus === 'refreshing') return 'syncing';
@@ -989,10 +994,14 @@ export default function Integrations() {
         return instantlyConnected ? 'active' : 'inactive';
       case 'apify':
         return apifyConnected ? 'active' : 'inactive';
+      case 'linkedin':
+        return linkedinConnected ? 'active' : 'inactive';
       case 'heygen':
         return heygenConnected ? 'active' : 'inactive';
       case 'elevenlabs':
         return elevenlabsConnected ? 'active' : 'inactive';
+      case 'fal-ai':
+        return falConfigured ? 'active' : 'inactive';
       default:
         return 'coming_soon';
     }
@@ -1068,12 +1077,20 @@ export default function Integrations() {
         setActiveConfigModal('apify');
         return;
       }
+      if (integrationId === 'linkedin') {
+        setActiveConfigModal('linkedin');
+        return;
+      }
       if (integrationId === 'elevenlabs') {
         setActiveConfigModal('elevenlabs');
         return;
       }
       if (integrationId === 'heygen') {
         setActiveConfigModal('heygen');
+        return;
+      }
+      if (integrationId === 'fal-ai') {
+        setActiveConfigModal('fal-ai');
         return;
       }
       // 60 Notetaker goes straight to config modal (handles its own enable flow)
@@ -1091,7 +1108,9 @@ export default function Integrations() {
     try {
       switch (integrationId) {
         case 'google-workspace': {
-          const authUrl = await connectGoogle();
+          // Route directly to Nylas for calendar access (no direct Google Cloud app needed)
+          const { connectNylas } = useIntegrationStore.getState();
+          const authUrl = await connectNylas();
           if (authUrl) {
             window.location.href = authUrl;
           } else {
@@ -1172,8 +1191,10 @@ export default function Integrations() {
       bettercontact: bettercontactLoading,
       instantly: instantlyLoading,
       apify: apifyLoading,
+      linkedin: linkedinLoading,
+      'fal-ai': falLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, bettercontactLoading, instantlyLoading, apifyLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, bettercontactLoading, instantlyLoading, apifyLoading, linkedinLoading, falLoading]
   );
 
   // Preload logo.dev URLs on page load to prevent any visible swap/flicker.
@@ -1237,7 +1258,6 @@ export default function Integrations() {
             {builtIntegrations
               .filter((integration) => (integration.id === 'hubspot' ? hubspotEnabled : true))
               .map((integration) => {
-                const isGoogleLimited = integration.id === 'google-workspace' && googleConnected && !nylasCalendarConnected;
                 return (
                   <IntegrationCardWithLogo
                     config={integration}
@@ -1246,17 +1266,6 @@ export default function Integrations() {
                     onAction={() => handleCardAction(integration.id, true)}
                     actionLoading={builtActionLoadingById[integration.id]}
                     sixtyLogoUrl={sixtyLogoUrl}
-                    customFooter={isGoogleLimited ? (
-                      <GoogleLimitedFooter onUpgrade={async () => {
-                        try {
-                          const { connectNylas } = useIntegrationStore.getState();
-                          const authUrl = await connectNylas();
-                          window.location.href = authUrl;
-                        } catch (err: any) {
-                          toast.error(err?.message || 'Failed to start Gmail upgrade');
-                        }
-                      }} />
-                    ) : undefined}
                   />
                 );
               })}
@@ -1373,12 +1382,20 @@ export default function Integrations() {
         open={activeConfigModal === 'apify'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
+      <LinkedInConfigModal
+        open={activeConfigModal === 'linkedin'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
       <HeyGenConfigModal
         open={activeConfigModal === 'heygen'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
       <ElevenLabsConfigModal
         open={activeConfigModal === 'elevenlabs'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <FalConfigModal
+        open={activeConfigModal === 'fal-ai'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
     </div>

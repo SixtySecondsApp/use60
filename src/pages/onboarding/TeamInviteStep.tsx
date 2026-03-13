@@ -27,8 +27,8 @@ interface PendingInvite {
 }
 
 const roleOptions = [
-  { value: 'admin' as const, label: 'Admin', description: 'Can manage team and settings' },
   { value: 'member' as const, label: 'Member', description: 'Can access and modify data' },
+  { value: 'admin' as const, label: 'Admin', description: 'Can manage team and settings' },
 ];
 
 export function TeamInviteStep({ onNext, onBack }: TeamInviteStepProps) {

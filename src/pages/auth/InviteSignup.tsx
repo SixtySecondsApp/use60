@@ -99,6 +99,30 @@ export default function InviteSignup() {
         return;
       }
 
+      // Backfill profile names if provided (existing users may have empty names)
+      if (formData.firstName.trim() || formData.lastName.trim()) {
+        try {
+          const userId = session.user.id;
+          await supabase.auth.updateUser({
+            data: {
+              first_name: formData.firstName.trim(),
+              last_name: formData.lastName.trim(),
+              full_name: `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim(),
+            },
+          });
+          await supabase
+            .from('profiles')
+            .update({
+              first_name: formData.firstName.trim(),
+              last_name: formData.lastName.trim(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', userId);
+        } catch (profileErr) {
+          console.warn('[InviteSignup] Failed to update profile names on sign-in:', profileErr);
+        }
+      }
+
       // Complete the invite signup (create membership, mark onboarding complete)
       const result = await completeInviteSignup(token);
 
@@ -462,44 +486,42 @@ export default function InviteSignup() {
               <p className="text-xs text-gray-500">Email verified from your invitation</p>
             </div>
 
-            {/* First and Last Name - only shown in signup mode */}
-            {formMode === 'signup' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-400">First Name</label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      required
-                      maxLength={50}
-                      value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
-                      placeholder="Sarah"
-                      disabled={status !== 'ready'}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-400">Last Name</label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      required
-                      maxLength={50}
-                      value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
-                      placeholder="Johnson"
-                      disabled={status !== 'ready'}
-                    />
-                  </div>
+            {/* First and Last Name - shown in both modes so existing users can fill in missing names */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-400">First Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    required={formMode === 'signup'}
+                    maxLength={50}
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
+                    placeholder="Sarah"
+                    disabled={status !== 'ready'}
+                  />
                 </div>
               </div>
-            )}
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-400">Last Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    required={formMode === 'signup'}
+                    maxLength={50}
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent transition-colors hover:bg-gray-600"
+                    placeholder="Johnson"
+                    disabled={status !== 'ready'}
+                  />
+                </div>
+              </div>
+            </div>
 
             {/* Password */}
             <div className="space-y-2">

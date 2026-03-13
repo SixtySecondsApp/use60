@@ -1,5 +1,5 @@
-import React from 'react';
-import { Sparkles, Send, Trash2, X, Upload, RotateCcw, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Sparkles, Send, Trash2, X, Upload, RotateCcw, Loader2, Download, Wand2 } from 'lucide-react';
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -10,10 +10,14 @@ interface BulkActionsBarProps {
   onDeselectAll: () => void;
   onPushToHubSpot?: () => void;
   onPushToAttio?: () => void;
+  onExportCSV?: () => void;
   onReEnrich?: () => void;
   onRetryFailed?: () => void;
+  onRemixAll?: () => void;
+  aiColumnCount?: number;
   isEnriching?: boolean;
   isPushingToInstantly?: boolean;
+  isRemixingAll?: boolean;
   enrichProgress?: number;
 }
 
@@ -26,15 +30,21 @@ export function BulkActionsBar({
   onDeselectAll,
   onPushToHubSpot,
   onPushToAttio,
+  onExportCSV,
   onReEnrich,
   onRetryFailed,
+  onRemixAll,
+  aiColumnCount = 0,
   isEnriching = false,
   isPushingToInstantly = false,
+  isRemixingAll = false,
   enrichProgress = 0,
 }: BulkActionsBarProps) {
   const isVisible = selectedCount > 0;
+  const [showRemixConfirm, setShowRemixConfirm] = useState(false);
 
   return (
+    <>
     <div
       className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 transition-all duration-300 ease-out ${
         isVisible
@@ -111,6 +121,17 @@ export function BulkActionsBar({
             </button>
           )}
 
+          {/* Export CSV Button */}
+          {onExportCSV && (
+            <button
+              onClick={onExportCSV}
+              className="flex items-center gap-2 rounded-lg bg-gray-700 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-600"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+          )}
+
           {/* Re-enrich Button */}
           {onReEnrich && (
             <button
@@ -120,6 +141,22 @@ export function BulkActionsBar({
             >
               <RotateCcw className="h-4 w-4" />
               Re-enrich
+            </button>
+          )}
+
+          {/* Remix All Button */}
+          {onRemixAll && (
+            <button
+              onClick={() => setShowRemixConfirm(true)}
+              disabled={isEnriching || isRemixingAll}
+              className="flex items-center gap-2 rounded-lg bg-violet-600 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isRemixingAll ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+              {isRemixingAll ? 'Generating...' : 'Remix All'}
             </button>
           )}
 
@@ -147,6 +184,65 @@ export function BulkActionsBar({
         </div>
       </div>
     </div>
+
+    {/* Remix All confirmation dialog */}
+
+    {showRemixConfirm && onRemixAll && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center"
+        onClick={() => setShowRemixConfirm(false)}
+      >
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+        <div
+          className="relative z-10 w-full max-w-sm mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-2.5 px-5 py-4 border-b border-gray-800">
+            <Wand2 className="h-5 w-5 text-violet-400 shrink-0" />
+            <h2 className="text-sm font-semibold text-white">Remix All AI Columns</h2>
+          </div>
+
+          {/* Body */}
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-sm text-gray-300">
+              This will regenerate all AI content for{' '}
+              <span className="font-semibold text-white">{selectedCount} row{selectedCount !== 1 ? 's' : ''}</span>
+              {aiColumnCount > 0 && (
+                <>
+                  {' '}across{' '}
+                  <span className="font-semibold text-white">{aiColumnCount} AI column{aiColumnCount !== 1 ? 's' : ''}</span>
+                </>
+              )}.
+            </p>
+            <p className="text-xs text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+              Each generation consumes AI credits. Existing results will be overwritten.
+            </p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-800">
+            <button
+              onClick={() => setShowRemixConfirm(false)}
+              className="rounded-lg px-3.5 py-2 text-sm font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-200"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                setShowRemixConfirm(false);
+                onRemixAll();
+              }}
+              className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+            >
+              <Wand2 className="h-4 w-4" />
+              Remix All
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 

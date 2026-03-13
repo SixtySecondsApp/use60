@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { FileText, Loader2, Settings2 } from 'lucide-react';
 
 import ProposalProgressOverlay from '@/components/proposals/ProposalProgressOverlay';
@@ -13,6 +13,10 @@ import { useActiveOrgId } from '@/lib/stores/orgStore';
 import { supabase } from '@/lib/supabase/clientV2';
 import { toast } from 'sonner';
 
+export interface ProposalQuickGenerateHandle {
+  trigger: () => void;
+}
+
 interface ProposalQuickGenerateProps {
   meetingId: string;
   dealId?: string | null;
@@ -21,6 +25,7 @@ interface ProposalQuickGenerateProps {
   hasNotes: boolean;
   onProposalStarted?: (proposalId: string) => void;
   onCustomise?: () => void;
+  triggerRef?: React.Ref<ProposalQuickGenerateHandle>;
 }
 
 export function ProposalQuickGenerate({
@@ -31,6 +36,7 @@ export function ProposalQuickGenerate({
   hasNotes,
   onProposalStarted,
   onCustomise,
+  triggerRef,
 }: ProposalQuickGenerateProps) {
   const [loading, setLoading] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -141,6 +147,8 @@ export function ProposalQuickGenerate({
       setLoading(false);
     }
   };
+
+  useImperativeHandle(triggerRef, () => ({ trigger: handleGenerate }), [handleGenerate]);
 
   const button = (
     <Button

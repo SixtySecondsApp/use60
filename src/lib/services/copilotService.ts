@@ -6,6 +6,7 @@
 import { getSupabaseHeaders } from '@/lib/utils/apiUtils';
 import { API_BASE_URL } from '@/lib/config';
 import logger from '@/lib/utils/logger';
+import { getClientIp } from '@/lib/utils/clientIp';
 import type {
   CopilotContextPayload,
   CopilotResponsePayload
@@ -24,11 +25,13 @@ export class CopilotService {
   ): Promise<CopilotResponsePayload> {
     try {
       const headers = await getSupabaseHeaders();
+      const clientIp = await getClientIp();
 
-      const requestBody: CopilotContextPayload = {
+      const requestBody: CopilotContextPayload & { client_ip?: string } = {
         message,
         conversationId,
-        context
+        context,
+        ...(clientIp ? { client_ip: clientIp } : {}),
       };
 
       logger.log('🤖 Sending message to Copilot:', { message, context });

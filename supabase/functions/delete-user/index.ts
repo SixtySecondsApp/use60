@@ -124,6 +124,7 @@ serve(async (req) => {
 
     // Delete from auth.users to revoke access (user can sign up again with same email)
     console.log('[delete-user] Deleting auth user:', userId)
+    let authWarning: string | null = null
     try {
       const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
@@ -136,22 +137,16 @@ serve(async (req) => {
         if (isNotFound) {
           console.log('[delete-user] Auth user does not exist (already deleted):', authDeleteError.message)
         } else {
-          // Auth deletion failed for a real reason - return error
+          // Auth deletion failed — log it but don't block if profile was already anonymized
           console.error('[delete-user] Error deleting auth user:', authDeleteError.message)
-          return new Response(
-            JSON.stringify({
-              error: `Failed to delete auth user: ${authDeleteError.message || 'Unknown error'}`,
-              code: 'AUTH_DELETION_FAILED',
-            }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
+          authWarning = `Auth cleanup incomplete: ${authDeleteError.message || 'Unknown error'}. User profile has been removed.`
         }
       } else {
         console.log('[delete-user] Auth user deleted successfully:', userId)
       }
     } catch (authErr: any) {
       console.error('[delete-user] auth.admin.deleteUser threw:', authErr?.message || authErr)
-      // Non-fatal for profile-only users (no auth record)
+      authWarning = `Auth cleanup threw: ${authErr?.message || 'Unknown error'}. User profile has been removed.`
     }
 
     // Reset waitlist entry so user can be re-invited
@@ -183,7 +178,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'User deleted successfully',
+        message: authWarning ? 'User removed with warnings' : 'User deleted successfully',
+        warning: authWarning || undefined,
         userId
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

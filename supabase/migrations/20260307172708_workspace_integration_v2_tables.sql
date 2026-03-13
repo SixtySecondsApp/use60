@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS calendar_watches (
 );
 
 CREATE INDEX IF NOT EXISTS idx_calendar_watches_expiration
-  ON calendar_watches(expiration) WHERE expiration > now();
+  ON calendar_watches(expiration);
 
 ALTER TABLE calendar_watches ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can read own calendar watches" ON calendar_watches;

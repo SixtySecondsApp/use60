@@ -1,17 +1,14 @@
-import { Download, Monitor } from 'lucide-react';
+import { useMemo } from 'react';
+import { Download, Monitor, Apple } from 'lucide-react';
 
-const DOWNLOAD_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/app-download`;
+const RELEASE_BASE = 'https://github.com/SixtySecondsApp/sixty-support-app/releases/latest/download';
+const WIN_URL = `${RELEASE_BASE}/sixty-support-setup.exe`;
+const MAC_URL = `${RELEASE_BASE}/sixty-support.dmg`;
 
-const ASSETS = {
-  windows: `${DOWNLOAD_BASE}/sixty-support-setup.exe`,
-  macArm64: `${DOWNLOAD_BASE}/sixty-support-arm64.dmg`,
-  macX64: `${DOWNLOAD_BASE}/sixty-support-x64.dmg`,
-};
-
-function detectOS(): 'mac' | 'windows' | 'unknown' {
-  const platform = navigator.platform ?? '';
-  if (platform.includes('Mac')) return 'mac';
-  if (platform.includes('Win')) return 'windows';
+function detectOS(): 'windows' | 'mac' | 'unknown' {
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes('win')) return 'windows';
+  if (ua.includes('mac')) return 'mac';
   return 'unknown';
 }
 
@@ -20,51 +17,40 @@ interface SupportAppDownloadProps {
 }
 
 export function SupportAppDownload({ isAdmin }: SupportAppDownloadProps) {
+  const os = useMemo(() => detectOS(), []);
+
   if (!isAdmin) return null;
 
-  const os = detectOS();
-
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 flex items-start gap-3 shadow-sm hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600/40 hover:-translate-y-0.5 transition-all duration-200 group">
-      <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-500/10 group-hover:bg-blue-100 dark:group-hover:bg-blue-500/20 transition-colors">
-        <Monitor className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors">
-          60 Support
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Desktop app for ticket management
-        </p>
-        <div className="flex gap-2 mt-2">
-          {(os === 'windows' || os === 'unknown') && (
-            <a
-              href={ASSETS.windows}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Windows
-            </a>
-          )}
-          {(os === 'mac' || os === 'unknown') && (
-            <a
-              href={ASSETS.macArm64}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              macOS (Apple Silicon)
-            </a>
-          )}
-          {(os === 'mac' || os === 'unknown') && (
-            <a
-              href={ASSETS.macX64}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              macOS (Intel)
-            </a>
-          )}
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 shadow-sm">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-500/10">
+          <Download className="w-4 h-4 text-blue-600 dark:text-blue-400" />
         </div>
+        <div>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">60 Support Desktop</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Admin tool for managing support tickets</p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {(os === 'windows' || os === 'unknown') && (
+          <a
+            href={WIN_URL}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+          >
+            <Monitor className="w-3.5 h-3.5" />
+            Download for Windows
+          </a>
+        )}
+        {(os === 'mac' || os === 'unknown') && (
+          <a
+            href={MAC_URL}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg bg-gray-900 hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 text-white transition-colors"
+          >
+            <Apple className="w-3.5 h-3.5" />
+            Download for macOS
+          </a>
+        )}
       </div>
     </div>
   );

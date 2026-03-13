@@ -95,11 +95,11 @@ export function useActionExecution(tableId: string | undefined) {
 
       return results;
     },
-    onSuccess: (_data, variables) => {
+    // Note: per-call onSuccess/onError are handled by the caller via mutateAsync.
+    // Mutation-level callbacks here only provide a fallback invalidation.
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
-      toast.success(`${variables.buttonConfig.label || 'Button'} completed`);
     },
-    onError: (err: Error) => toast.error(err.message || 'Button action failed'),
   });
 
   return { executeSingleAction, executeButton };

@@ -33,7 +33,7 @@ import {
   rateLimitMiddleware,
   RATE_LIMIT_CONFIGS,
 } from '../_shared/rateLimiter.ts';
-import { logAICostEvent, checkAgentBudget, checkCreditBalance } from '../_shared/costTracking.ts';
+import { logAICostEvent, checkAgentBudget, checkCreditBalance, extractClientIp } from '../_shared/costTracking.ts';
 import { executeAction } from '../_shared/copilot_adapters/executeAction.ts';
 import type { ExecuteActionName } from '../_shared/copilot_adapters/types.ts';
 import { resolveEntity } from '../_shared/resolveEntityAdapter.ts';
@@ -2432,6 +2432,7 @@ function detectHITLSignal(message: string): ApprovalSignal | null {
 
 serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
+  let clientIp = extractClientIp(req);
 
   // Handle CORS preflight
   const preflightResponse = handleCorsPreflightRequest(req);
@@ -2457,6 +2458,11 @@ serve(async (req: Request) => {
     // Parse request
     const body: RequestBody = await req.json();
     const { message, organizationId, context = {}, stream = true, fact_profile_id, product_profile_id } = body;
+
+    // Prefer client_ip from request body (set by frontend) over header extraction
+    if ((body as Record<string, unknown>).client_ip && !clientIp) {
+      clientIp = (body as Record<string, unknown>).client_ip as string;
+    }
 
     // Ensure orgId is available in context for model router and downstream consumers
     if (organizationId && !context.orgId) {
@@ -2800,6 +2806,9 @@ serve(async (req: Request) => {
 
         let finalResponseText = '';
 
+        // Setup wizard demo calls are free — skip credit deduction for all iterations
+        const isSetupWizard = context?.source === 'setup_wizard';
+
         try {
           const toolsUsed: string[] = [];
           const toolExecutionDetails: ToolExecutionDetail[] = [];
@@ -2896,23 +2905,6 @@ serve(async (req: Request) => {
 
             // Get the final message with complete content
             const finalMessage = await stream.finalMessage();
-
-            // Log cost + deduct org credits for autonomous copilot usage
-            if (userId && finalMessage.usage) {
-              await logAICostEvent(
-                supabase,
-                userId,
-                resolvedOrgForConfig,
-                'anthropic',
-                MODEL,
-                finalMessage.usage.input_tokens,
-                finalMessage.usage.output_tokens,
-                'copilot_autonomous',
-                { request_type: 'copilot_autonomous' },
-                undefined,
-                'copilot-autonomous'
-              );
-            }
 
             if (finalMessage.stop_reason === 'end_turn') {
               // Extract final text
@@ -3146,6 +3138,25 @@ serve(async (req: Request) => {
                 'Maximum iterations reached'
               );
             }
+          }
+
+          // Log cost ONCE for the entire request (not per-iteration)
+          // Uses accumulated token totals across all tool-loop iterations
+          if (userId && !isSetupWizard && (analytics.totalInputTokens > 0 || analytics.totalOutputTokens > 0)) {
+            await logAICostEvent(
+              supabase,
+              userId,
+              resolvedOrgForConfig,
+              'anthropic',
+              MODEL,
+              analytics.totalInputTokens,
+              analytics.totalOutputTokens,
+              'copilot_autonomous',
+              { request_type: 'copilot_autonomous', iterations },
+              undefined,
+              'copilot-autonomous',
+              clientIp,
+            );
           }
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);

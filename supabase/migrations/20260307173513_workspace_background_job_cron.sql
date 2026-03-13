@@ -18,6 +18,17 @@ CREATE EXTENSION IF NOT EXISTS pg_net;
 GRANT USAGE ON SCHEMA cron TO postgres;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cron TO postgres;
 
+-- Helper: safely unschedule a cron job (no-op if it doesn't exist)
+CREATE OR REPLACE FUNCTION _safe_unschedule(job_name text) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM cron.unschedule(job_name);
+EXCEPTION WHEN OTHERS THEN
+  -- Job doesn't exist, ignore
+  NULL;
+END;
+$$;
+
 -- Helper: resolve the edge function URL
 -- Uses the project's SUPABASE_URL env var pattern
 DO $$
@@ -35,7 +46,7 @@ BEGIN
   -- =========================================================================
   -- Token Refresh: every 10 minutes (always runs)
   -- =========================================================================
-  PERFORM cron.unschedule('workspace_token_refresh');
+  PERFORM _safe_unschedule('workspace_token_refresh');
   PERFORM cron.schedule(
     'workspace_token_refresh',
     '*/10 * * * *',
@@ -50,7 +61,7 @@ BEGIN
   -- =========================================================================
   -- Email Sync (Pro): every 30 minutes
   -- =========================================================================
-  PERFORM cron.unschedule('workspace_email_sync_pro');
+  PERFORM _safe_unschedule('workspace_email_sync_pro');
   PERFORM cron.schedule(
     'workspace_email_sync_pro',
     '*/30 * * * *',
@@ -65,7 +76,7 @@ BEGIN
   -- =========================================================================
   -- Email Classification: every hour
   -- =========================================================================
-  PERFORM cron.unschedule('workspace_email_classify');
+  PERFORM _safe_unschedule('workspace_email_classify');
   PERFORM cron.schedule(
     'workspace_email_classify',
     '0 * * * *',
@@ -80,7 +91,7 @@ BEGIN
   -- =========================================================================
   -- Reply Gap Detection (Pro): every 4 hours
   -- =========================================================================
-  PERFORM cron.unschedule('workspace_reply_gap_pro');
+  PERFORM _safe_unschedule('workspace_reply_gap_pro');
   PERFORM cron.schedule(
     'workspace_reply_gap_pro',
     '0 */4 * * *',
@@ -95,7 +106,7 @@ BEGIN
   -- =========================================================================
   -- Calendar Watch Renewal: daily at 3am UTC
   -- =========================================================================
-  PERFORM cron.unschedule('workspace_calendar_watch');
+  PERFORM _safe_unschedule('workspace_calendar_watch');
   PERFORM cron.schedule(
     'workspace_calendar_watch',
     '0 3 * * *',
@@ -110,7 +121,7 @@ BEGIN
   -- =========================================================================
   -- Sent/Received Ratio: daily at 2am UTC
   -- =========================================================================
-  PERFORM cron.unschedule('workspace_ratio_calc');
+  PERFORM _safe_unschedule('workspace_ratio_calc');
   PERFORM cron.schedule(
     'workspace_ratio_calc',
     '0 2 * * *',
@@ -125,7 +136,7 @@ BEGIN
   -- =========================================================================
   -- Document Linking: every 2 hours
   -- =========================================================================
-  PERFORM cron.unschedule('workspace_doc_link');
+  PERFORM _safe_unschedule('workspace_doc_link');
   PERFORM cron.schedule(
     'workspace_doc_link',
     '0 */2 * * *',
@@ -140,7 +151,7 @@ BEGIN
   -- =========================================================================
   -- Attendee Enrichment: every 15 minutes
   -- =========================================================================
-  PERFORM cron.unschedule('workspace_attendee_enrich');
+  PERFORM _safe_unschedule('workspace_attendee_enrich');
   PERFORM cron.schedule(
     'workspace_attendee_enrich',
     '*/15 * * * *',
@@ -153,3 +164,6 @@ BEGIN
   );
 
 END $$;
+
+-- Clean up helper function
+DROP FUNCTION IF EXISTS _safe_unschedule(text);

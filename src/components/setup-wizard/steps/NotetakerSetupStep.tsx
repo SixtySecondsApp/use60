@@ -36,9 +36,7 @@ export function NotetakerSetupStep() {
     }
   };
 
-  const handleSkip = async () => {
-    if (!user?.id || !activeOrgId) return;
-    await completeStep(user.id, activeOrgId, 'notetaker');
+  const handleSkip = () => {
     setCurrentStep('crm');
   };
 

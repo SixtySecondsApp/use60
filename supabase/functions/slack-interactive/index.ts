@@ -45,6 +45,7 @@ import { handleConfigQuestionAnswer } from './handlers/configQuestionAnswer.ts';
 import { handleAutonomyPromotion } from './handlers/autonomyPromotion.ts';
 import { handleAutopilotPromotion } from './handlers/autopilotPromotion.ts';
 import { handlePrepBriefingAction, handlePrepBriefingAskSubmission, handlePrepBriefingFeedbackSubmission } from './handlers/prepBriefing.ts';
+import { handleMorningBriefAction } from './handlers/morningBrief.ts';
 import { enrichContactContext } from '../_shared/orchestrator/adapters/contextEnrichment.ts';
 import { buildFollowupEmailPrompt } from '../_shared/orchestrator/adapters/emailSend.ts';
 import { buildEmailDraftApprovalBlocks } from '../_shared/orchestrator/adapters/emailDraftApproval.ts';
@@ -10011,6 +10012,36 @@ serve(async (req) => {
                 deal_id: valueData.deal_id,
                 urgency: 'normal',
               });
+            } else if (action.action_id === 'hygiene_reengage') {
+              // Trigger re-engagement sequence via orchestrator
+              try {
+                await fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                  },
+                  body: JSON.stringify({
+                    event_type: 'stale_deal_revival',
+                    user_id: sixtyUserId,
+                    org_id: orgId,
+                    context: { deal_id: valueData.deal_id, source: 'pipeline_hygiene', reason: valueData.reason },
+                  }),
+                });
+              } catch {
+                // Non-fatal — re-engagement request queued
+              }
+              await writeToCommandCentre({
+                org_id: orgId,
+                user_id: sixtyUserId,
+                source_agent: 'pipeline_hygiene',
+                item_type: 'follow_up',
+                title: `Re-engagement draft queued`,
+                summary: `Drafting re-engagement email for deal`,
+                context: { deal_id: valueData.deal_id, action: 'reengage', reason: valueData.reason },
+                deal_id: valueData.deal_id,
+                urgency: 'normal',
+              });
             } else if (action.action_id === 'hygiene_snooze_all') {
               const snoozeUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
               const dealIds = valueData.deal_ids || [];
@@ -10032,6 +10063,7 @@ serve(async (req) => {
             if (payload.response_url) {
               const actionLabel = action.action_id === 'hygiene_snooze_7d' ? 'Snoozed for 7 days'
                 : action.action_id === 'hygiene_draft_followup' ? 'Follow-up queued'
+                : action.action_id === 'hygiene_reengage' ? 'Re-engagement draft queued'
                 : action.action_id === 'hygiene_close_lost' ? 'Closing as lost'
                 : action.action_id === 'hygiene_snooze_all' ? 'All deals snoozed for 7 days'
                 : 'Action taken';
@@ -10052,6 +10084,42 @@ serve(async (req) => {
             });
           } catch (err) {
             console.error('[Hygiene] Action handler error:', err);
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        // =====================================================================
+        // PST-008/009: Morning Brief action handlers
+        // Format: morning_brief_{action}::{id}
+        // =====================================================================
+        if (action.action_id.startsWith('morning_brief_')) {
+          try {
+            const result = await handleMorningBriefAction(action.action_id, payload, action);
+            if (result) {
+              // Send response back to Slack
+              if (payload.response_url) {
+                await fetch(payload.response_url, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    replace_original: false,
+                    text: result.success
+                      ? (result.responseBlocks ? undefined : 'Done.')
+                      : `Error: ${result.error}`,
+                    ...(result.responseBlocks ? { blocks: result.responseBlocks } : {}),
+                  }),
+                });
+              }
+              return new Response(JSON.stringify({ ok: true }), {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+          } catch (err) {
+            console.error('[MorningBrief] Action handler error:', err);
             return new Response(JSON.stringify({ ok: true }), {
               status: 200,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },

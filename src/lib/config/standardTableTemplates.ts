@@ -1615,6 +1615,121 @@ export const WAITLIST_TABLE: StandardTableTemplate = {
 // EXPORTS
 // ============================================================================
 
+// ============================================================================
+// 8. WEBSITE VISITORS TABLE
+// ============================================================================
+
+export const WEBSITE_VISITORS_TABLE: StandardTableTemplate = {
+  key: 'standard_website_visitors',
+  name: 'Website Visitors',
+  description: 'Identified website visitors with company resolution, contact matching, and visit activity',
+  source_type: 'standard',
+  columns: [
+    {
+      key: 'company_name',
+      label: 'Company',
+      column_type: 'company',
+      is_system: true,
+      is_locked: true,
+      position: 0,
+      width: 200,
+      is_visible: true,
+      app_source_table: 'website_visitors',
+      app_source_column: 'resolved_company_name',
+    },
+    {
+      key: 'contact_name',
+      label: 'Contact',
+      column_type: 'person',
+      is_system: true,
+      is_locked: true,
+      position: 1,
+      width: 180,
+      is_visible: true,
+    },
+    {
+      key: 'contact_title',
+      label: 'Title',
+      column_type: 'text',
+      is_system: true,
+      is_locked: true,
+      position: 2,
+      width: 160,
+      is_visible: true,
+    },
+    {
+      key: 'page_visited',
+      label: 'Page Visited',
+      column_type: 'url',
+      is_system: true,
+      is_locked: true,
+      position: 3,
+      width: 220,
+      is_visible: true,
+      app_source_table: 'website_visitors',
+      app_source_column: 'page_url',
+    },
+    {
+      key: 'visit_date',
+      label: 'Visit Date',
+      column_type: 'date',
+      is_system: true,
+      is_locked: true,
+      position: 4,
+      width: 140,
+      is_visible: true,
+      app_source_table: 'website_visitors',
+      app_source_column: 'visited_at',
+    },
+    {
+      key: 'source',
+      label: 'Source',
+      column_type: 'dropdown',
+      is_system: true,
+      is_locked: true,
+      position: 5,
+      width: 120,
+      is_visible: true,
+      app_source_table: 'website_visitors',
+      app_source_column: 'resolution_provider',
+      dropdown_options: [
+        { value: 'pdl', label: 'PDL', color: '#3B82F6' },
+        { value: 'rb2b', label: 'RB2B', color: '#8B5CF6' },
+        { value: 'snitcher', label: 'Snitcher', color: '#10B981' },
+      ],
+    },
+    {
+      key: 'lead_status',
+      label: 'Lead Status',
+      column_type: 'status',
+      is_system: true,
+      is_locked: true,
+      position: 6,
+      width: 130,
+      is_visible: true,
+      dropdown_options: [
+        { value: 'new', label: 'New', color: '#3B82F6' },
+        { value: 'contacted', label: 'Contacted', color: '#F59E0B' },
+        { value: 'qualified', label: 'Qualified', color: '#10B981' },
+        { value: 'disqualified', label: 'Disqualified', color: '#EF4444' },
+      ],
+    },
+  ],
+  views: [
+    {
+      name: 'All Visitors',
+      is_default: true,
+      sort_config: { column: 'visit_date', direction: 'desc' },
+    },
+    {
+      name: 'RB2B Confirmed',
+      is_default: false,
+      filter_config: [{ column: 'source', operator: 'eq', value: 'rb2b' }],
+      sort_config: { column: 'visit_date', direction: 'desc' },
+    },
+  ],
+};
+
 export const STANDARD_TABLE_TEMPLATES: StandardTableTemplate[] = [
   LEADS_TABLE,
   MEETINGS_TABLE,
@@ -1622,7 +1737,8 @@ export const STANDARD_TABLE_TEMPLATES: StandardTableTemplate[] = [
   COMPANIES_TABLE,
   CLIENTS_TABLE,
   DEALS_TABLE,
-  WAITLIST_TABLE
+  WAITLIST_TABLE,
+  WEBSITE_VISITORS_TABLE,
 ];
 
 export function getStandardTableByKey(key: string): StandardTableTemplate | undefined {
