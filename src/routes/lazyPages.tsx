@@ -57,6 +57,7 @@ export const OrchestratorDashboard = lazyWithRetry(() => import('@/pages/platfor
 export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
 export const GoldenEyeAdmin = lazyWithRetry(() => import('@/pages/platform/GoldenEyeAdmin'));
+export const GodsEyeAdmin = GoldenEyeAdmin; // alias — App.tsx uses this name
 export const CreditMenuAdmin = lazyWithRetry(() => import('@/pages/platform/CreditMenuAdmin'));
 export const CouponAdmin = lazyWithRetry(() => import('@/pages/platform/CouponAdmin'));
 export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo/EnrichmentComparison'));
@@ -101,6 +102,7 @@ export const ProcessMaps = lazyWithRetry(() => import('@/pages/admin/ProcessMaps
 export const VSLAnalyticsTests = lazyWithRetry(() => import('@/pages/admin/VSLAnalyticsTests'));
 export const CronJobsAdmin = lazyWithRetry(() => import('@/pages/admin/CronJobsAdmin'));
 export const ApiMonitor = lazyWithRetry(() => import('@/pages/admin/ApiMonitor'));
+export const MigrationTracker = lazyWithRetry(() => import('@/pages/admin/MigrationTracker'));
 export const BillingAnalytics = lazyWithRetry(() => import('@/pages/admin/BillingAnalytics'));
 export const SaasAdminDashboard = lazyWithRetry(() => import('@/pages/SaasAdminDashboard'));
 export const QuickAddSimulator = lazyWithRetry(() => import('@/pages/platform/QuickAddSimulator'));
