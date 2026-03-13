@@ -50,6 +50,6 @@ CREATE POLICY "Users can view own org trigger runs"
   ON agent_trigger_runs FOR SELECT
   USING (
     organization_id IN (
-      SELECT org_id FROM organization_members WHERE user_id = auth.uid()
+      SELECT org_id FROM organization_memberships WHERE user_id = auth.uid()
     )
   );

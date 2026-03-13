@@ -38,7 +38,7 @@ BEGIN
   IF _org_id IS NULL THEN
     -- Fallback: look up org from user's membership
     SELECT om.org_id INTO _org_id
-    FROM public.organization_members om
+    FROM public.organization_memberships om
     WHERE om.user_id = NEW.user_id
     LIMIT 1;
   END IF;
@@ -119,7 +119,7 @@ BEGIN
   IF _org_id IS NULL THEN
     -- Fallback: look up org from owner
     SELECT om.org_id INTO _org_id
-    FROM public.organization_members om
+    FROM public.organization_memberships om
     WHERE om.user_id = NEW.owner_user_id
     LIMIT 1;
   END IF;

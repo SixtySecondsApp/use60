@@ -33,7 +33,7 @@ BEGIN
   -- Resolve org_id from owner's membership
   IF NEW.owner_id IS NOT NULL THEN
     SELECT om.org_id INTO _org_id
-    FROM public.organization_members om
+    FROM public.organization_memberships om
     WHERE om.user_id = NEW.owner_id
     LIMIT 1;
   END IF;
@@ -120,7 +120,7 @@ BEGIN
   _org_id := NEW.clerk_org_id::uuid;
   IF _org_id IS NULL THEN
     SELECT om.org_id INTO _org_id
-    FROM public.organization_members om
+    FROM public.organization_memberships om
     WHERE om.user_id = NEW.assigned_to
     LIMIT 1;
   END IF;
