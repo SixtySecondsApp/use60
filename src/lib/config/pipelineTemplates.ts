@@ -10,6 +10,7 @@ export interface PipelineColumnDef {
   position: number;
   width?: number;
   is_source?: boolean;
+  is_visible?: boolean;
   action_config?: ButtonConfig;
   formula_expression?: string;
 }
@@ -31,6 +32,8 @@ export interface PipelineDataSourceConfig {
   synthetic_rows?: Record<string, string>[];
 }
 
+import type { FormattingRule } from '@/lib/utils/conditionalFormatting';
+
 export interface PipelineTemplate {
   key: string;
   name: string;
@@ -39,8 +42,8 @@ export interface PipelineTemplate {
   icon: string;
   steps: PipelineStepDef[];
   columns: PipelineColumnDef[];
-  dataSource: PipelineDataSourceConfig;
   formatting_rules?: FormattingRule[];
+  dataSource: PipelineDataSourceConfig;
 }
 
 // ── Re-engagement Pipeline ──────────────────────────────────────
@@ -220,11 +223,13 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
   columns: [
     { key: 'first_name', label: 'First Name', column_type: 'text', position: 0, is_source: true },
     { key: 'last_name', label: 'Last Name', column_type: 'text', position: 1, is_source: true },
-    { key: 'company', label: 'Company', column_type: 'text', position: 2, is_source: true },
-    { key: 'meeting_date', label: 'Meeting Date', column_type: 'date', position: 3, is_source: true },
-    { key: 'transcript_text', label: 'Transcript', column_type: 'text', position: 4, width: 300, is_source: true },
+    { key: 'email', label: 'Email', column_type: 'text', position: 2, is_source: true },
+    { key: 'company', label: 'Company', column_type: 'text', position: 3, is_source: true },
+    { key: 'meeting_date', label: 'Meeting Date', column_type: 'date', position: 4, is_source: true },
+    { key: 'rep_name', label: 'Rep', column_type: 'text', position: 5, is_source: true },
+    { key: 'transcript_text', label: 'Transcript', column_type: 'text', position: 6, width: 300, is_source: true },
     {
-      key: 'analyse_btn', label: 'Analyse', column_type: 'action', position: 5,
+      key: 'analyse_btn', label: 'Analyse', column_type: 'action', position: 7,
       action_config: {
         label: 'Analyse Transcript',
         color: '#8b5cf6',
@@ -242,12 +247,21 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
         }],
       },
     },
-    { key: 'transcript_analysis', label: 'Analysis (JSON)', column_type: 'text', position: 6 },
-    { key: 'qualified', label: 'Qualified', column_type: 'formula', position: 7, formula_expression: 'JSON_GET(@transcript_analysis, "qualified")' },
-    { key: 'specific_pain', label: 'Pain Point', column_type: 'formula', position: 8, formula_expression: 'JSON_GET(@transcript_analysis, "specific_pain")' },
-    { key: 'suggested_tier', label: 'Tier', column_type: 'formula', position: 9, formula_expression: 'JSON_GET(@transcript_analysis, "suggested_tier")' },
+    { key: 'transcript_analysis', label: 'Analysis (JSON)', column_type: 'text', position: 8 },
+    { key: 'qualified', label: 'Qualified', column_type: 'formula', position: 9, formula_expression: 'JSON_GET(@transcript_analysis, "qualified")', is_visible: false },
+    { key: 'date_calculation', label: 'Date Calc', column_type: 'formula', position: 10, formula_expression: 'JSON_GET(@transcript_analysis, "date_calculation")', is_visible: false },
+    { key: 'months_ago', label: 'Months Ago', column_type: 'formula', position: 11, formula_expression: 'JSON_GET(@transcript_analysis, "months_ago")', is_visible: false },
+    { key: 'specific_pain', label: 'Pain Point', column_type: 'formula', position: 12, formula_expression: 'JSON_GET(@transcript_analysis, "specific_pain")', is_visible: false },
+    { key: 'blocker_signal', label: 'Blocker Signal', column_type: 'formula', position: 13, formula_expression: 'JSON_GET(@transcript_analysis, "blocker_signal")', is_visible: false },
+    { key: 'blocker_type', label: 'Blocker Type', column_type: 'formula', position: 14, formula_expression: 'JSON_GET(@transcript_analysis, "blocker_type")', is_visible: false },
+    { key: 'interest_areas', label: 'Interest Areas', column_type: 'formula', position: 15, formula_expression: 'JSON_GET(@transcript_analysis, "interest_areas")', is_visible: false },
+    { key: 'company_context', label: 'Company Context', column_type: 'formula', position: 16, formula_expression: 'JSON_GET(@transcript_analysis, "company_context")', is_visible: false },
+    { key: 'suggested_tier', label: 'Tier', column_type: 'formula', position: 17, formula_expression: 'JSON_GET(@transcript_analysis, "suggested_tier")', is_visible: false },
+    { key: 'personalisation_hook', label: 'Hook', column_type: 'formula', position: 18, formula_expression: 'JSON_GET(@transcript_analysis, "personalisation_hook")', is_visible: false },
+    { key: 'use60_angle', label: 'use60 Angle', column_type: 'formula', position: 19, formula_expression: 'JSON_GET(@transcript_analysis, "use60_angle")', is_visible: false },
+    { key: 'tone_notes', label: 'Tone Notes', column_type: 'formula', position: 20, formula_expression: 'JSON_GET(@transcript_analysis, "tone_notes")', is_visible: false },
     {
-      key: 'personalise_btn', label: 'Personalise', column_type: 'action', position: 10,
+      key: 'personalise_btn', label: 'Personalise', column_type: 'action', position: 21,
       action_config: {
         label: 'Personalise',
         color: '#10b981',
@@ -266,16 +280,19 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
         condition: { column_key: 'qualified', operator: 'equals', value: 'true' },
       },
     },
-    { key: 'email_variables', label: 'Email Vars (JSON)', column_type: 'text', position: 11 },
-    { key: 'hook_line', label: 'Hook Line', column_type: 'formula', position: 12, formula_expression: 'JSON_GET(@email_variables, "hook_line")' },
-    { key: 'pain_ref', label: 'Pain Ref', column_type: 'formula', position: 13, formula_expression: 'JSON_GET(@email_variables, "pain_ref")' },
-    { key: 'time_ref', label: 'Time Ref', column_type: 'formula', position: 14, formula_expression: 'JSON_GET(@email_variables, "time_ref")' },
-    { key: 'use60_intro', label: '60 Intro', column_type: 'formula', position: 15, formula_expression: 'JSON_GET(@email_variables, "use60_intro")' },
-    { key: 'pain_reframe', label: 'Pain Reframe', column_type: 'formula', position: 16, formula_expression: 'JSON_GET(@email_variables, "pain_reframe")' },
-    { key: 'capability_match', label: 'Capability', column_type: 'formula', position: 17, formula_expression: 'JSON_GET(@email_variables, "capability_match")' },
+    { key: 'email_variables', label: 'Email Vars (JSON)', column_type: 'text', position: 22 },
+    { key: 'hook_line', label: 'Hook Line', column_type: 'formula', position: 23, formula_expression: 'JSON_GET(@email_variables, "hook_line")', is_visible: false },
+    { key: 'pain_ref', label: 'Pain Ref', column_type: 'formula', position: 24, formula_expression: 'JSON_GET(@email_variables, "pain_ref")', is_visible: false },
+    { key: 'pain_short', label: 'Pain Short', column_type: 'formula', position: 25, formula_expression: 'JSON_GET(@email_variables, "pain_short")', is_visible: false },
+    { key: 'time_ref', label: 'Time Ref', column_type: 'formula', position: 26, formula_expression: 'JSON_GET(@email_variables, "time_ref")', is_visible: false },
+    { key: 'blocker_ref', label: 'Blocker Ref', column_type: 'formula', position: 27, formula_expression: 'JSON_GET(@email_variables, "blocker_ref")', is_visible: false },
+    { key: 'curiosity_line', label: 'Curiosity Line', column_type: 'formula', position: 28, formula_expression: 'JSON_GET(@email_variables, "curiosity_line")', is_visible: false },
+    { key: 'use60_intro', label: '60 Intro', column_type: 'formula', position: 29, formula_expression: 'JSON_GET(@email_variables, "use60_intro")', is_visible: false },
+    { key: 'use60_bridge', label: '60 Bridge', column_type: 'formula', position: 30, formula_expression: 'JSON_GET(@email_variables, "use60_bridge")', is_visible: false },
+    { key: 'pain_reframe', label: 'Pain Reframe', column_type: 'formula', position: 31, formula_expression: 'JSON_GET(@email_variables, "pain_reframe")', is_visible: false },
     // ── Review step columns ──
     {
-      key: 'review_btn', label: 'Review', column_type: 'action', position: 18,
+      key: 'review_btn', label: 'Review', column_type: 'action', position: 32,
       action_config: {
         label: 'Review Variables',
         color: '#f59e0b',
@@ -324,12 +341,12 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
         condition: { column_key: 'email_variables', operator: 'is_not_empty' },
       },
     },
-    { key: 'review_output', label: 'Review (JSON)', column_type: 'text', position: 19 },
-    { key: 'review_status', label: 'Review Status', column_type: 'formula', position: 20, formula_expression: 'JSON_GET(@review_output, "review_status")' },
-    { key: 'review_notes', label: 'Review Notes', column_type: 'formula', position: 21, formula_expression: 'JSON_GET(@review_output, "review_notes")' },
+    { key: 'review_output', label: 'Review (JSON)', column_type: 'text', position: 33 },
+    { key: 'review_status', label: 'Review Status', column_type: 'formula', position: 34, formula_expression: 'JSON_GET(@review_output, "review_status")' },
+    { key: 'review_notes', label: 'Review Notes', column_type: 'formula', position: 35, formula_expression: 'JSON_GET(@review_output, "review_notes")' },
     // ── Write Email step ──
     {
-      key: 'write_email_btn', label: 'Write Email', column_type: 'action', position: 22,
+      key: 'write_email_btn', label: 'Write Email', column_type: 'action', position: 36,
       action_config: {
         label: 'Write Email',
         color: '#f59e0b',
@@ -348,7 +365,7 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
         condition: { column_key: 'review_status', operator: 'equals', value: 'approved' },
       },
     },
-    { key: 'email_draft', label: 'Email Draft', column_type: 'text', position: 23 },
+    { key: 'email_draft', label: 'Email Draft', column_type: 'text', position: 37 },
   ],
   // ── Conditional formatting rules ──
   // Order matters: first matching row-scoped rule wins.
@@ -392,15 +409,17 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
     column_mapping: {
       first_name: 'contact_first_name',
       last_name: 'contact_last_name',
+      email: 'contact_email',
       company: 'contact_company',
       meeting_date: 'meeting_date',
+      rep_name: 'rep_name',
       transcript_text: 'transcript_text',
     },
-    limit: 10,
+    limit: 500,
     synthetic_rows: [
-      { first_name: 'Sarah', last_name: 'Chen', company: 'TechFlow Inc', meeting_date: '2025-11-15', transcript_text: 'Rep: Thanks for taking the time today Sarah. So tell me about what\'s happening at TechFlow.\nSarah: Sure, so we\'re a 50-person SaaS company and honestly our sales process is a mess. We have leads coming in from the website, LinkedIn, events — but nobody follows up consistently.\nRep: What happens after a lead comes in?\nSarah: It sits in HubSpot until someone remembers to check. Could be days. Our AEs are good on calls but terrible at admin. We tried hiring an SDR but they quit after 3 months.\nRep: What\'s the revenue impact?\nSarah: We estimated we\'re losing 30-40% of inbound leads to slow follow-up. At our ACV of $24k, that\'s significant. Our CEO is frustrated.\nRep: Have you looked at automation tools?\nSarah: We tried Outreach but it felt too enterprise for us. And the reps hated it. We need something that just works without a lot of setup.' },
-      { first_name: 'Marcus', last_name: 'Rivera', company: 'GrowthPath Advisory', meeting_date: '2025-10-22', transcript_text: 'Rep: Marcus, great to connect. What prompted you to take this call?\nMarcus: We\'re a boutique consulting firm, 12 people. I handle all the business development myself and I\'m drowning. Between client work and trying to grow the pipeline, something always drops.\nRep: What does your current sales process look like?\nMarcus: Honestly? It\'s my inbox and my memory. I meet someone at an event, exchange cards, maybe send a follow-up if I remember. Half the time I don\'t. I know I need a CRM but every time I try one I stop using it within a week.\nRep: What would success look like for you?\nMarcus: If someone could just handle the follow-ups and keep deals moving while I focus on delivery. I don\'t need complex pipelines — I need consistency. Budget isn\'t really an issue if it actually works, probably $500-1000/mo range.' },
-      { first_name: 'Priya', last_name: 'Patel', company: 'ScaleUp Ventures', meeting_date: '2025-12-03', transcript_text: 'Rep: Priya, thanks for the intro from James. Tell me about ScaleUp.\nPriya: We\'re a VC fund, $50M AUM. I lead deal sourcing. The challenge is we need to track hundreds of founders and companies across our pipeline but our current setup is spreadsheets and Notion.\nRep: What breaks first?\nPriya: Follow-through. A founder pitches, we say we\'ll circle back in 6 months after they hit certain milestones, and then nobody remembers. We\'ve missed 3 deals this year because a competitor followed up when we didn\'t.\nRep: That\'s real money in VC.\nPriya: Exactly. Each missed deal could be a 10x return. We need something that keeps relationships warm automatically. Not spam — genuine, contextual touchpoints. We looked at Affinity but it\'s $30k/year and still requires manual work.' },
+      { first_name: 'Sarah', last_name: 'Chen', company: 'TechFlow Inc', meeting_date: '2025-11-15', rep_name: 'Andrew', transcript_text: 'Rep: Thanks for taking the time today Sarah. So tell me about what\'s happening at TechFlow.\nSarah: Sure, so we\'re a 50-person SaaS company and honestly our sales process is a mess. We have leads coming in from the website, LinkedIn, events — but nobody follows up consistently.\nRep: What happens after a lead comes in?\nSarah: It sits in HubSpot until someone remembers to check. Could be days. Our AEs are good on calls but terrible at admin. We tried hiring an SDR but they quit after 3 months.\nRep: What\'s the revenue impact?\nSarah: We estimated we\'re losing 30-40% of inbound leads to slow follow-up. At our ACV of $24k, that\'s significant. Our CEO is frustrated.\nRep: Have you looked at automation tools?\nSarah: We tried Outreach but it felt too enterprise for us. And the reps hated it. We need something that just works without a lot of setup.' },
+      { first_name: 'Marcus', last_name: 'Rivera', company: 'GrowthPath Advisory', meeting_date: '2025-10-22', rep_name: 'Andrew', transcript_text: 'Rep: Marcus, great to connect. What prompted you to take this call?\nMarcus: We\'re a boutique consulting firm, 12 people. I handle all the business development myself and I\'m drowning. Between client work and trying to grow the pipeline, something always drops.\nRep: What does your current sales process look like?\nMarcus: Honestly? It\'s my inbox and my memory. I meet someone at an event, exchange cards, maybe send a follow-up if I remember. Half the time I don\'t. I know I need a CRM but every time I try one I stop using it within a week.\nRep: What would success look like for you?\nMarcus: If someone could just handle the follow-ups and keep deals moving while I focus on delivery. I don\'t need complex pipelines — I need consistency. Budget isn\'t really an issue if it actually works, probably $500-1000/mo range.' },
+      { first_name: 'Priya', last_name: 'Patel', company: 'ScaleUp Ventures', meeting_date: '2025-12-03', rep_name: 'Andrew', transcript_text: 'Rep: Priya, thanks for the intro from James. Tell me about ScaleUp.\nPriya: We\'re a VC fund, $50M AUM. I lead deal sourcing. The challenge is we need to track hundreds of founders and companies across our pipeline but our current setup is spreadsheets and Notion.\nRep: What breaks first?\nPriya: Follow-through. A founder pitches, we say we\'ll circle back in 6 months after they hit certain milestones, and then nobody remembers. We\'ve missed 3 deals this year because a competitor followed up when we didn\'t.\nRep: That\'s real money in VC.\nPriya: Exactly. Each missed deal could be a 10x return. We need something that keeps relationships warm automatically. Not spam — genuine, contextual touchpoints. We looked at Affinity but it\'s $30k/year and still requires manual work.' },
     ],
   },
 };
