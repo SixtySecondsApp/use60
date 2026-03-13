@@ -464,7 +464,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
 
                 <Route path="/platform/agent-teams" element={<PlatformAdminRouteGuard><AppLayout><AgentTeamSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/multi-agent-demo" element={<PlatformAdminRouteGuard><AppLayout><MultiAgentDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
-                <Route path="/platform/brain" element={<PlatformAdminRouteGuard><AppLayout><AgentDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/brain" element={<AppLayout><AgentDemoPage /></AppLayout>} />
                 <Route path="/platform/demo/prep-briefing" element={<PlatformAdminRouteGuard><AppLayout><DemoPrepBriefing /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/demo/conversational-copilot" element={<PlatformAdminRouteGuard><AppLayout><DemoConversationalCopilot /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/demo/autonomy" element={<PlatformAdminRouteGuard><AppLayout><AutonomyDemoPage /></AppLayout></PlatformAdminRouteGuard>} />
