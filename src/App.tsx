@@ -96,7 +96,7 @@ import {
   OutreachAnalyticsPage,
   WinLossPage,
   FollowUpDraftsPage,
-  OpsPage, OpsDetailPage, ApifyOpsPage, LinkedInAdLibraryPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
+  OpsPage, OpsDetailPage, ApifyOpsPage, LinkedInAdLibraryPage, LinkedInHubPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
   ProductProfileViewPage, ProductProfileEditPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
