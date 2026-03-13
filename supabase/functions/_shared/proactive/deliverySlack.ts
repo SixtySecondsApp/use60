@@ -1,11 +1,65 @@
 /**
  * Slack Delivery for Proactive Notifications
- * 
+ *
  * Handles sending Slack DMs and channel messages with safe block rendering.
+ * Includes audit trail logging to slack_delivery_log (US-022).
  */
 
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import type { ProactiveNotificationPayload } from './types.ts';
+
+// ---------------------------------------------------------------------------
+// Slack Delivery Audit Trail (US-022)
+// ---------------------------------------------------------------------------
+
+interface SlackDeliveryLogParams {
+  userId?: string;
+  orgId?: string;
+  messageType?: string;
+  channelId?: string;
+  success: boolean;
+  errorMessage?: string;
+  blockedReason?: string;
+}
+
+/**
+ * Log a Slack delivery attempt to the slack_delivery_log table.
+ *
+ * Uses the service role client so logging works regardless of the caller's auth
+ * context. Non-blocking: errors are caught and logged but never thrown.
+ */
+export async function logSlackDelivery(params: SlackDeliveryLogParams): Promise<void> {
+  try {
+    const url = Deno.env.get('SUPABASE_URL');
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!url || !key) {
+      console.warn('[deliverySlack] Cannot log delivery — missing SUPABASE_URL or SERVICE_ROLE_KEY');
+      return;
+    }
+
+    const serviceClient = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const { error } = await serviceClient
+      .from('slack_delivery_log')
+      .insert({
+        user_id: params.userId ?? null,
+        org_id: params.orgId ?? null,
+        message_type: params.messageType ?? null,
+        channel_id: params.channelId ?? null,
+        success: params.success,
+        error_message: params.errorMessage ?? null,
+        blocked_reason: params.blockedReason ?? null,
+      });
+
+    if (error) {
+      console.warn('[deliverySlack] Failed to write delivery log:', error.message);
+    }
+  } catch (err) {
+    console.warn('[deliverySlack] Delivery log error (non-fatal):', String(err));
+  }
+}
 
 interface SlackDeliveryOptions {
   botToken: string;
@@ -246,6 +300,16 @@ export async function deliverToSlack(
   const policy = await checkUserDeliveryPolicy(supabase, payload);
   if (!policy.allowed) {
     console.log(`[proactive/deliverySlack] Blocked by ${policy.reason} for user ${payload.recipientSlackUserId}`);
+
+    // US-022: Log blocked delivery
+    logSlackDelivery({
+      userId: payload.recipientUserId,
+      orgId: payload.orgId,
+      messageType: payload.type,
+      success: false,
+      blockedReason: policy.reason,
+    });
+
     return {
       sent: false,
       error: policy.reason,
@@ -257,6 +321,16 @@ export async function deliverToSlack(
     slackUserId: payload.recipientSlackUserId,
     blocks: payload.blocks,
     text: payload.message,
+  });
+
+  // US-022: Log delivery result (success or failure)
+  logSlackDelivery({
+    userId: payload.recipientUserId,
+    orgId: payload.orgId,
+    messageType: payload.type,
+    channelId: result.channelId,
+    success: result.success,
+    errorMessage: result.error,
   });
 
   // Record notification interaction for Smart Engagement Algorithm
