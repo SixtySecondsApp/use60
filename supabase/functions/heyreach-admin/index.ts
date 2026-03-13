@@ -125,12 +125,17 @@ serve(async (req) => {
       const webhookApiKey = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
 
       // Store credentials
-      await svc
+      const { error: credError } = await svc
         .from('heyreach_org_credentials')
         .upsert({ org_id: orgId, api_key: apiKey, updated_at: new Date().toISOString() }, { onConflict: 'org_id' })
 
+      if (credError) {
+        console.error('Failed to store HeyReach credentials', { orgId, userId: user.id, error: credError.message })
+        return errorResponse('Failed to store credentials')
+      }
+
       // Upsert integration record
-      await svc
+      const { error: intError } = await svc
         .from('heyreach_org_integrations')
         .upsert({
           org_id: orgId,
@@ -141,6 +146,11 @@ serve(async (req) => {
           webhook_api_key: webhookApiKey,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'org_id' })
+
+      if (intError) {
+        console.error('Failed to store HeyReach integration', { orgId, userId: user.id, error: intError.message })
+        return errorResponse('Failed to store integration record')
+      }
 
       // Build webhook URL for the user to configure in HeyReach
       const webhookUrl = `${supabaseUrl}/functions/v1/heyreach-webhook?key=${webhookApiKey}`
