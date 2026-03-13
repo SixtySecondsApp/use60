@@ -1,122 +1,589 @@
 {
   "version": 2,
-  "runSlug": "native-scheduling-engine",
-  "project": "Native Scheduling Engine",
-  "description": "Close 6 UX and reliability gaps in 60's scheduling infrastructure inspired by Claude Code Desktop patterns",
-  "phase": "build",
-  "startedAt": "2026-03-07T12:00:00Z",
-  "lastUpdatedAt": "2026-03-07T12:00:00Z",
+  "runSlug": "heyreach-ops-integration",
+  "project": "HeyReach + Ops Bidirectional Integration",
+  "description": "Full bidirectional HeyReach LinkedIn automation integration with Ops tables \u2014 push leads to campaigns, pull engagement data back, webhook-driven activity tracking, ops rules automation, multi-sender support, scheduled sync, and LinkedIn activity timeline columns",
+  "phase": "deliver",
+  "startedAt": "2026-03-12T10:00:00Z",
+  "lastUpdatedAt": "2026-03-13T12:00:00Z",
   "input": {
-    "type": "description",
-    "source": "Claude Code scheduled tasks analysis + codebase audit",
+    "type": "interactive",
+    "source": "Discovery conversation with user + HeyReach API research",
     "extractedRequirements": [
-      "Friendly frequency picker replacing raw cron input",
-      "Agent schedule runs table and history UI",
-      "Missed run catch-up logic",
-      "Per-schedule permission mode",
-      "One-shot reminders via copilot"
+      "Full bidirectional sync: push leads to HeyReach campaigns, pull engagement data back into Ops tables",
+      "Org-level HeyReach API key (one per org, all senders visible to team)",
+      "Webhook receiver for all 9 HeyReach event types (connection_request_sent/accepted, message_sent, message_reply_received, inmail_sent, inmail_reply_received, follow_sent, liked_post, viewed_profile, lead_tag_updated)",
+      "Wire all webhook events as Ops Rules triggers with all action types (task, Slack, deal stage, cell update, cross-integration, re-campaign)",
+      "Multi-sender support via column-based sender assignment in ops tables",
+      "Individual metric columns (reply_count, accept_status, last_contacted, etc.) toggleable per table",
+      "Combined LinkedIn Activity timeline view available via 'View Activity' button in row detail panel",
+      "Manual bulk push: select rows \u2192 'Push to HeyReach' action",
+      "Auto-push rules: 'When row added with filter X \u2192 auto-add to Campaign Y'",
+      "Scheduled sync: 'Every morning, push new rows matching filter to Campaign Z'",
+      "Webhook health monitoring: alert if webhooks silent for 24h",
+      "Campaign picker UI with field mapping (ops columns \u2192 HeyReach lead fields)",
+      "LinkedIn Sender column type for per-row sender assignment"
     ],
     "extractedConstraints": [
-      "Must not rebuild existing scheduler — extend only",
-      "Must follow existing patterns (React Query, explicit columns, maybeSingle)",
-      "Migrations must be idempotent (DROP POLICY IF EXISTS before CREATE)"
+      "HeyReach API auth: X-API-KEY header, 300 req/min rate limit",
+      "HeyReach webhooks: no HMAC signature \u2014 use API-key-based auth on our webhook URL",
+      "HeyReach webhook retries: 5 attempts over 24h on failure",
+      "Lead push requires: First Name, Last Name, LinkedIn URL (required), plus optional email, company, position, custom vars",
+      "Campaigns must exist in HeyReach already (cannot create via API)",
+      "Campaign must be Active for leads to be added",
+      "Follow existing integration patterns: instantly_org_credentials, heyreach_org_integrations, campaign_links",
+      "Use getCorsHeaders(req) for edge functions, pin supabase-js@2.43.4",
+      "Supabase auth only (no Clerk), maybeSingle() for optional records",
+      "Store credentials in service-role-only table, never expose to frontend"
     ],
     "openQuestions": [],
-    "answeredQuestions": []
+    "answeredQuestions": [
+      {
+        "q": "Primary use case?",
+        "a": "C \u2014 Full bidirectional sync"
+      },
+      {
+        "q": "Credential model?",
+        "a": "A \u2014 One org-level API key"
+      },
+      {
+        "q": "Which webhook events as rule triggers?",
+        "a": "All 9 events, all action types"
+      },
+      {
+        "q": "Activity timeline UX?",
+        "a": "C \u2014 Individual columns + timeline view in detail panel"
+      },
+      {
+        "q": "Push model?",
+        "a": "D \u2014 Manual + auto-push rules + scheduled sync"
+      },
+      {
+        "q": "Multi-sender assignment?",
+        "a": "A \u2014 Column-based per-row sender assignment"
+      }
+    ],
+    "briefImprovements": [
+      "BIDIRECTIONAL: Two-way sync from day one \u2014 auto-pull engagement data as live columns",
+      "AUTOMATION: Wire HeyReach webhook events into Ops Rules engine for cross-system triggers",
+      "MULTI-SENDER: Column-based LinkedIn sender assignment per row/segment",
+      "UX: LinkedIn Activity timeline column type \u2014 chronological feed per lead inline in ops table",
+      "OPS: Webhook health monitoring \u2014 heartbeat check, alert if silent 24h"
+    ]
+  },
+  "research": {
+    "heyreachApi": {
+      "auth": "X-API-KEY header",
+      "rateLimit": "300 req/min",
+      "endpoints": {
+        "campaigns": [
+          "list all (paginated)",
+          "get by ID",
+          "pause",
+          "resume",
+          "add leads",
+          "stop leads"
+        ],
+        "leads": [
+          "get details",
+          "add to campaign",
+          "add to list",
+          "get from list"
+        ],
+        "lists": [
+          "CRUD",
+          "get leads",
+          "get companies"
+        ],
+        "messages": [
+          "get conversations",
+          "send message"
+        ],
+        "senders": [
+          "get accounts",
+          "get by ID"
+        ],
+        "stats": [
+          "get overall stats"
+        ]
+      },
+      "webhookEvents": [
+        "connection_request_sent",
+        "connection_request_accepted",
+        "message_sent",
+        "message_reply_received",
+        "inmail_sent",
+        "inmail_reply_received",
+        "follow_sent",
+        "liked_post",
+        "viewed_profile",
+        "lead_tag_updated"
+      ],
+      "webhookRetries": "5 attempts over 24h",
+      "leadFields": {
+        "required": [
+          "first_name",
+          "last_name",
+          "linkedin_url"
+        ],
+        "optional": [
+          "email",
+          "company",
+          "position",
+          "location",
+          "summary",
+          "about",
+          "custom_variables"
+        ]
+      }
+    },
+    "codebaseFindings": {
+      "closestPattern": "Instantly integration (campaign links, field mapping, engagement sync)",
+      "existingWebhookInfra": "ops-table-inbound handler with API key auth, rate limiting, AI field mapping",
+      "credentialPattern": "{provider}_org_credentials (service-role-only) + {provider}_org_integrations (public)",
+      "opsRulesEngine": "supabase/migrations/20260205600000_ops_rules.sql \u2014 can wire webhook events as triggers",
+      "linkedinEnrichment": "Exists via Apify (profile scraping) but no outreach automation",
+      "existingHeyReachCode": "None \u2014 greenfield"
+    },
+    "risks": [
+      {
+        "severity": "high",
+        "area": "security",
+        "issue": "No HMAC signature from HeyReach webhooks",
+        "mitigation": "Use unique API key per org in webhook URL path for auth"
+      },
+      {
+        "severity": "medium",
+        "area": "data",
+        "issue": "Contact dedup across integrations",
+        "mitigation": "LinkedIn URL + email as compound identifier"
+      },
+      {
+        "severity": "medium",
+        "area": "data",
+        "issue": "Webhook payload schema not fully documented",
+        "mitigation": "Capture first payloads, log raw, iterate mapping"
+      },
+      {
+        "severity": "low",
+        "area": "performance",
+        "issue": "300 req/min API rate limit",
+        "mitigation": "Batch operations, queue large pushes"
+      }
+    ]
   },
   "phaseGates": {
-    "launch": { "status": "skipped", "completedAt": null },
-    "discover": { "status": "complete", "completedAt": "2026-03-07T11:30:00Z" },
-    "define": { "status": "complete", "completedAt": "2026-03-07T12:00:00Z" },
-    "plan": { "status": "complete", "completedAt": "2026-03-07T12:00:00Z" },
-    "sync": { "status": "skipped", "completedAt": null },
-    "build": { "status": "in_progress", "completedAt": null },
-    "deliver": { "status": "pending", "completedAt": null },
-    "housekeeping": { "status": "pending", "completedAt": null }
+    "launch": {
+      "status": "skipped",
+      "completedAt": null
+    },
+    "discover": {
+      "status": "complete",
+      "completedAt": "2026-03-12T10:30:00Z"
+    },
+    "define": {
+      "status": "complete",
+      "completedAt": "2026-03-12T11:00:00Z"
+    },
+    "plan": {
+      "status": "complete",
+      "completedAt": "2026-03-12T11:00:00Z"
+    },
+    "sync": {
+      "status": "complete",
+      "completedAt": "2026-03-12T11:00:00Z"
+    },
+    "build": {
+      "status": "complete",
+      "completedAt": "2026-03-13T12:00:00Z"
+    },
+    "deliver": {
+      "status": "in_progress",
+      "completedAt": null
+    },
+    "housekeeping": {
+      "status": "pending",
+      "completedAt": null
+    }
   },
   "team": {
-    "tier": 2,
-    "tierReason": "7 stories, 2 schema changes, familiar patterns, no external APIs",
-    "workers": { "model": "opus", "count": 1 },
-    "reviewer": { "model": "opus" }
+    "tier": 3,
+    "tierReason": "12 stories, schema changes, external API (HeyReach), ops rules wiring, new column types, webhook infra, scheduled sync \u2014 needs Opus oversight",
+    "complexityScore": {
+      "storyCount": 2,
+      "schemaChanges": 1,
+      "externalAPIs": 2,
+      "crossFeatureDeps": 1,
+      "securitySurface": 1,
+      "novelArchitecture": 1,
+      "total": 8,
+      "tier": 3
+    },
+    "workers": {
+      "model": "sonnet",
+      "count": 3
+    },
+    "reviewer": {
+      "model": "opus"
+    },
+    "architect": {
+      "model": "opus"
+    },
+    "manager": {
+      "model": "opus"
+    }
   },
-  "prdFile": "tasks/prd-native-scheduling-engine.md",
-  "branch": "feat/native-scheduling-engine",
+  "prdFile": "tasks/prd-heyreach-ops-integration.md",
+  "branch": "feature/heyreach-integration",
   "stories": [
     {
-      "id": "US-001",
-      "title": "Friendly Frequency Picker Component",
-      "type": "component",
-      "status": "pending",
+      "id": "HR-001",
+      "title": "Database Schema \u2014 HeyReach Integration Tables",
+      "type": "migration",
+      "status": "complete",
       "priority": 1,
-      "dependencies": { "stories": [], "schema": [] },
-      "parallelWith": ["US-003"],
-      "estimatedMinutes": 30
+      "group": 1,
+      "dependencies": [],
+      "visibility": "backend",
+      "description": "Create heyreach_org_credentials (service-role-only), heyreach_org_integrations (public metadata), heyreach_campaign_links (field mapping + sender), heyreach_sync_history (activity log). Extend source_type enums. RLS policies following Instantly pattern.",
+      "acceptance": [
+        "Migration creates heyreach_org_credentials with org_id PK, api_key TEXT NOT NULL, updated_at",
+        "Migration creates heyreach_org_integrations with id, org_id UNIQUE, connected_by_user_id, is_active, is_connected, connected_at, last_sync_at, last_webhook_received_at, created_at, updated_at",
+        "Migration creates heyreach_campaign_links with id, table_id FK, org_id FK, campaign_id TEXT, campaign_name, field_mapping JSONB, sender_column_key TEXT, auto_sync_engagement BOOLEAN, UNIQUE(table_id, campaign_id)",
+        "Migration creates heyreach_sync_history with id, table_id FK, campaign_id, sync_type CHECK, rows_processed, rows_succeeded, rows_failed, error_message, metadata JSONB",
+        "Extends dynamic_table_rows.source_type to include 'heyreach'",
+        "Adds dynamic_table_rows.heyreach_lead_id TEXT column",
+        "RLS: credentials service-role-only, integrations org-read/admin-write, campaign_links org-read/admin-write",
+        "All policies use DROP POLICY IF EXISTS before CREATE POLICY",
+        "Typecheck passes"
+      ]
     },
     {
-      "id": "US-002",
-      "title": "Wire FrequencyPicker into AgentTeamSettings",
-      "type": "integration",
-      "status": "pending",
+      "id": "HR-002",
+      "title": "Connection Setup \u2014 API Key & Config",
+      "type": "fullstack",
+      "status": "complete",
       "priority": 2,
-      "dependencies": { "stories": ["US-001"], "schema": [] },
-      "parallelWith": ["US-004"],
-      "estimatedMinutes": 15
+      "group": 1,
+      "dependencies": [
+        "HR-001"
+      ],
+      "visibility": "user-facing",
+      "description": "Edge function: heyreach-admin (connect/disconnect/validate). Frontend: HeyReachConfigModal with API key input, connection status, disconnect. Store credentials via service role.",
+      "acceptance": [
+        "Edge function heyreach-admin handles connect, disconnect, check_status actions",
+        "Connect validates API key by calling HeyReach API, stores in heyreach_org_credentials",
+        "Disconnect removes credentials, sets is_connected=false",
+        "HeyReachConfigModal wraps ConfigureModal with API key input and connection status",
+        "HeyReach card added to Integrations.tsx page",
+        "useHeyReachIntegration hook with isConnected, connect(apiKey), disconnect(), loading",
+        "Toast feedback on connect/disconnect",
+        "Edge function uses getCorsHeaders(req) and pins @supabase/supabase-js@2.43.4",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
     },
     {
-      "id": "US-003",
-      "title": "Agent Schedule Runs Migration",
-      "type": "schema",
-      "status": "pending",
+      "id": "HR-003",
+      "title": "Campaign Discovery & Linking",
+      "type": "fullstack",
+      "status": "complete",
       "priority": 3,
-      "dependencies": { "stories": [], "schema": [] },
-      "parallelWith": ["US-001"],
-      "estimatedMinutes": 15
+      "group": 2,
+      "dependencies": [
+        "HR-002"
+      ],
+      "visibility": "user-facing",
+      "description": "Edge function to list campaigns from HeyReach API. Campaign picker UI. Field mapping interface (ops columns \u2192 HeyReach lead fields). Create heyreach_campaign_links records.",
+      "acceptance": [
+        "heyreach-admin extended with list_campaigns and get_campaign_details actions",
+        "HeyReachCampaignPicker shows campaigns with name, status, sender count",
+        "Only Active campaigns can be linked",
+        "Field mapping UI maps HeyReach fields to ops table columns",
+        "Required fields (first_name, last_name, linkedin_url) validated before linking",
+        "Link Campaign creates heyreach_campaign_links record",
+        "Linked campaign shown in ops table toolbar with name + status badge",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
     },
     {
-      "id": "US-004",
-      "title": "Schedule Run History in AgentTeamSettings",
-      "type": "component",
-      "status": "pending",
+      "id": "HR-004",
+      "title": "Sender Account Management",
+      "type": "fullstack",
+      "status": "complete",
       "priority": 4,
-      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedule_runs"] },
-      "parallelWith": ["US-002"],
-      "estimatedMinutes": 30
+      "group": 2,
+      "dependencies": [
+        "HR-002"
+      ],
+      "visibility": "user-facing",
+      "description": "Fetch sender accounts from HeyReach API. 'LinkedIn Sender' column type for ops tables. Sender picker dropdown in column cells. Store sender assignment per row.",
+      "acceptance": [
+        "Edge function fetches sender accounts from HeyReach API",
+        "New ops table column type heyreach_sender with dropdown of available senders",
+        "Only senders assigned to linked campaign shown in dropdown",
+        "Selected sender stored as cell value (sender_id)",
+        "Bulk-assign sender action on selected rows",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
     },
     {
-      "id": "US-005",
-      "title": "Missed Run Catch-Up Logic",
-      "type": "service",
-      "status": "pending",
+      "id": "HR-005",
+      "title": "Webhook Receiver \u2014 All Events",
+      "type": "backend",
+      "status": "complete",
+      "priority": 3,
+      "group": 2,
+      "dependencies": [
+        "HR-001"
+      ],
+      "visibility": "backend",
+      "description": "Edge function: heyreach-webhook handler. Receive all 9 event types. API-key-based auth via URL query param. Parse payloads, resolve to ops table rows by LinkedIn URL/email. Log to heyreach_sync_history and integration_sync_logs. Rate limit 300 req/min.",
+      "acceptance": [
+        "Edge function heyreach-webhook receives POST requests with verify_jwt=false",
+        "Auth via API key in URL query parameter matched against heyreach_org_integrations",
+        "Handles all 9 event types",
+        "Resolves webhook to ops table row by LinkedIn URL (primary) or email (fallback)",
+        "Updates last_webhook_received_at on every event",
+        "Logs to integration_sync_logs with integration_name='heyreach'",
+        "Logs to heyreach_sync_history with sync_type='webhook_event'",
+        "Rate limit 300 req/min per org",
+        "Returns 200 on valid, 401 on invalid key, 429 on rate limit",
+        "Webhook URL displayed in HeyReachConfigModal for user to copy",
+        "Typecheck passes"
+      ]
+    },
+    {
+      "id": "HR-006",
+      "title": "Manual Push \u2014 Bulk Action",
+      "type": "fullstack",
+      "status": "complete",
       "priority": 5,
-      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedule_runs"] },
-      "parallelWith": ["US-006"],
-      "estimatedMinutes": 45
+      "group": 3,
+      "dependencies": [
+        "HR-003",
+        "HR-004"
+      ],
+      "visibility": "user-facing",
+      "description": "Bulk action 'Push to HeyReach' on selected ops table rows. Apply field mapping from campaign link. Respect sender column assignment. Batch via HeyReach API (100/request). Log to sync history. Toast feedback with success/fail counts.",
+      "acceptance": [
+        "Push to HeyReach bulk action in ops table toolbar when rows selected + campaign linked",
+        "Confirmation dialog shows count and campaign name",
+        "Validates required fields present on selected rows",
+        "Edge function heyreach-sync-outbound applies field mapping and batches at 100/request",
+        "Sender assignment from sender column included per row",
+        "Stores heyreach_lead_id on dynamic_table_rows",
+        "Logs to heyreach_sync_history and integration_sync_logs",
+        "Toast shows success/fail counts",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
     },
     {
-      "id": "US-006",
-      "title": "Per-Schedule Permission Mode",
-      "type": "schema+service",
-      "status": "pending",
+      "id": "HR-007",
+      "title": "Inbound Engagement Sync \u2014 Live Columns",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 5,
+      "group": 3,
+      "dependencies": [
+        "HR-005",
+        "HR-003"
+      ],
+      "visibility": "user-facing",
+      "description": "Process webhook events into ops table cells. Auto-create engagement columns. Upsert cells with source_type='heyreach'. Individual columns toggleable by user.",
+      "acceptance": [
+        "Auto-create engagement columns on first webhook: heyreach_status, heyreach_connection_status, heyreach_reply_count, heyreach_last_activity, heyreach_last_activity_type, heyreach_message_count",
+        "Webhook events update corresponding cells",
+        "heyreach_status computed from latest event type",
+        "Users can toggle engagement columns visible/hidden",
+        "Engagement column cells are read-only",
+        "Column headers show HeyReach icon indicator",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
+    },
+    {
+      "id": "HR-008",
+      "title": "LinkedIn Activity Timeline",
+      "type": "frontend",
+      "status": "complete",
       "priority": 6,
-      "dependencies": { "stories": ["US-003"], "schema": ["agent_schedules"] },
-      "parallelWith": ["US-005"],
-      "estimatedMinutes": 45
+      "group": 3,
+      "dependencies": [
+        "HR-007"
+      ],
+      "visibility": "user-facing",
+      "description": "'View Activity' button in row detail panel. Chronological feed of all HeyReach events per lead. Rich timeline UI with icons, timestamps, message previews.",
+      "acceptance": [
+        "View LinkedIn Activity button in row detail panel when row has HeyReach data",
+        "Timeline shows events in reverse chronological order",
+        "Each event has icon per type, description, relative timestamp",
+        "Reply events highlighted with accent color",
+        "Message events show preview text if available",
+        "Empty state: No LinkedIn activity yet",
+        "Timeline accessible from row detail panel and clicking heyreach_last_activity cell",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
     },
     {
-      "id": "US-007",
-      "title": "One-Shot Reminders",
-      "type": "schema+service",
-      "status": "pending",
+      "id": "HR-009",
+      "title": "Ops Rules \u2014 Webhook Event Triggers",
+      "type": "fullstack",
+      "status": "complete",
       "priority": 7,
-      "dependencies": { "stories": [], "schema": [] },
-      "parallelWith": [],
-      "estimatedMinutes": 45
+      "group": 4,
+      "dependencies": [
+        "HR-005"
+      ],
+      "visibility": "user-facing",
+      "description": "Wire all 9 HeyReach webhook events as ops rule triggers. Support all action types. Rule builder UI for HeyReach events.",
+      "acceptance": [
+        "Migration extends ops_rules.trigger_type CHECK to include 10 heyreach_ trigger types",
+        "Migration extends ops_rules.action_type CHECK to include push_to_heyreach",
+        "Webhook handler evaluates matching ops rules after each event",
+        "Rule builder UI shows HeyReach triggers under LinkedIn/HeyReach category",
+        "All existing action types work with HeyReach triggers",
+        "push_to_heyreach action type picks target campaign + reuses field mapping",
+        "Rule execution logged to ops_rule_executions",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
+    },
+    {
+      "id": "HR-010",
+      "title": "Auto-Push Rules",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 8,
+      "group": 4,
+      "dependencies": [
+        "HR-006"
+      ],
+      "visibility": "user-facing",
+      "description": "When row added/updated matching filter \u2192 auto-push to HeyReach Campaign. Field mapping inherited from campaign link. Debounce to prevent duplicates.",
+      "acceptance": [
+        "row_created/cell_updated trigger + push_to_heyreach action wired together",
+        "Filter conditions match on any cell value",
+        "Field mapping inherited from heyreach_campaign_links",
+        "Debounce: skip duplicate push to same campaign within 5 minutes",
+        "Auto-push logged with metadata.trigger='auto_rule'",
+        "Rule can be paused/resumed independently",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
+    },
+    {
+      "id": "HR-011",
+      "title": "Scheduled Sync",
+      "type": "backend",
+      "status": "complete",
+      "priority": 8,
+      "group": 4,
+      "dependencies": [
+        "HR-006"
+      ],
+      "visibility": "user-facing",
+      "description": "Scheduled push of new rows matching filter to HeyReach campaign. Configurable frequency. Only pushes rows created after last_push_at.",
+      "acceptance": [
+        "sync_schedule JSONB column added to heyreach_campaign_links",
+        "Edge function heyreach-scheduled-sync queries enabled schedules and pushes matching rows",
+        "Only new rows logic: push rows created after last_push_at matching filter",
+        "Schedule config UI: frequency picker + filter builder + enable toggle",
+        "Logged with metadata.trigger='scheduled'",
+        "Callable by Supabase cron",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
+    },
+    {
+      "id": "HR-012",
+      "title": "Webhook Health Monitoring",
+      "type": "fullstack",
+      "status": "complete",
+      "priority": 9,
+      "group": 4,
+      "dependencies": [
+        "HR-005"
+      ],
+      "visibility": "user-facing",
+      "description": "Monitor webhook health. Alert if silent 24h. Health indicator in config modal.",
+      "acceptance": [
+        "Edge function heyreach-health-check runs every 6 hours",
+        "Flags integration as unhealthy if last_webhook_received_at > 24h ago with active campaign links",
+        "Unhealthy triggers Slack notification + in-app toast",
+        "Health indicator in HeyReachConfigModal: green/yellow/red dot",
+        "Last webhook received timestamp displayed",
+        "Skips integrations with no campaign links",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ]
     }
   ],
-  "execution": {
-    "totalStories": 7,
-    "completedStories": 0,
-    "lastUpdated": "2026-03-07T12:00:00Z"
+  "parallelGroups": [
+    {
+      "group": 1,
+      "stories": [
+        "HR-001",
+        "HR-002"
+      ],
+      "description": "Foundation \u2014 schema + connection"
+    },
+    {
+      "group": 2,
+      "stories": [
+        "HR-003",
+        "HR-004",
+        "HR-005"
+      ],
+      "description": "Core \u2014 campaigns, senders, webhooks (parallel)"
+    },
+    {
+      "group": 3,
+      "stories": [
+        "HR-006",
+        "HR-007",
+        "HR-008"
+      ],
+      "description": "Sync \u2014 push, pull, timeline (parallel)"
+    },
+    {
+      "group": 4,
+      "stories": [
+        "HR-009",
+        "HR-010",
+        "HR-011",
+        "HR-012"
+      ],
+      "description": "Advanced \u2014 rules, auto-push, scheduling, monitoring (parallel)"
+    }
+  ],
+  "estimates": {
+    "optimistic": "6 hours",
+    "realistic": "10 hours",
+    "pessimistic": "14 hours"
+  },
+  "mvp": {
+    "stories": [
+      "HR-001",
+      "HR-002",
+      "HR-003",
+      "HR-005",
+      "HR-006",
+      "HR-007"
+    ],
+    "estimate": "5-6 hours",
+    "delivers": "Connect HeyReach, link campaigns, push leads manually, receive webhook events, see engagement data in ops table",
+    "deferred": [
+      "HR-004 (multi-sender)",
+      "HR-008 (timeline)",
+      "HR-009 (rules)",
+      "HR-010 (auto-push)",
+      "HR-011 (scheduled)",
+      "HR-012 (monitoring)"
+    ]
   }
 }
