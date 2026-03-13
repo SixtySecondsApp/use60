@@ -465,8 +465,8 @@ export default function CreditsSettingsPage() {
         initialPack={purchaseInitialPack}
       />
 
-      {/* Post-migration onboarding modal (shown once per user) */}
-      <CreditMigrationModal />
+      {/* Post-migration onboarding modal (shown once per user, suppressed when purchase modal is open) */}
+      <CreditMigrationModal suppress={purchaseModalOpen} />
     </SettingsPageWrapper>
   );
 }
