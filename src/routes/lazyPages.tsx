@@ -50,15 +50,19 @@ export const DemoPrepBriefing = lazyWithRetry(() => import('@/pages/platform/Dem
 export const DemoConversationalCopilot = lazyWithRetry(() => import('@/pages/platform/DemoConversationalCopilot'));
 export const AutonomyDemoPage = lazyWithRetry(() => import('@/pages/platform/AutonomyDemoPage'));
 export const AutopilotTestPage = lazyWithRetry(() => import('@/pages/platform/AutopilotTestPage'));
+export const ProactiveTeammateDemo = lazyWithRetry(() => import('@/pages/platform/ProactiveTeammateDemo'));
 export const AgentTeamsLiveDemoPage = lazyWithRetry(() => import('@/pages/platform/AgentTeamsLiveDemoPage'));
 export const AgentAbilitiesPage = lazyWithRetry(() => import('@/pages/platform/AgentAbilitiesPage'));
 export const OrchestratorDashboard = lazyWithRetry(() => import('@/pages/platform/OrchestratorDashboard'));
 export const CreditSystemDemo = lazyWithRetry(() => import('@/pages/platform/CreditSystemDemo'));
 export const AIModelAdmin = lazyWithRetry(() => import('@/pages/platform/AIModelAdmin'));
-export const GodsEyeAdmin = lazyWithRetry(() => import('@/pages/platform/GodsEyeAdmin'));
+export const GoldenEyeAdmin = lazyWithRetry(() => import('@/pages/platform/GoldenEyeAdmin'));
+export const GodsEyeAdmin = GoldenEyeAdmin; // alias — App.tsx uses this name
 export const CreditMenuAdmin = lazyWithRetry(() => import('@/pages/platform/CreditMenuAdmin'));
+export const CouponAdmin = lazyWithRetry(() => import('@/pages/platform/CouponAdmin'));
 export const EnrichmentComparisonDemo = lazyWithRetry(() => import('@/pages/demo/EnrichmentComparison'));
 export const ResearchComparisonDemo = lazyWithRetry(() => import('@/pages/demo/ResearchComparison'));
+export const GeminiModelComparison = lazyWithRetry(() => import('@/pages/demo/GeminiModelComparison'));
 export const ExaAbilitiesDemo = lazyWithRetry(() => import('@/pages/demo/ExaAbilitiesDemo'));
 export const EmailSequenceTest = lazyWithRetry(() => import('@/pages/demo/EmailSequenceTest'));
 export const AgentResearchDemo = lazyWithRetry(() => import('@/pages/demo/AgentResearchDemo'));
@@ -98,6 +102,7 @@ export const ProcessMaps = lazyWithRetry(() => import('@/pages/admin/ProcessMaps
 export const VSLAnalyticsTests = lazyWithRetry(() => import('@/pages/admin/VSLAnalyticsTests'));
 export const CronJobsAdmin = lazyWithRetry(() => import('@/pages/admin/CronJobsAdmin'));
 export const ApiMonitor = lazyWithRetry(() => import('@/pages/admin/ApiMonitor'));
+export const MigrationTracker = lazyWithRetry(() => import('@/pages/admin/MigrationTracker'));
 export const BillingAnalytics = lazyWithRetry(() => import('@/pages/admin/BillingAnalytics'));
 export const SaasAdminDashboard = lazyWithRetry(() => import('@/pages/SaasAdminDashboard'));
 export const QuickAddSimulator = lazyWithRetry(() => import('@/pages/platform/QuickAddSimulator'));
@@ -160,13 +165,16 @@ export const FreepikFlow = lazyWithRetry(() => import('@/components/workflows/Fr
 export const Copilot = lazyWithRetry(() => import('@/components/Copilot').then(m => ({ default: m.Copilot })));
 export const CopilotPage = lazyWithRetry(() => import('@/pages/CopilotPage'));
 export const LandingPageBuilderPage = lazyWithRetry(() => import('@/pages/LandingPageBuilderPage'));
+export const LandingPagesPage = lazyWithRetry(() => import('@/pages/platform/LandingPagesPage'));
 export const CampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/CampaignsPage'));
 export const AbmCampaignsPage = lazyWithRetry(() => import('@/pages/campaigns/AbmCampaignsPage'));
 export const OutreachAnalyticsPage = lazyWithRetry(() => import('@/pages/OutreachAnalyticsPage'));
 export const WinLossPage = lazyWithRetry(() => import('@/pages/WinLossPage'));
 export const OpsPage = lazyWithRetry(() => import('@/pages/OpsPage'));
 export const OpsDetailPage = lazyWithRetry(() => import('@/pages/OpsDetailPage'));
+export const PipelineGalleryPage = lazyWithRetry(() => import('@/pages/PipelineGalleryPage'));
 export const ApifyOpsPage = lazyWithRetry(() => import('@/pages/ApifyOpsPage'));
+export const LinkedInAdLibraryPage = lazyWithRetry(() => import('@/pages/LinkedInAdLibraryPage'));
 export const ProspectingPage = lazyWithRetry(() => import('@/pages/ProspectingPage'));
 export const FactProfilesPage = lazyWithRetry(() => import('@/pages/FactProfilesPage'));
 export const ProfilesPage = lazyWithRetry(() => import('@/pages/ProfilesPage'));
@@ -208,6 +216,10 @@ export const AutonomySettingsPage = lazyWithRetry(() => import('@/pages/settings
 export const AutonomyDashboardPage = lazyWithRetry(() => import('@/pages/AutonomyDashboardPage'));
 export const SearchResultsPage = lazyWithRetry(() => import('@/pages/SearchResultsPage'));
 export const CompetitiveIntelPage = lazyWithRetry(() => import('@/pages/CompetitiveIntelPage'));
+export const AdLibraryPage = lazyWithRetry(() => import('@/pages/AdLibrary'));
+export const LinkedInRevenuePage = lazyWithRetry(() => import('@/pages/LinkedInRevenue'));
+export const LinkedInAnalyticsPage = lazyWithRetry(() => import('@/pages/LinkedInAnalytics'));
+export const LinkedInHubPage = lazyWithRetry(() => import('@/pages/LinkedInHub'));
 export const FollowUpDraftsPage = lazyWithRetry(() => import('@/pages/FollowUpDraftsPage'));
 export const CoachingDashboardPage = lazyWithRetry(() => import('@/pages/CoachingDashboardPage'));
 export const CoachingRepDetailPage = lazyWithRetry(() => import('@/pages/CoachingRepDetailPage'));

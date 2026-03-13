@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase/clientV2';
+import { getClientIp } from '@/lib/utils/clientIp';
 
 export interface DocArticle {
   id?: string;
@@ -107,6 +108,7 @@ export function useSupportChat() {
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
         // Call docs-agent with SSE streaming
+        const clientIp = await getClientIp();
         const response = await fetch(`${supabaseUrl}/functions/v1/docs-agent`, {
           method: 'POST',
           headers: {
@@ -117,6 +119,7 @@ export function useSupportChat() {
           body: JSON.stringify({
             message: query,
             conversationHistory: conversationHistoryRef.current.slice(0, -1), // exclude current message
+            ...(clientIp ? { client_ip: clientIp } : {}),
           }),
         });
 

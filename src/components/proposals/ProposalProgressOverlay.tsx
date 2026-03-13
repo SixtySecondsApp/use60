@@ -81,7 +81,7 @@ interface ProposalRow {
   generation_status: PipelineStatus | null;
   pdf_url: string | null;
   credits_used: number | null;
-  metadata: Record<string, unknown> | null;
+  rendered_html: string | null;
   brand_config: Record<string, unknown> | null;
   style_config: Record<string, unknown> | null;
   trigger_type: string | null;
@@ -318,7 +318,7 @@ export default function ProposalProgressOverlay({
   const fetchProposal = useCallback(async () => {
     const { data, error: fetchErr } = await supabase
       .from('proposals')
-      .select('id, title, generation_status, pdf_url, credits_used, metadata, brand_config, style_config, trigger_type, created_at, updated_at')
+      .select('id, title, generation_status, pdf_url, credits_used, brand_config, style_config, trigger_type, rendered_html, created_at, updated_at')
       .eq('id', proposalId)
       .maybeSingle();
 
@@ -334,7 +334,7 @@ export default function ProposalProgressOverlay({
 
       if (row.generation_status === 'failed') {
         const pipelineError =
-          (row.metadata as Record<string, unknown> | null)?._pipeline_error as string | undefined;
+          (row.style_config as Record<string, unknown> | null)?._pipeline_error as string | undefined;
         setError(pipelineError || 'Proposal generation failed. Please try again.');
       }
     }
@@ -519,7 +519,7 @@ export default function ProposalProgressOverlay({
 
           if (next.generation_status === 'failed') {
             const pipelineError =
-              (next.metadata as Record<string, unknown> | null)?._pipeline_error as string | undefined;
+              (next.style_config as Record<string, unknown> | null)?._pipeline_error as string | undefined;
             setError(pipelineError || 'Proposal generation failed. Please try again.');
           } else {
             setError(null);
@@ -567,10 +567,9 @@ export default function ProposalProgressOverlay({
   const isDone = status === 'ready';
   const isFailed = status === 'failed';
 
-  // Thumbnail is written to brand_config by proposal-render-gotenberg; fall back to metadata
+  // Thumbnail is written to brand_config by proposal-render-gotenberg
   const thumbnailUrl =
-    ((proposal?.brand_config as Record<string, unknown> | null)?.thumbnail_url as string | undefined) ||
-    ((proposal?.metadata as Record<string, unknown> | null)?.thumbnail_url as string | undefined);
+    (proposal?.brand_config as Record<string, unknown> | null)?.thumbnail_url as string | undefined;
 
   // -------------------------------------------------------------------
   // Render helpers

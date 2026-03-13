@@ -55,9 +55,15 @@ const truncateToWordLimit = (text: string): string => {
   return words.length > MAX_TEXTAREA_WORDS ? words.slice(0, MAX_TEXTAREA_WORDS).join(' ') : text;
 };
 
-// Sanitize input to prevent injection attacks
+// Sanitize input to prevent injection attacks and code block pasting
 const sanitizeInput = (input: string): string => {
-  return input.trim().replace(/[<>]/g, '');
+  return input
+    .trim()
+    .replace(/[<>]/g, '')
+    .replace(/[{}[\]]/g, '')       // Strip common code delimiters
+    .replace(/;\s*$/gm, '')        // Strip trailing semicolons
+    .replace(/^\s*(const|let|var|function|import|export|class|return)\s/gm, '') // Strip code keywords
+    .trim();
 };
 
 export function SkillsConfigStep() {
@@ -329,7 +335,12 @@ export function SkillsConfigStep() {
             {/* Tone */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-300">Tone Description</label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-300">Tone Description</label>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
+                    Editable Suggestions
+                  </span>
+                </div>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
                   {countWords(activeConfig.tone || '')}/{MAX_TEXTAREA_WORDS} words
                 </span>
@@ -339,7 +350,7 @@ export function SkillsConfigStep() {
                 onChange={(e) => {
                   const truncated = truncateToWordLimit(e.target.value);
                   if (truncated.length <= MAX_TEXTAREA_LENGTH) {
-                    updateSkillConfig('brand_voice', { tone: sanitizeInput(truncated) });
+                    updateSkillConfig('brand_voice', { tone: sanitizeInput(truncated), avoid: activeConfig.avoid || [] });
                   }
                 }}
                 maxLength={MAX_TEXTAREA_LENGTH}
@@ -365,10 +376,11 @@ export function SkillsConfigStep() {
                       }
                       const newAvoid = [...(activeConfig.avoid || [])];
                       newAvoid[i] = sanitized;
-                      updateSkillConfig('brand_voice', { avoid: newAvoid });
+                      updateSkillConfig('brand_voice', { tone: activeConfig.tone || '', avoid: newAvoid });
                     }}
                     onDelete={() => {
                       updateSkillConfig('brand_voice', {
+                        tone: activeConfig.tone || '',
                         avoid: activeConfig.avoid?.filter((_: string, idx: number) => idx !== i),
                       });
                     }}
@@ -424,6 +436,7 @@ export function SkillsConfigStep() {
                             return;
                           }
                           updateSkillConfig('brand_voice', {
+                            tone: activeConfig.tone || '',
                             avoid: [...(activeConfig.avoid || []), sanitized],
                           });
                           setShowAddWordModal(false);
@@ -453,6 +466,7 @@ export function SkillsConfigStep() {
                             return;
                           }
                           updateSkillConfig('brand_voice', {
+                            tone: activeConfig.tone || '',
                             avoid: [...(activeConfig.avoid || []), sanitized],
                           });
                           setShowAddWordModal(false);
@@ -560,9 +574,14 @@ export function SkillsConfigStep() {
             {/* Company Profile */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-300">
-                  Ideal Company Profile
-                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-300">
+                    Ideal Company Profile
+                  </label>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
+                    Editable Suggestions
+                  </span>
+                </div>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
                   {countWords(activeConfig.companyProfile || '')}/{MAX_TEXTAREA_WORDS} words
                 </span>
@@ -572,7 +591,7 @@ export function SkillsConfigStep() {
                 onChange={(e) => {
                   const truncated = truncateToWordLimit(e.target.value);
                   if (truncated.length <= MAX_TEXTAREA_LENGTH) {
-                    updateSkillConfig('icp', { companyProfile: sanitizeInput(truncated) });
+                    updateSkillConfig('icp', { companyProfile: sanitizeInput(truncated), buyerPersona: activeConfig.buyerPersona || '', buyingSignals: activeConfig.buyingSignals || [] });
                   }
                 }}
                 maxLength={MAX_TEXTAREA_LENGTH}
@@ -583,9 +602,14 @@ export function SkillsConfigStep() {
             {/* Buyer Persona */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-300">
-                  Buyer Persona
-                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-300">
+                    Buyer Persona
+                  </label>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
+                    Editable Suggestions
+                  </span>
+                </div>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300">
                   {countWords(activeConfig.buyerPersona || '')}/{MAX_TEXTAREA_WORDS} words
                 </span>
@@ -595,7 +619,7 @@ export function SkillsConfigStep() {
                 onChange={(e) => {
                   const truncated = truncateToWordLimit(e.target.value);
                   if (truncated.length <= MAX_TEXTAREA_LENGTH) {
-                    updateSkillConfig('icp', { buyerPersona: sanitizeInput(truncated) });
+                    updateSkillConfig('icp', { buyerPersona: sanitizeInput(truncated), companyProfile: activeConfig.companyProfile || '', buyingSignals: activeConfig.buyingSignals || [] });
                   }
                 }}
                 maxLength={MAX_TEXTAREA_LENGTH}
@@ -791,8 +815,8 @@ export function SkillsConfigStep() {
         <div className="p-4 sm:p-6">
           <div className="mb-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-400">{activeSkill.description}</p>
-              <span className="text-sm text-gray-500">
+              <h3 className="text-base font-medium text-gray-200">{activeSkill.description}</h3>
+              <span className="text-sm text-gray-500 whitespace-nowrap ml-3">
                 {currentSkillIndex + 1} of {SKILLS.length}
               </span>
             </div>
@@ -805,7 +829,7 @@ export function SkillsConfigStep() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
-              className="min-h-[400px] max-h-[calc(100vh-240px)] overflow-y-auto pr-1"
+              className="min-h-[480px] max-h-[calc(100vh-200px)] overflow-y-auto pr-1"
             >
               {renderSkillConfig()}
             </motion.div>

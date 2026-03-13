@@ -1148,8 +1148,8 @@ export default function OrganizationManagementPage() {
                     disabled={isSendingInvite}
                     className="bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2.5 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent disabled:opacity-50 min-w-[140px]"
                   >
-                    <option value="admin">Admin</option>
                     <option value="member">Member</option>
+                    <option value="admin">Admin</option>
                   </select>
                   <Button
                     type="submit"

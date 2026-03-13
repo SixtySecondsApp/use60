@@ -1,18 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   ConfigureModal,
   ConfigSection,
-  ConfigToggle,
   DangerZone,
 } from './ConfigureModal';
-import { Button } from '@/components/ui/button';
-import { useGoogleIntegration } from '@/lib/stores/integrationStore';
-import { GoogleServiceStatus, googleApi, GoogleTestConnectionResult } from '@/lib/api/googleIntegration';
-import { Mail, Calendar, FolderOpen, ListTodo, RefreshCw, Loader2, CheckCircle, XCircle, TestTube2, Sparkles, Tag, ChevronDown, ChevronUp } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Calendar, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useUser } from '@/lib/hooks/useUser';
-import { ProcessMapButton } from '@/components/process-maps';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useIntegrationStore } from '@/lib/stores/integrationStore';
 
 interface GoogleConfigModalProps {
   open: boolean;
@@ -20,109 +15,28 @@ interface GoogleConfigModalProps {
 }
 
 export function GoogleConfigModal({ open, onOpenChange }: GoogleConfigModalProps) {
-  const navigate = useNavigate();
-  const {
-    integration,
-    email,
-    services,
-    isLoading,
-    disconnect,
-    toggleService,
-  } = useGoogleIntegration();
-
-  const [localServices, setLocalServices] = useState<GoogleServiceStatus>(services);
-  const [isSaving, setIsSaving] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<GoogleTestConnectionResult | null>(null);
-  const [showCategorizationSettings, setShowCategorizationSettings] = useState(false);
-  const { user } = useUser();
-
-  // Sync local state with store
-  useEffect(() => {
-    setLocalServices(services);
-  }, [services]);
-
-  const hasChanges =
-    localServices.gmail !== services.gmail ||
-    localServices.calendar !== services.calendar ||
-    localServices.drive !== services.drive;
-
-  const handleToggle = (service: keyof GoogleServiceStatus) => {
-    setLocalServices((prev) => ({
-      ...prev,
-      [service]: !prev[service],
-    }));
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      // Toggle each service that changed
-      const serviceKeys: (keyof GoogleServiceStatus)[] = ['gmail', 'calendar', 'drive'];
-      for (const key of serviceKeys) {
-        if (localServices[key] !== services[key]) {
-          await toggleService(key);
-        }
-      }
-      toast.success('Settings saved successfully');
-      onOpenChange(false);
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to save settings');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const nylasCalendarConnected = useIntegrationStore(state => state.google.nylasCalendarConnected);
+  const email = useIntegrationStore(state => state.google.email);
+  const checkGoogleConnection = useIntegrationStore(state => state.checkGoogleConnection);
 
   const handleDisconnect = async () => {
     setIsDisconnecting(true);
     try {
-      await disconnect();
-      toast.success('Google account disconnected');
+      // Deactivate Nylas integration
+      await supabase
+        .from('nylas_integrations')
+        .update({ is_active: false })
+        .eq('is_active', true);
+
+      // Re-check connection status to update store
+      await checkGoogleConnection();
+      toast.success('Google Calendar disconnected');
       onOpenChange(false);
     } catch (error: any) {
       toast.error(error.message || 'Failed to disconnect');
     } finally {
       setIsDisconnecting(false);
-    }
-  };
-
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    setTestResult(null);
-    try {
-      const result = await googleApi.testConnection();
-      setTestResult(result);
-      if (result.allServicesOk) {
-        toast.success('All Google services are working correctly!');
-      } else if (result.connected) {
-        toast.warning('Some services may have issues. Check details below.');
-      } else {
-        toast.error('Connection test failed. Please reconnect your Google account.');
-      }
-    } catch (error: any) {
-      // Log full error for debugging
-      console.error('[GoogleConfigModal] Test connection error:', error);
-      console.error('[GoogleConfigModal] Error details:', {
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-        context: error.context,
-      });
-      toast.error(error.message || 'Failed to test connection');
-      setTestResult({
-        success: false,
-        connected: false,
-        message: error.message,
-        services: {
-          userinfo: { ok: false, message: 'Test failed' },
-          gmail: { ok: false, message: 'Test failed' },
-          calendar: { ok: false, message: 'Test failed' },
-          tasks: { ok: false, message: 'Test failed' },
-        },
-      });
-    } finally {
-      setIsTesting(false);
     }
   };
 
@@ -153,271 +67,34 @@ export function GoogleConfigModal({ open, onOpenChange }: GoogleConfigModalProps
       open={open}
       onOpenChange={onOpenChange}
       integrationId="google-workspace"
-      integrationName="Google Workspace"
+      integrationName="Google Calendar"
       connectedEmail={email || undefined}
       fallbackIcon={<GoogleLogo />}
-      onSave={handleSave}
-      isSaving={isSaving}
-      hasChanges={hasChanges}
     >
-      {/* Services Section */}
-      <ConfigSection title="Enabled Services">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/50">
-            <div className="flex items-center space-x-3">
-              <Mail className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Gmail</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Send emails directly from contact pages
-                </p>
-              </div>
-            </div>
-            <ConfigToggle
-              label=""
-              checked={localServices.gmail}
-              onChange={() => handleToggle('gmail')}
-              disabled={isLoading}
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/50">
-            <div className="flex items-center space-x-3">
-              <Calendar className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  Google Calendar
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Schedule meetings and sync events
-                </p>
-              </div>
-            </div>
-            <ConfigToggle
-              label=""
-              checked={localServices.calendar}
-              onChange={() => handleToggle('calendar')}
-              disabled={isLoading}
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/50">
-            <div className="flex items-center space-x-3">
-              <FolderOpen className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Google Drive</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Access and share files
-                </p>
-              </div>
-            </div>
-            <ConfigToggle
-              label=""
-              checked={localServices.drive}
-              onChange={() => handleToggle('drive')}
-              disabled={isLoading}
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/50">
-            <div className="flex items-center space-x-3">
-              <ListTodo className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Google Tasks</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Sync tasks bidirectionally
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                onOpenChange(false);
-                navigate('/tasks');
-              }}
-              className="text-xs"
-            >
-              Manage
-            </Button>
-          </div>
-        </div>
-      </ConfigSection>
-
-      {/* Email Categorization (Fyxer-style) */}
-      <ConfigSection title="Email Categorization">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Sparkles className="w-5 h-5 text-purple-500" />
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  Smart Categorization
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Auto-categorize emails: To Respond, FYI, Marketing
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowCategorizationSettings(!showCategorizationSettings)}
-              className="text-xs"
-            >
-              {showCategorizationSettings ? (
-                <ChevronUp className="w-4 h-4" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
-              )}
-            </Button>
-          </div>
-          
-          {showCategorizationSettings && (
-            <div className="pt-3 border-t border-gray-100 dark:border-gray-700/50 space-y-3">
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Emails are categorized every 15 minutes. Categories feed into the Slack Sales Assistant for follow-up reminders.
+      {/* Calendar Status */}
+      <ConfigSection title="Calendar Sync">
+        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-100 dark:border-gray-700/50">
+          <div className="flex items-center space-x-3">
+            <Calendar className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                Google Calendar
               </p>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex items-center gap-2 p-2 rounded bg-green-50 dark:bg-green-900/20">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="text-xs text-green-700 dark:text-green-300">To Respond</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-blue-50 dark:bg-blue-900/20">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span className="text-xs text-blue-700 dark:text-blue-300">FYI</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-orange-50 dark:bg-orange-900/20">
-                  <div className="w-2 h-2 rounded-full bg-orange-500" />
-                  <span className="text-xs text-orange-700 dark:text-orange-300">Marketing</span>
-                </div>
-                <div className="flex items-center gap-2 p-2 rounded bg-purple-50 dark:bg-purple-900/20">
-                  <div className="w-2 h-2 rounded-full bg-purple-500" />
-                  <span className="text-xs text-purple-700 dark:text-purple-300">Automated</span>
-                </div>
-              </div>
-              
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  onOpenChange(false);
-                  navigate('/admin/email-categorization');
-                }}
-                className="w-full text-xs"
-              >
-                <Tag className="w-4 h-4 mr-2" />
-                Configure Categories
-              </Button>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Events synced via Nylas
+              </p>
             </div>
-          )}
-        </div>
-      </ConfigSection>
-
-      {/* Connection Info */}
-      <ConfigSection title="Connection Info">
-        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-          <div className="flex justify-between">
-            <span>Connected:</span>
-            <span>
-              {integration && new Date(integration.created_at).toLocaleDateString()}
-            </span>
           </div>
-          {integration?.expires_at && (
-            <div className="flex justify-between">
-              <span className="flex items-center gap-1">
-                <RefreshCw className="w-3 h-3" />
-                Token expires:
-              </span>
-              <span>{new Date(integration.expires_at).toLocaleDateString()}</span>
-            </div>
-          )}
-        </div>
-      </ConfigSection>
-
-      {/* Test Connection */}
-      <ConfigSection title="Test Connection">
-        <div className="space-y-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Verify your Google integration is working correctly by testing all connected services.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTestConnection}
-              disabled={isTesting || !integration}
-              className="flex-1"
-            >
-            {isTesting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Testing...
-                </>
-              ) : (
-                <>
-                  <TestTube2 className="w-4 h-4 mr-2" />
-                  Test Connection
-                </>
-              )}
-            </Button>
-            <ProcessMapButton
-              processType="integration"
-              processName="google"
-              variant="outline"
-              size="sm"
-              label="Process Map"
-            />
-          </div>
-          
-          {testResult && (
-            <div className="space-y-2 mt-3">
-              <div className="flex items-center gap-2 text-sm">
-                {testResult.allServicesOk ? (
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                ) : (
-                  <XCircle className="w-4 h-4 text-amber-500" />
-                )}
-                <span className={testResult.allServicesOk ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}>
-                  {testResult.allServicesOk ? 'All services working' : 'Some services have issues'}
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {Object.entries(testResult.services).map(([service, result]) => (
-                  <div 
-                    key={service}
-                    className={`flex items-center gap-1.5 p-2 rounded ${
-                      result.ok 
-                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-                        : 'bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400'
-                    }`}
-                  >
-                    {result.ok ? (
-                      <CheckCircle className="w-3 h-3" />
-                    ) : (
-                      <XCircle className="w-3 h-3" />
-                    )}
-                    <span className="capitalize">{service}</span>
-                  </div>
-                ))}
-              </div>
-              
-              {testResult.testedAt && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  Tested at {new Date(testResult.testedAt).toLocaleTimeString()}
-                </p>
-              )}
-            </div>
+          {nylasCalendarConnected && (
+            <CheckCircle className="w-5 h-5 text-green-500" />
           )}
         </div>
       </ConfigSection>
 
       {/* Danger Zone */}
       <DangerZone
-        title="Disconnect Google"
-        description="Stops Gmail, Calendar, and Drive sync."
+        title="Disconnect Google Calendar"
+        description="Stops calendar event sync."
         buttonText="Disconnect"
         onAction={handleDisconnect}
         isLoading={isDisconnecting}

@@ -577,13 +577,23 @@ async function handleGenerateFollowUp(
           .eq('is_default', true)
           .maybeSingle();
 
-        // Also load words_to_avoid from tone settings
+        // Load full tone settings for writing style enrichment
         const { data: toneSettings } = await supabase
           .from('user_tone_settings')
-          .select('words_to_avoid')
+          .select('formality_level, words_to_avoid, preferred_keywords, cta_style, email_sign_off, tone_style, brand_voice_description, sample_phrases')
           .eq('user_id', userId)
           .eq('content_type', 'email')
           .maybeSingle();
+
+        // Build writing style by blending user_writing_styles + user_tone_settings
+        const ts = toneSettings as Record<string, unknown> | null;
+        // Map formality_level (1-10 DB scale) to 1-5 WritingStyle scale
+        const tsFormalityMapped = ts?.formality_level ? Math.ceil((ts.formality_level as number) / 2) : null;
+        const tsWordsToAvoid = Array.isArray(ts?.words_to_avoid) ? ts.words_to_avoid as string[] : [];
+        const tsPreferredKeywords = Array.isArray(ts?.preferred_keywords) ? ts.preferred_keywords as string[] : [];
+        const tsSamplePhrases = Array.isArray(ts?.sample_phrases) ? ts.sample_phrases as string[] : [];
+        const tsSignOff = typeof ts?.email_sign_off === 'string' ? ts.email_sign_off : null;
+        const tsBrandVoice = typeof ts?.brand_voice_description === 'string' ? ts.brand_voice_description : null;
 
         let writingStyle = null;
         if (styleRow) {
@@ -592,18 +602,31 @@ async function handleGenerateFollowUp(
           const tone = meta.tone || {};
           const vocabulary = meta.vocabulary || {};
           const greetingsSignoffs = meta.greetings_signoffs || {};
+          const basePhrases = Array.isArray(vocabulary.common_phrases) ? vocabulary.common_phrases
+            : Array.isArray(meta.common_phrases) ? meta.common_phrases : [];
+          const baseSignoffs = Array.isArray(greetingsSignoffs.signoffs) ? greetingsSignoffs.signoffs
+            : Array.isArray(meta.signoffs) ? meta.signoffs : [];
           writingStyle = {
             name: (styleRow as any).name || 'Default',
-            toneDescription: (styleRow as any).tone_description || '',
-            formality: tone.formality ?? meta.formality ?? 3,
+            toneDescription: tsBrandVoice || (styleRow as any).tone_description || '',
+            formality: tsFormalityMapped ?? tone.formality ?? meta.formality ?? 3,
             directness: tone.directness ?? meta.directness ?? 3,
             warmth: tone.warmth ?? meta.warmth ?? 3,
-            commonPhrases: Array.isArray(vocabulary.common_phrases) ? vocabulary.common_phrases
-              : Array.isArray(meta.common_phrases) ? meta.common_phrases : [],
-            signoffs: Array.isArray(greetingsSignoffs.signoffs) ? greetingsSignoffs.signoffs
-              : Array.isArray(meta.signoffs) ? meta.signoffs : [],
-            wordsToAvoid: Array.isArray((toneSettings as any)?.words_to_avoid)
-              ? (toneSettings as any).words_to_avoid : [],
+            commonPhrases: [...new Set([...basePhrases, ...tsSamplePhrases, ...tsPreferredKeywords])],
+            signoffs: tsSignOff ? [tsSignOff, ...baseSignoffs] : baseSignoffs,
+            wordsToAvoid: [...new Set([...tsWordsToAvoid])],
+          };
+        } else if (ts) {
+          // No writing style trained, but tone settings exist — build from tone settings alone
+          writingStyle = {
+            name: 'Default',
+            toneDescription: tsBrandVoice || '',
+            formality: tsFormalityMapped ?? 3,
+            directness: 3,
+            warmth: 3,
+            commonPhrases: [...new Set([...tsSamplePhrases, ...tsPreferredKeywords])],
+            signoffs: tsSignOff ? [tsSignOff] : [],
+            wordsToAvoid: [...new Set([...tsWordsToAvoid])],
           };
         }
 

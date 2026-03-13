@@ -1,0 +1,1 @@
+-- Migration applied directly to staging; stub for CI compatibility

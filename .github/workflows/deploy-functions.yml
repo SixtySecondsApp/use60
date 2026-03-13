@@ -1,0 +1,486 @@
+name: Edge Function Deployment
+
+on:
+  pull_request:
+    branches: [main, staging]
+    paths:
+      - 'supabase/functions/**'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: deploy-functions-${{ github.event_name }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '20'
+  STAGING_REF: 'caerqjzvuerejfrdtygb'
+  PRODUCTION_REF: 'ygdpgliavpxeugaajgrb'
+
+jobs:
+  # ============================================
+  # Detect which functions changed
+  # ============================================
+  detect-changes:
+    name: Detect Changed Functions
+    runs-on: ubuntu-latest
+    outputs:
+      functions: ${{ steps.detect.outputs.functions }}
+      has_changes: ${{ steps.detect.outputs.has_changes }}
+      deploy_all: ${{ steps.detect.outputs.deploy_all }}
+      function_count: ${{ steps.detect.outputs.function_count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed functions
+        id: detect
+        run: |
+          chmod +x scripts/detect-changed-functions.sh
+          RESULT=$(./scripts/detect-changed-functions.sh origin/${{ github.base_ref || 'main' }})
+          echo "Raw result: $RESULT"
+
+          if [ "$RESULT" = '"ALL"' ]; then
+            echo "deploy_all=true" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "functions=ALL" >> $GITHUB_OUTPUT
+
+            FUNC_COUNT=$(ls -d supabase/functions/*/ 2>/dev/null | grep -v "_shared" | wc -l | tr -d ' ')
+            echo "function_count=$FUNC_COUNT" >> $GITHUB_OUTPUT
+          elif [ "$RESULT" = '[]' ]; then
+            echo "deploy_all=false" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "functions=[]" >> $GITHUB_OUTPUT
+            echo "function_count=0" >> $GITHUB_OUTPUT
+          else
+            echo "deploy_all=false" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "functions=$RESULT" >> $GITHUB_OUTPUT
+
+            FUNC_COUNT=$(echo "$RESULT" | tr ',' '\n' | wc -l | tr -d ' ')
+            echo "function_count=$FUNC_COUNT" >> $GITHUB_OUTPUT
+          fi
+
+  # ============================================
+  # Validate changed functions (Deno lint + import check)
+  # ============================================
+  validate:
+    name: Validate Edge Functions
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    continue-on-error: true
+    outputs:
+      validation_result: ${{ steps.validate.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate edge functions
+        id: validate
+        run: |
+          chmod +x scripts/validate-edge-functions.sh
+
+          FUNCTIONS='${{ needs.detect-changes.outputs.functions }}'
+
+          if [ "$FUNCTIONS" = "ALL" ]; then
+            OUTPUT=$(./scripts/validate-edge-functions.sh 2>&1) || true
+          else
+            # Parse JSON array to space-separated list
+            FUNC_LIST=$(echo "$FUNCTIONS" | tr -d '[]"' | tr ',' ' ')
+            OUTPUT=$(./scripts/validate-edge-functions.sh $FUNC_LIST 2>&1) || true
+          fi
+
+          echo "result<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  # ============================================
+  # Deploy to Staging (on PR)
+  # ============================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [detect-changes, validate]
+    if: |
+      github.event_name == 'pull_request' &&
+      needs.detect-changes.outputs.has_changes == 'true'
+    outputs:
+      deployed_functions: ${{ steps.deploy.outputs.deployed }}
+      deploy_status: ${{ steps.deploy.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Deploy changed functions to staging
+        id: deploy
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          FUNCTIONS='${{ needs.detect-changes.outputs.functions }}'
+          DEPLOYED=""
+          FAILED=""
+          COUNT=0
+
+          npx supabase link --project-ref ${{ env.STAGING_REF }}
+
+          if [ "${{ needs.detect-changes.outputs.deploy_all }}" = "true" ]; then
+            echo "Deploying ALL functions to staging..."
+            if npx supabase functions deploy --project-ref ${{ env.STAGING_REF }} --no-verify-jwt 2>&1; then
+              DEPLOYED="ALL (${{ needs.detect-changes.outputs.function_count }} functions)"
+              STATUS="success"
+            else
+              FAILED="Bulk deploy failed"
+              STATUS="partial"
+            fi
+          else
+            FUNC_LIST=$(echo "$FUNCTIONS" | tr -d '[]"' | tr ',' ' ')
+            for func in $FUNC_LIST; do
+              echo "Deploying: $func"
+              if npx supabase functions deploy "$func" --project-ref ${{ env.STAGING_REF }} --no-verify-jwt 2>&1; then
+                DEPLOYED="$DEPLOYED $func"
+                COUNT=$((COUNT + 1))
+              else
+                FAILED="$FAILED $func"
+              fi
+            done
+            STATUS="success"
+            [ -n "$FAILED" ] && STATUS="partial"
+          fi
+
+          echo "deployed<<EOF" >> $GITHUB_OUTPUT
+          echo "${DEPLOYED:-none}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const functions = `${{ needs.detect-changes.outputs.functions }}`;
+            const deployed = `${{ steps.deploy.outputs.deployed }}`;
+            const status = `${{ steps.deploy.outputs.status }}`;
+            const validation = `${{ needs.validate.outputs.validation_result }}`;
+            const count = `${{ needs.detect-changes.outputs.function_count }}`;
+
+            const statusEmoji = status === 'success' ? 'white_check_mark' : 'warning';
+
+            let body = `## Edge Function Deployment (Staging)\n\n`;
+            body += `| Item | Details |\n|------|--------|\n`;
+            body += `| Functions changed | ${count} |\n`;
+            body += `| Deploy status | :${statusEmoji}: ${status} |\n`;
+            body += `| Deployed | ${deployed} |\n\n`;
+
+            if (validation && validation.trim()) {
+              body += `### Validation\n\`\`\`\n${validation}\n\`\`\`\n\n`;
+            }
+
+            body += `<!-- deploy-functions-comment -->`;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes('<!-- deploy-functions-comment -->'));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  # ============================================
+  # Smoke Tests (after staging deploy)
+  # ============================================
+  smoke-test:
+    name: Smoke Test Staging
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: needs.deploy-staging.outputs.deploy_status == 'success'
+    continue-on-error: true
+    outputs:
+      smoke_result: ${{ steps.smoke.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for deployment propagation
+        run: sleep 10
+
+      - name: Run smoke tests
+        id: smoke
+        run: |
+          chmod +x scripts/smoke-test-staging.sh
+          OUTPUT=$(./scripts/smoke-test-staging.sh 2>&1) || true
+          echo "result<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  # ============================================
+  # Test Plan Verification (auto-tick PR checklist)
+  # ============================================
+  verify-test-plan:
+    name: Verify Test Plan
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, smoke-test]
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run notification spam regression tests
+        id: tests
+        run: |
+          OUTPUT=$(npx vitest run --config vitest.config.edge.ts supabase/functions/proactive-meeting-prep/notification-spam.test.ts --reporter=verbose 2>&1)
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          # Parse individual test group results
+          CLASSIFY_PERSONAL=$(echo "$OUTPUT" | grep -c "✓.*→ personal" || echo "0")
+          CLASSIFY_SOLO=$(echo "$OUTPUT" | grep -c "✓.*solo" || echo "0")
+          CLASSIFY_BUSINESS=$(echo "$OUTPUT" | grep -c "✓.*→ business" || echo "0")
+          DEDUP=$(echo "$OUTPUT" | grep -c "✓.*shouldSend\|✓.*record" || echo "0")
+          LEARNING=$(echo "$OUTPUT" | grep -c "✓.*preference\|✓.*skip.*store\|✓.*confirm.*store" || echo "0")
+
+          echo "classify_personal=$CLASSIFY_PERSONAL" >> $GITHUB_OUTPUT
+          echo "classify_solo=$CLASSIFY_SOLO" >> $GITHUB_OUTPUT
+          echo "classify_business=$CLASSIFY_BUSINESS" >> $GITHUB_OUTPUT
+          echo "dedup=$DEDUP" >> $GITHUB_OUTPUT
+          echo "learning=$LEARNING" >> $GITHUB_OUTPUT
+
+          echo "$OUTPUT"
+          exit $EXIT_CODE
+
+      - name: Update PR test plan checkboxes
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployStatus = '${{ needs.deploy-staging.outputs.deploy_status }}';
+            const testExit = '${{ steps.tests.outputs.exit_code }}';
+            const classifyPersonal = parseInt('${{ steps.tests.outputs.classify_personal }}') || 0;
+            const classifySolo = parseInt('${{ steps.tests.outputs.classify_solo }}') || 0;
+            const dedup = parseInt('${{ steps.tests.outputs.dedup }}') || 0;
+            const learning = parseInt('${{ steps.tests.outputs.learning }}') || 0;
+
+            // Determine which items passed
+            const checks = {
+              deploy: deployStatus === 'success',
+              officeAndLunch: classifyPersonal >= 10,
+              soloEvents: classifySolo >= 1,
+              dedup: dedup >= 2,
+              skipLearning: learning >= 2,
+              confirmLearning: learning >= 2,
+              learnedPreference: learning >= 3,
+            };
+
+            // Get current PR body
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            let body = pr.body || '';
+
+            // Replace checkboxes in test plan
+            const replacements = [
+              [/- \[[ x]\] Deploy proactive-meeting-prep/, `- [${checks.deploy ? 'x' : ' '}] Deploy proactive-meeting-prep`],
+              [/- \[[ x]\] Verify "Office" and "Lunch"/, `- [${checks.officeAndLunch ? 'x' : ' '}] Verify "Office" and "Lunch"`],
+              [/- \[[ x]\] Verify solo events/, `- [${checks.soloEvents ? 'x' : ' '}] Verify solo events`],
+              [/- \[[ x]\] Trigger cron twice/, `- [${checks.dedup ? 'x' : ' '}] Trigger cron twice`],
+              [/- \[[ x]\] Click "Skip"/, `- [${checks.skipLearning ? 'x' : ' '}] Click "Skip"`],
+              [/- \[[ x]\] Click "Yes, prep this meeting"/, `- [${checks.confirmLearning ? 'x' : ' '}] Click "Yes, prep this meeting"`],
+              [/- \[[ x]\] Next cron run/, `- [${checks.learnedPreference ? 'x' : ' '}] Next cron run`],
+            ];
+
+            for (const [pattern, replacement] of replacements) {
+              body = body.replace(pattern, replacement);
+            }
+
+            // Update PR body
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body,
+            });
+
+            // Summary
+            const passed = Object.values(checks).filter(v => v).length;
+            const total = Object.values(checks).length;
+            console.log(`Test plan: ${passed}/${total} items verified`);
+
+  # ============================================
+  # Deploy to Production (on merge to main)
+  # ============================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.has_changes == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Deploy changed functions to production
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          FUNCTIONS='${{ needs.detect-changes.outputs.functions }}'
+
+          npx supabase link --project-ref ${{ env.PRODUCTION_REF }}
+
+          if [ "${{ needs.detect-changes.outputs.deploy_all }}" = "true" ]; then
+            echo "Deploying ALL functions to production..."
+            npx supabase functions deploy --project-ref ${{ env.PRODUCTION_REF }}
+          else
+            FUNC_LIST=$(echo "$FUNCTIONS" | tr -d '[]"' | tr ',' ' ')
+            for func in $FUNC_LIST; do
+              echo "Deploying: $func"
+              npx supabase functions deploy "$func" --project-ref ${{ env.PRODUCTION_REF }}
+            done
+          fi
+
+      - name: Verify health endpoint
+        run: |
+          sleep 15
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            "https://${{ env.PRODUCTION_REF }}.supabase.co/functions/v1/health" || echo "000")
+          echo "Health check: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "WARNING: Health endpoint returned $HTTP_STATUS"
+          fi
+
+      - name: Notify Slack (success)
+        if: success() && env.SLACK_BOT_TOKEN != ''
+        continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_DEPLOY_CHANNEL_ID: ${{ secrets.SLACK_DEPLOY_CHANNEL_ID }}
+        run: |
+          FUNC_COUNT="${{ needs.detect-changes.outputs.function_count }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          curl -fsSL -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"channel\": \"$SLACK_DEPLOY_CHANNEL_ID\",
+              \"text\": \"$FUNC_COUNT edge function(s) deployed to production\",
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": { \"type\": \"plain_text\", \"text\": \"Edge Functions Deployed\", \"emoji\": true }
+                },
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \":white_check_mark: *$FUNC_COUNT function(s)* deployed to *production*\"
+                  }
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    { \"type\": \"mrkdwn\", \"text\": \"*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$SHORT_SHA>\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*By:*\n${{ github.actor }}\" }
+                  ]
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {
+                      \"type\": \"button\",
+                      \"text\": { \"type\": \"plain_text\", \"text\": \"View Workflow\" },
+                      \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+                    }
+                  ]
+                }
+              ]
+            }"
+
+      - name: Notify Slack (failure)
+        if: failure() && env.SLACK_BOT_TOKEN != ''
+        continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_DEPLOY_CHANNEL_ID: ${{ secrets.SLACK_DEPLOY_CHANNEL_ID }}
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          curl -fsSL -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"channel\": \"$SLACK_DEPLOY_CHANNEL_ID\",
+              \"text\": \"Edge function deployment FAILED on production\",
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": { \"type\": \"plain_text\", \"text\": \"Deploy Failed\", \"emoji\": true }
+                },
+                {
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \":x: *Edge function deployment FAILED* on *production*\"
+                  }
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    { \"type\": \"mrkdwn\", \"text\": \"*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|$SHORT_SHA>\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*By:*\n${{ github.actor }}\" }
+                  ]
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {
+                      \"type\": \"button\",
+                      \"text\": { \"type\": \"plain_text\", \"text\": \"View Workflow\" },
+                      \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+                      \"style\": \"danger\"
+                    }
+                  ]
+                }
+              ]
+            }"

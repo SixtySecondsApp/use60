@@ -1,4 +1,4 @@
-import { getCorsHeaders } from '../_shared/corsHelper.ts'
+import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts'
 import { handleDocs } from './handlers/docs.ts'
 import { handleDocsCreate } from './handlers/docs_create.ts'
 import { handleDrive } from './handlers/drive.ts'
@@ -24,8 +24,9 @@ const HANDLERS: Record<string, (req: Request) => Promise<Response>> = {
 }
 
 Deno.serve(async (req: Request) => {
+  const preflight = handleCorsPreflightRequest(req)
+  if (preflight) return preflight
   const cors = getCorsHeaders(req)
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed. Use POST with JSON body: { action, origin?, scope_tier? }' }), { status: 405, headers: { ...cors, 'Content-Type': 'application/json' } })
   }

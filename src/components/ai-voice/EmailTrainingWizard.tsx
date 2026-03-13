@@ -137,7 +137,7 @@ export function EmailTrainingWizard({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Mail className="w-5 h-5 text-[#37bd7e]" />

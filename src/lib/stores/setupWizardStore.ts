@@ -47,6 +47,7 @@ interface SetupWizardState {
   fetchProgress: (userId: string, orgId: string) => Promise<void>;
   completeStep: (userId: string, orgId: string, step: SetupStep) => Promise<CompleteStepResult>;
   markStepCompleted: (step: SetupStep) => void;
+  resetProgress: (userId: string, orgId: string) => Promise<boolean>;
   reset: () => void;
 }
 
@@ -172,6 +173,35 @@ export const useSetupWizardStore = create<SetupWizardState>((set, get) => ({
       newSteps[step] = { ...newSteps[step], completed: true };
       return { steps: newSteps };
     });
+  },
+
+  resetProgress: async (userId, orgId) => {
+    try {
+      const { data, error } = await supabase.rpc('reset_setup_wizard_progress', {
+        p_user_id: userId,
+        p_org_id: orgId,
+      } as any);
+
+      if (error) {
+        console.error('Failed to reset setup wizard progress:', error);
+        return false;
+      }
+
+      // Reset local state
+      set({
+        steps: { ...defaultSteps },
+        allCompleted: false,
+        isDismissed: false,
+        currentStep: 'calendar',
+        showWelcome: true,
+        hasFetched: false,
+      });
+
+      return true;
+    } catch (err) {
+      console.error('Setup wizard reset error:', err);
+      return false;
+    }
   },
 
   reset: () => set({

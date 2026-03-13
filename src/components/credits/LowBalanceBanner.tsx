@@ -1,9 +1,10 @@
 /**
  * LowBalanceBanner — Dismissible warning banner when credit balance is low.
  *
- * Amber at ~20% remaining, red at ~10% remaining.
- * If auto top-up is active, shows friendly message about upcoming top-up.
- * Links to the credits settings page.
+ * Amber at projected <14 days remaining, red at <7 days.
+ * Dismissed once per session (persisted in sessionStorage).
+ * Hidden on the credits settings page (user is already managing credits).
+ * "Top Up" navigates to credits page instead of opening another modal.
  */
 
 import { useState } from 'react';
@@ -14,7 +15,6 @@ import { useOrgId } from '@/lib/contexts/OrgContext';
 import { isUserAdmin } from '@/lib/utils/adminUtils';
 import { useUser } from '@/lib/hooks/useUser';
 import { cn } from '@/lib/utils';
-import { useCreditTopUp } from '@/components/credits/CreditTopUpPrompt';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
 
@@ -25,8 +25,13 @@ export function LowBalanceBanner() {
   const isAdmin = userData ? isUserAdmin(userData) : false;
   const navigate = useNavigate();
   const location = useLocation();
-  const { openTopUp } = useCreditTopUp();
-  const [dismissed, setDismissed] = useState(false);
+
+  // Session-persistent dismiss — once dismissed, stays hidden for the entire browser session
+  const dismissKey = orgId ? `sixty_low_balance_dismissed_${orgId}` : null;
+  const [dismissed, setDismissed] = useState(() =>
+    dismissKey ? sessionStorage.getItem(dismissKey) === 'true' : false
+  );
+
   const welcomeKey = orgId ? `sixty_welcome_credits_${orgId}` : null;
   const [showWelcome, setShowWelcome] = useState(() =>
     welcomeKey ? localStorage.getItem(welcomeKey) === 'pending' : false
@@ -48,9 +53,12 @@ export function LowBalanceBanner() {
     staleTime: 60_000,
   });
 
-  // Don't render on full-height pages like Copilot — the banner steals viewport space.
+  // Hide on pages where banner is redundant or disruptive
   const isFullHeightPage = location.pathname.startsWith('/copilot');
-  if (!orgId || isLoading || costEventsLoading || !data || dismissed || isFullHeightPage) return null;
+  const isCreditsPage = location.pathname.startsWith('/settings/credits');
+  const isBillingPage = location.pathname.startsWith('/settings/billing');
+
+  if (!orgId || isLoading || costEventsLoading || !data || dismissed || isFullHeightPage || isCreditsPage || isBillingPage) return null;
 
   const { balance, projectedDaysRemaining, autoTopUp } = data;
 
@@ -58,12 +66,10 @@ export function LowBalanceBanner() {
   const hasUsageData = projectedDaysRemaining >= 0;
 
   // Determine low-balance thresholds using projected days
-  // Amber: <14 days remaining (roughly 20% if avg usage),  Red: <7 days (roughly 10%)
   const isRedLow = balance > 0 && hasUsageData && projectedDaysRemaining < 7;
   const isAmberLow = balance > 0 && hasUsageData && projectedDaysRemaining >= 7 && projectedDaysRemaining < 14;
 
   // Welcome credits banner — shown once after onboarding.
-  // Only show if balance > 0; if the credit grant failed, clear the flag and fall through to normal logic.
   if (showWelcome && balance <= 0) {
     if (welcomeKey) localStorage.removeItem(welcomeKey);
     setShowWelcome(false);
@@ -88,11 +94,9 @@ export function LowBalanceBanner() {
     );
   }
 
-  // Suppress the red "depleted" banner for brand-new users.
-  // Two conditions: (1) no cost events at all, or (2) welcome credits were recently granted
-  // (onboarding fires research-fact-profile which creates cost events, so we can't rely on count alone)
+  // Suppress the red "depleted" banner for brand-new users
   if (isZero && !costEventsLoading && (costEventCount ?? 0) === 0) return null;
-  if (isZero && showWelcome) return null; // Still in onboarding welcome phase
+  if (isZero && showWelcome) return null;
 
   if (!isZero && !isRedLow && !isAmberLow) return null;
 
@@ -102,6 +106,11 @@ export function LowBalanceBanner() {
   const formattedBalance = balance % 1 === 0
     ? `${Math.round(balance)} credits`
     : `${balance.toFixed(1)} credits`;
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    if (dismissKey) sessionStorage.setItem(dismissKey, 'true');
+  };
 
   return (
     <div
@@ -135,7 +144,7 @@ export function LowBalanceBanner() {
       </span>
       {isAdmin && !autoTopUpEnabled && (
         <button
-          onClick={() => openTopUp({ currentBalance: balance })}
+          onClick={() => navigate('/settings/credits')}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors flex-shrink-0',
             isZero || isRedLow
@@ -156,7 +165,7 @@ export function LowBalanceBanner() {
         </button>
       )}
       <button
-        onClick={() => setDismissed(true)}
+        onClick={handleDismiss}
         className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 flex-shrink-0"
         aria-label="Dismiss"
       >

@@ -76,6 +76,9 @@ CREATE EXTENSION IF NOT EXISTS "citext" WITH SCHEMA "extensions";
 
 -- COMMENT ON EXTENSION "citext" IS 'data type for case-insensitive character strings';
 
+-- Fix: set search_path so unqualified "citext" type resolves on Supabase preview branches
+-- (Supabase may install the extension in extensions schema instead of public)
+SELECT pg_catalog.set_config('search_path', 'public, extensions', false);
 
 --
 -- Name: pg_graphql; Type: EXTENSION; Schema: -; Owner: -

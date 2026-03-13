@@ -91,7 +91,7 @@ const EMPTY_RESEARCH_DATA: ProductProfileResearchData = {
 }
 
 const LOG_PREFIX = '[research-product-profile]'
-const GEMINI_MODEL = 'gemini-2.0-flash'
+const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview'
 
 // ---------------------------------------------------------------------------
 // Website scraping helper

@@ -222,8 +222,8 @@ async function sendViaEmail(
     to: candidate.email,
     subject: emailContent.subject,
     html: emailContent.bodyHtml,
-    from: "noreply@use60.com",
-    fromName: "Sixty",
+    from: "app@use60.com",
+    fromName: "60",
   });
 
   if (!result.success) {

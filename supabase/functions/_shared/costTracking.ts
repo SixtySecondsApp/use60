@@ -901,9 +901,29 @@ export async function checkArBudget(
   }
 }
 
+// =============================================================================
+// Client IP Extraction
+// =============================================================================
 
+/**
+ * Extract the client IP address from a request.
+ * Checks standard proxy headers before falling back to the connection info.
+ */
+export function extractClientIp(req: Request): string | undefined {
+  // Cloudflare
+  const cfIp = req.headers.get('cf-connecting-ip');
+  if (cfIp) return cfIp;
 
+  // Standard proxy header (first entry is the real client)
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
 
+  // Fly.io / other proxies
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp;
+
+  return undefined;
+}
 
 
 

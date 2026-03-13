@@ -1,0 +1,197 @@
+{
+  "project": {
+    "name": "Settings Page Fixes (TSK-0455)",
+    "runSlug": "settings-page-fixes",
+    "branchName": "fix/settings-page",
+    "prdFile": "tasks/prd-settings-page-fixes.md",
+    "createdAt": "2026-03-12T12:00:00Z"
+  },
+  "features": [
+    {
+      "id": "settings-page-fixes",
+      "name": "Settings Page Fixes (TSK-0455)",
+      "status": "in_progress",
+      "createdAt": "2026-03-12T12:00:00Z"
+    }
+  ],
+  "stories": [
+    {
+      "id": "SET-001",
+      "feature": "settings-page-fixes",
+      "title": "Hide Task Auto-Sync, Smart Listening, and Proactive Agent from Settings",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SET-002"],
+      "acceptance": [
+        "Task Auto-Sync removed from allSettingsSections in Settings.tsx",
+        "Smart Listening removed from allSettingsSections in Settings.tsx",
+        "Proactive Agent removed from allSettingsSections in Settings.tsx",
+        "Routes commented out or removed in App.tsx",
+        "No dead links in settings sidebar",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/pages/Settings.tsx",
+        "src/App.tsx"
+      ],
+      "notes": "Remove/comment the nav items from allSettingsSections array and the routes from App.tsx"
+    },
+    {
+      "id": "SET-002",
+      "feature": "settings-page-fixes",
+      "title": "Fix Off-Centre Dialogs in Settings",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SET-001"],
+      "acceptance": [
+        "EmailTrainingWizard DialogContent has proper centering",
+        "Other settings dialogs checked for centering issues",
+        "Dialogs render below fixed top bar (not behind it)",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/ai-voice/EmailTrainingWizard.tsx"
+      ],
+      "notes": "Check DialogContent centering. May need to add top-offset class per CLAUDE.md SheetContent rule."
+    },
+    {
+      "id": "SET-003",
+      "feature": "settings-page-fixes",
+      "title": "Verify and Fix Follow Up Configuration Workflows",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Add Default Workflows seeds 3 default workflows",
+        "Workflows can be edited and saved",
+        "Workflows can be deleted",
+        "Workflows persist after page refresh",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/settings/FollowUpSettings.tsx"
+      ],
+      "notes": "Investigate the OrgProposalWorkflowService CRUD. May already work — verify code path end-to-end."
+    },
+    {
+      "id": "SET-004",
+      "feature": "settings-page-fixes",
+      "title": "Fix Google Workspace Service Toggle Persistence",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Toggling OFF a service and Save persists the change to DB",
+        "Page reload shows correct toggle state",
+        "service_preferences column exists on google_integrations",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/components/integrations/GoogleWorkspaceSettings.tsx",
+        "src/lib/api/googleIntegration.ts"
+      ],
+      "notes": "Check if service_preferences JSONB column exists. If null defaults all to true, fix the save path."
+    },
+    {
+      "id": "SET-005",
+      "feature": "settings-page-fixes",
+      "title": "Fix Email Sync Button",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 5,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "Sync Emails button triggers sync process",
+        "Progress indicator shows during sync",
+        "Emails Synced count updates after completion",
+        "If Google not connected, button disabled with message",
+        "Error states handled with toast feedback",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/health/EmailSyncPanel.tsx",
+        "src/lib/hooks/useEmailSync.ts"
+      ],
+      "notes": "Check if emailSyncService calls an edge function. Verify Google connection prerequisite."
+    },
+    {
+      "id": "SET-006",
+      "feature": "settings-page-fixes",
+      "title": "Fix Organization Invitation Role Assignment",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 6,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SET-007"],
+      "acceptance": [
+        "Member role saves as 'member' in organization_invitations table",
+        "Admin role saves as 'admin' in organization_invitations table",
+        "Invitations list displays correct role per invite",
+        "Role dropdown value passed through full chain: UI → service → DB",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/pages/settings/OrganizationManagementPage.tsx",
+        "src/lib/services/invitationService.ts"
+      ],
+      "notes": "Trace role param from UI dropdown through handleSendInvite → createInvitation → DB insert"
+    },
+    {
+      "id": "SET-007",
+      "feature": "settings-page-fixes",
+      "title": "Fix Organization Invitation Email Delivery",
+      "type": "backend",
+      "status": "pending",
+      "priority": 7,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["SET-006"],
+      "acceptance": [
+        "Admin and Member invites both trigger email delivery",
+        "send-router edge function handles organization_invitation type",
+        "Clear error message when email delivery fails",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/services/invitationService.ts",
+        "supabase/functions/send-router/index.ts"
+      ],
+      "notes": "Investigate send-router for invitation email handler. Check if Encharge/email provider is wired."
+    }
+  ],
+  "execution": {
+    "totalStories": 7,
+    "completedStories": 0,
+    "parallelGroups": [
+      { "group": 1, "stories": ["SET-001", "SET-002"], "reason": "Independent UI changes" },
+      { "group": 2, "stories": ["SET-003"], "reason": "Follow-up config investigation" },
+      { "group": 3, "stories": ["SET-004"], "reason": "Google Workspace toggle fix" },
+      { "group": 4, "stories": ["SET-005"], "reason": "Email sync fix" },
+      { "group": 5, "stories": ["SET-006", "SET-007"], "reason": "Related invitation bugs" }
+    ],
+    "estimatedTotalMinutes": 135,
+    "lastUpdated": "2026-03-12T12:00:00Z"
+  }
+}

@@ -28,6 +28,7 @@ import { handleIntelligenceIndex } from './handlers/intelligence-index.ts'
 import { handleIntelligenceSearch } from './handlers/intelligence-search.ts'
 import { handleLimitWarningEmail } from './handlers/limit-warning-email.ts'
 import { handleProcessStructuredSummary } from './handlers/process-structured-summary.ts'
+import { handleShareVideoUrl } from './handlers/share-video-url.ts'
 
 const HANDLERS: Record<string, (req: Request) => Promise<Response>> = {
   aggregate_insights_query: handleAggregateInsightsQuery,
@@ -37,6 +38,7 @@ const HANDLERS: Record<string, (req: Request) => Promise<Response>> = {
   intelligence_search: handleIntelligenceSearch,
   limit_warning_email: handleLimitWarningEmail,
   process_structured_summary: handleProcessStructuredSummary,
+  share_video_url: handleShareVideoUrl,
 }
 
 Deno.serve(async (req: Request) => {

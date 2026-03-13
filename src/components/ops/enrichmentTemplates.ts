@@ -13,6 +13,11 @@ import {
   Target,
   Shield,
   UserCircle,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Fingerprint,
+  Briefcase,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -128,5 +133,39 @@ export const DEAL_ENRICHMENT_TEMPLATES: EnrichmentTemplate[] = [
     prompt: 'Analyze the stakeholders involved in @deal_name at @company_name. Based on roles, seniority, and engagement patterns (meeting count, responsiveness), assess each stakeholder\'s influence level and alignment with the deal. Provide recommendations for engagement strategy.',
     icon: UserCircle,
     description: 'AI analyzes contacts and their roles/influence in the deal',
+  },
+];
+
+/** BetterContact enrichment templates — waterfall email/phone enrichment */
+export const BETTERCONTACT_TEMPLATES: EnrichmentTemplate[] = [
+  {
+    name: 'Verified Email',
+    prompt: 'Find verified work email address via BetterContact waterfall enrichment',
+    icon: Mail,
+    description: 'Verified email from 20+ data providers',
+  },
+  {
+    name: 'Phone Number',
+    prompt: 'Find verified direct phone number via BetterContact',
+    icon: Phone,
+    description: 'Mobile and direct phone numbers',
+  },
+  {
+    name: 'Email Deliverability',
+    prompt: 'Email deliverability status — deliverable, catch-all, or undeliverable',
+    icon: ShieldCheck,
+    description: 'Catch-all detection and bounce prevention',
+  },
+  {
+    name: 'Data Provider',
+    prompt: 'Which data provider found the email/phone',
+    icon: Fingerprint,
+    description: 'Attribution — Hunter, Dropcontact, Lusha, etc.',
+  },
+  {
+    name: 'Job Title',
+    prompt: 'Contact job title from BetterContact enrichment',
+    icon: Briefcase,
+    description: 'Current role and title',
   },
 ];

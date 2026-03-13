@@ -141,7 +141,47 @@ export function useCommandCentreItemMutations() {
     },
   });
 
-  return { approveItem, dismissItem, snoozeItem, undoItem, updateDraftedAction, approveAndSendEmail };
+  const saveEmailAsDraft = useMutation({
+    mutationFn: ({
+      id,
+      emailPayload,
+    }: {
+      id: string;
+      emailPayload: { to: string; subject: string; body_html: string };
+    }) => commandCentreItemsService.saveEmailAsDraft(id, emailPayload),
+    onSuccess: () => {
+      toast.success('Saved to Gmail drafts');
+      invalidate();
+    },
+    onError: () => {
+      toast.error('Failed to save draft');
+    },
+  });
+
+  const markGoodSuggestion = useMutation({
+    mutationFn: (id: string) => commandCentreItemsService.markGoodSuggestion(id),
+    onSuccess: () => {
+      toast.success('Noted — AI will learn from this');
+      invalidate();
+    },
+    onError: () => {
+      toast.error('Failed to record feedback');
+    },
+  });
+
+  const regenerateWithFeedback = useMutation({
+    mutationFn: ({ id, feedback }: { id: string; feedback: string }) =>
+      commandCentreItemsService.regenerateWithFeedback(id, feedback),
+    onSuccess: () => {
+      toast.success('Email regenerated');
+      invalidate();
+    },
+    onError: () => {
+      toast.error('Failed to regenerate');
+    },
+  });
+
+  return { approveItem, dismissItem, snoozeItem, undoItem, updateDraftedAction, approveAndSendEmail, saveEmailAsDraft, markGoodSuggestion, regenerateWithFeedback };
 }
 
 // ============================================================================

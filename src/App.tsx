@@ -77,10 +77,10 @@ import {
   SettingsBookingSources, HealthRules, EmailCategorizationSettings, AdminModelSettings,
   AdminPromptSettings, InternalDomainsSettings, SlackDemo,
   TasksDemo, ProcessMaps, VSLAnalyticsTests,
-  CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
+  CronJobsAdmin, ApiMonitor, MigrationTracker, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
-  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GodsEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
+  NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GoldenEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
   // Auth
   Signup, VerifyEmail, ForgotPassword, ResetPassword, SetPassword, Onboarding, UpdatePassword,
   // CRM & Data
@@ -96,7 +96,7 @@ import {
   OutreachAnalyticsPage,
   WinLossPage,
   FollowUpDraftsPage,
-  OpsPage, OpsDetailPage, ApifyOpsPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
+  OpsPage, OpsDetailPage, ApifyOpsPage, LinkedInAdLibraryPage, LinkedInHubPage, PipelineGalleryPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
   ProductProfileViewPage, ProductProfileEditPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
@@ -118,7 +118,6 @@ import {
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
 const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
-// AvatarCreatorWizard is now inline in Ops table VideoAvatarColumnWizard — no standalone route needed
 
 // ============================================================
 // SUPABASE GLOBAL INITIALIZATION
@@ -430,7 +429,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/meetings-waitlist" element={<PlatformAdminRouteGuard><AppLayout><MeetingsWaitlist /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/waitlist-slack-settings" element={<PlatformAdminRouteGuard><AppLayout><WaitlistSlackSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - God's Eye Token Flow */}
-                <Route path="/platform/godseye" element={<PlatformAdminRouteGuard><AppLayout><GodsEyeAdmin /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/godseye" element={<PlatformAdminRouteGuard><AppLayout><GoldenEyeAdmin /></AppLayout></PlatformAdminRouteGuard>} />
                 {/* Platform Admin - AI Configuration */}
                 <Route path="/platform/ai/settings" element={<PlatformAdminRouteGuard><AppLayout><AIProviderSettings /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/ai/models" element={<PlatformAdminRouteGuard><AppLayout><AIModelAdmin /></AppLayout></PlatformAdminRouteGuard>} />
@@ -513,6 +512,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/dev/billing-analytics" element={<PlatformAdminRouteGuard><AppLayout><BillingAnalytics /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/functions" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/function-testing" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/dev/migrations" element={<PlatformAdminRouteGuard><AppLayout><MigrationTracker /></AppLayout></PlatformAdminRouteGuard>} />
 
                 <Route path="/platform/onboarding-simulator" element={<InternalRouteGuard><AppLayout><OnboardingSimulator /></AppLayout></InternalRouteGuard>} />
                 <Route path="/platform/quickadd-simulator" element={<PlatformAdminRouteGuard><AppLayout><QuickAddSimulator /></AppLayout></PlatformAdminRouteGuard>} />
@@ -565,6 +565,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/follow-ups/drafts" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><FollowUpDraftsPage /></Suspense></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
+                <Route path="/ops/linkedin-ads" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><LinkedInAdLibraryPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                <Route path="/ops/pipelines" element={<InternalRouteGuard><AppLayout><PipelineGalleryPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
                 {/* Unified profiles routes */}
                 <Route path="/profiles" element={<InternalRouteGuard><AppLayout><ProfilesPage /></AppLayout></InternalRouteGuard>} />
@@ -580,7 +582,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/fact-profiles/:id/edit" element={<RedirectFactProfileEdit />} />
                 <Route path="/docs" element={<AppLayout><DocsPage /></AppLayout>} />
                 <Route path="/support" element={<AppLayout><SupportCentrePage /></AppLayout>} />
-                <Route path="/tasks/settings" element={<Navigate to="/settings/task-sync" replace />} />
+                {/* Hidden: unreleased Task Auto-Sync redirect (SET-001) */}
+                {/* <Route path="/tasks/settings" element={<Navigate to="/settings/task-sync" replace />} /> */}
                 <Route path="/calendar" element={<ExternalRedirect url="https://calendar.google.com" />} />
                 <Route path="/events" element={<InternalRouteGuard><AppLayout><Events /></AppLayout></InternalRouteGuard>} />
                 <Route path="/leads" element={<InternalRouteGuard><AppLayout><LeadsInbox /></AppLayout></InternalRouteGuard>} />
@@ -631,6 +634,11 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/autonomy" element={<InternalRouteGuard><AppLayout><AutonomyDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/search" element={<AppLayout><SearchResultsPage /></AppLayout>} />
                 <Route path="/intelligence/competitive" element={<AppLayout><CompetitiveIntelPage /></AppLayout>} />
+                <Route path="/linkedin" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><LinkedInHubPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                {/* Legacy LinkedIn routes → redirect to hub tabs */}
+                <Route path="/intelligence/ads" element={<InternalRouteGuard><Navigate to="/linkedin?tab=ad_library" replace /></InternalRouteGuard>} />
+                <Route path="/intelligence/linkedin-revenue" element={<InternalRouteGuard><Navigate to="/linkedin?tab=revenue" replace /></InternalRouteGuard>} />
+                <Route path="/intelligence/linkedin-analytics" element={<InternalRouteGuard><Navigate to="/linkedin?tab=analytics" replace /></InternalRouteGuard>} />
                 <Route path="/coaching" element={<InternalRouteGuard><AppLayout><CoachingDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/coaching/rep/:userId" element={<InternalRouteGuard><AppLayout><CoachingRepDetailPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/methodology" element={<OrgAdminRouteGuard><AppLayout><SalesMethodologySettings /></AppLayout></OrgAdminRouteGuard>} />
@@ -641,7 +649,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/sales-coaching" element={<AppLayout><SalesCoachingPage /></AppLayout>} />
                 <Route path="/settings/api-keys" element={<AppLayout><APIKeysPage /></AppLayout>} />
                 <Route path="/settings/email-sync" element={<AppLayout><EmailSyncPage /></AppLayout>} />
-                <Route path="/settings/task-sync" element={<AppLayout><TaskSyncPage /></AppLayout>} />
+                {/* Hidden: unreleased Task Auto-Sync setting (SET-001) */}
+                {/* <Route path="/settings/task-sync" element={<AppLayout><TaskSyncPage /></AppLayout>} /> */}
                 <Route path="/settings/organization-management" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
                 {/* Legacy routes for backwards compatibility */}
                 <Route path="/settings/team-members" element={<ProtectedRoute><AppLayout><OrganizationManagementPage /></AppLayout></ProtectedRoute>} />
@@ -672,10 +681,10 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/integrations/bullhorn" element={<AppLayout><BullhornSettings /></AppLayout>} />
                 {/* Instantly Settings */}
                 <Route path="/settings/integrations/instantly" element={<AppLayout><InstantlySettings /></AppLayout>} />
-                {/* Smart Listening Settings */}
-                <Route path="/settings/smart-listening" element={<AppLayout><SmartListeningSettings /></AppLayout>} />
-                {/* Proactive Agent Settings - admin only */}
-                <Route path="/settings/proactive-agent" element={<AppLayout><ProactiveAgentSettings /></AppLayout>} />
+                {/* Hidden: unreleased Smart Listening setting (SET-001) */}
+                {/* <Route path="/settings/smart-listening" element={<AppLayout><SmartListeningSettings /></AppLayout>} /> */}
+                {/* Hidden: unreleased Proactive Agent setting (SET-001) */}
+                {/* <Route path="/settings/proactive-agent" element={<AppLayout><ProactiveAgentSettings /></AppLayout>} /> */}
                 <Route path="/settings/demo" element={<InternalRouteGuard><AppLayout><DemoExperiencePage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/bullhorn" element={<Navigate to="/settings/integrations/bullhorn" replace />} />
                 {/* Google Workspace Settings - visible only when Google is connected (enforced inside page) */}
@@ -688,8 +697,9 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/settings/integrations/60-notetaker" element={<Navigate to="/meetings/settings/notetaker" replace />} />
                 <Route path="/meetings/recordings/settings" element={<Navigate to="/meetings/settings/notetaker" replace />} />
                 <Route path="/settings/ai" element={<AppLayout><AISettings /></AppLayout>} />
-                <Route path="/settings/extraction-rules" element={<Navigate to="/settings/task-sync" replace />} />
-                <Route path="/settings/task-sync" element={<AppLayout><TaskSyncSettings /></AppLayout>} />
+                {/* Hidden: unreleased Task Auto-Sync setting redirects (SET-001) */}
+                {/* <Route path="/settings/extraction-rules" element={<Navigate to="/settings/task-sync" replace />} /> */}
+                {/* <Route path="/settings/task-sync" element={<AppLayout><TaskSyncSettings /></AppLayout>} /> */}
                 <Route path="/settings/call-types" element={<AppLayout><CallTypeSettings /></AppLayout>} />
                 <Route path="/settings/pipeline-automation" element={<AppLayout><PipelineAutomationSettings /></AppLayout>} />
                 <Route path="/settings/follow-ups" element={<AppLayout><FollowUpSettings /></AppLayout>} />

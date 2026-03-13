@@ -299,13 +299,12 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
               'absolute inset-0 flex items-center justify-center transition-opacity duration-200 pointer-events-none',
               controlsVisible ? 'opacity-100' : 'opacity-0'
             )}
-            style={{ pointerEvents: controlsVisible ? 'auto' : 'none' }}
-            onClick={togglePlay}
           >
             {/* Only show big button when paused */}
             {!isPlaying && (
               <div
-                className="w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-transform hover:scale-110 cursor-pointer"
+                onClick={togglePlay}
+                className="w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-transform hover:scale-110 cursor-pointer pointer-events-auto"
                 style={{ background: BRAND_GRADIENT, boxShadow: '0 8px 32px rgba(42,94,219,0.4)' }}
               >
                 <Play className="h-7 w-7 text-white ml-1" fill="currentColor" />
@@ -326,7 +325,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
         {/* ── Controls panel ── */}
         <div
           className={cn(
-            'absolute bottom-0 left-0 right-0 px-4 pb-3 pt-3 transition-opacity duration-300',
+            'absolute bottom-0 left-0 right-0 px-4 pb-3 pt-3 transition-opacity duration-300 z-10',
             controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
           )}
           style={CONTROLS_BG}

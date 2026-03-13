@@ -1,6 +1,7 @@
 export type WarmthTier = 'hot' | 'warm' | 'cool' | 'cold';
 export type TrendingDirection = 'up' | 'down' | 'stable';
 export type ContactCategory = 'prospect' | 'client' | 'employee' | 'supplier' | 'partner' | 'investor' | 'other';
+export type ContactSource = 'app' | 'manual' | 'fathom_sync' | 'hubspot' | 'attio';
 
 export interface GraphCompany {
   id: string;
@@ -32,6 +33,7 @@ export interface GraphContact {
   company_id: string | null;
   owner_id: string | null;
   category: ContactCategory;
+  source: ContactSource;
 
   // Warmth data (nullable — may not have scores yet)
   warmth_score: number | null;

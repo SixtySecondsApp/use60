@@ -15,6 +15,8 @@ export interface OpsTableRecord {
   row_count: number;
   /** Fact profile used as context for enrichment variable resolution */
   context_profile_id: string | null;
+  /** Table-level integration bindings (e.g. LinkedIn campaign binding) */
+  integration_config: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   columns?: OpsTableColumn[];
@@ -97,7 +99,10 @@ export interface OpsTableColumn {
     | 'linkedin_property'
     | 'instantly'
     | 'signal'
-    | 'agent_research';
+    | 'agent_research'
+    | 'fal_video'
+    | 'ai_image'
+    | 'svg_animation';
   is_enrichment: boolean;
   enrichment_prompt: string | null;
   enrichment_model: string | null;
@@ -218,7 +223,7 @@ interface RawRow {
 // ---------------------------------------------------------------------------
 
 const TABLE_COLUMNS =
-  'id, organization_id, created_by, name, description, source_type, source_query, row_count, context_profile_id, created_at, updated_at';
+  'id, organization_id, created_by, name, description, source_type, source_query, row_count, context_profile_id, integration_config, created_at, updated_at';
 
 const COLUMN_COLUMNS =
   'id, table_id, key, label, column_type, is_enrichment, enrichment_prompt, enrichment_model, enrichment_provider, enrichment_schema, enrichment_pack_id, dropdown_options, formula_expression, integration_type, integration_config, action_type, action_config, hubspot_property_name, apollo_property_name, position, width, is_visible, created_at';
@@ -328,7 +333,7 @@ export class OpsTableService {
 
   async updateTable(
     tableId: string,
-    updates: { name?: string; description?: string; source_query?: Record<string, unknown>; context_profile_id?: string | null }
+    updates: { name?: string; description?: string; source_query?: Record<string, unknown>; context_profile_id?: string | null; integration_config?: Record<string, unknown> | null }
   ): Promise<OpsTableRecord> {
     const { data, error } = await this.supabase
       .from('dynamic_tables')
@@ -1409,20 +1414,31 @@ export class OpsTableService {
   static generateCSVExport(
     rows: OpsTableRow[],
     columns: OpsTableColumn[],
-    filename: string = 'export'
+    filename: string = 'export',
+    extraColumns?: Array<{ label: string; value: string | ((row: OpsTableRow) => string) }>
   ): void {
-    const visibleCols = columns.filter((c) => c.is_visible);
+    // Export ALL passed columns (caller decides which to include)
+    const exportCols = columns;
 
     // Header row
-    const headers = visibleCols.map((c) => `"${c.label.replace(/"/g, '""')}"`);
+    const headers = exportCols.map((c) => `"${c.label.replace(/"/g, '""')}"`);
+    if (extraColumns) {
+      for (const ec of extraColumns) headers.push(`"${ec.label.replace(/"/g, '""')}"`);
+    }
     const csvLines = [headers.join(',')];
 
     // Data rows
     for (const row of rows) {
-      const values = visibleCols.map((col) => {
+      const values = exportCols.map((col) => {
         const val = row.cells[col.key]?.value ?? '';
         return `"${val.replace(/"/g, '""')}"`;
       });
+      if (extraColumns) {
+        for (const ec of extraColumns) {
+          const val = typeof ec.value === 'function' ? ec.value(row) : ec.value;
+          values.push(`"${val.replace(/"/g, '""')}"`);
+        }
+      }
       csvLines.push(values.join(','));
     }
 

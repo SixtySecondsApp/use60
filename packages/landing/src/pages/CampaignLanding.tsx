@@ -33,6 +33,7 @@ export interface CampaignQueryParams {
   ln?: string;
   email?: string;
   cid?: string;
+  title?: string;
 }
 
 interface CampaignLinkRow {
@@ -57,10 +58,11 @@ export default function CampaignLanding() {
   // UCR-001: If code is a domain, render the creator view
   if (code && isDomain(code)) {
     const queryParams: CampaignQueryParams = {
-      fn: searchParams.get('fn') || undefined,
-      ln: searchParams.get('ln') || undefined,
+      fn: searchParams.get('fn') || searchParams.get('f') || undefined,
+      ln: searchParams.get('ln') || searchParams.get('l') || undefined,
       email: searchParams.get('email') || undefined,
-      cid: searchParams.get('cid') || undefined,
+      cid: searchParams.get('cid') || searchParams.get('id') || undefined,
+      title: searchParams.get('title') || searchParams.get('t') || undefined,
     };
 
     return (

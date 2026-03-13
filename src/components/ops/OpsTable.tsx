@@ -36,6 +36,8 @@ import {
   Play,
   GripVertical,
   ChevronRight,
+  Trophy,
+  GitCompare,
 } from 'lucide-react';
 import { OpsTableCell } from './OpsTableCell';
 import { AgentColumnHeader } from './AgentColumnHeader';
@@ -102,6 +104,11 @@ interface OpsTableProps {
   columnScheduleLabels?: Record<string, string>;
   groupConfig?: GroupConfig | null;
   summaryConfig?: Record<string, AggregateType> | null;
+  onRowExpand?: (rowId: string) => void;
+  /** When true, highlights best/worst performer per analytics column */
+  compareMode?: boolean;
+  /** Callback to toggle compare mode (called from toolbar) */
+  onToggleCompareMode?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +138,8 @@ const columnTypeIcons: Record<string, React.FC<React.SVGProps<SVGSVGElement>>> =
 // Constants
 // ---------------------------------------------------------------------------
 
-const CHECKBOX_COL_WIDTH = 44;
+const CHECKBOX_COL_WIDTH_BASE = 44;
+const CHECKBOX_COL_WIDTH_EXPAND = 64;
 const ADD_COL_WIDTH = 44;
 const ROW_HEIGHT = 36;
 const HEADER_HEIGHT = 34;
@@ -313,7 +321,11 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   columnScheduleLabels,
   groupConfig,
   summaryConfig,
+  onRowExpand,
+  compareMode = false,
+  onToggleCompareMode,
 }) => {
+  const CHECKBOX_COL_WIDTH = onRowExpand ? CHECKBOX_COL_WIDTH_EXPAND : CHECKBOX_COL_WIDTH_BASE;
   const parentRef = useRef<HTMLDivElement>(null);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
   const [horizontalScrollLeft, setHorizontalScrollLeft] = useState(0);
@@ -522,7 +534,97 @@ export const OpsTable: React.FC<OpsTableProps> = ({
     }
     return Object.keys(result).length > 0 ? result : null;
   }, [summaryConfig, rows]);
-  const bottomScrollPadding = summaryValues && rows.length > 0 ? ROW_HEIGHT + 24 : 24;
+
+  // ---- ANALYTICS COLUMNS ----
+  // Identify linkedin_analytics columns for quartile + compare computations
+  const analyticsColumns = useMemo(
+    () => visibleColumns.filter((c) => c.column_type === 'linkedin_analytics'),
+    [visibleColumns],
+  );
+
+  // Per-column numeric values (parsed from cell.value) — for quartile and compare calculations
+  const analyticsNumericValues = useMemo(() => {
+    const result: Record<string, number[]> = {};
+    for (const col of analyticsColumns) {
+      const nums = rows
+        .map((r) => parseFloat(r.cells[col.key]?.value ?? ''))
+        .filter((n) => !isNaN(n));
+      result[col.key] = nums;
+    }
+    return result;
+  }, [analyticsColumns, rows]);
+
+  // Per-column quartile boundaries (Q1 = 25th percentile, Q3 = 75th percentile)
+  const analyticsQuartiles = useMemo(() => {
+    const result: Record<string, { q1: number; q3: number }> = {};
+    for (const col of analyticsColumns) {
+      const nums = [...(analyticsNumericValues[col.key] ?? [])].sort((a, b) => a - b);
+      if (nums.length < 4) continue;
+      const q1Idx = Math.floor(nums.length * 0.25);
+      const q3Idx = Math.floor(nums.length * 0.75);
+      result[col.key] = { q1: nums[q1Idx], q3: nums[q3Idx] };
+    }
+    return result;
+  }, [analyticsColumns, analyticsNumericValues]);
+
+  // Per-column best/worst row id for compare mode
+  const analyticsCompareMap = useMemo(() => {
+    if (!compareMode) return {};
+    const result: Record<string, { bestRowId: string | null; worstRowId: string | null }> = {};
+    for (const col of analyticsColumns) {
+      let bestRowId: string | null = null;
+      let worstRowId: string | null = null;
+      let bestVal = -Infinity;
+      let worstVal = Infinity;
+      for (const row of rows) {
+        const v = parseFloat(row.cells[col.key]?.value ?? '');
+        if (isNaN(v)) continue;
+        if (v > bestVal) { bestVal = v; bestRowId = row.id; }
+        if (v < worstVal) { worstVal = v; worstRowId = row.id; }
+      }
+      // Only mark if there are at least 2 distinct rows with data
+      const populated = rows.filter((r) => !isNaN(parseFloat(r.cells[col.key]?.value ?? '')));
+      result[col.key] = populated.length >= 2 ? { bestRowId, worstRowId } : { bestRowId: null, worstRowId: null };
+    }
+    return result;
+  }, [compareMode, analyticsColumns, rows]);
+
+  // Auto-computed summary values for analytics columns (footer aggregation)
+  const analyticsSummaryValues = useMemo(() => {
+    if (analyticsColumns.length === 0) return {};
+    // Metrics that should be summed vs averaged
+    const AVERAGE_METRICS = new Set(['ctr', 'cpa', 'cpl', 'engagement_rate']);
+    const result: Record<string, string> = {};
+    for (const col of analyticsColumns) {
+      const nums = analyticsNumericValues[col.key] ?? [];
+      if (nums.length === 0) continue;
+      const config = col.integration_config as { metric?: string } | null | undefined;
+      const metric = config?.metric ?? 'impressions';
+      const PERCENTAGE_METRICS = new Set(['ctr', 'engagement_rate']);
+      const CURRENCY_METRICS = new Set(['spend', 'cpa', 'cpl']);
+      if (AVERAGE_METRICS.has(metric)) {
+        const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+        if (PERCENTAGE_METRICS.has(metric)) {
+          result[col.key] = `Avg ${avg.toFixed(1)}%`;
+        } else if (CURRENCY_METRICS.has(metric)) {
+          result[col.key] = `Avg ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(avg)}`;
+        } else {
+          result[col.key] = `Avg ${avg.toFixed(1)}`;
+        }
+      } else {
+        const sum = nums.reduce((a, b) => a + b, 0);
+        if (CURRENCY_METRICS.has(metric)) {
+          result[col.key] = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(sum);
+        } else {
+          result[col.key] = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(sum);
+        }
+      }
+    }
+    return result;
+  }, [analyticsColumns, analyticsNumericValues]);
+
+  const hasFooter = (summaryValues || Object.keys(analyticsSummaryValues).length > 0) && rows.length > 0;
+  const bottomScrollPadding = hasFooter ? ROW_HEIGHT + 24 : 24;
 
   const handleTableWheel = useCallback((container: HTMLDivElement, event: WheelEvent | React.WheelEvent<HTMLDivElement>) => {
     const canScrollHorizontally = container.scrollWidth > container.clientWidth;
@@ -712,13 +814,34 @@ export const OpsTable: React.FC<OpsTableProps> = ({
   // -----------------------------------------------------------------------
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-950 overflow-hidden w-full min-w-0">
+    <div className="rounded-xl border border-gray-800 bg-gray-950 overflow-hidden w-full min-w-0 flex-1 min-h-0 flex flex-col">
+      {/* Analytics compare toolbar — shown when analytics columns exist */}
+      {analyticsColumns.length > 0 && onToggleCompareMode && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-800 bg-gray-900/60 shrink-0">
+          <Trophy className="w-3.5 h-3.5 text-blue-400" />
+          <span className="text-xs text-gray-400">LinkedIn Analytics</span>
+          <span className="text-gray-700 text-xs">·</span>
+          <span className="text-xs text-gray-500">{analyticsColumns.length} metric column{analyticsColumns.length > 1 ? 's' : ''}</span>
+          <button
+            onClick={onToggleCompareMode}
+            className={`ml-auto inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium border transition-colors ${
+              compareMode
+                ? 'border-blue-600/50 bg-blue-600/20 text-blue-300 hover:bg-blue-600/30'
+                : 'border-gray-700 bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+            }`}
+            title={compareMode ? 'Disable compare mode' : 'Enable compare mode — highlight best/worst per column'}
+          >
+            <GitCompare className="w-3 h-3" />
+            Compare
+          </button>
+        </div>
+      )}
       {/* Scrollable container */}
       <div
         ref={parentRef}
-        className="overflow-auto"
+        className="overflow-auto flex-1 min-h-0"
         onWheel={(event) => handleTableWheel(event.currentTarget, event)}
-        style={{ maxHeight: 'var(--ops-table-max-height, calc(100vh - 220px))', overscrollBehavior: 'contain' }}
+        style={{ overscrollBehavior: 'contain' }}
       >
         <div style={{ width: totalWidth, minWidth: '100%' }}>
           {/* ---- HEADER ---- */}
@@ -857,6 +980,15 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                       onChange={() => onSelectRow(row.id)}
                       className="w-4 h-4 rounded border-gray-600 text-blue-600 bg-gray-800 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
                     />
+                    {onRowExpand && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onRowExpand(row.id); }}
+                        className="ml-0.5 p-0.5 rounded text-gray-500 hover:text-white hover:bg-gray-700/50 transition-colors"
+                        title="Expand row"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Data cells */}
@@ -905,16 +1037,36 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                           metadata={cellData.metadata}
                           onEnrichRow={(col.is_enrichment || col.column_type === 'apollo_property' || col.column_type === 'apollo_org_property' || col.column_type === 'linkedin_property') ? () => onEnrichRow?.(row.id, col.id) : undefined}
                           buttonConfig={(col.column_type === 'button' || col.column_type === 'action') ? col.action_config as any : undefined}
-                          rowCellValues={(col.column_type === 'button' || col.column_type === 'action' || col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio') ? Object.fromEntries(
+                          rowCellValues={(col.column_type === 'button' || col.column_type === 'action' || col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video' || col.column_type === 'ai_image' || col.column_type === 'svg_animation') ? Object.fromEntries(
                             Object.entries(row.cells).map(([k, v]) => [k, v.value ?? ''])
                           ) : undefined}
-                          integrationConfig={(col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio') ? col.integration_config : undefined}
-                          agentColumnId={col.column_type === 'agent_research' ? col.id : undefined}
-                          rowId={(col.column_type === 'agent_research' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio') ? row.id : undefined}
-                          tableId={(col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio') ? tableId : undefined}
+                          integrationConfig={(col.column_type === 'instantly' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video' || col.column_type === 'ai_image' || col.column_type === 'svg_animation' || col.column_type === 'linkedin_analytics') ? col.integration_config : undefined}
+                          agentColumnId={(col.column_type === 'agent_research' || col.column_type === 'fal_video' || col.column_type === 'ai_image' || col.column_type === 'svg_animation') ? col.id : undefined}
+                          rowId={(col.column_type === 'agent_research' || col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video' || col.column_type === 'ai_image' || col.column_type === 'svg_animation') ? row.id : undefined}
+                          tableId={(col.column_type === 'heygen_video' || col.column_type === 'elevenlabs_audio' || col.column_type === 'fal_video' || col.column_type === 'ai_image' || col.column_type === 'svg_animation') ? tableId : undefined}
                           columnKey={(col.column_type === 'elevenlabs_audio') ? col.key : undefined}
                           onRunAgentResearch={col.column_type === 'agent_research' ? () => handleRunAgentResearch(col.id, row.id) : undefined}
                           onRetryAgentResearch={col.column_type === 'agent_research' ? (depth) => handleRetryAgentResearch(col.id, row.id, depth) : undefined}
+                          analyticsQuartile={col.column_type === 'linkedin_analytics' ? (() => {
+                            const q = analyticsQuartiles[col.key];
+                            if (!q) return null;
+                            const v = parseFloat(cellData.value ?? '');
+                            if (isNaN(v)) return null;
+                            return {
+                              q1: q.q1,
+                              q3: q.q3,
+                              isTopPerformer: v >= q.q3,
+                              isBottomPerformer: v <= q.q1,
+                            };
+                          })() : null}
+                          compareInfo={col.column_type === 'linkedin_analytics' && compareMode ? (() => {
+                            const cm = analyticsCompareMap[col.key];
+                            if (!cm) return null;
+                            return {
+                              isBest: cm.bestRowId === row.id,
+                              isWorst: cm.worstRowId === row.id,
+                            };
+                          })() : null}
                         />
                       </div>
                     );
@@ -942,7 +1094,7 @@ export const OpsTable: React.FC<OpsTableProps> = ({
           )}
 
           {/* ---- SUMMARY ROW ---- */}
-          {summaryValues && rows.length > 0 && (
+          {(summaryValues || Object.keys(analyticsSummaryValues).length > 0) && rows.length > 0 && (
             <div
               className="sticky bottom-0 z-10 flex border-t border-gray-700 bg-gray-800/90 backdrop-blur-sm"
               style={{ minWidth: totalWidth }}
@@ -953,11 +1105,13 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                 style={{ width: CHECKBOX_COL_WIDTH, minWidth: CHECKBOX_COL_WIDTH, height: ROW_HEIGHT }}
               />
               {visibleColumns.map((col) => {
-                const val = summaryValues[col.key];
+                // Prefer explicit summaryConfig value; fall back to auto analytics summary
+                const val = summaryValues?.[col.key] ?? analyticsSummaryValues[col.key];
                 const aggType = summaryConfig?.[col.key];
                 const aggLabel = aggType && aggType !== 'none'
                   ? { count: '#', sum: '\u03A3', average: 'Avg', min: 'Min', max: 'Max', filled_percent: '%', unique_count: '\u2261' }[aggType] ?? ''
                   : '';
+                const isAnalyticsFooter = !summaryValues?.[col.key] && !!analyticsSummaryValues[col.key];
                 const cellWidth = resizingColumnId === col.id ? (resizingWidth ?? col.width) : col.width;
                 return (
                   <div
@@ -966,8 +1120,8 @@ export const OpsTable: React.FC<OpsTableProps> = ({
                     style={{ width: cellWidth, minWidth: cellWidth, height: ROW_HEIGHT }}
                   >
                     {val ? (
-                      <span className="text-xs font-medium text-gray-300 truncate">
-                        <span className="text-gray-500 mr-1">{aggLabel}</span>
+                      <span className={`text-xs font-medium truncate ${isAnalyticsFooter ? 'text-blue-300' : 'text-gray-300'}`}>
+                        {!isAnalyticsFooter && aggLabel && <span className="text-gray-500 mr-1">{aggLabel}</span>}
                         {val}
                       </span>
                     ) : null}

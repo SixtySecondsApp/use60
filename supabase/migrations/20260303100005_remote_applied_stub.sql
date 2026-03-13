@@ -1,0 +1,1 @@
+-- Migration applied directly to production DB; stub for CI compatibility

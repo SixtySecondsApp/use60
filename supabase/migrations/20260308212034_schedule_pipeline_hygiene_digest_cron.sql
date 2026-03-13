@@ -8,8 +8,7 @@
 -- Rollback strategy:
 --   SELECT cron.unschedule('pipeline-hygiene-digest');
 
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net;
+-- Extensions already enabled by workspace_background_job_cron migration
 
 -- Unschedule if exists (idempotent)
 SELECT cron.unschedule('pipeline-hygiene-digest')

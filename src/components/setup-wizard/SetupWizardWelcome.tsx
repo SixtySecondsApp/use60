@@ -1,6 +1,10 @@
-import { Bot, Calendar, Video, Link2, Mail, Zap, Check, ArrowRight } from 'lucide-react';
+import { useState } from 'react';
+import { Bot, Calendar, Video, Link2, Mail, Zap, Check, ArrowRight, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSetupWizardStore, SETUP_STEPS, STEP_META, type SetupStep } from '@/lib/stores/setupWizardStore';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrgStore } from '@/lib/stores/orgStore';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const stepIcons: Record<SetupStep, React.ElementType> = {
@@ -12,9 +16,13 @@ const stepIcons: Record<SetupStep, React.ElementType> = {
 };
 
 export function SetupWizardWelcome() {
-  const { steps, setCurrentStep } = useSetupWizardStore();
+  const { steps, setCurrentStep, resetProgress } = useSetupWizardStore();
+  const { user } = useAuth();
+  const { activeOrgId } = useOrgStore();
+  const [resetting, setResetting] = useState(false);
 
   const firstIncomplete = SETUP_STEPS.find(s => !steps[s].completed) || 'calendar';
+  const anyCompleted = SETUP_STEPS.some(s => steps[s].completed);
 
   return (
     <div className="p-8">
@@ -112,9 +120,36 @@ export function SetupWizardWelcome() {
         onClick={() => setCurrentStep(firstIncomplete)}
         className="w-full h-11 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium rounded-xl shadow-sm"
       >
-        Get Started
+        {anyCompleted ? 'Continue Setup' : 'Get Started'}
         <ArrowRight className="w-4 h-4 ml-2" />
       </Button>
+
+      {/* Start Over — only show when some steps are already completed */}
+      {anyCompleted && (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={resetting}
+          onClick={async () => {
+            if (!user?.id || !activeOrgId) return;
+            setResetting(true);
+            try {
+              const success = await resetProgress(user.id, activeOrgId);
+              if (success) {
+                toast.success('Setup progress reset');
+              } else {
+                toast.error('Failed to reset progress');
+              }
+            } finally {
+              setResetting(false);
+            }
+          }}
+          className="w-full mt-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+        >
+          <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+          {resetting ? 'Resetting...' : 'Start over'}
+        </Button>
+      )}
     </div>
   );
 }

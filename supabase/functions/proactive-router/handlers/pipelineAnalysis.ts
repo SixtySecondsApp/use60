@@ -308,11 +308,12 @@ async function analyzeUserPipeline(
 
   const { data: staleDeals } = await supabase
     .from('deals')
-    .select('id, name, value, stage_id, last_activity_at, deal_stages(name, default_probability)')
+    .select('id, name, value, stage_id, last_activity_at, deal_stages!inner(name, default_probability)')
     .eq('owner_id', userId)
-    .eq('org_id', organizationId)
+    .eq('clerk_org_id', organizationId)
     .not('status', 'eq', 'won')
     .not('status', 'eq', 'lost')
+    .not('deal_stages.name', 'in', '("Lost","Signed")')
     .lt('last_activity_at', sevenDaysAgo.toISOString());
 
   const dealSummaries: DealSummary[] = [];
@@ -391,11 +392,12 @@ async function analyzeUserPipeline(
 
   const { data: closingSoon } = await supabase
     .from('deals')
-    .select('id, name, value, expected_close_date, deal_stages(name, default_probability)')
+    .select('id, name, value, expected_close_date, deal_stages!inner(name, default_probability)')
     .eq('owner_id', userId)
-    .eq('org_id', organizationId)
+    .eq('clerk_org_id', organizationId)
     .not('status', 'eq', 'won')
     .not('status', 'eq', 'lost')
+    .not('deal_stages.name', 'in', '("Lost","Signed")')
     .gte('expected_close_date', today.toISOString().split('T')[0])
     .lte('expected_close_date', sevenDaysFromNow.toISOString().split('T')[0]);
 
@@ -448,11 +450,12 @@ async function analyzeUserPipeline(
   // At-risk deals (health_score < 50)
   const { data: atRiskDeals } = await supabase
     .from('deals')
-    .select('id, name, value, health_score, risk_score, deal_stages(name, default_probability)')
+    .select('id, name, value, health_score, risk_score, deal_stages!inner(name, default_probability)')
     .eq('owner_id', userId)
-    .eq('org_id', organizationId)
+    .eq('clerk_org_id', organizationId)
     .not('status', 'eq', 'won')
     .not('status', 'eq', 'lost')
+    .not('deal_stages.name', 'in', '("Lost","Signed")')
     .lt('health_score', 50);
 
   for (const deal of atRiskDeals || []) {

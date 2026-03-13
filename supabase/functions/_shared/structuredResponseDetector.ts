@@ -2223,7 +2223,7 @@ The body MUST include proper greeting and sign off with "${userName}" (not "[You
       try {
         // Resolve model via model router (respects user's intelligence tier setting)
         let useProvider = 'google'
-        let useModelId = 'gemini-2.0-flash'
+        let useModelId = 'gemini-3.1-flash-lite-preview'
         const orgId = context?.orgId || ''
 
         try {
@@ -2276,7 +2276,7 @@ The body MUST include proper greeting and sign off with "${userName}" (not "[You
         if (!aiResponseText && GEMINI_API_KEY) {
           console.log('[EMAIL-DRAFT] Calling Gemini to generate personalized email...')
           const geminiResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -2489,7 +2489,7 @@ Return ONLY a JSON object: {"subject": "...", "body": "..."}`
 
         try {
           let useProvider = 'google'
-          let useModelId = 'gemini-2.0-flash'
+          let useModelId = 'gemini-3.1-flash-lite-preview'
           const orgId = context?.orgId || ''
 
           try {
@@ -2521,7 +2521,7 @@ Return ONLY a JSON object: {"subject": "...", "body": "..."}`
 
           if (!aiResponseText && GEMINI_API_KEY) {
             const geminiResponse = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

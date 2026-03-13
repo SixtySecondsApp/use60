@@ -520,7 +520,7 @@ serve(async (req) => {
 
     // Log AI cost for enrichment actions (Gemini + Exa calls are made async in pipeline)
     if (userId && organization_id && (action === 'start' || action === 'manual')) {
-      logAICostEvent(supabase, userId, organization_id, 'gemini', 'gemini-2.5-flash', 1000, 800, 'research_enrichment', { source: 'onboarding' }).catch(() => {});
+      logAICostEvent(supabase, userId, organization_id, 'gemini', 'gemini-3.1-flash-lite-preview', 1000, 800, 'research_enrichment', { source: 'onboarding' }).catch(() => {});
     }
 
     return new Response(JSON.stringify(response), {

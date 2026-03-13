@@ -236,7 +236,7 @@ When answering:
   }
 
   const response = await fetch(
-    `${GEMINI_API_BASE}/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+    `${GEMINI_API_BASE}/models/gemini-3.1-flash-lite-preview:generateContent?key=${geminiApiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

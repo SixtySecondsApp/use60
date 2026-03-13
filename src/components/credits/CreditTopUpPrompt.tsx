@@ -297,20 +297,37 @@ export function CreditTopUpProvider({ children }: { children: ReactNode }) {
   const [options, setOptions] = useState<OpenTopUpOptions>({});
 
   const openTopUp = useCallback((opts: OpenTopUpOptions = {}) => {
+    // Session-once guard: if this prompt was already shown and dismissed this session,
+    // don't show again — let the caller handle navigation if needed.
+    const shownKey = 'sixty_topup_shown_session';
+    if (sessionStorage.getItem(shownKey) === 'true') {
+      return;
+    }
     setOptions(opts);
     setOpen(true);
   }, []);
 
   const closeTopUp = useCallback(() => {
     setOpen(false);
+    // Mark as shown for this session so next trigger is suppressed
+    sessionStorage.setItem('sixty_topup_shown_session', 'true');
   }, []);
+
+  // Wrap onOpenChange so closing the dialog (X, backdrop click) also sets the session flag
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    if (!nextOpen) {
+      closeTopUp();
+    } else {
+      setOpen(true);
+    }
+  }, [closeTopUp]);
 
   return (
     <CreditTopUpContext.Provider value={{ openTopUp, closeTopUp }}>
       {children}
       <CreditTopUpPromptModal
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
         options={options}
       />
     </CreditTopUpContext.Provider>

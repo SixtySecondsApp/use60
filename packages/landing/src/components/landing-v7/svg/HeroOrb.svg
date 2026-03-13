@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" role="img" aria-labelledby="hero-orb-title">
+  <title id="hero-orb-title">Command Center Orb — AI connecting to everything</title>
+  <defs>
+    <radialGradient id="orbGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c084fc" stop-opacity="0.95"/>
+      <stop offset="60%" stop-color="#c084fc" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#c084fc" stop-opacity="0.1"/>
+    </radialGradient>
+    <radialGradient id="orbGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c084fc" stop-opacity="0.15"/>
+      <stop offset="60%" stop-color="#c084fc" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#c084fc" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="satGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a8a29e" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#78716c" stop-opacity="0.45"/>
+    </radialGradient>
+  </defs>
+
+  <style>
+    /* === CENTRAL ORB — gentle breathing scale === */
+    @keyframes orbBreathe {
+      0%, 100% { transform: translate(400px, 250px) scale(1); }
+      50% { transform: translate(400px, 250px) scale(1.05); }
+    }
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.35; transform: translate(400px, 250px) scale(1); }
+      50% { opacity: 0.65; transform: translate(400px, 250px) scale(1.1); }
+    }
+
+    /* === SATELLITE DRIFT — organic float with varied timing === */
+    @keyframes sat1Drift {
+      0%, 100% { transform: translate(260px, 145px); }
+      33% { transform: translate(257px, 142px); }
+      66% { transform: translate(263px, 148px); }
+    }
+    @keyframes sat2Drift {
+      0%, 100% { transform: translate(530px, 130px); }
+      40% { transform: translate(533px, 127px); }
+      75% { transform: translate(527px, 133px); }
+    }
+    @keyframes sat3Drift {
+      0%, 100% { transform: translate(590px, 270px); }
+      30% { transform: translate(593px, 267px); }
+      70% { transform: translate(587px, 274px); }
+    }
+    @keyframes sat4Drift {
+      0%, 100% { transform: translate(520px, 390px); }
+      35% { transform: translate(517px, 393px); }
+      65% { transform: translate(523px, 387px); }
+    }
+    @keyframes sat5Drift {
+      0%, 100% { transform: translate(265px, 380px); }
+      45% { transform: translate(262px, 383px); }
+      80% { transform: translate(268px, 377px); }
+    }
+    @keyframes sat6Drift {
+      0%, 100% { transform: translate(200px, 260px); }
+      50% { transform: translate(197px, 257px); }
+      85% { transform: translate(203px, 264px); }
+    }
+
+    /* === CONNECTION LINE — subtle opacity breathing === */
+    @keyframes linePulse1 {
+      0%, 100% { opacity: 0.15; }
+      50% { opacity: 0.32; }
+    }
+    @keyframes linePulse2 {
+      0%, 100% { opacity: 0.12; }
+      50% { opacity: 0.28; }
+    }
+
+    /* === DATA PARTICLES — flow along offset-path toward center === */
+    @keyframes particleFlow {
+      0% { offset-distance: 0%; opacity: 0; }
+      8% { opacity: 0.75; }
+      80% { opacity: 0.6; }
+      100% { offset-distance: 100%; opacity: 0; }
+    }
+
+    /* === ELEMENT ASSIGNMENTS === */
+    .orb-core {
+      will-change: transform;
+      animation: orbBreathe 4s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+    }
+    .orb-glow {
+      will-change: transform, opacity;
+      animation: glowPulse 4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    }
+
+    .sat-1 { will-change: transform; animation: sat1Drift 5.2s cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+    .sat-2 { will-change: transform; animation: sat2Drift 6.1s cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+    .sat-3 { will-change: transform; animation: sat3Drift 4.7s cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+    .sat-4 { will-change: transform; animation: sat4Drift 5.8s cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+    .sat-5 { will-change: transform; animation: sat5Drift 6.4s cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+    .sat-6 { will-change: transform; animation: sat6Drift 5.0s cubic-bezier(0.37, 0, 0.63, 1) infinite; }
+
+    .conn-1 { animation: linePulse1 3.5s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+    .conn-2 { animation: linePulse2 4.2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+    .conn-3 { animation: linePulse1 3.8s cubic-bezier(0.45, 0, 0.55, 1) infinite 0.5s; }
+    .conn-4 { animation: linePulse2 4.5s cubic-bezier(0.45, 0, 0.55, 1) infinite 0.3s; }
+    .conn-5 { animation: linePulse1 3.2s cubic-bezier(0.45, 0, 0.55, 1) infinite 0.8s; }
+    .conn-6 { animation: linePulse2 4.0s cubic-bezier(0.45, 0, 0.55, 1) infinite 0.6s; }
+
+    /* Particle paths — from satellite toward center (400,250) */
+    .p1 {
+      offset-path: path('M 260 145 C 310 180 360 220 400 250');
+      will-change: offset-distance, opacity;
+      animation: particleFlow 3.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    }
+    .p2 {
+      offset-path: path('M 590 270 C 530 265 460 255 400 250');
+      will-change: offset-distance, opacity;
+      animation: particleFlow 3.8s cubic-bezier(0.22, 1, 0.36, 1) infinite 0.9s;
+    }
+    .p3 {
+      offset-path: path('M 265 380 C 310 330 360 285 400 250');
+      will-change: offset-distance, opacity;
+      animation: particleFlow 4.1s cubic-bezier(0.22, 1, 0.36, 1) infinite 1.8s;
+    }
+    .p4 {
+      offset-path: path('M 530 130 C 490 170 440 215 400 250');
+      will-change: offset-distance, opacity;
+      animation: particleFlow 3.5s cubic-bezier(0.22, 1, 0.36, 1) infinite 2.5s;
+    }
+
+    /* Accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+      }
+    }
+  </style>
+
+  <!-- CONNECTION LINES — thin luminous lines from satellites to center -->
+  <line class="conn-1" x1="260" y1="145" x2="400" y2="250" stroke="#c084fc" stroke-width="0.8" opacity="0.15"/>
+  <line class="conn-2" x1="530" y1="130" x2="400" y2="250" stroke="#c084fc" stroke-width="0.8" opacity="0.12"/>
+  <line class="conn-3" x1="590" y1="270" x2="400" y2="250" stroke="#c084fc" stroke-width="0.8" opacity="0.15"/>
+  <line class="conn-4" x1="520" y1="390" x2="400" y2="250" stroke="#c084fc" stroke-width="0.8" opacity="0.12"/>
+  <line class="conn-5" x1="265" y1="380" x2="400" y2="250" stroke="#c084fc" stroke-width="0.8" opacity="0.15"/>
+  <line class="conn-6" x1="200" y1="260" x2="400" y2="250" stroke="#c084fc" stroke-width="0.8" opacity="0.12"/>
+
+  <!-- CENTRAL ORB — outer glow ring -->
+  <circle class="orb-glow" cx="0" cy="0" r="65" fill="url(#orbGlow)"/>
+
+  <!-- CENTRAL ORB — main body with breathing scale -->
+  <circle class="orb-core" cx="0" cy="0" r="20" fill="url(#orbGrad)"/>
+
+  <!-- CENTRAL ORB — inner bright core -->
+  <circle class="orb-core" cx="0" cy="0" r="7" fill="#c084fc" opacity="0.8"/>
+
+  <!-- SATELLITE NODES — 6 stone-colored dots arranged around center -->
+  <circle class="sat-1" cx="0" cy="0" r="5" fill="url(#satGrad)"/>
+  <circle class="sat-2" cx="0" cy="0" r="4.5" fill="url(#satGrad)"/>
+  <circle class="sat-3" cx="0" cy="0" r="5.5" fill="url(#satGrad)"/>
+  <circle class="sat-4" cx="0" cy="0" r="4" fill="url(#satGrad)"/>
+  <circle class="sat-5" cx="0" cy="0" r="5" fill="url(#satGrad)"/>
+  <circle class="sat-6" cx="0" cy="0" r="4.5" fill="url(#satGrad)"/>
+
+  <!-- DATA PARTICLES — tiny dots flowing along paths toward the central orb -->
+  <circle class="p1" r="2" fill="#c084fc" opacity="0"/>
+  <circle class="p2" r="1.5" fill="#c084fc" opacity="0"/>
+  <circle class="p3" r="2" fill="#c084fc" opacity="0"/>
+  <circle class="p4" r="1.5" fill="#c084fc" opacity="0"/>
+</svg>

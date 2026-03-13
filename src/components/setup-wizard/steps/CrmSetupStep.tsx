@@ -33,9 +33,7 @@ export function CrmSetupStep() {
     }
   };
 
-  const handleSkip = async () => {
-    if (!user?.id || !activeOrgId) return;
-    await completeStep(user.id, activeOrgId, 'crm');
+  const handleSkip = () => {
     setCurrentStep('followups');
   };
 

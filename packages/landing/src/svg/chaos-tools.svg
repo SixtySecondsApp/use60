@@ -155,12 +155,12 @@
   </g>
 
   <!-- Broken connection lines that fragment outward -->
-  <path class="ct-broken ct-broken-flow1" d="M120,115 C180,140 230,155 270,175"/>
-  <path class="ct-broken ct-broken-flow2" d="M270,175 C330,145 380,130 440,120"/>
-  <path class="ct-broken ct-broken-flow3" d="M160,280 C200,260 250,230 270,200"/>
-  <path class="ct-broken ct-broken-flow4" d="M440,120 C460,170 475,230 480,270"/>
-  <path class="ct-broken ct-broken-flow1" d="M270,200 C310,240 370,260 420,275"/>
-  <path class="ct-broken ct-broken-flow3" d="M120,115 C135,160 148,220 160,280"/>
+  <path class="ct-broken ct-broken-flow1" d="M130,100 C200,140 250,160 300,200"/>
+  <path class="ct-broken ct-broken-flow2" d="M300,200 C380,160 430,120 500,90"/>
+  <path class="ct-broken ct-broken-flow3" d="M160,320 C220,280 260,240 300,210"/>
+  <path class="ct-broken ct-broken-flow4" d="M500,90 C510,170 500,250 490,310"/>
+  <path class="ct-broken ct-broken-flow1" d="M300,210 C360,260 410,290 470,310"/>
+  <path class="ct-broken ct-broken-flow3" d="M130,100 C140,170 148,240 160,320"/>
 
   <!-- Entropy particles drifting outward -->
   <circle class="ct-particle" cx="290" cy="190" r="1.2" style="--dx:40px;--dy:-50px"/>
@@ -172,9 +172,9 @@
   <circle class="ct-particle ct-p7" cx="305" cy="185" r="0.7" style="--dx:45px;--dy:-40px"/>
   <circle class="ct-particle ct-p8" cx="295" cy="215" r="1.2" style="--dx:-25px;--dy:-55px"/>
 
-  <!-- Icon 1: Email (concentric transmission arcs) -->
-  <g class="ct-g1" transform="translate(100,95)">
-    <circle class="ct-halo-blue" cx="18" cy="18" r="32"/>
+  <!-- Icon 1: Email (concentric transmission arcs) — top left -->
+  <g class="ct-g1" transform="translate(60,40) scale(2)">
+    <circle class="ct-halo-blue" cx="18" cy="18" r="40"/>
     <path class="ct-icon" stroke="#2A5EDB" d="M4,8 L18,20 L32,8"/>
     <path class="ct-icon" stroke="#2A5EDB" opacity="0.7" d="M0,24 A22,22 0 0,1 4,8"/>
     <path class="ct-icon" stroke="#2A5EDB" opacity="0.7" d="M36,24 A22,22 0 0,0 32,8"/>
@@ -182,9 +182,9 @@
     <path class="ct-icon" stroke="#2A5EDB" opacity="0.4" d="M40,30 A28,28 0 0,0 36,10"/>
   </g>
 
-  <!-- Icon 2: Calendar (grid with missing cells) -->
-  <g class="ct-g2" transform="translate(248,150)">
-    <circle class="ct-halo-teal" cx="18" cy="18" r="32"/>
+  <!-- Icon 2: Calendar (grid with missing cells) — center -->
+  <g class="ct-g2" transform="translate(248,130) scale(2)">
+    <circle class="ct-halo-teal" cx="18" cy="18" r="40"/>
     <rect class="ct-icon" stroke="#03AD9C" x="2" y="6" width="32" height="28" rx="3"/>
     <line class="ct-icon" stroke="#03AD9C" x1="2" y1="14" x2="34" y2="14"/>
     <line class="ct-icon" stroke="#03AD9C" x1="12" y1="14" x2="12" y2="34" opacity="0.3"/>
@@ -195,9 +195,9 @@
     <rect x="26" y="26" width="6" height="6" rx="1" fill="rgba(3,173,156,0.12)"/>
   </g>
 
-  <!-- Icon 3: Data (stacked lines with gaps) -->
-  <g class="ct-g3" transform="translate(420,95)">
-    <circle class="ct-halo-violet" cx="18" cy="18" r="32"/>
+  <!-- Icon 3: Data (stacked lines with gaps) — top right -->
+  <g class="ct-g3" transform="translate(440,30) scale(2)">
+    <circle class="ct-halo-violet" cx="18" cy="18" r="40"/>
     <line class="ct-icon" stroke="#8129D7" x1="2" y1="6" x2="28" y2="6"/>
     <line class="ct-icon" stroke="#8129D7" x1="6" y1="14" x2="34" y2="14"/>
     <line class="ct-icon" stroke="#8129D7" x1="0" y1="22" x2="20" y2="22"/>
@@ -206,9 +206,9 @@
     <line class="ct-icon" stroke="#8129D7" x1="22" y1="30" x2="30" y2="30" opacity="0.4"/>
   </g>
 
-  <!-- Icon 4: Tasks (broken checkboxes) — with warning -->
-  <g class="ct-g4" transform="translate(140,255)">
-    <circle class="ct-halo-white" cx="18" cy="18" r="32"/>
+  <!-- Icon 4: Tasks (broken checkboxes) — bottom left, with warning -->
+  <g class="ct-g4" transform="translate(80,255) scale(2)">
+    <circle class="ct-halo-white" cx="18" cy="18" r="40"/>
     <!-- Broken checkbox 1 -->
     <path class="ct-icon" stroke="rgba(255,255,255,0.6)" d="M4,4 L4,18 L18,18 L18,8" stroke-dasharray="3 2"/>
     <line class="ct-icon" stroke="rgba(255,255,255,0.35)" x1="24" y1="10" x2="38" y2="10"/>
@@ -221,9 +221,9 @@
     <circle class="ct-warn-dot" cx="40" cy="4" r="3"/>
   </g>
 
-  <!-- Icon 5: Analytics (ascending bars with cracks) -->
-  <g class="ct-g5" transform="translate(450,248)">
-    <circle class="ct-halo-blue" cx="18" cy="18" r="32"/>
+  <!-- Icon 5: Analytics (ascending bars with cracks) — bottom right -->
+  <g class="ct-g5" transform="translate(430,250) scale(2)">
+    <circle class="ct-halo-blue" cx="18" cy="18" r="40"/>
     <rect class="ct-icon" stroke="#2A5EDB" x="2" y="22" width="7" height="14" rx="1"/>
     <rect class="ct-icon" stroke="#2A5EDB" x="13" y="14" width="7" height="22" rx="1"/>
     <rect class="ct-icon" stroke="#2A5EDB" x="24" y="6" width="7" height="30" rx="1"/>

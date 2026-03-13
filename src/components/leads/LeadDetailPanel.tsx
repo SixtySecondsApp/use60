@@ -1,11 +1,11 @@
-import { type ReactNode, useMemo } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { LeadWithPrep } from '@/lib/services/leadService';
-import { ClipboardList, Globe, Mail, Timer, User, Building2, ExternalLink, Activity, Calendar, Sparkles, Briefcase, Users, Cpu, Newspaper, ArrowUpRight } from 'lucide-react';
+import { ClipboardList, Globe, Mail, Timer, User, Building2, ExternalLink, Activity, Calendar, Sparkles, Briefcase, Users, Cpu, Newspaper, ArrowUpRight, Send, Pencil, X, Check, Loader2, MessageSquare } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import { Button } from '@/components/ui/button';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
 import type { Activity as ActivityType } from '@/lib/hooks/useActivities';
 import { useLeadReprocessor } from '@/lib/hooks/useLeads';
@@ -174,6 +174,10 @@ export function LeadDetailPanel({ lead }: LeadDetailPanelProps) {
 
         <CompanyIntelCard lead={lead} />
 
+        {lead.external_source === 'linkedin' && (
+          <ProposedEmailCard leadId={lead.id} />
+        )}
+
         {lead.prep_summary && (
           <section className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-200">
@@ -268,6 +272,328 @@ export function LeadDetailPanel({ lead }: LeadDetailPanelProps) {
         </section>
       </div>
     </div>
+  );
+}
+
+function ProposedEmailCard({ leadId }: { leadId: string }) {
+  const queryClient = useQueryClient();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editSubject, setEditSubject] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [feedbackText, setFeedbackText] = useState('');
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackSaved, setFeedbackSaved] = useState(false);
+
+  const { data: approval, isLoading } = useQuery({
+    queryKey: ['lead-proposed-email', leadId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('hitl_pending_approvals')
+        .select('id, status, original_content, created_at')
+        .eq('resource_type', 'email_draft')
+        .eq('resource_id', leadId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    staleTime: 30_000,
+  });
+
+  // Record feedback to ai_feedback + org_ai_preferences
+  const recordFeedback = async (action: 'approved' | 'rejected' | 'edited', editedBody?: string) => {
+    if (!approval) return;
+    const content = approval.original_content as Record<string, string>;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Save to ai_feedback
+    await supabase.from('ai_feedback').insert({
+      suggestion_id: approval.id,
+      user_id: user.id,
+      action,
+      action_type: 'email_draft',
+      original_content: `Subject: ${content.subject}\n\n${content.body}`,
+      edited_content: editedBody ? `Subject: ${isEditing ? editSubject : content.subject}\n\n${editedBody}` : null,
+    }).catch(() => {});
+  };
+
+  // Save style feedback as a training rule
+  const feedbackMutation = useMutation({
+    mutationFn: async (instruction: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Get user's org
+      const { data: membership } = await supabase
+        .from('organization_memberships')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+
+      const orgId = membership?.org_id;
+      if (!orgId) throw new Error('No org found');
+
+      // Upsert org_ai_preferences with the new rule in tone_guidelines
+      const { data: existing } = await supabase
+        .from('org_ai_preferences')
+        .select('id, tone_guidelines')
+        .eq('org_id', orgId)
+        .maybeSingle();
+
+      const currentGuidelines = existing?.tone_guidelines || '';
+      const updatedGuidelines = currentGuidelines
+        ? `${currentGuidelines}\n- ${instruction}`
+        : `- ${instruction}`;
+
+      if (existing) {
+        await supabase
+          .from('org_ai_preferences')
+          .update({ tone_guidelines: updatedGuidelines, updated_at: new Date().toISOString() })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('org_ai_preferences')
+          .insert({ org_id: orgId, tone_guidelines: updatedGuidelines });
+      }
+
+      // Also record as feedback
+      await supabase.from('ai_feedback').insert({
+        suggestion_id: approval?.id,
+        user_id: user.id,
+        action: 'edited',
+        action_type: 'style_feedback',
+        original_content: instruction,
+      }).catch(() => {});
+    },
+    onSuccess: () => {
+      setFeedbackSaved(true);
+      setFeedbackText('');
+      toast.success('Style rule saved — AI will follow this for future emails');
+      setTimeout(() => setFeedbackSaved(false), 3000);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to save feedback');
+    },
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      if (!approval) return;
+      const content = approval.original_content as Record<string, string>;
+      const subject = isEditing ? editSubject : content.subject;
+      const body = isEditing ? editBody : content.body;
+
+      const { error } = await supabase.functions.invoke('email-send-as-rep', {
+        body: {
+          to: content.email,
+          subject,
+          body,
+          contact_id: content.contact_id,
+          lead_id: leadId,
+        },
+      });
+      if (error) throw error;
+
+      // Record feedback
+      const wasEdited = isEditing && (editSubject !== content.subject || editBody !== content.body);
+      await recordFeedback(wasEdited ? 'edited' : 'approved', wasEdited ? body : undefined);
+
+      await supabase
+        .from('hitl_pending_approvals')
+        .update({ status: wasEdited ? 'edited' : 'approved' })
+        .eq('id', approval.id);
+    },
+    onSuccess: () => {
+      toast.success('Email sent successfully');
+      queryClient.invalidateQueries({ queryKey: ['lead-proposed-email', leadId] });
+      setIsEditing(false);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to send email');
+    },
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async () => {
+      if (!approval) return;
+      await recordFeedback('rejected');
+      await supabase
+        .from('hitl_pending_approvals')
+        .update({ status: 'rejected' })
+        .eq('id', approval.id);
+    },
+    onSuccess: () => {
+      toast.success('Email dismissed');
+      queryClient.invalidateQueries({ queryKey: ['lead-proposed-email', leadId] });
+    },
+  });
+
+  if (isLoading || !approval) return null;
+  if (approval.status !== 'pending') return null;
+
+  const content = approval.original_content as Record<string, string>;
+  const { subject, body, contact_name, company_name, job_title, email } = content;
+
+  const handleStartEdit = () => {
+    setEditSubject(subject);
+    setEditBody(body);
+    setIsEditing(true);
+  };
+
+  const handleFeedbackSubmit = () => {
+    const trimmed = feedbackText.trim();
+    if (!trimmed) return;
+    feedbackMutation.mutate(trimmed);
+  };
+
+  return (
+    <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-200">
+          <Mail className="h-4 w-4" />
+          Proposed Email
+        </h3>
+        <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+          Awaiting Approval
+        </span>
+      </div>
+
+      {/* Recipient info */}
+      <div className="flex flex-wrap gap-2 mb-3 text-xs text-gray-600 dark:text-gray-300">
+        <span className="font-medium">To: {contact_name}</span>
+        <span className="text-gray-400">&lt;{email}&gt;</span>
+        {job_title && <span className="text-gray-400">· {job_title}</span>}
+        {company_name && <span className="text-gray-400">· {company_name}</span>}
+      </div>
+
+      {/* Email content */}
+      {isEditing ? (
+        <div className="space-y-2 mb-3">
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Subject</label>
+          <input
+            type="text"
+            value={editSubject}
+            onChange={(e) => setEditSubject(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
+            placeholder="Subject"
+          />
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Body</label>
+          <textarea
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
+            rows={10}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 leading-relaxed resize-y focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none"
+          />
+        </div>
+      ) : (
+        <div
+          className="rounded-lg bg-white/80 dark:bg-gray-800/50 border border-gray-200/60 dark:border-gray-700/40 p-3 mb-3 cursor-pointer hover:border-amber-300 dark:hover:border-amber-500/40 transition-colors group"
+          onClick={handleStartEdit}
+          title="Click to edit"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              {subject}
+            </p>
+            <Pencil className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+          <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+            {body}
+          </p>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          onClick={() => sendMutation.mutate()}
+          disabled={sendMutation.isPending || dismissMutation.isPending}
+          className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+        >
+          {sendMutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Send className="h-3.5 w-3.5" />
+          )}
+          {isEditing ? 'Send Edited' : 'Send'}
+        </Button>
+        {isEditing && (
+          <Button size="sm" variant="outline" onClick={() => setIsEditing(false)} className="gap-1.5">
+            <X className="h-3.5 w-3.5" />
+            Cancel Edit
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => dismissMutation.mutate()}
+          disabled={sendMutation.isPending || dismissMutation.isPending}
+          className="gap-1.5 text-gray-500 hover:text-red-600"
+        >
+          <X className="h-3.5 w-3.5" />
+          Dismiss
+        </Button>
+        <div className="flex-1" />
+        <Button
+          size="sm"
+          variant={showFeedback ? 'secondary' : 'ghost'}
+          onClick={() => setShowFeedback(!showFeedback)}
+          className="gap-1.5 text-gray-500"
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          Train AI
+        </Button>
+      </div>
+
+      {/* Feedback / Training section */}
+      {showFeedback && (
+        <div className="mt-3 pt-3 border-t border-amber-200/60 dark:border-amber-500/20">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            Tell the AI how to write better emails. These rules apply to all future drafts.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleFeedbackSubmit(); }}
+              placeholder='e.g. "Do not use em dashes", "Keep under 100 words", "More casual tone"'
+              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none placeholder:text-gray-400"
+            />
+            <Button
+              size="sm"
+              onClick={handleFeedbackSubmit}
+              disabled={!feedbackText.trim() || feedbackMutation.isPending}
+              className="gap-1.5"
+            >
+              {feedbackMutation.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : feedbackSaved ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+              {feedbackSaved ? 'Saved' : 'Save Rule'}
+            </Button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {['No em dashes', 'Shorter sentences', 'More casual tone', 'No exclamation marks', 'Always include a CTA'].map((suggestion) => (
+              <button
+                key={suggestion}
+                onClick={() => setFeedbackText(suggestion)}
+                className="rounded-full bg-white/80 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 px-2.5 py-1 text-[11px] text-gray-600 dark:text-gray-400 hover:border-amber-300 hover:text-amber-700 dark:hover:border-amber-500/40 dark:hover:text-amber-300 transition-colors"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

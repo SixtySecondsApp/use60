@@ -32,6 +32,11 @@ import {
   MoreHorizontal,
   Inbox,
   Play,
+  Columns,
+  ChevronLeft,
+  ChevronRight,
+  Square,
+  BarChart3,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, getSupabaseAuthToken } from '@/lib/supabase/clientV2';
@@ -44,6 +49,9 @@ import { EditColumnSettingsModal } from '@/components/ops/EditColumnSettingsModa
 import { EditApolloSettingsModal } from '@/components/ops/EditApolloSettingsModal';
 import { EditInstantlySettingsModal } from '@/components/ops/EditInstantlySettingsModal';
 import { EditHeyGenVideoSettingsModal } from '@/components/ops/EditHeyGenVideoSettingsModal';
+import { FalVideoColumnWizard } from '@/components/ops/FalVideoColumnWizard';
+import { AiImageColumnWizard } from '@/components/ops/AiImageColumnWizard';
+import { SvgAnimationColumnWizard } from '@/components/ops/SvgAnimationColumnWizard';
 import { EditEmailGenerationModal, type EmailGenerationConfig } from '@/components/ops/EditEmailGenerationModal';
 import { ColumnFilterPopover } from '@/components/ops/ColumnFilterPopover';
 import { ActiveFilterBar } from '@/components/ops/ActiveFilterBar';
@@ -105,12 +113,31 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { useFactProfiles } from '@/lib/hooks/useFactProfiles';
 import { convertAIStyleToCSS, type FormattingRule } from '@/lib/utils/conditionalFormatting';
 import { WebhookSettingsPanel } from '@/components/ops/WebhookSettingsPanel';
+import { LinkedInCampaignBinding } from '@/components/ops/LinkedInCampaignBinding';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatRelativeTime(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
 
 // ---------------------------------------------------------------------------
 // Service singleton
 // ---------------------------------------------------------------------------
 
 const tableService = new OpsTableService(supabase);
+
+const AI_COLUMN_TYPES = ['ai_image', 'fal_video', 'svg_animation'] as const;
+type AiColumnType = typeof AI_COLUMN_TYPES[number];
 
 // ---------------------------------------------------------------------------
 // Normalize formatting rules from DB (handles old + new formats)
@@ -170,6 +197,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
   // ---- Local state ----
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [showAddColumn, setShowAddColumn] = useState(false);
   const [activeColumnMenu, setActiveColumnMenu] = useState<{
     columnId: string;
@@ -200,12 +228,16 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [showAttioPush, setShowAttioPush] = useState(false);
   const [showAttioSyncHistory, setShowAttioSyncHistory] = useState(false);
   const [isPushingToInstantly, setIsPushingToInstantly] = useState(false);
+  const [isRemixingAll, setIsRemixingAll] = useState(false);
   const [editEnrichmentColumn, setEditEnrichmentColumn] = useState<OpsTableColumn | null>(null);
   const [editFormulaColumn, setEditFormulaColumn] = useState<OpsTableColumn | null>(null);
   const [editButtonColumn, setEditButtonColumn] = useState<OpsTableColumn | null>(null);
   const [editApolloColumn, setEditApolloColumn] = useState<OpsTableColumn | null>(null);
   const [editInstantlyColumn, setEditInstantlyColumn] = useState<OpsTableColumn | null>(null);
   const [editHeyGenColumn, setEditHeyGenColumn] = useState<OpsTableColumn | null>(null);
+  const [editFalVideoColumn, setEditFalVideoColumn] = useState<OpsTableColumn | null>(null);
+  const [editAiImageColumn, setEditAiImageColumn] = useState<OpsTableColumn | null>(null);
+  const [editSvgAnimationColumn, setEditSvgAnimationColumn] = useState<OpsTableColumn | null>(null);
   const [createCampaignFromStepColumn, setCreateCampaignFromStepColumn] = useState<OpsTableColumn | null>(null);
   const [editEmailGenColumn, setEditEmailGenColumn] = useState<OpsTableColumn | null>(null);
   const [scheduleDialogColumn, setScheduleDialogColumn] = useState<string | null>(null);
@@ -216,6 +248,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [editingView, setEditingView] = useState<SavedView | null>(null);
   const [groupConfig, setGroupConfig] = useState<GroupConfig | null>(null);
   const [summaryConfig, setSummaryConfig] = useState<Record<string, AggregateType> | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
   const [viewSuggestions, setViewSuggestions] = useState<Array<{
     name: string;
     description: string;
@@ -224,6 +257,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   }>>([]);
   const [nlViewConfig, setNlViewConfig] = useState<ViewConfigState | null>(null);
   const [nlQueryLoading, setNlQueryLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const OPS_PAGE_SIZE = 500;
 
   // Snapshot state before panel opens so we can revert on cancel
   const preConfigSnapshot = useRef<{
@@ -243,11 +278,16 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   const [showSaveAsHubSpotList, setShowSaveAsHubSpotList] = useState(false);
   const [crossQueryResult, setCrossQueryResult] = useState<any>(null);
 
+  // ---- LinkedIn Analytics refresh ----
+  const [isRefreshingAnalytics, setIsRefreshingAnalytics] = useState(false);
+
   // ---- Run All Pipeline ----
   const [isRunningPipeline, setIsRunningPipeline] = useState(false);
   const [pipelineProgress, setPipelineProgress] = useState('');
   const [pipelineBannerDismissed, setPipelineBannerDismissed] = useState(false);
+  const pipelineAbortRef = useRef(false);
   const [viewPromptText, setViewPromptText] = useState<string | null>(null);
+  const [isAddingRows, setIsAddingRows] = useState(false);
 
   // ---- Campaign wizard ----
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
@@ -349,16 +389,25 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     data: tableData,
     isLoading: isDataLoading,
   } = useQuery({
-    queryKey: ['ops-table-data', tableId, sortState, filterConditions],
+    queryKey: ['ops-table-data', tableId, sortState, filterConditions, currentPage],
     queryFn: () =>
       tableService.getTableData(tableId!, {
-        perPage: 500,
+        page: currentPage,
+        perPage: OPS_PAGE_SIZE,
         sortBy: primarySort?.key ?? 'row_index',
         sortDir: primarySort?.dir,
         filters: filterConditions.length > 0 ? filterConditions : undefined,
       }),
     enabled: !!tableId,
   });
+
+  // Reset to page 1 when filters or sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterConditions, sortState]);
+
+  const totalRows = tableData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalRows / OPS_PAGE_SIZE));
 
   const { data: views = [], isLoading: isViewsLoading } = useQuery({
     queryKey: ['ops-table-views', tableId],
@@ -470,6 +519,61 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     [table?.columns],
   );
 
+  // ---- LinkedIn Analytics presence ----
+  const hasLinkedInAnalyticsColumns = useMemo(
+    () => columns.some((c) => c.column_type === 'linkedin_analytics'),
+    [columns],
+  );
+
+  // Compute the most recent last_synced_at across all linkedin_analytics cells in current page
+  const lastAnalyticsSyncedAt = useMemo(() => {
+    if (!hasLinkedInAnalyticsColumns || !tableData?.rows) return null;
+    const analyticsColumnKeys = columns
+      .filter((c) => c.column_type === 'linkedin_analytics')
+      .map((c) => c.key);
+    let latest: Date | null = null;
+    for (const row of tableData.rows) {
+      for (const key of analyticsColumnKeys) {
+        const cell = row.cells[key];
+        const syncedAt = (cell?.metadata as Record<string, unknown> | null)?.last_synced_at;
+        if (typeof syncedAt === 'string') {
+          const d = new Date(syncedAt);
+          if (!latest || d > latest) latest = d;
+        }
+      }
+    }
+    return latest;
+  }, [hasLinkedInAnalyticsColumns, columns, tableData?.rows]);
+
+  // Default sort: if table has a meeting_date column and no sort is set, sort desc
+  useEffect(() => {
+    if (sortState || !columns.length) return;
+    const hasDateCol = columns.some((c) => c.key === 'meeting_date');
+    if (hasDateCol) {
+      setSortState({ key: 'meeting_date', dir: 'desc' });
+    }
+  }, [columns, sortState]);
+
+  // ---- LinkedIn Analytics refresh handler ----
+  const handleRefreshAnalytics = useCallback(async () => {
+    if (!tableId || isRefreshingAnalytics) return;
+    setIsRefreshingAnalytics(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('linkedin-analytics-to-ops', {
+        body: { table_id: tableId },
+      });
+      if (error) throw error;
+      const synced = (data as { synced_cells?: number })?.synced_cells ?? 0;
+      toast.success(`Analytics refreshed — ${synced} cell${synced === 1 ? '' : 's'} updated`);
+      queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to refresh analytics';
+      toast.error(msg);
+    } finally {
+      setIsRefreshingAnalytics(false);
+    }
+  }, [tableId, isRefreshingAnalytics, queryClient]);
+
   // ---- Enrich All handler ----
   const APOLLO_ENRICHABLE_KEYS = new Set(['email', 'phone', 'linkedin_url', 'city', 'website_url', 'funding_stage', 'employees']);
   const handleEnrichAll = useCallback(() => {
@@ -556,6 +660,13 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     });
   }, [tableId, table, currentUserId, views.length, columns, isViewsLoading, queryClient]);
 
+  // Auto-select default view when no view is active but views exist
+  useEffect(() => {
+    if (embedded || activeViewId || isViewsLoading || views.length === 0) return;
+    const defaultView = views.find((v) => v.is_default) || views[0];
+    if (defaultView) setActiveViewId(defaultView.id);
+  }, [embedded, activeViewId, isViewsLoading, views]);
+
   // Rows: server-side filter + primary sort, then client-side multi-sort if needed
   const rows = useMemo(() => {
     const base = tableData?.rows ?? [];
@@ -580,8 +691,18 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   }, [tableData?.rows, normalizedSorts]);
 
   // ---- Run All Pipeline handler ----
+  // Processes each row fully (all steps) before moving to the next row.
+  // Recalculates dependent formulas between steps so conditions (e.g. qualified) are fresh.
+  // Supports stop/resume — skips rows whose output columns are already filled.
   const handleRunAllPipeline = useCallback(async () => {
     if (!tableId || !rows.length || !columns.length) return;
+
+    // If already running, stop the pipeline
+    if (isRunningPipeline) {
+      pipelineAbortRef.current = true;
+      toast.info('Stopping pipeline after current row…');
+      return;
+    }
 
     // Find button columns with run_prompt actions, ordered by position
     const promptButtonCols = columns
@@ -597,71 +718,206 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       return;
     }
 
+    // Count rows that still need processing (last step output empty)
+    const lastStep = promptButtonCols[promptButtonCols.length - 1];
+    const lastOutputKey = (lastStep.action_config as any)?.actions?.find((a: any) => a.type === 'run_prompt')?.config?.output_column_key;
+    const pendingRows = lastOutputKey
+      ? rows.filter((r) => !r.cells[lastOutputKey]?.value).length
+      : rows.length;
+
     const confirmed = window.confirm(
-      `Run AI pipeline on ${rows.length} rows?\n\n${promptButtonCols.map((c, i) => `Step ${i + 1}: ${(c.action_config as any)?.label || c.label}`).join('\n')}`
+      `Run AI pipeline on ${pendingRows} remaining rows (${rows.length} total)?\n\n${promptButtonCols.map((c, i) => `Step ${i + 1}: ${(c.action_config as any)?.label || c.label}`).join('\n')}\n\nClick "Run All" again to stop at any time.`
     );
     if (!confirmed) return;
 
     setIsRunningPipeline(true);
+    pipelineAbortRef.current = false;
+    let completedRows = 0;
 
     try {
-      for (let stepIdx = 0; stepIdx < promptButtonCols.length; stepIdx++) {
-        const col = promptButtonCols[stepIdx];
-        const buttonConfig = col.action_config as any;
-        const promptAction = buttonConfig?.actions?.find((a: any) => a.type === 'run_prompt');
-        if (!promptAction) continue;
+      for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+        if (pipelineAbortRef.current) {
+          toast.info(`Pipeline stopped — ${completedRows} rows completed`);
+          break;
+        }
 
-        const outputKey = promptAction.config?.output_column_key;
-
-        for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
-          const row = rows[rowIdx];
-          const rowCellValues: Record<string, string> = {};
-          if (row.cells) {
-            for (const [key, c] of Object.entries(row.cells)) {
-              if ((c as any).value) rowCellValues[key] = (c as any).value;
-            }
+        const row = rows[rowIdx];
+        // Build fresh cell values for this row
+        let rowCellValues: Record<string, string> = {};
+        if (row.cells) {
+          for (const [key, c] of Object.entries(row.cells)) {
+            if ((c as any).value) rowCellValues[key] = (c as any).value;
           }
+        }
 
-          // Skip if output already has a value
+        // Skip row if the LAST step's output is already filled (fully processed)
+        if (lastOutputKey && rowCellValues[lastOutputKey]) continue;
+
+        let ranAnyStep = false;
+
+        for (let stepIdx = 0; stepIdx < promptButtonCols.length; stepIdx++) {
+          if (pipelineAbortRef.current) break;
+
+          const col = promptButtonCols[stepIdx];
+          const buttonConfig = col.action_config as any;
+          const promptAction = buttonConfig?.actions?.find((a: any) => a.type === 'run_prompt');
+          if (!promptAction) continue;
+
+          const outputKey = promptAction.config?.output_column_key;
+
+          // Skip step if output already filled for this row
           if (outputKey && rowCellValues[outputKey]) continue;
 
-          // Check condition
+          // Check condition (case-insensitive, matching OpsTableCell)
           if (buttonConfig.condition) {
             const cond = buttonConfig.condition;
-            const cellVal = rowCellValues[cond.column_key] ?? '';
+            const cellVal = (rowCellValues[cond.column_key] ?? '').trim().toLowerCase();
+            const condVal = (cond.value ?? '').trim().toLowerCase();
             let condMet = true;
             switch (cond.operator) {
-              case 'equals': condMet = cellVal === cond.value; break;
-              case 'not_equals': condMet = cellVal !== cond.value; break;
-              case 'contains': condMet = cellVal.includes(cond.value ?? ''); break;
+              case 'equals': condMet = cellVal === condVal; break;
+              case 'not_equals': condMet = cellVal !== condVal; break;
+              case 'contains': condMet = cellVal.includes(condVal); break;
               case 'is_empty': condMet = !cellVal; break;
               case 'is_not_empty': condMet = !!cellVal; break;
             }
             if (!condMet) continue;
           }
 
-          setPipelineProgress(`Step ${stepIdx + 1}/${promptButtonCols.length} — Row ${rowIdx + 1}/${rows.length}`);
+          setPipelineProgress(`Row ${rowIdx + 1}/${rows.length} — Step ${stepIdx + 1}/${promptButtonCols.length}`);
 
           try {
             const { data, error } = await supabase.functions.invoke('run-prompt', {
               body: { table_id: tableId, row_id: row.id, action_config: promptAction.config },
             });
-            if (error) console.error(`Pipeline error row ${rowIdx + 1}:`, error);
+            if (error) {
+              console.error(`Pipeline error row ${rowIdx + 1} step ${stepIdx + 1}:`, error);
+              continue;
+            }
+            ranAnyStep = true;
+
+            // Update local cell values so the next step's condition check uses fresh data
+            if (outputKey && data?.result) {
+              rowCellValues[outputKey] = data.result;
+            }
+
+            // Recalculate dependent formula columns for this row (e.g. qualified)
+            const outputKeys = new Set(outputKey ? [outputKey] : []);
+            const dependentFormulas = columns
+              .filter((c) => c.column_type === 'formula' && c.formula_expression)
+              .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)));
+            if (dependentFormulas.length > 0) {
+              try {
+                // evaluate-formula writes results to DB — response is just { evaluated, errors }
+                await Promise.all(
+                  dependentFormulas.map((c) =>
+                    supabase.functions.invoke('evaluate-formula', {
+                      body: { table_id: tableId, column_id: c.id, row_ids: [row.id] },
+                    }),
+                  ),
+                );
+                // Re-fetch this row's cells from DB so we have fresh formula values
+                const colIdToKey = new Map(columns.map((c) => [c.id, c.key]));
+                const { data: freshCells } = await supabase
+                  .from('dynamic_table_cells')
+                  .select('column_id, value')
+                  .eq('row_id', row.id);
+                if (freshCells) {
+                  for (const cell of freshCells) {
+                    const key = colIdToKey.get(cell.column_id);
+                    if (key && cell.value) rowCellValues[key] = cell.value;
+                  }
+                }
+              } catch {
+                // Non-fatal — formulas will be stale until next full recalc
+              }
+            }
           } catch (err) {
-            console.error(`Pipeline error row ${rowIdx + 1}:`, err);
+            console.error(`Pipeline error row ${rowIdx + 1} step ${stepIdx + 1}:`, err);
           }
+        }
+
+        if (ranAnyStep) {
+          completedRows++;
+          // Refresh UI after each row so user sees results before next row starts
+          await queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
         }
       }
 
       queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
-      toast.success('Pipeline complete');
+      if (!pipelineAbortRef.current) {
+        toast.success(`Pipeline complete — ${completedRows} rows processed`);
+      }
     } catch (err: any) {
       toast.error(err.message || 'Pipeline failed');
     } finally {
       setIsRunningPipeline(false);
       setPipelineProgress('');
+      pipelineAbortRef.current = false;
     }
-  }, [tableId, rows, columns, queryClient]);
+  }, [tableId, rows, columns, queryClient, isRunningPipeline]);
+
+  // ---- Add Rows (append new meetings to existing pipeline table) ----
+  const handleAddRows = useCallback(async (dateRange: '30' | '60' | '90' | '180' | '365' | 'all') => {
+    if (!tableId || !table) return;
+
+    // Detect which pipeline template this table uses by checking column keys
+    const { getPipelineTemplateByKey } = await import('@/lib/config/pipelineTemplates');
+    const templateKeys = ['reengagement', 'lead_scoring', 'meeting_followup'];
+    let templateConfig = null;
+    for (const key of templateKeys) {
+      const tmpl = getPipelineTemplateByKey(key);
+      if (!tmpl) continue;
+      const tmplColumnKeys = new Set(tmpl.columns.map((c: any) => c.key));
+      const tableColumnKeys = new Set(columns.map((c) => c.key));
+      const overlap = [...tmplColumnKeys].filter((k) => tableColumnKeys.has(k)).length;
+      if (overlap >= tmplColumnKeys.size * 0.6) {
+        templateConfig = tmpl;
+        break;
+      }
+    }
+
+    if (!templateConfig) {
+      toast.error('Could not detect pipeline template for this table');
+      return;
+    }
+
+    setIsAddingRows(true);
+    try {
+      const filters: Record<string, string> = {};
+      if (dateRange !== 'all') {
+        const daysAgo = new Date();
+        daysAgo.setDate(daysAgo.getDate() - parseInt(dateRange));
+        filters.date_from = daysAgo.toISOString();
+      }
+
+      const { data, error } = await supabase.functions.invoke('setup-pipeline-template', {
+        body: {
+          org_id: table.organization_id,
+          template_key: templateConfig.key,
+          template_config: templateConfig,
+          existing_table_id: tableId,
+          filters,
+        },
+      });
+
+      if (error) throw error;
+
+      const newRows = data?.rows_created ?? 0;
+      const skipped = data?.rows_skipped ?? 0;
+      if (newRows > 0) {
+        toast.success(`Added ${newRows} new rows${skipped ? ` (${skipped} duplicates skipped)` : ''}`);
+        queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+        queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+      } else {
+        toast.info('No new meetings found — all meetings in that range are already in the table');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add rows');
+    } finally {
+      setIsAddingRows(false);
+    }
+  }, [tableId, table, columns, queryClient]);
 
   // ---- Integration polling ----
   useIntegrationPolling(tableId, columns, rows);
@@ -677,10 +933,15 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       searchParams.delete('action');
       setSearchParams(searchParams, { replace: true });
     } else if (action === 'export') {
-      // Trigger CSV export
-      const visibleCols = columns.filter((c) => c.is_visible);
-      OpsTableService.generateCSVExport(rows, visibleCols, table.name || 'export');
-      toast.success(`Exported ${rows.length} rows to CSV`);
+      // Trigger CSV export — include ALL columns (visible + hidden), exclude action buttons and transcripts
+      const exportCols = columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
+      // Default to approved-only rows when review_status column exists
+      const hasReviewStatus = columns.some((c) => c.key === 'review_status');
+      const exportRows = hasReviewStatus
+        ? rows.filter((r) => (r.cells['review_status']?.value ?? '').trim().toLowerCase() === 'approved')
+        : rows;
+      OpsTableService.generateCSVExport(exportRows, exportCols, table.name || 'export');
+      toast.success(`Exported ${exportRows.length}${hasReviewStatus ? ' approved' : ''} rows to CSV`);
       searchParams.delete('action');
       setSearchParams(searchParams, { replace: true });
     }
@@ -885,6 +1146,15 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     onError: () => toast.error('Failed to rename column'),
   });
 
+  const updateColumnIntegrationConfigMutation = useMutation({
+    mutationFn: ({ columnId, integrationConfig }: { columnId: string; integrationConfig: Record<string, unknown> }) =>
+      tableService.updateColumn(columnId, { integrationConfig }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+    },
+    onError: () => toast.error('Failed to update column settings'),
+  });
+
   const updateEnrichmentMutation = useMutation({
     mutationFn: ({ columnId, enrichmentPrompt, enrichmentModel, enrichmentProvider }: {
       columnId: string;
@@ -1063,6 +1333,21 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     onError: () => toast.error('Failed to hide column'),
   });
 
+  const toggleAllColumnsMutation = useMutation({
+    mutationFn: async (showAll: boolean) => {
+      const hiddenCols = columns.filter(c => c.is_visible !== showAll);
+      await Promise.all(
+        hiddenCols.map(c => tableService.updateColumn(c.id, { isVisible: showAll }))
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+    },
+    onError: () => toast.error('Failed to toggle columns'),
+  });
+
+  const hiddenColumnCount = columns.filter(c => !c.is_visible).length;
+
   const deleteColumnMutation = useMutation({
     mutationFn: (columnId: string) => tableService.removeColumn(columnId),
     onSuccess: () => {
@@ -1173,6 +1458,26 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     },
     onError: () => toast.error('Failed to recalculate formula'),
   });
+
+  /** Recalculate dependent formula columns for a specific row, then refresh data */
+  const recalcFormulasForRow = useCallback(async (rowId: string, outputKeys: Set<string>) => {
+    const dependentFormulas = columns
+      .filter((c) => c.column_type === 'formula' && c.formula_expression)
+      .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)));
+    if (dependentFormulas.length === 0) return;
+    try {
+      await Promise.all(
+        dependentFormulas.map((c) =>
+          supabase.functions.invoke('evaluate-formula', {
+            body: { table_id: tableId, column_id: c.id, row_ids: [rowId] },
+          }),
+        ),
+      );
+    } catch {
+      // Non-fatal — formulas will be stale until next full recalc
+    }
+    await queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+  }, [tableId, columns, queryClient]);
 
   const cellEditMutation = useMutation({
     mutationFn: ({ cellId, rowId, columnId, value }: { cellId?: string; rowId: string; columnId: string; value: string }) => {
@@ -1498,41 +1803,38 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           const actionLabel = buttonConfig.label || col.label || 'Action';
           toast.info(`Running: ${actionLabel}...`);
 
-          executeButton.mutate(
-            {
-              columnId: col.id,
-              rowId,
-              buttonConfig,
-              rowCellValues,
-              onUpdateCell: (targetKey: string, newValue: string) => {
-                // Trigger a regular cell edit for set_value actions
-                handleCellEdit(rowId, targetKey, newValue);
-              },
-            },
-            {
-              onSuccess: () => {
-                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'complete', cellId: cell?.id });
-                // Re-evaluate any formula columns that reference the output column
-                const outputKeys = new Set(
-                  (buttonConfig.actions ?? [])
-                    .filter((a: any) => a.type === 'run_prompt' && a.config?.output_column_key)
-                    .map((a: any) => a.config.output_column_key),
-                );
-                if (outputKeys.size > 0) {
-                  columns
-                    .filter((c) => c.column_type === 'formula' && c.formula_expression)
-                    .filter((c) => [...outputKeys].some((k) => c.formula_expression!.includes(`@${k}`)))
-                    .forEach((c) => recalcFormulaMutation.mutate(c.id));
-                }
-                queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
-                toast.success(`Done: ${actionLabel}`);
-              },
-              onError: () => {
-                cellEditMutation.mutate({ rowId, columnId: col.id, value: 'failed', cellId: cell?.id });
-                toast.error(`Failed: ${actionLabel}`);
-              },
-            },
-          );
+          // Use mutateAsync so each row's post-action logic runs independently.
+          // (.mutate() callbacks get overwritten when multiple rows are clicked.)
+          (async () => {
+            try {
+              await executeButton.mutateAsync({
+                columnId: col.id,
+                rowId,
+                buttonConfig,
+                rowCellValues,
+                onUpdateCell: (targetKey: string, newValue: string) => {
+                  handleCellEdit(rowId, targetKey, newValue);
+                },
+              });
+              // Mark button cell as complete
+              tableService.upsertCell(rowId, col.id, 'complete').catch(() => {});
+              // Re-evaluate dependent formula columns for this specific row
+              const outputKeys = new Set(
+                (buttonConfig.actions ?? [])
+                  .filter((a: any) => a.type === 'run_prompt' && a.config?.output_column_key)
+                  .map((a: any) => a.config.output_column_key),
+              );
+              if (outputKeys.size > 0) {
+                await recalcFormulasForRow(rowId, outputKeys);
+              } else {
+                await queryClient.invalidateQueries({ queryKey: ['ops-table-data', tableId] });
+              }
+              toast.success(`Done: ${actionLabel}`);
+            } catch {
+              tableService.upsertCell(rowId, col.id, 'failed').catch(() => {});
+              toast.error(`Failed: ${actionLabel}`);
+            }
+          })();
           return;
         }
 
@@ -1723,6 +2025,93 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
     },
     [columns, startSingleRowEnrichment, singleRowApolloEnrichment, startApolloOrgEnrichment, singleRowLinkedInEnrichment],
   );
+
+  // ---- Remix All: bulk generate all AI columns for selected rows ----
+  const aiColumns = useMemo(
+    () => columns.filter((c) => AI_COLUMN_TYPES.includes(c.column_type as AiColumnType)),
+    [columns],
+  );
+
+  const handleRemixAll = useCallback(async () => {
+    if (aiColumns.length === 0) {
+      toast.info('No AI columns (image, video, or SVG animation) found in this table');
+      return;
+    }
+    if (selectedRows.size === 0) {
+      toast.info('Select rows first');
+      return;
+    }
+
+    const selectedRowIds = Array.from(selectedRows);
+    const total = aiColumns.length * selectedRowIds.length;
+    setIsRemixingAll(true);
+    const toastId = toast.loading(`Generating ${total} item${total !== 1 ? 's' : ''} across ${aiColumns.length} AI column${aiColumns.length !== 1 ? 's' : ''}...`);
+
+    try {
+      const promises = aiColumns.map(async (col) => {
+        try {
+          if (col.column_type === 'fal_video') {
+            const cfg = col.integration_config as Record<string, unknown> | null;
+            if (!cfg?.model_id) return;
+            const { error } = await supabase.functions.invoke('fal-video-generate', {
+              body: {
+                model_id: cfg.model_id || 'fal-ai/kling-video/v3/pro/text-to-video',
+                prompt_template: cfg.prompt_template,
+                table_id: tableId,
+                row_ids: selectedRowIds,
+                image_column_key: cfg.image_column_key,
+                duration: cfg.duration || '5',
+                aspect_ratio: cfg.aspect_ratio || '16:9',
+                generate_audio: cfg.generate_audio,
+              },
+            });
+            if (error) throw new Error(error.message);
+          } else if (col.column_type === 'ai_image') {
+            const cfg = col.integration_config as Record<string, unknown> | null;
+            if (!cfg?.model_id) return;
+            const { error } = await supabase.functions.invoke('ai-image-generate', {
+              body: {
+                action: 'generate',
+                org_id: '',
+                user_id: '',
+                table_id: tableId,
+                column_id: col.id,
+                row_ids: selectedRowIds,
+                model_id: cfg.model_id,
+                resolution: cfg.resolution,
+                aspect_ratio: cfg.aspect_ratio,
+              },
+            });
+            if (error) throw new Error(error.message);
+          } else if (col.column_type === 'svg_animation') {
+            const cfg = col.integration_config as Record<string, unknown> | null;
+            if (!cfg?.prompt_template) return;
+            const { error } = await supabase.functions.invoke('generate-svg-animation', {
+              body: {
+                action: 'generate',
+                org_id: '',
+                user_id: '',
+                table_id: tableId,
+                column_id: col.id,
+                row_ids: selectedRowIds,
+                complexity: cfg.complexity || 'medium',
+              },
+            });
+            if (error) throw new Error(error.message);
+          }
+        } catch (err) {
+          console.error(`Remix All: failed for column "${col.label}":`, err);
+        }
+      });
+
+      await Promise.all(promises);
+      toast.success(`Remix started — generating ${total} item${total !== 1 ? 's' : ''}`, { id: toastId });
+    } catch (err: any) {
+      toast.error(err?.message || 'Remix All failed', { id: toastId });
+    } finally {
+      setIsRemixingAll(false);
+    }
+  }, [aiColumns, selectedRows, tableId]);
 
   const handleStartEditName = useCallback(() => {
     if (table) {
@@ -2151,8 +2540,8 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               exportRows = filteredData.rows;
             }
             const exportCols = (result.columns as string[])
-              ? columns.filter((c) => (result.columns as string[]).includes(c.key))
-              : columns.filter((c) => c.is_visible);
+              ? columns.filter((c) => (result.columns as string[]).includes(c.key) && c.key !== 'transcript_text')
+              : columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
             OpsTableService.generateCSVExport(
               exportRows,
               exportCols,
@@ -2480,7 +2869,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
   // ---- Render ----
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Top section: back nav + query bar + metadata */}
       <div className={`shrink-0 border-b border-gray-800 bg-gray-950 px-6 ${isFullscreen ? 'pb-3 pt-3' : 'pb-4 pt-5'}`}>
         {/* Back button — hidden in fullscreen and embedded mode */}
@@ -2704,6 +3093,32 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
 
             {/* Right: action buttons */}
             <div className="flex items-center gap-1.5 shrink-0">
+            {/* LinkedIn Analytics refresh — visible when table has linkedin_analytics columns */}
+            {hasLinkedInAnalyticsColumns && (
+              <div className="flex items-center gap-1.5">
+                {lastAnalyticsSyncedAt && (
+                  <span className="text-xs text-gray-500 shrink-0">
+                    Synced {formatRelativeTime(lastAnalyticsSyncedAt)}
+                  </span>
+                )}
+                <button
+                  onClick={handleRefreshAnalytics}
+                  disabled={isRefreshingAnalytics}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-700/40 bg-blue-900/20 px-2.5 py-1.5 text-xs font-medium text-blue-300 transition-colors hover:bg-blue-900/40 hover:text-blue-200 disabled:opacity-50"
+                  title="Refresh LinkedIn analytics data"
+                >
+                  {isRefreshingAnalytics ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <BarChart3 className="h-3.5 w-3.5" />
+                      <RefreshCw className="h-3 w-3" />
+                    </>
+                  )}
+                  Refresh Analytics
+                </button>
+              </div>
+            )}
             {/* Source sync — primary action for sourced tables */}
             {table.source_type === 'hubspot' && (
               <button
@@ -2739,21 +3154,89 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                 Enriching
               </div>
             )}
+            {/* Toggle hidden columns */}
+            {hiddenColumnCount > 0 && (
+              <button
+                onClick={() => toggleAllColumnsMutation.mutate(true)}
+                disabled={toggleAllColumnsMutation.isPending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white disabled:opacity-50"
+              >
+                {toggleAllColumnsMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Columns className="h-3.5 w-3.5" />
+                )}
+                Show all ({hiddenColumnCount})
+              </button>
+            )}
+            {hiddenColumnCount === 0 && columns.filter(c => c.column_type === 'formula').length > 5 && (
+              <button
+                onClick={() => {
+                  const toHide = columns.filter(c => c.column_type === 'formula');
+                  if (toHide.length > 0) {
+                    Promise.all(toHide.map(c => tableService.updateColumn(c.id, { isVisible: false })))
+                      .then(() => queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] }))
+                      .catch(() => toast.error('Failed to hide columns'));
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700 hover:text-white"
+              >
+                <Columns className="h-3.5 w-3.5" />
+                Compact view
+              </button>
+            )}
             {/* Run All Pipeline */}
             {columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
               <button
                 onClick={handleRunAllPipeline}
-                disabled={isRunningPipeline}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-900/40 hover:text-emerald-200 disabled:opacity-50"
-                title={pipelineProgress || 'Run AI pipeline on all rows'}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  isRunningPipeline
+                    ? 'border-red-700/40 bg-red-900/20 text-red-300 hover:bg-red-900/40 hover:text-red-200'
+                    : 'border-emerald-700/40 bg-emerald-900/20 text-emerald-300 hover:bg-emerald-900/40 hover:text-emerald-200'
+                }`}
+                title={isRunningPipeline ? 'Click to stop after current row' : pipelineProgress || 'Run AI pipeline on all rows'}
               >
                 {isRunningPipeline ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Square className="h-3.5 w-3.5" />
                 ) : (
                   <Play className="h-3.5 w-3.5" />
                 )}
-                {isRunningPipeline ? pipelineProgress || 'Running...' : 'Run All'}
+                {isRunningPipeline ? pipelineProgress || 'Stop' : 'Run All'}
               </button>
+            )}
+            {/* Add Rows from wider date range (pipeline tables) */}
+            {columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    disabled={isAddingRows}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-700/40 bg-blue-900/20 px-2.5 py-1.5 text-xs font-medium text-blue-300 transition-colors hover:bg-blue-900/40 hover:text-blue-200 disabled:opacity-50"
+                  >
+                    {isAddingRows ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" />
+                    )}
+                    {isAddingRows ? 'Adding…' : 'Add Rows'}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[200px]">
+                  <div className="px-2 py-1.5 text-xs font-medium text-gray-400">Import meetings from…</div>
+                  <DropdownMenuSeparator />
+                  {[
+                    { label: 'Last 30 days', value: '30' as const },
+                    { label: 'Last 60 days', value: '60' as const },
+                    { label: 'Last 90 days', value: '90' as const },
+                    { label: 'Last 6 months', value: '180' as const },
+                    { label: 'Last 12 months', value: '365' as const },
+                    { label: 'All time', value: 'all' as const },
+                  ].map((opt) => (
+                    <DropdownMenuItem key={opt.value} onClick={() => handleAddRows(opt.value)}>
+                      {opt.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {/* Add Row */}
             <button
@@ -2768,6 +3251,14 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               )}
               Add Row
             </button>
+            {/* LinkedIn Campaign Binding */}
+            {tableId && table && (
+              <LinkedInCampaignBinding
+                tableId={tableId}
+                integrationConfig={table.integration_config}
+                onSaved={() => queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] })}
+              />
+            )}
             {/* Webhook settings */}
             <button
               onClick={() => setShowWebhookPanel(true)}
@@ -2813,6 +3304,28 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
                   <Upload className="h-3.5 w-3.5 mr-2" />
                   Import CSV
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  const exportCols = columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
+                  const hasReviewStatus = columns.some((c) => c.key === 'review_status');
+                  const exportRows = hasReviewStatus
+                    ? rows.filter((r) => (r.cells['review_status']?.value ?? '').trim().toLowerCase() === 'approved')
+                    : rows;
+                  OpsTableService.generateCSVExport(exportRows, exportCols, table?.name || 'export');
+                  toast.success(`Exported ${exportRows.length} approved rows to CSV`);
+                }}>
+                  <Download className="h-3.5 w-3.5 mr-2" />
+                  {columns.some((c) => c.key === 'review_status') ? 'Export CSV (Approved Only)' : 'Export CSV'}
+                </DropdownMenuItem>
+                {columns.some((c) => c.key === 'review_status') && (
+                  <DropdownMenuItem onClick={() => {
+                    const exportCols = columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
+                    OpsTableService.generateCSVExport(rows, exportCols, `${table?.name || 'export'}-all`);
+                    toast.success(`Exported all ${rows.length} rows to CSV`);
+                  }}>
+                    <Download className="h-3.5 w-3.5 mr-2" />
+                    Export CSV (All Rows)
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={() => setShowCampaignWizard(true)}>
                   <Send className="h-3.5 w-3.5 mr-2" />
                   Create Campaign
@@ -3094,12 +3607,11 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
       {/* Table area */}
       {activeTab === 'data' && (
         <div
-          className="flex-1 min-h-[50vh] min-w-0 overflow-hidden px-6 pt-4 pb-16"
-          style={{ '--ops-table-max-height': isFullscreen ? 'calc(100vh - 90px)' : 'calc(100vh - 220px)' } as React.CSSProperties}
+          className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col px-6 pt-4 pb-4"
         >
           {/* Pipeline info banner */}
           {!pipelineBannerDismissed && columns.some((c) => (c.column_type === 'button' || c.column_type === 'action') && (c.action_config as any)?.actions?.some((a: any) => a.type === 'run_prompt')) && (
-            <div className="mb-3 flex items-center gap-3 rounded-lg border border-violet-700/30 bg-violet-900/10 px-4 py-2.5 text-xs text-violet-300">
+            <div className="mb-3 shrink-0 flex items-center gap-3 rounded-lg border border-violet-700/30 bg-violet-900/10 px-4 py-2.5 text-xs text-violet-300">
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
               <span>This table has AI pipeline steps. Click action buttons to process rows, or use <strong>Run All</strong> to process everything. Edit prompts via column header menu.</span>
               <button onClick={() => setPipelineBannerDismissed(true)} className="ml-auto shrink-0 text-violet-400 hover:text-violet-200">
@@ -3154,7 +3666,40 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
               if (Object.keys(instantlySummary).length === 0) return summaryConfig ?? null;
               return { ...instantlySummary, ...(summaryConfig ?? {}) };
             })()}
+            onRowExpand={(rowId) => setExpandedRowId(rowId)}
+            compareMode={compareMode}
+            onToggleCompareMode={() => setCompareMode((m) => !m)}
           />
+
+          {/* Pagination controls */}
+          {totalPages > 1 && (
+            <div className="shrink-0 flex items-center justify-between px-2 py-3 border-t border-zinc-800/60">
+              <span className="text-xs text-zinc-500">
+                Showing {((currentPage - 1) * OPS_PAGE_SIZE) + 1}–{Math.min(currentPage * OPS_PAGE_SIZE, totalRows)} of {totalRows} rows
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Prev
+                </button>
+                <span className="px-2 text-xs text-zinc-400">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3238,7 +3783,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             toast.error(msg);
           }
         }}
-        existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+        existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
         sourceType={table?.source_type as 'manual' | 'csv' | 'hubspot' | null}
         tableId={tableId}
@@ -3363,6 +3908,15 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           onEditHeygen={activeColumn.column_type === 'heygen_video' ? () => {
             setEditHeyGenColumn(activeColumn);
           } : undefined}
+          onEditFalVideo={activeColumn.column_type === 'fal_video' ? () => {
+            setEditFalVideoColumn(activeColumn);
+          } : undefined}
+          onEditAiImage={activeColumn.column_type === 'ai_image' ? () => {
+            setEditAiImageColumn(activeColumn);
+          } : undefined}
+          onEditSvgAnimation={activeColumn.column_type === 'svg_animation' ? () => {
+            setEditSvgAnimationColumn(activeColumn);
+          } : undefined}
           onEditEmailGeneration={/^instantly_step_\d+_(subject|body)$/.test(activeColumn.key) ? () => {
             setEditEmailGenColumn(activeColumn);
           } : undefined}
@@ -3374,6 +3928,17 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             setCreateCampaignFromStepColumn(activeColumn);
           } : undefined}
           anchorRect={activeColumnMenu?.anchorRect}
+          analyticsDateRange={activeColumn.column_type === 'linkedin_analytics'
+            ? ((activeColumn.integration_config as { date_range?: string } | null)?.date_range ?? 'last_30_days')
+            : undefined}
+          onChangeDateRange={activeColumn.column_type === 'linkedin_analytics' ? (dateRange) => {
+            const existing = (activeColumn.integration_config as Record<string, unknown> | null) ?? {};
+            updateColumnIntegrationConfigMutation.mutate({
+              columnId: activeColumn.id,
+              integrationConfig: { ...existing, date_range: dateRange },
+            });
+            toast.success(`Date range updated to ${dateRange.replace(/_/g, ' ')}`);
+          } : undefined}
         />
       )}
 
@@ -3475,7 +4040,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           currentModel={editEnrichmentColumn.enrichment_model ?? 'anthropic/claude-3.5-sonnet'}
           currentProvider={editEnrichmentColumn.enrichment_provider ?? 'openrouter'}
           columnLabel={editEnrichmentColumn.label}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
           contextProfileName={contextProfile?.company_name ?? (factProfiles.find((p) => p.is_org_profile)?.company_name || null)}
           contextProfileIsOrg={contextProfile ? contextProfile.is_org_profile : true}
         />
@@ -3495,7 +4060,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             });
           }}
           columnLabel={editFormulaColumn.label}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
           sampleRowValues={rows[0] ? Object.fromEntries(Object.entries(rows[0].cells).map(([k, c]) => [k, c.value ?? ''])) : {}}
         />
       )}
@@ -3514,7 +4079,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             });
           }}
           columnLabel={editButtonColumn.label}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
       )}
 
@@ -3663,7 +4228,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           columnLabel={editInstantlyColumn.label}
           currentConfig={(editInstantlyColumn.integration_config as any) ?? undefined}
           orgId={table?.organization_id}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
       )}
 
@@ -3683,8 +4248,83 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
           }}
           columnLabel={editHeyGenColumn.label}
           currentConfig={(editHeyGenColumn.integration_config as any) ?? undefined}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
+      )}
+
+      {/* Edit FAL Video Settings */}
+      {editFalVideoColumn && tableId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditFalVideoColumn(null)} />
+          <div className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <FalVideoColumnWizard
+              tableId={tableId}
+              existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              initialConfig={(editFalVideoColumn.integration_config as any) ?? undefined}
+              onComplete={async (config) => {
+                try {
+                  await tableService.updateColumn(editFalVideoColumn.id, { integrationConfig: config as unknown as Record<string, unknown> });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                  toast.success('Video settings updated');
+                } catch {
+                  toast.error('Failed to update video settings');
+                }
+                setEditFalVideoColumn(null);
+              }}
+              onCancel={() => setEditFalVideoColumn(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Edit AI Image Settings */}
+      {editAiImageColumn && tableId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditAiImageColumn(null)} />
+          <div className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <AiImageColumnWizard
+              tableId={tableId}
+              existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              initialConfig={(editAiImageColumn.integration_config as any) ?? undefined}
+              onComplete={async (config) => {
+                try {
+                  await tableService.updateColumn(editAiImageColumn.id, { integrationConfig: config as unknown as Record<string, unknown> });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                  toast.success('Image settings updated');
+                } catch {
+                  toast.error('Failed to update image settings');
+                }
+                setEditAiImageColumn(null);
+              }}
+              onCancel={() => setEditAiImageColumn(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Edit SVG Animation Settings */}
+      {editSvgAnimationColumn && tableId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditSvgAnimationColumn(null)} />
+          <div className="relative z-10 w-full max-w-lg mx-4 rounded-xl border border-gray-700/80 bg-gray-900 shadow-2xl p-5 max-h-[80vh] overflow-y-auto">
+            <SvgAnimationColumnWizard
+              tableId={tableId}
+              existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
+              initialConfig={(editSvgAnimationColumn.integration_config as any) ?? undefined}
+              onComplete={async (config) => {
+                try {
+                  await tableService.updateColumn(editSvgAnimationColumn.id, { integrationConfig: config as unknown as Record<string, unknown> });
+                  queryClient.invalidateQueries({ queryKey: ['ops-table', tableId] });
+                  toast.success('Animation settings updated');
+                } catch {
+                  toast.error('Failed to update animation settings');
+                }
+                setEditSvgAnimationColumn(null);
+              }}
+              onCancel={() => setEditSvgAnimationColumn(null)}
+            />
+          </div>
+        </div>
       )}
 
       {/* Create Instantly Campaign from Step Columns */}
@@ -3784,7 +4424,7 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             return (campaignConfigCol?.integration_config as any) ?? { instantly_subtype: 'campaign_config' };
           })()}
           orgId={table?.organization_id}
-          existingColumns={columns.map((c) => ({ key: c.key, label: c.label }))}
+          existingColumns={columns.map((c) => ({ key: c.key, label: c.label, column_type: c.column_type }))}
         />
       )}
 
@@ -3922,6 +4562,86 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         }}
         onPushToHubSpot={() => { setShowHubSpotPush(true); fetchHubSpotLists(); }}
         onPushToAttio={() => setShowAttioPush(true)}
+        onExportCSV={async () => {
+          const selectedRowData = rows.filter((r) => selectedRows.has(r.id));
+          const allExportCols = columns.filter((c) => c.column_type !== 'action' && c.key !== 'transcript_text');
+          const toastId = toast.loading('Building CSV with encoded tags...');
+
+          try {
+            // 1. Get current user's Slack ID
+            let slackUserId = '';
+            if (currentUserId && table?.organization_id) {
+              const { data: slackMapping } = await supabase
+                .from('slack_user_mappings')
+                .select('slack_user_id')
+                .eq('org_id', table.organization_id)
+                .eq('sixty_user_id', currentUserId)
+                .limit(1)
+                .maybeSingle();
+              slackUserId = slackMapping?.slack_user_id ?? '';
+            }
+
+            // 2. Collect all contact_ids from rows to batch-fetch emails
+            const contactIdSet = new Set<string>();
+            for (const row of selectedRowData) {
+              const contactId = row.cells['contact_id']?.value;
+              if (contactId) contactIdSet.add(contactId);
+            }
+            const contactEmailMap = new Map<string, string>();
+            if (contactIdSet.size > 0) {
+              const { data: contacts } = await supabase
+                .from('contacts')
+                .select('id, email')
+                .in('id', Array.from(contactIdSet));
+              for (const c of contacts ?? []) {
+                if (c.email) contactEmailMap.set(c.id, c.email);
+              }
+            }
+
+            // 3. Build raw tag strings per row
+            const CAMPAIGN_ID = '15000_C3.5_PS_V1_';
+            const encodedTagsMap = new Map<string, string>();
+            const rawTagsMap = new Map<string, string>();
+            const orderedRowIds: string[] = [];
+
+            for (const row of selectedRowData) {
+              const firstName = row.cells['first_name']?.value ?? '';
+              const lastName = row.cells['last_name']?.value ?? '';
+              const contactId = row.cells['contact_id']?.value ?? '';
+              const email = contactEmailMap.get(contactId) ?? row.cells['email']?.value ?? '';
+
+              const rawTags = `tag1=${firstName}&tag2=${lastName}&tag3=${email}&tag4=${slackUserId}&tag5=${CAMPAIGN_ID}&rca=${firstName}&rtr-intro-client-name=${firstName}&rtr-client-name=${firstName}`;
+              rawTagsMap.set(row.id, rawTags);
+              orderedRowIds.push(row.id);
+            }
+
+            // 4. Encode all tags via edge function (avoids CORS)
+            try {
+              const token = await getSupabaseAuthToken();
+              const { data: encodeResult, error: encodeErr } = await supabase.functions.invoke('encode-tags', {
+                body: { tags: orderedRowIds.map((id) => rawTagsMap.get(id)!) },
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+              });
+              if (!encodeErr && encodeResult?.encoded) {
+                for (let i = 0; i < orderedRowIds.length; i++) {
+                  encodedTagsMap.set(orderedRowIds[i], encodeResult.encoded[i] ?? '');
+                }
+              }
+            } catch (encErr) {
+              console.error('[encode-tags] Failed:', encErr);
+            }
+
+            // 5. Export CSV with extra columns
+            OpsTableService.generateCSVExport(selectedRowData, allExportCols, table?.name || 'export', [
+              { label: 'Campaign ID', value: CAMPAIGN_ID },
+              { label: 'Tags', value: (row) => rawTagsMap.get(row.id) ?? '' },
+              { label: 'Encoded Tags', value: (row) => encodedTagsMap.get(row.id) ?? '' },
+            ]);
+            toast.success(`Exported ${selectedRowData.length} rows`, { id: toastId });
+          } catch (err: any) {
+            toast.error(err?.message ?? 'Export failed', { id: toastId });
+          }
+        }}
         onReEnrich={() => {
           const enrichCols = columns.filter((c) => c.is_enrichment);
           if (enrichCols.length === 0) return toast.info('No enrichment columns');
@@ -3929,6 +4649,9 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
         }}
         onDelete={() => deleteRowsMutation.mutate(Array.from(selectedRows))}
         onDeselectAll={() => setSelectedRows(new Set())}
+        onRemixAll={aiColumns.length > 0 ? handleRemixAll : undefined}
+        aiColumnCount={aiColumns.length}
+        isRemixingAll={isRemixingAll}
       />
 
       {/* HubSpot Push Modal */}
@@ -4114,6 +4837,43 @@ function OpsDetailPage({ embeddedTableId, embedded }: { embeddedTableId?: string
             ) : (
               <WorkflowList tableId={tableId!} onEdit={() => setShowWorkflowBuilder(true)} />
             )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Row Detail Panel */}
+      <Sheet open={!!expandedRowId} onOpenChange={(open) => !open && setExpandedRowId(null)}>
+        <SheetContent className="w-[520px] sm:w-[560px] overflow-y-auto !top-16 !h-[calc(100vh-4rem)] !p-0 border-l border-white/[0.06] bg-gray-950">
+          <SheetHeader className="border-b border-white/[0.06] px-6 pt-6 pb-5">
+            <SheetTitle className="text-base font-semibold text-gray-100">Row Details</SheetTitle>
+          </SheetHeader>
+          <div className="px-6 py-4 space-y-3">
+            {(() => {
+              const row = rows.find(r => r.id === expandedRowId);
+              if (!row) return <p className="text-sm text-gray-500">Row not found</p>;
+              return columns.map(col => {
+                const cellValue = row.cells[col.key]?.value;
+                if (cellValue === null || cellValue === undefined || cellValue === '') return null;
+                const isJson = typeof cellValue === 'string' && (cellValue.startsWith('{') || cellValue.startsWith('['));
+                return (
+                  <div key={col.id} className="rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{col.label}</span>
+                      {!col.is_visible && (
+                        <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-500">hidden</span>
+                      )}
+                    </div>
+                    {isJson ? (
+                      <pre className="whitespace-pre-wrap text-xs text-gray-300 font-mono leading-relaxed max-h-80 overflow-auto">{
+                        (() => { try { return JSON.stringify(JSON.parse(cellValue), null, 2); } catch { return cellValue; } })()
+                      }</pre>
+                    ) : (
+                      <p className="text-sm text-gray-200 whitespace-pre-wrap">{cellValue}</p>
+                    )}
+                  </div>
+                );
+              }).filter(Boolean);
+            })()}
           </div>
         </SheetContent>
       </Sheet>

@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, KeyboardEvent, useRef, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface EditableTagProps {
@@ -69,12 +69,18 @@ export function EditableTag({
   return (
     <span
       className={cn(
-        'group px-2.5 py-1 text-sm rounded-full flex items-center gap-1.5 cursor-pointer transition-colors',
+        'group px-2.5 py-1 text-sm rounded-full flex items-center gap-1.5 transition-colors',
         'bg-gray-800 text-gray-300 hover:bg-gray-700',
         className
       )}
     >
-      <span onClick={() => setIsEditing(true)}>{value}</span>
+      <span>{value}</span>
+      <button
+        onClick={() => setIsEditing(true)}
+        className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-violet-400"
+      >
+        <Pencil className="w-3 h-3" />
+      </button>
       <button
         onClick={onDelete}
         className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400"

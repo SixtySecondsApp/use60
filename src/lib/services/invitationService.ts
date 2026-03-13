@@ -27,6 +27,8 @@ export interface CreateInvitationParams {
   orgId: string;
   email: string;
   role: 'admin' | 'member';
+  /** TTL in days for the invitation link. Defaults to 7. */
+  ttlDays?: number;
 }
 
 export interface AcceptInvitationResult {
@@ -78,7 +80,7 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     const name = inviterName || 'A team member';
 
     // Call send-router edge function with dark-themed template
-    const { error } = await supabase.functions.invoke('send-router', {
+    const { data: sendData, error } = await supabase.functions.invoke('send-router', {
       body: {
         action: 'organization_invitation',
         to_email: invitation.email,
@@ -90,8 +92,19 @@ async function sendInvitationEmail(invitation: Invitation, inviterName?: string)
     });
 
     if (error) {
-      logger.error('[InvitationService] Error sending invitation email:', error);
+      // Log detailed error info for debugging email delivery issues
+      const errorDetail = error instanceof Error ? error.message : JSON.stringify(error);
+      logger.error('[InvitationService] Error sending invitation email:', errorDetail);
+      if (sendData) {
+        logger.error('[InvitationService] Response body:', JSON.stringify(sendData));
+      }
       // Don't throw - invitation still created even if email fails
+      return false;
+    }
+
+    // Check if the send-router returned a non-success response in the body
+    if (sendData && sendData.success === false) {
+      logger.error('[InvitationService] Send-router returned failure:', sendData.error || 'Unknown error');
       return false;
     }
 
@@ -111,9 +124,11 @@ export async function createInvitation({
   orgId,
   email,
   role,
+  ttlDays = 7,
 }: CreateInvitationParams): Promise<{ data: Invitation | null; error: string | null; warning?: string }> {
   try {
-    logger.log('[InvitationService] Creating invitation:', { orgId, email, role });
+    const ttlMs = ttlDays * 24 * 60 * 60 * 1000;
+    logger.log('[InvitationService] Creating invitation:', { orgId, email, role, ttlDays });
 
     // Permission check: caller must be admin or owner of the target org
     const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -203,7 +218,7 @@ export async function createInvitation({
             token: Array.from(crypto.getRandomValues(new Uint8Array(32)))
               .map(b => b.toString(16).padStart(2, '0'))
               .join(''),
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            expires_at: new Date(Date.now() + ttlMs).toISOString(),
             role, // Update role in case it changed from the original invite
           } as any)
           .eq('id', existingInvite.id)
@@ -259,7 +274,7 @@ export async function createInvitation({
         role,
         invited_by: user?.id || null,
         token, // Explicitly set the token
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+        expires_at: new Date(Date.now() + ttlMs).toISOString(),
       } as any)
       .select()
       .single();
@@ -358,12 +373,14 @@ export async function getOrgInvitations(
 ): Promise<{ data: Invitation[] | null; error: string | null }> {
   try {
     // Note: selecting specific columns to avoid auth.users permission error (invited_by FK)
+    // Show invitations from the last 30 days (including recently expired ones so admins can extend)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase
       .from('organization_invitations')
       .select('id, org_id, email, role, token, expires_at, accepted_at, created_at')
       .eq('org_id', orgId)
       .is('accepted_at', null)
-      .gt('expires_at', new Date().toISOString())
+      .gt('expires_at', thirtyDaysAgo)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -657,5 +674,39 @@ export async function resendInvitation(
   } catch (err: any) {
     logger.error('[InvitationService] Exception resending invitation:', err);
     return { data: null, error: err.message || 'Failed to resend invitation' };
+  }
+}
+
+// =====================================================
+// Extend Invitation Expiry (without regenerating token)
+// =====================================================
+
+export async function extendInvitationExpiry(
+  invitationId: string,
+  newExpiresAt: Date
+): Promise<{ data: Invitation | null; error: string | null }> {
+  try {
+    logger.log('[InvitationService] Extending invitation expiry:', invitationId, 'to', newExpiresAt.toISOString());
+
+    const response = await (supabase
+      .from('organization_invitations') as any)
+      .update({
+        expires_at: newExpiresAt.toISOString(),
+      })
+      .eq('id', invitationId)
+      .is('accepted_at', null)
+      .select()
+      .single() as { data: Invitation | null; error: any };
+
+    if (response.error) {
+      logger.error('[InvitationService] Error extending invitation:', response.error);
+      return { data: null, error: response.error.message };
+    }
+
+    logger.log('[InvitationService] Invitation expiry extended');
+    return { data: response.data, error: null };
+  } catch (err: any) {
+    logger.error('[InvitationService] Exception extending invitation:', err);
+    return { data: null, error: err.message || 'Failed to extend invitation' };
   }
 }

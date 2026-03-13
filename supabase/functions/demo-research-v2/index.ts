@@ -21,7 +21,7 @@
 
 import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from '../_shared/corsHelper.ts';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
 const PROVIDER_TIMEOUT_MS = 10_000;
 
 interface DemoResearchRequest {

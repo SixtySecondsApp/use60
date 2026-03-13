@@ -1,6 +1,6 @@
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
-import { useState, useEffect, useCallback } from 'react';
-import { Building2, Check, X, Loader2, AlertCircle, ChevronDown, Brain, FileText, Palette, Plus, Trash2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Building2, Check, X, Loader2, AlertCircle, ChevronDown, ChevronRight, Brain, FileText, Palette, Plus, Trash2, Globe, Upload, Eye } from 'lucide-react';
 import { OrgAIUsage } from '@/components/settings/OrgAIUsage';
 import { OrgProfileSettings } from '@/components/settings/OrgProfileSettings';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,72 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+// ---------------------------------------------------------------------------
+// Brand prompt generator — mirrors the edge function version
+// ---------------------------------------------------------------------------
+
+const TONE_DESCRIPTIONS: Record<string, string> = {
+  formal: 'Write in a polished, professional manner. Use proper grammar, avoid slang, and maintain authority.',
+  conversational: 'Write like a knowledgeable friend. Use contractions, ask rhetorical questions, and keep sentences short.',
+  playful: 'Write with energy and personality. Use bold statements, wordplay, and punchy rhythm.',
+  authoritative: 'Write with deep confidence and domain expertise. Lead with data, use decisive language.',
+  minimal: 'Write with radical brevity. Every word earns its place. Short sentences. No filler.',
+};
+
+function buildBrandPrompt(
+  colors: Array<{ hex: string; role: string }>,
+  headingFont: string | null,
+  bodyFont: string | null,
+  tone: string | null,
+  orgName: string,
+  websiteUrl?: string
+): string {
+  const lines: string[] = [];
+  lines.push(`## Brand Identity — ${orgName}`);
+  if (websiteUrl) lines.push(`Website: ${websiteUrl}`);
+  lines.push('');
+
+  if (colors.length) {
+    lines.push('### Color Palette');
+    for (const c of colors) {
+      const role = (c.role || 'accent').toLowerCase();
+      let usage = '';
+      if (role.includes('primary')) usage = ' — Use for headings, buttons, and primary CTAs';
+      else if (role.includes('secondary')) usage = ' — Use for supporting elements, borders, and secondary actions';
+      else if (role.includes('accent')) usage = ' — Use sparingly for highlights, badges, and emphasis';
+      else if (role.includes('background')) usage = ' — Use for page/section backgrounds';
+      lines.push(`- ${c.role || 'Accent'}: \`${c.hex}\`${usage}`);
+    }
+    lines.push('');
+    lines.push('Use ONLY these brand colors. Do not introduce new colors. Ensure WCAG AA contrast.');
+    lines.push('');
+  }
+
+  if (headingFont || bodyFont) {
+    lines.push('### Typography');
+    if (headingFont) lines.push(`- **Headings**: ${headingFont}`);
+    if (bodyFont) lines.push(`- **Body**: ${bodyFont}`);
+    lines.push('');
+  }
+
+  if (tone) {
+    lines.push('### Voice & Tone');
+    const desc = TONE_DESCRIPTIONS[tone.toLowerCase().trim()];
+    lines.push(`Style: **${tone}**`);
+    if (desc) lines.push(desc);
+    else lines.push(`Write in a ${tone} manner consistently across all copy.`);
+    lines.push('');
+  }
+
+  lines.push('### Rules');
+  lines.push('- Never deviate from brand colors, fonts, or tone unless explicitly asked');
+  lines.push('- Prioritize brand consistency over generic best practices');
+  const primary = colors.find(c => c.role?.toLowerCase().includes('primary'));
+  if (primary) lines.push(`- Default CTA/button color: \`${primary.hex}\``);
+
+  return lines.join('\n');
+}
+
 export default function OrganizationSettingsPage() {
   const { activeOrgId, activeOrg, organizations, permissions, refreshOrgs, switchOrg } = useOrg();
   const [isEditingName, setIsEditingName] = useState(false);
@@ -27,6 +93,9 @@ export default function OrganizationSettingsPage() {
   const [currencyCode, setCurrencyCode] = useState<CurrencyCode>(
     ((activeOrg?.currency_code as CurrencyCode | undefined) || 'GBP')
   );
+  // TSK-0499 Bug #7/#8: Don't fall back to company_domain for website field.
+  // company_domain is the email domain (e.g. "acme.com"), company_website is
+  // the user-entered URL (e.g. "https://www.acme.io"). Mixing them is confusing.
   const [companyWebsite, setCompanyWebsite] = useState(activeOrg?.company_website || '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
@@ -38,6 +107,10 @@ export default function OrganizationSettingsPage() {
   const [brandBodyFont, setBrandBodyFont] = useState(existingBrand.body_font || '');
   const [brandTone, setBrandTone] = useState(existingBrand.tone || '');
   const [isSavingBrand, setIsSavingBrand] = useState(false);
+  const [isScrapingBrand, setIsScrapingBrand] = useState(false);
+  const [isUploadingBrand, setIsUploadingBrand] = useState(false);
+  const [showBrandPrompt, setShowBrandPrompt] = useState(false);
+  const brandFileInputRef = useRef<HTMLInputElement>(null);
 
   // Update org name when activeOrg changes
   useEffect(() => {
@@ -140,6 +213,14 @@ export default function OrganizationSettingsPage() {
         heading_font: brandFont.trim() || null,
         body_font: brandBodyFont.trim() || null,
         tone: brandTone || null,
+        brand_prompt: buildBrandPrompt(
+          validColors,
+          brandFont.trim() || null,
+          brandBodyFont.trim() || null,
+          brandTone || null,
+          activeOrg?.name || 'Our Company',
+          companyWebsite || (activeOrg as any)?.company_website || ''
+        ),
       };
       const { error } = await (supabase as any)
         .from('organizations')
@@ -153,7 +234,99 @@ export default function OrganizationSettingsPage() {
     } finally {
       setIsSavingBrand(false);
     }
-  }, [activeOrgId, permissions.canManageSettings, brandColors, brandFont, brandBodyFont, brandTone, refreshOrgs]);
+  }, [activeOrgId, permissions.canManageSettings, brandColors, brandFont, brandBodyFont, brandTone, companyWebsite, activeOrg, refreshOrgs]);
+
+  const handleAutoDetectBrand = useCallback(async () => {
+    if (!activeOrgId || !permissions.canManageSettings) return;
+    const websiteUrl = companyWebsite.trim()
+      || (activeOrg as any)?.company_website
+      || (activeOrg as any)?.company_domain
+      || '';
+    if (!websiteUrl) {
+      toast.error('Enter your company website above first, then try again');
+      return;
+    }
+    setIsScrapingBrand(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('scrape-brand-guidelines', {
+        body: { website_url: websiteUrl },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const bg = data?.brand_guidelines;
+      if (bg) {
+        if (Array.isArray(bg.colors)) setBrandColors(bg.colors);
+        if (bg.heading_font) setBrandFont(bg.heading_font);
+        if (bg.body_font) setBrandBodyFont(bg.body_font);
+        if (bg.tone) setBrandTone(bg.tone);
+        toast.success('Brand guidelines detected from website');
+        await refreshOrgs();
+      } else {
+        toast.info('Could not extract brand guidelines — try adding them manually');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to auto-detect brand guidelines');
+    } finally {
+      setIsScrapingBrand(false);
+    }
+  }, [activeOrgId, permissions.canManageSettings, companyWebsite, activeOrg, refreshOrgs]);
+
+  const handleUploadBrandFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeOrgId || !permissions.canManageSettings) return;
+
+    // Reset the input so the same file can be re-selected
+    e.target.value = '';
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const mimeMap: Record<string, string> = {
+      pdf: 'application/pdf',
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      svg: 'image/svg+xml',
+      md: 'text/markdown',
+      markdown: 'text/markdown',
+    };
+    const file_type = mimeMap[ext] || file.type || 'application/octet-stream';
+
+    setIsUploadingBrand(true);
+    try {
+      const file_data: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Strip the data:...;base64, prefix
+          const base64 = result.split(',')[1] || result;
+          resolve(base64);
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+
+      const { data, error } = await supabase.functions.invoke('scrape-brand-guidelines', {
+        body: { file_data, file_type, file_name: file.name },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const bg = data?.brand_guidelines;
+      if (bg) {
+        if (Array.isArray(bg.colors)) setBrandColors(bg.colors);
+        if (bg.heading_font) setBrandFont(bg.heading_font);
+        if (bg.body_font) setBrandBodyFont(bg.body_font);
+        if (bg.tone) setBrandTone(bg.tone);
+        toast.success('Brand guidelines extracted from file');
+      } else {
+        toast.info('Could not extract brand guidelines from file — try adding them manually');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to extract brand guidelines from file');
+    } finally {
+      setIsUploadingBrand(false);
+    }
+  }, [activeOrgId, permissions.canManageSettings]);
 
   if (!activeOrgId) {
     return (
@@ -307,9 +480,55 @@ export default function OrganizationSettingsPage() {
             Brand Guidelines
           </h2>
           <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-6 space-y-6">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Brand colors, fonts, and tone are used by AI agents (landing page builder, email drafts, proposals) to match your brand.
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Brand colors, fonts, and tone are used by AI agents (landing page builder, email drafts, proposals, ad remix) to match your brand.
+              </p>
+              {permissions.canManageSettings && (
+                <>
+                  <input
+                    ref={brandFileInputRef}
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.svg,.md,.markdown"
+                    className="hidden"
+                    onChange={handleUploadBrandFile}
+                  />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        disabled={isScrapingBrand || isUploadingBrand}
+                        variant="outline"
+                        size="sm"
+                        className="flex-shrink-0"
+                      >
+                        {isScrapingBrand || isUploadingBrand ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                            {isScrapingBrand ? 'Detecting...' : 'Uploading...'}
+                          </>
+                        ) : (
+                          <>
+                            <Palette className="w-4 h-4 mr-1.5" />
+                            Auto-detect Brand
+                            <ChevronDown className="w-3.5 h-3.5 ml-1.5" />
+                          </>
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={handleAutoDetectBrand}>
+                        <Globe className="w-4 h-4 mr-2" />
+                        Analyze Website
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => brandFileInputRef.current?.click()}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload Brand File
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
+            </div>
 
             {/* Brand Colors */}
             <div className="space-y-3">
@@ -443,6 +662,35 @@ export default function OrganizationSettingsPage() {
                 )}
               </Button>
             )}
+
+            {/* AI Brand Prompt Preview */}
+            {existingBrand.brand_prompt && (
+              <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowBrandPrompt(!showBrandPrompt)}
+                  className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                >
+                  {showBrandPrompt ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                  <Eye className="w-4 h-4" />
+                  AI Brand Prompt Preview
+                </button>
+                {showBrandPrompt && (
+                  <div className="mt-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 p-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
+                      This prompt is automatically injected into AI agents (ad remix, proposals, landing pages, emails) to enforce your brand.
+                    </p>
+                    <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto">
+                      {existingBrand.brand_prompt}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -480,6 +728,24 @@ export default function OrganizationSettingsPage() {
                 This changes how money is displayed across your organization (no automatic conversion).
               </p>
             </div>
+
+            {/* Company domain (read-only, from email/enrichment) */}
+            {(activeOrg as any)?.company_domain && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Company Domain
+                </label>
+                <input
+                  type="text"
+                  value={(activeOrg as any)?.company_domain || ''}
+                  disabled
+                  className="w-full bg-gray-100 dark:bg-gray-800/30 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Detected from your email domain. Used for matching and enrichment.
+                </p>
+              </div>
+            )}
 
             {/* Company website */}
             <div className="space-y-2">
