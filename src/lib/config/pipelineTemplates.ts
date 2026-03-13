@@ -1,4 +1,5 @@
 import type { ButtonConfig } from '@/lib/services/opsTableService';
+import type { FormattingRule } from '@/lib/utils/conditionalFormatting';
 
 // ── Interfaces ──────────────────────────────────────────────────
 
@@ -80,6 +81,97 @@ Return ONLY a JSON object with:
 const REENGAGEMENT_PROMPT_2_USER = `Analysis for {{first_name}} {{last_name}} ({{company}}):
 {{transcript_analysis}}`;
 
+// ── Review Step Prompts ──────────────────────────────────────────
+
+const REENGAGEMENT_REVIEW_SYSTEM = `You are an AI quality reviewer for a sales re-engagement pipeline. You review the transcript analysis and email variables for quality.
+
+Your job:
+1. QUALIFICATION CHECK — Using the transcript analysis, verify the prospect is genuinely qualified:
+   - They discussed real business challenges that the product could solve
+   - They are NOT an existing/past client
+   - No follow-up meeting was already scheduled
+   - The transcript is a real prospect conversation (not internal, not garbled)
+   - If NOT qualified, return review_status: "not_qualified"
+
+2. VARIABLE QUALITY CHECK — If qualified, review the email merge variables:
+   - hook_line: Must be specific, not generic. Reference something real from the meeting.
+   - pain_ref: Must accurately reflect their stated pain point.
+   - pain_short: Must be concise (3-5 words).
+   - time_ref: Must be natural ("back in January", not "3.5 months ago").
+   - use60_intro: Must be one clear sentence about how 60 helps.
+   - pain_reframe: Must reframe their pain as an opportunity, not repeat it.
+   - capability_match: Must match their specific needs to actual capabilities.
+   - All variables must sound human and casual, never corporate or salesy.
+   - All variables must be under 30 words each.
+
+3. DECISION:
+   - "approved" — qualification passes AND all variables are good quality
+   - "not_qualified" — prospect should not receive an email
+   - "wording_fix_needed" — qualified prospect but one or more variables need rewording. Include specific feedback about what needs fixing.
+
+Return ONLY a JSON object with:
+- review_status (string: "approved", "not_qualified", or "wording_fix_needed")
+- review_notes (string: 2-3 sentences explaining the decision)
+- feedback (string: if wording_fix_needed, specific guidance on what to fix and how. Empty string otherwise.)`;
+
+const REENGAGEMENT_REVIEW_USER = `Review this prospect's re-engagement data:
+
+Prospect: {{first_name}} {{last_name}} at {{company}}
+Meeting date: {{meeting_date}}
+
+Transcript Analysis:
+{{transcript_analysis}}
+
+Email Variables:
+{{email_variables}}`;
+
+const REENGAGEMENT_FIX_VARIABLES_SYSTEM = `You are an AI copywriter fixing email merge variables based on review feedback.
+
+You will receive the original email variables and review feedback explaining what needs to change.
+
+Rules:
+- If the review_status is "approved" or "not_qualified", return the original email variables EXACTLY as-is. Do not change anything.
+- If the review_status is "wording_fix_needed", rewrite ONLY the variables that the feedback identifies as problematic. Keep unchanged variables identical.
+- All variables must sound human and casual, never corporate or salesy.
+- All variables must be under 30 words each.
+- pain_short must be 3-5 words.
+- time_ref must be natural (e.g. "back in January").
+
+Return ONLY a JSON object with the same fields as the original email variables:
+- time_ref, pain_ref, pain_short, hook_line, use60_intro, pain_reframe, capability_match`;
+
+const REENGAGEMENT_FIX_VARIABLES_USER = `Review result:
+{{review_output}}
+
+Original email variables:
+{{email_variables}}
+
+Transcript analysis (for context):
+{{transcript_analysis}}`;
+
+const REENGAGEMENT_RE_REVIEW_SYSTEM = `You are an AI quality reviewer performing a FINAL re-review of email variables after an auto-fix attempt.
+
+The variables were previously flagged as "wording_fix_needed" and have been automatically corrected. Your job is to make the FINAL call:
+
+- "approved" — the corrected variables are now good quality. All sound human, casual, specific, and under word limits.
+- "needs_review" — the auto-fix did not sufficiently address the issues. A human needs to review.
+
+If the original review was "approved" or "not_qualified" (no fix was needed), preserve that status.
+
+Return ONLY a JSON object with:
+- review_status (string: "approved", "not_qualified", or "needs_review")
+- review_notes (string: 2-3 sentences explaining the final decision)
+- feedback (string: empty string)`;
+
+const REENGAGEMENT_RE_REVIEW_USER = `Original review result:
+{{review_output}}
+
+Current email variables (after any auto-fix):
+{{email_variables}}
+
+Transcript analysis:
+{{transcript_analysis}}`;
+
 const REENGAGEMENT_PROMPT_3_SYSTEM = `You are an AI email writer. Write a short, warm re-engagement email. Plain text only. Under 150 words. Sound human, not salesy. Reference specific details from the meeting.`;
 
 const REENGAGEMENT_PROMPT_3_USER = `Write a re-engagement email to {{first_name}} at {{company}}.
@@ -115,14 +207,14 @@ const REENGAGEMENT_TEMPLATE: PipelineTemplate = {
     },
     {
       title: 'Review',
-      description: 'AI quality gate — reviews qualification and variable quality, auto-fixes wording issues.',
+      description: 'AI quality-checks variables and qualification. Auto-fixes wording issues once — escalates to human if still wrong.',
       icon: 'ShieldCheck',
       color: 'amber',
       action_column_key: 'review_btn',
     },
     {
       title: 'Write Email',
-      description: 'Drafts a warm, human re-engagement email using the personalised variables.',
+      description: 'Drafts a warm, human re-engagement email using the reviewed variables.',
       icon: 'Mail',
       color: 'amber',
       action_column_key: 'write_email_btn',
