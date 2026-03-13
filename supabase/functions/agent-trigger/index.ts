@@ -131,6 +131,11 @@ const BRAIN_EVENTS: Record<string, {
   /** If true, skip traditional trigger execution and only dispatch to orchestrator */
   orchestratorOnly: boolean;
 }> = {
+  deal_created: {
+    orchestratorEventType: 'deal_created',
+    source: 'trigger:brain_deal_created',
+    orchestratorOnly: false,
+  },
   calendar_event_created: {
     orchestratorEventType: 'calendar_event_created',
     source: 'trigger:brain_pre_call',
@@ -154,7 +159,7 @@ const BRAIN_EVENTS: Record<string, {
 };
 
 /** Events that create CC items directly (no fleet orchestration needed) */
-const DIRECT_CC_EVENTS = new Set(['task_overdue']);
+const DIRECT_CC_EVENTS = new Set(['task_overdue', 'contact_created']);
 
 interface BrainDispatchResult {
   dispatched: boolean;
@@ -267,6 +272,41 @@ async function handleDirectCCEvent(
   idempotencyKey: string,
 ): Promise<BrainDispatchResult> {
   try {
+    if (event === 'contact_created') {
+      const contactName = (payload.full_name || payload.name || 'New contact') as string;
+      const contactId = (payload.id || payload.contact_id || '') as string;
+      const email = (payload.email || '') as string;
+      const company = (payload.company || '') as string;
+
+      const ccItemId = await writeToCommandCentre({
+        org_id: orgId,
+        user_id: userId,
+        source_agent: 'notification-bridge' as SourceAgent,
+        item_type: 'suggestion' as ItemType,
+        title: `New contact: ${contactName}`,
+        summary: [
+          `${contactName} was added to your CRM.`,
+          email ? `Email: ${email}` : '',
+          company ? `Company: ${company}` : '',
+          'Auto-enrichment can fill in missing details.',
+        ].filter(Boolean).join(' '),
+        urgency: 'low' as Urgency,
+        contact_id: contactId || undefined,
+        source_event_id: contactId || undefined,
+        context: {
+          brain_event: 'contact_created',
+          contact_id: contactId,
+          contact_name: contactName,
+          email,
+          company,
+          idempotency_key: idempotencyKey,
+        },
+      });
+
+      console.log(`[brain] contact_created handled: CC item=${ccItemId}, contact=${contactName}`);
+      return { dispatched: true, method: 'direct_cc', idempotencyKey, ccItemId };
+    }
+
     if (event === 'task_overdue') {
       const taskTitle = (payload.title || payload.task_title || 'Untitled task') as string;
       const taskId = (payload.id || payload.task_id || '') as string;

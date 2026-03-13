@@ -501,6 +501,50 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
     },
   ],
   // =========================================================================
+  // Brain Deal Created: deal_created → research + enrichment + CC notify
+  // =========================================================================
+  deal_created: [
+    {
+      skill: 'lead-research',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+    {
+      skill: 'company-research',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+    {
+      skill: 'cc-notify',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['lead-research', 'company-research'],
+    },
+  ],
+
+  // =========================================================================
+  // Brain Contact Created: contact_created → direct CC (handled in agent-trigger)
+  // =========================================================================
+  contact_created: [
+    {
+      skill: 'cc-notify',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+  ],
+
+  // =========================================================================
   // Brain Pre-Call (US-007): calendar_event_created → research + dossier + notify
   // DB-driven route: brain_pre_call (seeded in migration 20260313142351)
   // This hardcoded fallback mirrors the DB definition.

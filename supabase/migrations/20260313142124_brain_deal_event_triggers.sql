@@ -44,13 +44,13 @@ BEGIN
   _payload := jsonb_build_object(
     'event', 'deal_created',
     'organization_id', NEW.clerk_org_id,
-    'user_id', COALESCE(NEW.owner_id, NEW.created_by),
+    'user_id', NEW.owner_id,
     'payload', jsonb_build_object(
       'deal_id', NEW.id,
       'deal_name', NEW.name,
-      'stage', NEW.stage,
+      'stage_id', NEW.stage_id,
       'value', NEW.value,
-      'company_name', NEW.company_name,
+      'company', NEW.company,
       'owner_id', NEW.owner_id
     )
   );
@@ -83,7 +83,7 @@ DECLARE
   _payload JSONB;
 BEGIN
   -- Only fire when stage actually changes
-  IF OLD.stage IS NOT DISTINCT FROM NEW.stage THEN
+  IF OLD.stage_id IS NOT DISTINCT FROM NEW.stage_id THEN
     RETURN NEW;
   END IF;
 
@@ -97,14 +97,14 @@ BEGIN
   _payload := jsonb_build_object(
     'event', 'deal_stage_changed',
     'organization_id', NEW.clerk_org_id,
-    'user_id', COALESCE(NEW.owner_id, NEW.created_by),
+    'user_id', NEW.owner_id,
     'payload', jsonb_build_object(
       'deal_id', NEW.id,
       'deal_name', NEW.name,
-      'old_stage', OLD.stage,
-      'new_stage', NEW.stage,
+      'old_stage_id', OLD.stage_id,
+      'new_stage_id', NEW.stage_id,
       'value', NEW.value,
-      'company_name', NEW.company_name,
+      'company', NEW.company,
       'owner_id', NEW.owner_id
     )
   );

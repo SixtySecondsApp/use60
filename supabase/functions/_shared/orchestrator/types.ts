@@ -22,7 +22,9 @@ export type EventType =
   // Brain event types (US-007 to US-013)
   | 'calendar_event_created'
   | 'meeting_completed'
+  | 'deal_created'
   | 'deal_stage_changed'
+  | 'contact_created'
   | 'task_overdue'
   | 'deal_stalled'
   | 'deal_risk_rescore';
@@ -43,7 +45,9 @@ export type EventSource =
   // Brain trigger sources (US-007 to US-013)
   | 'trigger:brain_pre_call'
   | 'trigger:brain_post_call'
+  | 'trigger:brain_deal_created'
   | 'trigger:brain_deal_stage'
+  | 'trigger:brain_contact_created'
   | 'trigger:brain_task_overdue'
   | 'trigger:brain_stale_deal';
 
