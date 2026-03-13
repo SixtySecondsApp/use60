@@ -18,6 +18,9 @@ import {
   ChevronUp,
   ChevronDown,
   Mic,
+  Lock,
+  ArrowRight,
+  Linkedin,
   Globe,
 } from 'lucide-react';
 import { HelpPanel } from '@/components/docs/HelpPanel';
@@ -46,6 +49,7 @@ import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
 import { ExplloriumConfigModal } from '@/components/integrations/ExplloriumConfigModal';
 import { BetterContactConfigModal } from '@/components/integrations/BetterContactConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
+import { HeyReachConfigModal } from '@/components/integrations/HeyReachConfigModal';
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
 import { LinkedInConfigModal } from '@/components/integrations/LinkedInConfigModal';
 import { HeyGenConfigModal } from '@/components/integrations/HeyGenConfigModal';
@@ -67,6 +71,7 @@ import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { useExploriumIntegration } from '@/lib/hooks/useExploriumIntegration';
 import { useBetterContactIntegration } from '@/lib/hooks/useBetterContactIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
+import { useHeyReachIntegration } from '@/lib/hooks/useHeyReachIntegration';
 import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
 import { useLinkedInIntegration } from '@/lib/hooks/useLinkedInIntegration';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
@@ -577,6 +582,21 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'heyreach',
+    name: 'HeyReach',
+    description: 'LinkedIn outreach automation at scale.',
+    permissions: [
+      { title: 'Push leads', description: 'Add leads to HeyReach LinkedIn campaigns.' },
+      { title: 'Receive webhooks', description: 'Track connection accepts, replies, and engagement.' },
+      { title: 'Sync engagement', description: 'Pull LinkedIn activity data into Ops tables.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    iconBorderColor: 'border-blue-100 dark:border-blue-800/40',
+    fallbackIcon: <Linkedin className="w-6 h-6 text-blue-600 dark:text-blue-400" />,
+    isBuilt: true,
+  },
+  {
     id: 'heygen',
     name: 'HeyGen',
     description: 'Connect your HeyGen account for AI video avatars.',
@@ -855,6 +875,11 @@ export default function Integrations() {
   } = useInstantlyIntegration();
 
   const {
+    isConnected: heyreachConnected,
+    loading: heyreachLoading,
+  } = useHeyReachIntegration();
+
+  const {
     isConnected: apifyConnected,
     loading: apifyLoading,
   } = useApifyIntegration();
@@ -992,6 +1017,8 @@ export default function Integrations() {
         return bettercontactConnected ? 'active' : 'inactive';
       case 'instantly':
         return instantlyConnected ? 'active' : 'inactive';
+      case 'heyreach':
+        return heyreachConnected ? 'active' : 'inactive';
       case 'apify':
         return apifyConnected ? 'active' : 'inactive';
       case 'linkedin':
@@ -1376,6 +1403,10 @@ export default function Integrations() {
       />
       <InstantlyConfigModal
         open={activeConfigModal === 'instantly'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <HeyReachConfigModal
+        open={activeConfigModal === 'heyreach'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
       <ApifyConfigModal
