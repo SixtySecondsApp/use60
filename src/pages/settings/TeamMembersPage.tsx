@@ -13,6 +13,7 @@ import {
   getOrgInvitations,
   revokeInvitation,
   resendInvitation,
+  extendInvitationExpiry,
   type Invitation,
 } from '@/lib/services/invitationService';
 import {
@@ -66,7 +67,9 @@ export default function TeamMembersPage() {
   // Invite form state
   const [newInviteEmail, setNewInviteEmail] = useState('');
   const [newInviteRole, setNewInviteRole] = useState<'admin' | 'member'>('member');
+  const [newInviteTtl, setNewInviteTtl] = useState<number>(7);
   const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [extendingInviteId, setExtendingInviteId] = useState<string | null>(null);
 
   // Join requests section collapse state
   const [isJoinRequestsExpanded, setIsJoinRequestsExpanded] = useState(true);
@@ -439,7 +442,9 @@ export default function TeamMembersPage() {
     loadMembers();
   }, [activeOrgId, membersRefetchKey]);
 
-  // Load invitations
+  // Load invitations — also refresh when members change (TSK-0499 Bug #6)
+  // When an invited user completes signup, accepted_at is set and the invitation
+  // should disappear from the pending list. membersRefetchKey triggers this.
   useEffect(() => {
     if (!activeOrgId) return;
 
@@ -455,7 +460,7 @@ export default function TeamMembersPage() {
     };
 
     loadInvitations();
-  }, [activeOrgId]);
+  }, [activeOrgId, membersRefetchKey]);
 
   // Check if user is owner
   useEffect(() => {
@@ -478,6 +483,7 @@ export default function TeamMembersPage() {
       orgId: activeOrgId,
       email: newInviteEmail.trim(),
       role: newInviteRole,
+      ttlDays: newInviteTtl,
     });
 
     if (error) {
@@ -515,6 +521,40 @@ export default function TeamMembersPage() {
     } else {
       toast.error(error || 'Failed to resend invitation');
     }
+  };
+
+  // Handle extending invitation expiry
+  const handleExtendInvite = async (inviteId: string, days: number) => {
+    setExtendingInviteId(inviteId);
+    const newExpiry = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const { data, error } = await extendInvitationExpiry(inviteId, newExpiry);
+    if (data) {
+      toast.success(`Invitation extended by ${days} days`);
+      setInvitations(invitations.map((inv) => (inv.id === inviteId ? data : inv)));
+    } else {
+      toast.error(error || 'Failed to extend invitation');
+    }
+    setExtendingInviteId(null);
+  };
+
+  // Helper: format remaining time for invitation expiry
+  const formatExpiryStatus = (expiresAt: string) => {
+    const now = new Date();
+    const expiry = new Date(expiresAt);
+    const diffMs = expiry.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      const absDays = Math.abs(diffDays);
+      return { text: `Expired ${absDays}d ago`, color: 'text-red-500 dark:text-red-400', isExpired: true };
+    }
+    if (diffDays === 0) {
+      return { text: 'Expires today', color: 'text-amber-500 dark:text-amber-400', isExpired: false };
+    }
+    if (diffDays <= 7) {
+      return { text: `Expires in ${diffDays}d`, color: 'text-amber-500 dark:text-amber-400', isExpired: false };
+    }
+    return { text: `Expires in ${diffDays}d`, color: 'text-gray-500 dark:text-gray-400', isExpired: false };
   };
 
   // Handle removing member - ORGREM-013
@@ -795,6 +835,19 @@ export default function TeamMembersPage() {
                 <option value="member">Member</option>
                 <option value="admin">Admin</option>
               </select>
+              <select
+                value={newInviteTtl}
+                onChange={(e) => setNewInviteTtl(Number(e.target.value))}
+                disabled={isSendingInvite}
+                className="bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-xl px-3 py-2.5 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#37bd7e] focus:border-transparent disabled:opacity-50"
+                title="Link validity period"
+              >
+                <option value={1}>1 day</option>
+                <option value={7}>7 days</option>
+                <option value={14}>14 days</option>
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+              </select>
               <Button
                 type="submit"
                 disabled={isSendingInvite || !newInviteEmail.trim()}
@@ -819,32 +872,51 @@ export default function TeamMembersPage() {
             </h2>
             <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
               <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                {invitations.map((invite) => (
+                {invitations.map((invite) => {
+                  const expiry = formatExpiryStatus(invite.expires_at);
+                  return (
                   <div
                     key={invite.id}
                     className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700/50 flex items-center justify-center">
-                        <Mail className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${expiry.isExpired ? 'bg-red-100 dark:bg-red-900/30' : 'bg-gray-200 dark:bg-gray-700/50'}`}>
+                        <Mail className={`w-5 h-5 ${expiry.isExpired ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`} />
                       </div>
                       <div>
                         <p className="text-gray-900 dark:text-white">{invite.email}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Expires {new Date(invite.expires_at).toLocaleDateString()}
+                        <p className={`text-sm ${expiry.color}`}>
+                          {expiry.text}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-medium border ${roleColors[invite.role]}`}
                       >
                         {roleLabels[invite.role]}
                       </span>
+                      <select
+                        onChange={(e) => {
+                          const days = Number(e.target.value);
+                          if (days > 0) handleExtendInvite(invite.id, days);
+                          e.target.value = '';
+                        }}
+                        disabled={extendingInviteId === invite.id}
+                        className="bg-transparent border border-gray-300 dark:border-gray-700/50 rounded-lg px-2 py-1 text-xs text-gray-600 dark:text-gray-400 focus:ring-1 focus:ring-[#37bd7e] disabled:opacity-50 cursor-pointer"
+                        defaultValue=""
+                        title="Extend invitation expiry"
+                      >
+                        <option value="" disabled>Extend</option>
+                        <option value={7}>+7 days</option>
+                        <option value={14}>+14 days</option>
+                        <option value={30}>+30 days</option>
+                        <option value={90}>Set to 90d</option>
+                      </select>
                       <button
                         onClick={() => handleResendInvite(invite.id)}
                         className="p-2 text-gray-500 dark:text-gray-400 hover:text-[#37bd7e] transition-colors"
-                        title="Resend invitation"
+                        title="Resend invitation (generates new link)"
                       >
                         <RefreshCw className="w-4 h-4" />
                       </button>
@@ -857,7 +929,8 @@ export default function TeamMembersPage() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -193,7 +193,7 @@ serve(async (req) => {
       subject: emailSubject,
       html: emailHtml,
       text: emailText,
-      from: 'invites@use60.com',
+      from: 'app@use60.com',
       fromName: '60',
     });
 

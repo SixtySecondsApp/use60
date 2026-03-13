@@ -69,8 +69,8 @@ serve(async (req) => {
           to: invite.email,
           subject: `${sender_name} invited you to skip the line for Meeting Intelligence`,
           html: emailHtml,
-          from: 'invites@sixtyseconds.ai',
-          fromName: 'Meeting Intelligence',
+          from: 'app@use60.com',
+          fromName: '60',
         });
 
         if (!result.success) {

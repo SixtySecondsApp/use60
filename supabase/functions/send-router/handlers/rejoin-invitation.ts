@@ -178,7 +178,7 @@ export async function handleRejoinInvitation(req: Request): Promise<Response> {
       subject: emailSubject,
       html: emailHtml,
       text: emailText,
-      from: 'invites@use60.com',
+      from: 'app@use60.com',
       fromName: '60',
     });
 
