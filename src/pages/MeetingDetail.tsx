@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic, CheckCircle2, CircleDot, Building2, Globe, Linkedin, Users, TrendingUp, Briefcase } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Loader2, AlertCircle, Play, FileText, MessageSquare, Sparkles, RefreshCw, BarChart3, Clock, Mic, CheckCircle2, CircleDot, Building2, Globe, Linkedin, Users, TrendingUp, Briefcase, Copy, Check, Download } from 'lucide-react';
 import FathomPlayerV2, { FathomPlayerV2Handle } from '@/components/FathomPlayerV2';
 import { VoiceMeetingPlayer } from '@/components/meetings/VoiceMeetingPlayer';
 import { AskAIChat } from '@/components/meetings/AskAIChat';
@@ -16,11 +16,12 @@ import { useActivitiesActions } from '@/lib/hooks/useActivitiesActions';
 import { useEventEmitter } from '@/lib/communication/EventBus';
 import { toast } from 'sonner';
 import { ProposalWizard } from '@/components/proposals/ProposalWizard';
-import { ProposalQuickGenerate } from '@/components/proposals/ProposalQuickGenerate';
+import { ProposalQuickGenerate, type ProposalQuickGenerateHandle } from '@/components/proposals/ProposalQuickGenerate';
 import { TalkTimeChart } from '@/components/meetings/analytics/TalkTimeChart';
 import { CoachingInsights } from '@/components/meetings/analytics/CoachingInsights';
 import { QuickActionsCard } from '@/components/meetings/QuickActionsCard';
 import { ShareMeetingModal } from '@/components/meetings/ShareMeetingModal';
+import { formatVoiceTranscript, downloadTranscriptTxt, copyToClipboard } from '@/lib/utils/transcriptExport';
 import { StructuredMeetingSummary } from '@/components/meetings/StructuredMeetingSummary';
 import { useActivationTracking } from '@/lib/hooks/useActivationTracking';
 import { useOnboardingProgress } from '@/lib/hooks/useOnboardingProgress';
@@ -265,6 +266,43 @@ export function MeetingDetail() {
   const [isReprocessing, setIsReprocessing] = useState(false);
   const { execute: executeMeetingSummaryGated } = useCreditGatedAction('meeting_summary', 5);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [transcriptCopied, setTranscriptCopied] = useState(false);
+  const proposalRef = useRef<ProposalQuickGenerateHandle>(null);
+
+  const handleCopyTranscript = useCallback(async () => {
+    if (!meeting) return;
+    let text: string | null = null;
+    if (voiceRecordingData?.transcript_segments?.length) {
+      text = formatVoiceTranscript(voiceRecordingData.transcript_segments);
+    } else {
+      text = meeting.transcript_text;
+    }
+    if (!text) return;
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      toast.success('Transcript copied to clipboard');
+      setTranscriptCopied(true);
+      setTimeout(() => setTranscriptCopied(false), 2000);
+    } else {
+      toast.error('Failed to copy transcript');
+    }
+  }, [meeting, voiceRecordingData]);
+
+  const handleDownloadTranscript = useCallback(() => {
+    if (!meeting) return;
+    let text: string | null = null;
+    if (voiceRecordingData?.transcript_segments?.length) {
+      text = formatVoiceTranscript(voiceRecordingData.transcript_segments);
+    } else {
+      text = meeting.transcript_text;
+    }
+    if (!text) return;
+    downloadTranscriptTxt({
+      title: meeting.title || 'Meeting',
+      date: meeting.start_time,
+      transcriptText: text,
+    });
+  }, [meeting, voiceRecordingData]);
 
   const handleQuickAdd = async (type: 'meeting' | 'outbound' | 'proposal' | 'sale') => {
     if (!meeting) return;
@@ -297,6 +335,28 @@ export function MeetingDetail() {
         }
       }
     });
+  };
+
+  const handleDraftFollowUp = async () => {
+    if (!meeting) return;
+    const toastId = toast.loading('Drafting follow-up email...');
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-follow-up', {
+        body: { meeting_id: meeting.id },
+      });
+      if (error) throw error;
+      const body = data?.email?.body || data?.body;
+      const subject = data?.email?.subject || data?.subject;
+      if (body) {
+        await navigator.clipboard.writeText(`Subject: ${subject || ''}\n\n${body}`);
+        toast.success('Follow-up email copied to clipboard', { id: toastId });
+      } else {
+        toast.error('Could not generate follow-up email', { id: toastId });
+      }
+    } catch (err: any) {
+      console.error('[MeetingDetail] Draft follow-up failed:', err);
+      toast.error(err?.message || 'Failed to draft follow-up', { id: toastId });
+    }
   };
 
   useEffect(() => {
@@ -434,9 +494,12 @@ export function MeetingDetail() {
             })
         ];
         const seen = new Set<string>();
+        const BOT_ATTENDEE_NAMES = new Set(['60 notetaker', '60_notetaker', 'notetaker', 'ai notetaker', 'meeting bot', 'bot']);
         const combinedAttendees = allAttendees.filter(a => {
           const key = a.email?.toLowerCase();
           if (!key || seen.has(key)) return false;
+          // Filter out bot/notetaker attendees
+          if (a.name && BOT_ATTENDEE_NAMES.has(a.name.toLowerCase().trim())) return false;
           seen.add(key);
           return true;
         });
@@ -1154,6 +1217,7 @@ export function MeetingDetail() {
                       hasRecording={!!meeting.fathom_recording_id}
                       hasNotes={!!meeting.transcript_text}
                       onCustomise={() => setShowProposalWizard(true)}
+                      triggerRef={proposalRef}
                     />
                   </div>
 
@@ -1234,6 +1298,25 @@ export function MeetingDetail() {
 
                 {/* Transcript Tab */}
                 <TabsContent value="transcript" className="mt-0">
+                  {/* Copy/Export buttons — show for any meeting type with transcript data */}
+                  {(meeting.transcript_text || (voiceRecordingData?.transcript_segments?.length || 0) !== 0) && (
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={handleCopyTranscript}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        {transcriptCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        {transcriptCopied ? 'Copied' : 'Copy'}
+                      </button>
+                      <button
+                        onClick={handleDownloadTranscript}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Export .txt
+                      </button>
+                    </div>
+                  )}
                   {meeting.transcript_text ? (
                     <div className="max-h-[600px] overflow-y-auto pr-1 scrollbar-custom">
                       <div className="text-sm space-y-0">
@@ -1246,7 +1329,32 @@ export function MeetingDetail() {
                         };
                         const getFirstName = (name: string) => name.trim().split(/\s+/)[0];
 
-                        const lines = meeting.transcript_text!.split('\n');
+                        // Pre-process: resolve bot speaker names (e.g. "60 Notetaker") to real people
+                        const BOT_NAMES = new Set(['60 notetaker', '60_notetaker', 'notetaker', 'ai notetaker', 'meeting bot', 'bot']);
+                        const isBotName = (n: string) => BOT_NAMES.has(n.toLowerCase().trim());
+
+                        const rawLines = meeting.transcript_text!.split('\n');
+                        // First pass: find all speakers and detect bot
+                        const allSpeakers = new Set<string>();
+                        for (const l of rawLines) {
+                          const m = l.match(/^\[?\d{1,2}:\d{2}:\d{2}\]?\s+([^:]+):/);
+                          if (m) allSpeakers.add(m[1].trim());
+                        }
+                        const realSpeakers = Array.from(allSpeakers).filter(s => !isBotName(s));
+                        const hasBotSpeaker = Array.from(allSpeakers).some(s => isBotName(s));
+                        let botReplaceName: string | null = null;
+                        if (hasBotSpeaker && meeting.title) {
+                          const titleParts = meeting.title.split(/\s+and\s+/i).map(s => s.trim()).filter(Boolean);
+                          for (const tp of titleParts) {
+                            const tpLower = tp.toLowerCase();
+                            if (!realSpeakers.some(rs => rs.toLowerCase().includes(tpLower) || tpLower.includes(rs.toLowerCase()))) {
+                              botReplaceName = tp;
+                              break;
+                            }
+                          }
+                        }
+
+                        const lines = rawLines;
                         const result: React.ReactNode[] = [];
                         let prevSpeaker: string | null = null;
 
@@ -1254,9 +1362,9 @@ export function MeetingDetail() {
                           // Timestamped format: [HH:MM:SS] Speaker: text
                           const tsMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/);
                           if (tsMatch) {
-                            const [, ts, speaker, text] = tsMatch;
+                            const [, ts, rawSpeaker, text] = tsMatch;
+                            const sp = (isBotName(rawSpeaker.trim()) && botReplaceName) ? botReplaceName : rawSpeaker.trim();
                             const seconds = parseTimestampToSeconds(ts);
-                            const sp = speaker.trim();
                             const slot = getSlot(sp);
                             const { gradient, color, rowHoverClass, tsHoverClass } = SPEAKER_CONFIGS[slot];
                             const firstName = getFirstName(sp);
@@ -1318,8 +1426,8 @@ export function MeetingDetail() {
                           // Legacy format: Speaker: text (no timestamp)
                           const spMatch = line.match(/^([^:]+):\s*(.*)$/);
                           if (spMatch) {
-                            const [, speaker, text] = spMatch;
-                            const sp = speaker.trim();
+                            const [, rawSp, text] = spMatch;
+                            const sp = (isBotName(rawSp.trim()) && botReplaceName) ? botReplaceName : rawSp.trim();
                             const slot = getSlot(sp);
                             const { gradient, color, rowHoverClass } = SPEAKER_CONFIGS[slot];
                             const firstName = getFirstName(sp);
@@ -1367,6 +1475,66 @@ export function MeetingDetail() {
                         });
 
                         return result;
+                      })()}
+                      </div>
+                    </div>
+                  ) : voiceRecordingData?.transcript_segments?.length ? (
+                    <div className="max-h-[600px] overflow-y-auto pr-1 scrollbar-custom">
+                      <div className="text-sm space-y-0">
+                      {(() => {
+                        const speakerSlotMap = new Map<string, number>();
+                        let slotIdx = 0;
+                        const getSlot = (speaker: string) => {
+                          if (!speakerSlotMap.has(speaker)) speakerSlotMap.set(speaker, slotIdx++ % SPEAKER_CONFIGS.length);
+                          return speakerSlotMap.get(speaker)!;
+                        };
+                        const getFirstName = (name: string) => name.trim().split(/\s+/)[0];
+
+                        return voiceRecordingData!.transcript_segments!.map((segment, idx) => {
+                          const sp = segment.speaker;
+                          const slot = getSlot(sp);
+                          const { gradient, color, rowHoverClass } = SPEAKER_CONFIGS[slot];
+                          const firstName = getFirstName(sp);
+                          const initial = firstName[0]?.toUpperCase() ?? '?';
+                          const prevSpeaker = idx > 0 ? voiceRecordingData!.transcript_segments![idx - 1].speaker : null;
+                          const isCont = sp === prevSpeaker;
+                          const avatarUrl = speakerAvatarMap.get(sp) || speakerAvatarMap.get(firstName);
+
+                          return (
+                            <React.Fragment key={idx}>
+                              {!isCont && idx > 0 && (
+                                <div className="my-2 h-px bg-gradient-to-r from-transparent via-gray-200/60 dark:via-gray-700/40 to-transparent" />
+                              )}
+                              <div className={`flex items-start gap-3 px-2 py-2 rounded-lg border border-transparent ${rowHoverClass}`}>
+                                <div className="w-9 shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                                  {!isCont ? (
+                                    <>
+                                      {avatarUrl ? (
+                                        <img src={avatarUrl} alt={firstName} className="w-6 h-6 rounded-md object-cover shrink-0" />
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                                             style={{ background: gradient }}>
+                                          {initial}
+                                        </div>
+                                      )}
+                                      <span className="text-[10px] font-medium leading-none" style={{ color }}>{firstName}</span>
+                                    </>
+                                  ) : (
+                                    <div className="w-6 h-6" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-sm">{segment.text}</p>
+                                    {segment.time && (
+                                      <span className="font-mono text-[11px] text-gray-400 dark:text-gray-500 shrink-0 mt-0.5">{segment.time}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </React.Fragment>
+                          );
+                        });
                       })()}
                       </div>
                     </div>
@@ -1585,13 +1753,16 @@ export function MeetingDetail() {
             <PrepBriefCard brief={prepBrief} />
           )}
 
-          {/* Quick Actions */}
+          {/* Quick Actions — Next Steps */}
           {meeting && (
             <QuickActionsCard
               meeting={meeting}
-              onEmailClick={() => toast.info('Email follow-up requires OAuth setup — coming soon')}
-              onBookCallClick={() => toast.info('Book call feature coming soon')}
+              onEmailClick={handleDraftFollowUp}
+              onGenerateProposal={() => proposalRef.current?.trigger()}
+              onCreateTask={() => handleQuickAdd('outbound')}
+              onCreateDeal={() => handleQuickAdd('sale')}
               onShareClick={() => setShowShareModal(true)}
+              onBookCallClick={() => handleQuickAdd('meeting')}
             />
           )}
 
