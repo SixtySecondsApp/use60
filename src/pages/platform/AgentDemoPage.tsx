@@ -32,7 +32,9 @@ import {
   Sparkles,
   Settings,
   BarChart3,
+  HeartPulse,
 } from 'lucide-react';
+import BrainHealthDashboard from '@/components/agent/BrainHealthDashboard';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -404,6 +406,15 @@ export default function AgentDemoPage() {
             Triage Analytics
           </h2>
           <DemoAnalytics />
+        </div>
+
+        {/* Brain Health Dashboard (US-033) */}
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <HeartPulse className="w-5 h-5" />
+            Brain Health
+          </h2>
+          <BrainHealthDashboard />
         </div>
 
         {/* Two-column layout: Feed + Settings */}
