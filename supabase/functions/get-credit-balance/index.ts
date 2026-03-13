@@ -228,7 +228,7 @@ function computeWarningLevel(
   }
 
   // Day-based thresholds (reduced from 14/7 to 7/3)
-  if (effectiveRunway < 3) return 'red';
+  if (effectiveRunway <= 3) return 'red';
   if (effectiveRunway < 7) return 'amber';
 
   return 'none';
