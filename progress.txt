@@ -1,8 +1,64 @@
 # Progress Log
-Run: nylas-integration-verification
-Started: 2026-03-07T18:00:00Z
+Run: 60-brain
+Started: 2026-03-13T12:00:00Z
 
 ## Codebase Patterns
-(Add reusable patterns/gotchas discovered during implementation)
+- DB triggers: Follow ops_rule_event_triggers pattern (debounce, pg_net, Vault auth)
+- CC items: Use _shared/commandCentre/writeAdapter.ts writeToCommandCentre() / emitCCItem()
+- Slack delivery: Use _shared/proactive/deliverySlack.ts with Block Kit
+- Realtime: Track via realtimeMonitor, cleanup in useEffect return
+- Autopilot: 80% built — confidence scoring, promotion/demotion engines, signal recording all work
+- HITL: edited_content column exists but never populated — wire on approval
+- Morning brief: Two parallel systems (slack-morning-brief + agent-morning-briefing) — consolidate
+- CC auto-execute: Stubbed (CC12-007) — needs real dispatch implementation
 
 ---
+
+## Phase 1: Foundation (US-001 to US-006) — COMPLETE
+- US-001: agent_trigger_runs table + calendar_event_created event
+- US-002: DB triggers for deal events (created + stage_changed)
+- US-003: DB triggers for calendar + meeting events
+- US-004: DB triggers for contact + task events (with 24h debounce)
+- US-005: Fleet handoff routes for pre-call chain
+- US-006: Fleet handoff routes for post-call + pipeline chains
+
+## Phase 2: Event Chain Handlers (US-007 to US-013) — COMPLETE
+- US-007-009: Pre-call chain wired (calendar → research → dossier → CC + Slack)
+- US-010-011: Post-call chain wired (meeting → transcript → followup → CRM)
+- US-012: Deal stage change → risk rescore + next actions
+- US-013: Task overdue direct CC items + cold deal detection
+
+## Phase 3: CC Intelligence Inbox (US-014 to US-016) — COMPLETE
+- US-014: CommandCenterInbox with realtime + priority sorting
+- US-015: CCItemCard with approve/dismiss/snooze actions
+- US-016: Tab restructure (Inbox default, Chat secondary)
+
+## Phase 4: Approval & Autonomy (US-017, US-024, US-025) — COMPLETE
+- US-017: ApprovalProgressBadge on CC items
+- US-024: EventReplayTrail component (horizontal stepper)
+- US-025: AIAutonomySettings + PromotionNudgeBanner
+
+## Phase 5: Ability Cards (US-018 to US-020) — COMPLETE
+- US-018: AbilityTriggerFlow visualization
+- US-019: AbilityStatsPanel with live stats
+- US-020: Inline threshold editing + channel toggles
+
+## Phase 6: Reliability (US-021 to US-023) — COMPLETE
+- US-021: Integration health heartbeat (2h cron)
+- US-022: Slack delivery audit trail
+- US-023: Circuit breakers with exponential backoff
+
+## Phase 7: Auto-Execute + Learning (US-026 to US-029) — COMPLETE
+- US-026: CC auto-execute real dispatch (send_email, update_crm, create_task, send_slack)
+- US-027: Capture edited content on HITL approval
+- US-028: Extract edit feedback → copilot_memories preferences
+- US-029: Inject learned preferences into draft generation
+
+## Phase 8: Intelligence (US-030 to US-032) — COMPLETE
+- US-030: Consolidated morning brain DM (brain-morning-brief)
+- US-031: Reply "more" thread handler for expanded details
+- US-032: Pattern insights wired as CC items (2/user/week cap)
+
+## Phase 9: Dashboard + Onboarding (US-033 to US-034) — COMPLETE
+- US-033: BrainHealthDashboard on Agent Demo page (30s auto-refresh)
+- US-034: brain-initial-scan + useBrainOnboarding hook
