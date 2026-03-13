@@ -86,14 +86,27 @@ serve(async (req: Request) => {
 
       // Resolve contacts — use contact_id or primary_contact_id
       const contactIds = (meetings ?? []).map(m => m.contact_id ?? m.primary_contact_id).filter(Boolean)
-      let contactMap: Record<string, { first_name: string; last_name: string; company: string }> = {}
+      let contactMap: Record<string, { first_name: string; last_name: string; company: string; email: string }> = {}
       if (contactIds.length > 0) {
         const { data: contacts } = await supabase
           .from('contacts')
-          .select('id, first_name, last_name, company')
+          .select('id, first_name, last_name, company, email')
           .in('id', contactIds)
         for (const c of contacts ?? []) {
-          contactMap[c.id] = { first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '' }
+          contactMap[c.id] = { first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '', email: c.email ?? '' }
+        }
+      }
+
+      // Resolve meeting owners → profile names
+      const ownerIds = [...new Set((meetings ?? []).map(m => m.owner_user_id).filter(Boolean))]
+      let ownerMap: Record<string, string> = {}
+      if (ownerIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', ownerIds)
+        for (const p of profiles ?? []) {
+          ownerMap[p.id] = [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Unknown'
         }
       }
 
@@ -106,8 +119,10 @@ serve(async (req: Request) => {
         for (const [templateCol, sourceCol] of Object.entries(mapping)) {
           if (sourceCol === 'contact_first_name') row[templateCol] = contact?.first_name ?? 'Unknown'
           else if (sourceCol === 'contact_last_name') row[templateCol] = contact?.last_name ?? ''
+          else if (sourceCol === 'contact_email') row[templateCol] = contact?.email ?? ''
           else if (sourceCol === 'contact_company') row[templateCol] = contact?.company ?? meeting.title ?? ''
           else if (sourceCol === 'meeting_date') row[templateCol] = meeting.meeting_start ?? ''
+          else if (sourceCol === 'rep_name') row[templateCol] = ownerMap[meeting.owner_user_id] ?? ''
           else if (sourceCol === 'transcript_text') row[templateCol] = (meeting.transcript_text ?? '').slice(0, 10000)
         }
         sourceRows.push(row)
@@ -218,7 +233,7 @@ serve(async (req: Request) => {
       column_type: col.column_type,
       position: col.position,
       width: col.width ?? 150,
-      is_visible: true,
+      is_visible: col.is_visible !== false,
       is_enrichment: false,
       ...(col.formula_expression ? { formula_expression: col.formula_expression } : {}),
       ...(col.action_config ? { action_config: col.action_config } : {}),
@@ -272,7 +287,32 @@ serve(async (req: Request) => {
       }
     }
 
-    // ── 5. Instantly integration (optional) ──────────────────────
+    // ── 5. Create default view with formatting rules (if template has them) ──
+    if (template_config.formatting_rules && template_config.formatting_rules.length > 0) {
+      const { error: viewError } = await supabase
+        .from('ops_table_views')
+        .insert({
+          table_id: tableId,
+          created_by: user.id,
+          name: 'Default',
+          is_default: true,
+          is_system: false,
+          filter_config: [],
+          sort_config: null,
+          column_config: null,
+          formatting_rules: template_config.formatting_rules,
+          group_config: null,
+          summary_config: null,
+          position: 0,
+        })
+      if (viewError) {
+        console.warn('[setup-pipeline-template] View creation failed (non-fatal):', viewError.message)
+      } else {
+        console.log(`[setup-pipeline-template] Default view created with ${template_config.formatting_rules.length} formatting rules`)
+      }
+    }
+
+    // ── 6. Instantly integration (optional) ──────────────────────
     const instantlyConfig = body.instantly_config
     let instantlyCampaignId: string | null = null
 
@@ -340,7 +380,7 @@ serve(async (req: Request) => {
       }
     }
 
-    // ── 6. HubSpot Sequences (optional) ─────────────────────────
+    // ── 7. HubSpot Sequences (optional) ─────────────────────────
     const hubspotConfig = body.hubspot_sequence_config
     let hubspotEnrolledCount = 0
 
