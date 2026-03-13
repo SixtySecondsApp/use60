@@ -89,13 +89,32 @@ async function handleSubmitSearch(
     return new Response(JSON.stringify({ error: 'At least company_name or company_domain is required' }), { status: 400, headers });
   }
 
-  // Submit to BetterContact Lead Finder
-  const searchPayload: Record<string, any> = {};
-  if (filters.company_name) searchPayload.company_name = filters.company_name;
-  if (filters.company_domain) searchPayload.company_domain = filters.company_domain;
-  if (filters.job_title) searchPayload.job_title = filters.job_title;
-  if (filters.location) searchPayload.location = filters.location;
-  if (filters.limit) searchPayload.limit = filters.limit;
+  // Build BetterContact Lead Finder payload with structured filters
+  // API expects: { filters: { company: { include: [] }, lead_job_title: { include: [] }, ... }, max_leads: N }
+  const bcFilters: Record<string, any> = {};
+
+  // Company filter — uses domain as company identifier
+  if (filters.company_domain) {
+    bcFilters.company = { include: Array.isArray(filters.company_domain) ? filters.company_domain : [filters.company_domain] };
+  } else if (filters.company_name) {
+    bcFilters.company = { include: Array.isArray(filters.company_name) ? filters.company_name : [filters.company_name] };
+  }
+
+  if (filters.job_title) {
+    bcFilters.lead_job_title = { include: Array.isArray(filters.job_title) ? filters.job_title : [filters.job_title] };
+  }
+  if (filters.location) {
+    bcFilters.lead_location = { include: Array.isArray(filters.location) ? filters.location : [filters.location] };
+  }
+  if (filters.department) {
+    bcFilters.lead_department = { include: Array.isArray(filters.department) ? filters.department : [filters.department] };
+  }
+  if (filters.seniority) {
+    bcFilters.lead_seniority = { include: Array.isArray(filters.seniority) ? filters.seniority : [filters.seniority] };
+  }
+
+  const searchPayload: Record<string, any> = { filters: bcFilters };
+  if (filters.limit) searchPayload.max_leads = filters.limit;
 
   const bcResponse = await fetch(`${BETTERCONTACT_API_URL}/lead_finder/async`, {
     method: 'POST',
@@ -119,7 +138,7 @@ async function handleSubmitSearch(
     .from('bettercontact_requests')
     .insert({
       organization_id: orgId,
-      bettercontact_request_id: bcResult.id,
+      bettercontact_request_id: bcResult.request_id || bcResult.id,
       action: 'lead_finder',
       status: 'pending',
       total_contacts: 0,
@@ -127,7 +146,7 @@ async function handleSubmitSearch(
     });
 
   return new Response(JSON.stringify({
-    request_id: bcResult.id,
+    request_id: bcResult.request_id || bcResult.id,
     message: 'Lead search submitted',
   }), { status: 200, headers });
 }
@@ -166,14 +185,17 @@ async function handlePollResults(
     }), { status: 200, headers });
   }
 
+  // Lead Finder returns results in "leads" array (not "data")
+  const leads = bcResult.leads || bcResult.data || [];
+
   // Results ready -- create Ops table if requested
-  if (!auto_create_table || !bcResult.data || bcResult.data.length === 0) {
+  if (!auto_create_table || leads.length === 0) {
     // Update tracking
     await serviceClient
       .from('bettercontact_requests')
       .update({
         status: 'terminated',
-        processed_contacts: bcResult.data?.length || 0,
+        processed_contacts: leads.length,
         credits_consumed: bcResult.credits_consumed || 0,
         completed_at: new Date().toISOString(),
       })
@@ -182,7 +204,7 @@ async function handlePollResults(
 
     return new Response(JSON.stringify({
       status: 'terminated',
-      data: bcResult.data,
+      data: leads,
       summary: bcResult.summary,
       credits_consumed: bcResult.credits_consumed,
     }), { status: 200, headers });
@@ -198,7 +220,7 @@ async function handlePollResults(
       created_by: user.id,
       name: tableName,
       source_type: 'bettercontact',
-      row_count: bcResult.data.length,
+      row_count: leads.length,
     })
     .select('id')
     .single();
@@ -217,6 +239,10 @@ async function handlePollResults(
     { key: 'job_title', label: 'Job Title', column_type: 'text', position: 5 },
     { key: 'gender', label: 'Gender', column_type: 'text', position: 6 },
     { key: 'email_provider', label: 'Email Provider', column_type: 'text', position: 7 },
+    { key: 'company_name', label: 'Company', column_type: 'text', position: 8 },
+    { key: 'linkedin_url', label: 'LinkedIn', column_type: 'url', position: 9 },
+    { key: 'location', label: 'Location', column_type: 'text', position: 10 },
+    { key: 'seniority', label: 'Seniority', column_type: 'text', position: 11 },
   ];
 
   const { data: columns } = await serviceClient
@@ -234,8 +260,8 @@ async function handlePollResults(
   }
 
   // Create rows and cells
-  for (let i = 0; i < bcResult.data.length; i++) {
-    const contact = bcResult.data[i];
+  for (let i = 0; i < leads.length; i++) {
+    const contact = leads[i];
 
     const { data: row } = await serviceClient
       .from('dynamic_table_rows')
@@ -249,16 +275,20 @@ async function handlePollResults(
 
     if (!row) continue;
 
-    // Create cells
+    // Create cells — Lead Finder uses contact_* field names
     const cellData = [
       { row_id: row.id, column_id: colMap['first_name'], value: contact.contact_first_name || null, status: 'complete', source: 'bettercontact' },
       { row_id: row.id, column_id: colMap['last_name'], value: contact.contact_last_name || null, status: 'complete', source: 'bettercontact' },
-      { row_id: row.id, column_id: colMap['email'], value: contact.contact_email_address || null, status: contact.enriched ? 'complete' : 'failed', source: 'bettercontact' },
+      { row_id: row.id, column_id: colMap['email'], value: contact.contact_email_address || null, status: contact.contact_email_address ? 'complete' : 'failed', source: 'bettercontact' },
       { row_id: row.id, column_id: colMap['email_status'], value: contact.contact_email_address_status || null, status: 'complete', source: 'bettercontact' },
       { row_id: row.id, column_id: colMap['phone'], value: contact.contact_phone_number || null, status: 'complete', source: 'bettercontact' },
       { row_id: row.id, column_id: colMap['job_title'], value: contact.contact_job_title || null, status: 'complete', source: 'bettercontact' },
       { row_id: row.id, column_id: colMap['gender'], value: contact.contact_gender || null, status: 'complete', source: 'bettercontact' },
-      { row_id: row.id, column_id: colMap['email_provider'], value: contact.email_provider || null, status: 'complete', source: 'bettercontact' },
+      { row_id: row.id, column_id: colMap['email_provider'], value: contact.contact_email_address_provider || null, status: 'complete', source: 'bettercontact' },
+      { row_id: row.id, column_id: colMap['company_name'], value: contact.company_name || null, status: 'complete', source: 'bettercontact' },
+      { row_id: row.id, column_id: colMap['linkedin_url'], value: contact.contact_linkedin_profile_url || null, status: 'complete', source: 'bettercontact' },
+      { row_id: row.id, column_id: colMap['location'], value: [contact.contact_location_city, contact.contact_location_country].filter(Boolean).join(', ') || null, status: 'complete', source: 'bettercontact' },
+      { row_id: row.id, column_id: colMap['seniority'], value: contact.contact_seniority || null, status: 'complete', source: 'bettercontact' },
     ].filter(c => c.column_id); // Filter out any missing columns
 
     await serviceClient
@@ -272,7 +302,7 @@ async function handlePollResults(
     .update({
       status: 'terminated',
       table_id: table.id,
-      processed_contacts: bcResult.data.length,
+      processed_contacts: leads.length,
       credits_consumed: bcResult.credits_consumed || 0,
       completed_at: new Date().toISOString(),
     })
