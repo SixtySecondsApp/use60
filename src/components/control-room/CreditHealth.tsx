@@ -244,9 +244,9 @@ export default function CreditHealth() {
       {projectedDaysRemaining !== null && sevenDayAvg > 0 && (
         <div
           className={`flex items-start gap-2 rounded-md p-2 text-xs ${
-            projectedDaysRemaining <= 7
+            projectedDaysRemaining <= 3
               ? 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400'
-              : projectedDaysRemaining <= 14
+              : projectedDaysRemaining <= 7
               ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400'
               : 'bg-gray-50 dark:bg-gray-800/50 text-muted-foreground'
           }`}

@@ -60,14 +60,12 @@ export function LowBalanceBanner() {
 
   if (!orgId || isLoading || costEventsLoading || !data || dismissed || isFullHeightPage || isCreditsPage || isBillingPage) return null;
 
-  const { balance, projectedDaysRemaining, autoTopUp } = data;
+  const { balance, warningLevel, effectiveRunwayDays, autoTopUp } = data;
 
   const isZero = balance <= 0;
-  const hasUsageData = projectedDaysRemaining >= 0;
-
-  // Determine low-balance thresholds using projected days
-  const isRedLow = balance > 0 && hasUsageData && projectedDaysRemaining < 7;
-  const isAmberLow = balance > 0 && hasUsageData && projectedDaysRemaining >= 7 && projectedDaysRemaining < 14;
+  // Use server-computed warning level instead of local threshold checks
+  const isRedLow = warningLevel === 'red';
+  const isAmberLow = warningLevel === 'amber';
 
   // Welcome credits banner — shown once after onboarding.
   if (showWelcome && balance <= 0) {
@@ -98,7 +96,8 @@ export function LowBalanceBanner() {
   if (isZero && !costEventsLoading && (costEventCount ?? 0) === 0) return null;
   if (isZero && showWelcome) return null;
 
-  if (!isZero && !isRedLow && !isAmberLow) return null;
+  // Use server-computed warning level — 'none' means no warning needed
+  if (!isZero && warningLevel === 'none') return null;
 
   const autoTopUpEnabled = autoTopUp?.enabled ?? false;
   const autoTopUpPackCredits = autoTopUp?.packType ? `${autoTopUp.packType}` : 'credits';
@@ -138,7 +137,7 @@ export function LowBalanceBanner() {
         ) : (
           <>
             Low AI credits ({formattedBalance} remaining
-            {hasUsageData && projectedDaysRemaining < 365 && `, ~${Math.round(projectedDaysRemaining)} days left`}).
+            {effectiveRunwayDays >= 0 && effectiveRunwayDays < 365 && `, ~${Math.round(effectiveRunwayDays)} days left`}).
           </>
         )}
       </span>

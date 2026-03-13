@@ -56,6 +56,15 @@ export interface OnboardingCredits {
   complete: boolean;
 }
 
+export type WarningLevel = 'none' | 'amber' | 'red' | 'depleted';
+
+export interface RunwayFactors {
+  autoTopUpCreditsProjected: number;
+  subscriptionRenewalCreditsProjected: number;
+  daysUntilRenewal: number | null;
+  autoTopUpsRemaining: number;
+}
+
 export interface CreditBalance {
   balance: number;
   subscriptionCredits: SubscriptionCredits;
@@ -64,6 +73,9 @@ export interface CreditBalance {
   packInventory: PackInventory;
   dailyBurnRate: number;
   projectedDaysRemaining: number;
+  effectiveRunwayDays: number;
+  warningLevel: WarningLevel;
+  runwayFactors: RunwayFactors;
   usageByFeature: FeatureUsage[];
   recentTransactions: CreditTransaction[];
   lastPurchaseDate: string | null;
@@ -164,6 +176,14 @@ interface BalanceResponseDto {
     payment_id: string | null;
     expires_at: string | null;
   }>;
+  effective_runway_days?: number;
+  warning_level?: WarningLevel;
+  runway_factors?: {
+    auto_top_up_credits_projected: number;
+    subscription_renewal_credits_projected: number;
+    days_until_renewal: number | null;
+    auto_top_ups_remaining: number;
+  };
 }
 
 // ============================================================================
@@ -198,6 +218,16 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
       },
       dailyBurnRate: data?.daily_burn_rate ?? 0,
       projectedDaysRemaining: data?.projected_days_remaining ?? 0,
+      effectiveRunwayDays: data?.effective_runway_days ?? data?.projected_days_remaining ?? 0,
+      warningLevel: data?.warning_level ?? 'none',
+      runwayFactors: data?.runway_factors
+        ? {
+            autoTopUpCreditsProjected: data.runway_factors.auto_top_up_credits_projected,
+            subscriptionRenewalCreditsProjected: data.runway_factors.subscription_renewal_credits_projected,
+            daysUntilRenewal: data.runway_factors.days_until_renewal,
+            autoTopUpsRemaining: data.runway_factors.auto_top_ups_remaining,
+          }
+        : { autoTopUpCreditsProjected: 0, subscriptionRenewalCreditsProjected: 0, daysUntilRenewal: null, autoTopUpsRemaining: 0 },
       usageByFeature: (data?.usage_by_feature ?? []).map((f) => ({
         featureKey: f.feature_key,
         featureName: f.feature_name,
@@ -254,6 +284,9 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
       packInventory: { activePacks: 0, totalRemaining: 0 },
       dailyBurnRate: 0,
       projectedDaysRemaining: -1, // no usage data available from fallback
+      effectiveRunwayDays: -1,
+      warningLevel: 'none' as WarningLevel,
+      runwayFactors: { autoTopUpCreditsProjected: 0, subscriptionRenewalCreditsProjected: 0, daysUntilRenewal: null, autoTopUpsRemaining: 0 },
       usageByFeature: [],
       recentTransactions: [],
       lastPurchaseDate: null,
@@ -269,6 +302,9 @@ export async function getBalance(orgId: string): Promise<CreditBalance> {
       packInventory: { activePacks: 0, totalRemaining: 0 },
       dailyBurnRate: 0,
       projectedDaysRemaining: -1,
+      effectiveRunwayDays: -1,
+      warningLevel: 'none' as WarningLevel,
+      runwayFactors: { autoTopUpCreditsProjected: 0, subscriptionRenewalCreditsProjected: 0, daysUntilRenewal: null, autoTopUpsRemaining: 0 },
       usageByFeature: [],
       recentTransactions: [],
       lastPurchaseDate: null,

@@ -120,11 +120,45 @@ async function evaluateNegativeBalance(
   };
 }
 
-function evaluateLowBalance10cr(
+async function evaluateLowBalance10cr(
+  client: ReturnType<typeof createClient>,
+  orgId: string,
   balance: number,
   estimatedNextCost: number,
-): FiredAlert | null {
+): Promise<FiredAlert | null> {
   if (balance >= 10) return null;
+
+  // Skip if auto top-up is enabled and has remaining monthly capacity
+  try {
+    const { data: autoTopUp } = await client
+      .from('auto_top_up_settings')
+      .select('enabled, monthly_cap')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (autoTopUp?.enabled) {
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+
+      const { count } = await client
+        .from('auto_top_up_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('status', 'success')
+        .gte('triggered_at', monthStart.toISOString());
+
+      const topUpsUsed = count ?? 0;
+      const topUpsRemaining = (autoTopUp.monthly_cap ?? 3) - topUpsUsed;
+
+      if (topUpsRemaining > 0) {
+        return null; // Auto top-up will handle it
+      }
+    }
+  } catch (err) {
+    // Fail-open: if auto top-up check fails, still fire the alert
+    console.warn('[check-credit-alerts] Auto top-up check failed in low_balance_10cr:', err);
+  }
 
   return {
     alert_type: 'low_balance_10cr',
@@ -154,7 +188,7 @@ async function evaluateLowBalance20pct(
   const threshold = lastTopUp * 0.2;
   if (balance >= threshold) return null;
 
-  // Estimate days remaining based on 7-day burn rate
+  // Fetch burn rate once (reused for both subscription check and days remaining)
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data: recentLogs } = await client
     .from('credit_logs')
@@ -167,6 +201,38 @@ async function evaluateLowBalance20pct(
     (sum: number, r: { credits_charged: number }) => sum + Number(r.credits_charged), 0
   );
   const dailyRate = weekTotal / 7;
+
+  // Check if Pro subscription renewal is within 7 days
+  try {
+    const { data: subData } = await client
+      .from('organization_subscriptions')
+      .select('current_period_end, subscription_plans(slug, features)')
+      .eq('org_id', orgId)
+      .in('status', ['active', 'trialing'])
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (subData) {
+      const plan = subData.subscription_plans as { slug: string; features: { bundled_credits?: number } } | null;
+      const periodEnd = subData.current_period_end ? new Date(subData.current_period_end) : null;
+
+      if (plan?.slug === 'pro' && periodEnd) {
+        const daysUntilRenewal = Math.max(0, Math.ceil((periodEnd.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+        const bundledCredits = plan.features?.bundled_credits ?? 250;
+
+        if (daysUntilRenewal <= 7 && dailyRate > 0) {
+          const creditsNeededUntilRenewal = dailyRate * daysUntilRenewal;
+          if (balance + bundledCredits > creditsNeededUntilRenewal) {
+            return null; // Renewal will cover the gap
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[check-credit-alerts] Subscription check failed in low_balance_20pct:', err);
+  }
+
   const daysRemaining = dailyRate > 0 ? Math.round(balance / dailyRate) : 999;
 
   return {
@@ -381,7 +447,7 @@ serve(async (req: Request) => {
         ? evaluateNegativeBalance(serviceClient, org_id, balance)
         : null,
       eligible.has('low_balance_10cr')
-        ? Promise.resolve(evaluateLowBalance10cr(balance, estimatedNextCost))
+        ? evaluateLowBalance10cr(serviceClient, org_id, balance, estimatedNextCost)
         : null,
       eligible.has('low_balance_20pct')
         ? evaluateLowBalance20pct(serviceClient, org_id, balance)
