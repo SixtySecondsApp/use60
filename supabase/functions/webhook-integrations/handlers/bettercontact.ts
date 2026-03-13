@@ -11,6 +11,17 @@ const BETTERCONTACT_FIELD_MAP: Record<string, string> = {
   email_provider: 'email_provider',
 };
 
+/** Extract a custom field value from BetterContact's array format.
+ *  custom_fields comes back as [{name, value, position}, ...] not a flat object. */
+function getCustomField(customFields: any, fieldName: string): string | null {
+  if (!customFields) return null;
+  if (Array.isArray(customFields)) {
+    const field = customFields.find((f: any) => f.name === fieldName);
+    return field?.value ?? null;
+  }
+  return customFields[fieldName] ?? null;
+}
+
 export async function handleWebhook(req: Request): Promise<Response> {
   try {
     const payload = await req.json();
@@ -56,8 +67,8 @@ export async function handleWebhook(req: Request): Promise<Response> {
     const fieldPath = BETTERCONTACT_FIELD_MAP[propertyName] || propertyName;
 
     for (const contact of results) {
-      // Get row_id from custom_fields (we passed it when submitting)
-      const rowId = contact.custom_fields?.row_id;
+      // Get row_id from custom_fields (array of {name, value, position} objects)
+      const rowId = getCustomField(contact.custom_fields, 'row_id');
       if (!rowId) {
         console.warn('[bettercontact-webhook] Contact missing custom_fields.row_id, skipping');
         failedCount++;

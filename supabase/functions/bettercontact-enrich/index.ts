@@ -38,6 +38,19 @@ const BETTERCONTACT_FIELD_MAP: Record<string, { path: string; label: string }> =
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Extract a custom field value from BetterContact's array format.
+ *  custom_fields comes back as [{name, value, position}, ...] not a flat object. */
+function getCustomField(customFields: any, fieldName: string): string | null {
+  if (!customFields) return null
+  // Handle array format: [{name: "row_id", value: "xxx"}, ...]
+  if (Array.isArray(customFields)) {
+    const field = customFields.find((f: any) => f.name === fieldName)
+    return field?.value ?? null
+  }
+  // Handle flat object format (fallback)
+  return customFields[fieldName] ?? null
+}
+
 /** Find a column from a lookup map using multiple name patterns */
 function findColumnByPatterns(
   patterns: string[],
@@ -536,7 +549,7 @@ async function handlePollAndProcess(
   let failedCount = 0
 
   for (const contact of results) {
-    const rowId = contact.custom_fields?.row_id
+    const rowId = getCustomField(contact.custom_fields, 'row_id')
     if (!rowId) { failedCount++; continue }
 
     // Cache in source_data

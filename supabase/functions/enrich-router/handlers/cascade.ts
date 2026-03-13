@@ -1159,7 +1159,11 @@ export async function handleCascade(req: Request): Promise<Response> {
 
                 if (bcResult.data) {
                   for (const contact of bcResult.data) {
-                    const rowId = (contact.custom_fields as Record<string, unknown>)?.row_id as string | undefined
+                    // custom_fields comes back as [{name, value, position}, ...] array
+                    const cf = contact.custom_fields as any
+                    const rowId = Array.isArray(cf)
+                      ? (cf.find((f: any) => f.name === 'row_id')?.value as string | undefined)
+                      : (cf?.row_id as string | undefined)
                     if (!rowId) continue
 
                     const matchedEntry = bcEligible.find(e => e.row.id === rowId)
