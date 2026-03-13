@@ -29,7 +29,13 @@ function formatDate(iso: string): string {
   });
 }
 
-function balanceColorClass(balance: number): string {
+function balanceColorClass(balance: number, warningLevel?: string): string {
+  // Prefer server-computed warning level when available
+  if (warningLevel) {
+    if (warningLevel === 'depleted' || warningLevel === 'red') return 'text-red-600 dark:text-red-400';
+    if (warningLevel === 'amber') return 'text-amber-600 dark:text-amber-400';
+    return 'text-emerald-600 dark:text-emerald-400';
+  }
   if (balance >= 50) return 'text-emerald-600 dark:text-emerald-400';
   if (balance >= 10) return 'text-amber-600 dark:text-amber-400';
   return 'text-red-600 dark:text-red-400';
@@ -97,8 +103,9 @@ export function CreditBalanceSection() {
   const onboardingCredits = balance?.onboardingCredits ?? { balance: 0, complete: false };
   const packCredits = balance?.packCredits ?? 0;
   const dailyBurnRate = balance?.dailyBurnRate ?? 0;
-  const projectedDays = balance?.projectedDaysRemaining ?? -1;
+  const projectedDays = balance?.effectiveRunwayDays ?? balance?.projectedDaysRemaining ?? -1;
   const autoTopUp = balance?.autoTopUp;
+  const warningLevel = balance?.warningLevel;
 
   // For subscription credits, get the bundled amount from the plan features
   const bundledCredits = subState?.plan?.features?.bundled_credits;
@@ -114,7 +121,7 @@ export function CreditBalanceSection() {
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
               Total Credits
             </p>
-            <p className={cn('text-4xl font-bold tabular-nums', balanceColorClass(total))}>
+            <p className={cn('text-4xl font-bold tabular-nums', balanceColorClass(total, warningLevel))}>
               {total % 1 === 0 ? total.toFixed(0) : total.toFixed(1)}
             </p>
           </div>

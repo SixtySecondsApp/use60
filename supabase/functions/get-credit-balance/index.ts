@@ -80,6 +80,15 @@ interface OnboardingCreditsDto {
   complete: boolean;
 }
 
+interface RunwayFactors {
+  auto_top_up_credits_projected: number;
+  subscription_renewal_credits_projected: number;
+  days_until_renewal: number | null;
+  auto_top_ups_remaining: number;
+}
+
+type WarningLevel = 'none' | 'amber' | 'red' | 'depleted';
+
 interface BalanceResponse {
   balance_credits: number;
   subscription_credits: SubscriptionCreditsDto;
@@ -90,10 +99,139 @@ interface BalanceResponse {
   auto_top_up: AutoTopUpDto | null;
   daily_burn_rate: number;
   projected_days_remaining: number;
+  effective_runway_days: number;
+  runway_factors: RunwayFactors;
+  warning_level: WarningLevel;
   usage_by_feature: UsageByFeature[];
   recent_transactions: RecentTransaction[];
   last_purchase_date: string | null;
   storage: StorageUsage;
+}
+
+function getPackCredits(packType: string): number {
+  const PACK_CREDITS: Record<string, number> = {
+    starter: 100,
+    growth: 250,
+    scale: 500,
+    agency_starter: 1000,
+    agency_growth: 2500,
+    agency_scale: 5000,
+    agency_enterprise: 10000,
+  };
+  return PACK_CREDITS[packType] ?? 100;
+}
+
+function computeEffectiveRunway(
+  balance: number,
+  dailyBurnRate: number,
+  autoTopUp: { enabled: boolean; threshold: number; packCredits: number; remainingThisMonth: number } | null,
+  subscription: { isProPlan: boolean; daysUntilRenewal: number | null; renewalCredits: number; subscriptionCreditsExpiring: number; daysUntilExpiry: number | null } | null,
+): { effective_runway_days: number; runway_factors: RunwayFactors } {
+  const factors: RunwayFactors = {
+    auto_top_up_credits_projected: 0,
+    subscription_renewal_credits_projected: 0,
+    days_until_renewal: subscription?.daysUntilRenewal ?? null,
+    auto_top_ups_remaining: autoTopUp?.remainingThisMonth ?? 0,
+  };
+
+  if (dailyBurnRate <= 0) {
+    return { effective_runway_days: -1, runway_factors: factors };
+  }
+
+  // Early exit if already depleted
+  if (balance <= 0) {
+    return { effective_runway_days: 0, runway_factors: factors };
+  }
+
+  let simulatedBalance = balance;
+  let autoTopUpsUsed = 0;
+  let lastTopUpDay = -1; // Prevent multiple top-ups on the same day
+  const maxAutoTopUps = autoTopUp?.remainingThisMonth ?? 0;
+
+  // Map day-0 events to day 1 (events happening "today" fire on first simulation day)
+  const renewalDay = subscription?.daysUntilRenewal != null ? Math.max(1, Math.ceil(subscription.daysUntilRenewal)) : null;
+  const expiryDay = subscription?.daysUntilExpiry != null ? Math.max(1, Math.ceil(subscription.daysUntilExpiry)) : null;
+
+  for (let day = 1; day <= 365; day++) {
+    // Apply subscription renewal FIRST (credit inflow before burn/expiry)
+    if (subscription?.isProPlan && renewalDay != null && day === renewalDay) {
+      simulatedBalance += subscription.renewalCredits;
+      factors.subscription_renewal_credits_projected = subscription.renewalCredits;
+    }
+
+    // Apply subscription credit expiry (deduction of unused sub credits)
+    if (expiryDay != null && day === expiryDay && subscription!.subscriptionCreditsExpiring > 0) {
+      simulatedBalance -= subscription!.subscriptionCreditsExpiring;
+    }
+
+    // Daily burn
+    simulatedBalance -= dailyBurnRate;
+
+    // Simulate auto top-up trigger (max one per day, only when balance is positive but low)
+    if (autoTopUp?.enabled === true
+        && simulatedBalance > 0
+        && simulatedBalance <= autoTopUp.threshold
+        && autoTopUpsUsed < maxAutoTopUps
+        && day !== lastTopUpDay) {
+      simulatedBalance += autoTopUp.packCredits;
+      autoTopUpsUsed += 1;
+      lastTopUpDay = day;
+      factors.auto_top_up_credits_projected += autoTopUp.packCredits;
+    }
+
+    if (simulatedBalance <= 0) {
+      factors.auto_top_ups_remaining = maxAutoTopUps - autoTopUpsUsed;
+      return { effective_runway_days: day, runway_factors: factors };
+    }
+  }
+
+  factors.auto_top_ups_remaining = maxAutoTopUps - autoTopUpsUsed;
+  return { effective_runway_days: 365, runway_factors: factors };
+}
+
+function computeWarningLevel(
+  balance: number,
+  effectiveRunway: number,
+  dailyBurnRate: number,
+  autoTopUp: { enabled: boolean; remainingThisMonth: number } | null,
+  subscription: { isProPlan: boolean; daysUntilRenewal: number | null; renewalCredits: number } | null,
+  lastPackCredits: number | null,
+): WarningLevel {
+  // Always depleted if balance <= 0
+  if (balance <= 0) return 'depleted';
+
+  // No burn = no warning
+  if (dailyBurnRate <= 0 || effectiveRunway < 0) return 'none';
+
+  // Auto top-up is enabled and has remaining capacity
+  if (autoTopUp?.enabled && autoTopUp.remainingThisMonth > 0) {
+    // Only warn if effective runway is critically short (top-up might fail)
+    if (effectiveRunway < 3) return 'red';
+    return 'none';
+  }
+
+  // Pro subscription with imminent renewal
+  if (subscription?.isProPlan && subscription.daysUntilRenewal != null) {
+    // Renewal today or tomorrow — safe, credits incoming imminently
+    if (subscription.daysUntilRenewal <= 1) return 'none';
+    const creditsNeededUntilRenewal = dailyBurnRate * subscription.daysUntilRenewal;
+    if (balance >= creditsNeededUntilRenewal) {
+      return 'none'; // Will make it to renewal
+    }
+  }
+
+  // Pay-as-you-go thresholds
+  // Check percentage threshold: < 10% of last pack purchased
+  if (lastPackCredits && lastPackCredits > 0) {
+    const tenPercent = lastPackCredits * 0.1;
+    if (balance <= tenPercent && effectiveRunway < 14) return 'amber';
+  }
+
+  // Day-based thresholds (reduced from 14/7 to 7/3)
+  if (effectiveRunway <= 3) return 'red';
+  if (effectiveRunway < 7) return 'amber';
+
+  return 'none';
 }
 
 serve(async (req: Request) => {
@@ -181,6 +319,8 @@ serve(async (req: Request) => {
       documentCountResult,
       enrichmentCountResult,
       lastStorageDeductionResult,
+      // Subscription data
+      subscriptionResult,
     ] = await Promise.all([
       // 3. Get aggregate balance + subscription/onboarding breakdown
       supabase
@@ -292,6 +432,16 @@ serve(async (req: Request) => {
         .eq('org_id', org_id)
         .eq('feature_key', 'storage_metering')
         .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+
+      // 16. Subscription data for runway calculation
+      supabase
+        .from('organization_subscriptions')
+        .select('status, current_period_end, plan_id, subscription_plans(slug, features)')
+        .eq('org_id', org_id)
+        .in('status', ['active', 'trialing'])
+        .order('started_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
     ]);
@@ -425,6 +575,52 @@ serve(async (req: Request) => {
       };
     }
 
+    // --- Subscription data ---
+    const subRow = subscriptionResult.data;
+    const subPlan = subRow?.subscription_plans as { slug: string; features: { bundled_credits?: number } } | null;
+    const isProPlan = subPlan?.slug === 'pro';
+    const renewalCredits = subPlan?.features?.bundled_credits ?? 0;
+    const periodEnd = subRow?.current_period_end ? new Date(subRow.current_period_end) : null;
+    const daysUntilRenewal = periodEnd ? Math.max(0, Math.ceil((periodEnd.getTime() - Date.now()) / (24 * 60 * 60 * 1000))) : null;
+    const daysUntilSubExpiry = subscriptionCreditsExpiry ? Math.max(0, Math.ceil((new Date(subscriptionCreditsExpiry).getTime() - Date.now()) / (24 * 60 * 60 * 1000))) : null;
+
+    // --- Effective runway ---
+    const autoTopUpPackCredits = autoTopUpResult.data?.pack_type ? getPackCredits(autoTopUpResult.data.pack_type) : 0;
+    const autoTopUpsRemaining = autoTopUpResult.data ? Math.max(0, (autoTopUpResult.data.monthly_cap ?? 3) - (topUpCountResult.count ?? 0)) : 0;
+
+    const { effective_runway_days: effectiveRunwayDays, runway_factors: runwayFactors } = computeEffectiveRunway(
+      balance,
+      dailyBurnRate,
+      autoTopUpResult.data ? {
+        enabled: autoTopUpResult.data.enabled ?? false,
+        threshold: autoTopUpResult.data.threshold ?? 10,
+        packCredits: autoTopUpPackCredits,
+        remainingThisMonth: autoTopUpsRemaining,
+      } : null,
+      {
+        isProPlan,
+        daysUntilRenewal,
+        renewalCredits,
+        subscriptionCreditsExpiring: subscriptionCreditsBalance,
+        daysUntilExpiry: daysUntilSubExpiry,
+      },
+    );
+
+    // --- Warning level ---
+    // Use the most recent pack (last in FIFO-sorted array = newest purchased)
+    const lastPackCredits = sortedPacks.length > 0
+      ? sortedPacks[sortedPacks.length - 1].credits_purchased
+      : null;
+
+    const warningLevel = computeWarningLevel(
+      balance,
+      effectiveRunwayDays,
+      dailyBurnRate,
+      autoTopUpResult.data ? { enabled: autoTopUpResult.data.enabled ?? false, remainingThisMonth: autoTopUpsRemaining } : null,
+      { isProPlan, daysUntilRenewal, renewalCredits },
+      lastPackCredits,
+    );
+
     // --- Storage usage ---
     const recordingSeconds = (meetingDurationsResult.data ?? []).reduce(
       (sum: number, row: { duration_seconds: number | null }) => sum + (row.duration_seconds ?? 0),
@@ -467,6 +663,9 @@ serve(async (req: Request) => {
       auto_top_up: autoTopUp,
       daily_burn_rate: Math.round(dailyBurnRate * 100) / 100,
       projected_days_remaining: projectedDaysRemaining,
+      effective_runway_days: effectiveRunwayDays,
+      runway_factors: runwayFactors,
+      warning_level: warningLevel,
       usage_by_feature: usageByFeature,
       recent_transactions: recentTransactions,
       last_purchase_date: lastPurchaseDate,

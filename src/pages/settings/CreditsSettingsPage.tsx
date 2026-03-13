@@ -59,7 +59,14 @@ import type { PackType } from '@/lib/config/creditPacks';
 // Balance color helpers
 // ============================================================================
 
-function getStatusColor(balance: number, projectedDays: number) {
+function getStatusColor(balance: number, projectedDays: number, warningLevel?: string) {
+  // Prefer server-computed warning level when available
+  if (warningLevel) {
+    if (warningLevel === 'depleted') return 'text-red-500';
+    if (warningLevel === 'red') return 'text-red-500';
+    if (warningLevel === 'amber') return 'text-amber-500';
+    return 'text-emerald-500';
+  }
   if (balance <= 0) return 'text-red-500';
   if (projectedDays < 0) return 'text-emerald-500';
   if (projectedDays < 7) return 'text-red-500';
@@ -67,7 +74,13 @@ function getStatusColor(balance: number, projectedDays: number) {
   return 'text-emerald-500';
 }
 
-function getStatusBg(balance: number, projectedDays: number) {
+function getStatusBg(balance: number, projectedDays: number, warningLevel?: string) {
+  // Prefer server-computed warning level when available
+  if (warningLevel) {
+    if (warningLevel === 'depleted' || warningLevel === 'red') return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
+    if (warningLevel === 'amber') return 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800';
+    return 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800';
+  }
   if (balance <= 0) return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
   if (projectedDays < 0) return 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800';
   if (projectedDays < 7) return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
@@ -181,14 +194,14 @@ export default function CreditsSettingsPage() {
             {/* Current balance */}
             <div className={cn(
               'border rounded-xl p-4',
-              getStatusBg(balance.balance, balance.projectedDaysRemaining)
+              getStatusBg(balance.balance, balance.projectedDaysRemaining, balance.warningLevel)
             )}>
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
                 Balance
               </p>
               <p className={cn(
                 'text-2xl font-bold tabular-nums',
-                getStatusColor(balance.balance, balance.projectedDaysRemaining)
+                getStatusColor(balance.balance, balance.projectedDaysRemaining, balance.warningLevel)
               )}>
                 {formattedBalance}
               </p>
@@ -251,14 +264,14 @@ export default function CreditsSettingsPage() {
               </p>
               <p className={cn(
                 'text-2xl font-bold tabular-nums',
-                getStatusColor(balance.balance, balance.projectedDaysRemaining)
+                getStatusColor(balance.balance, balance.projectedDaysRemaining, balance.warningLevel)
               )}>
-                {balance.projectedDaysRemaining < 0 || balance.projectedDaysRemaining === Infinity
+                {(balance.effectiveRunwayDays ?? balance.projectedDaysRemaining) < 0 || (balance.effectiveRunwayDays ?? balance.projectedDaysRemaining) === Infinity
                   ? '--'
-                  : `${Math.round(balance.projectedDaysRemaining)}d`}
+                  : `${Math.round(balance.effectiveRunwayDays ?? balance.projectedDaysRemaining)}d`}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {balance.projectedDaysRemaining < 0 ? 'no usage yet' : 'at current usage'}
+                {(balance.effectiveRunwayDays ?? balance.projectedDaysRemaining) < 0 ? 'no usage yet' : 'at current usage'}
               </p>
             </div>
           </div>
@@ -452,8 +465,8 @@ export default function CreditsSettingsPage() {
         initialPack={purchaseInitialPack}
       />
 
-      {/* Post-migration onboarding modal (shown once per user) */}
-      <CreditMigrationModal />
+      {/* Post-migration onboarding modal (shown once per user, suppressed when purchase modal is open) */}
+      <CreditMigrationModal suppress={purchaseModalOpen} />
     </SettingsPageWrapper>
   );
 }

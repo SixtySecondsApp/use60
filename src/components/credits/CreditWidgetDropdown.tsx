@@ -28,9 +28,18 @@ interface CreditWidgetDropdownProps {
   data: CreditBalance;
 }
 
-function getBalanceDotClass(balance: number, projectedDays: number) {
+function getBalanceDotClass(balance: number, projectedDays: number, warningLevel?: string) {
+  // Prefer server-computed warning level when available
+  if (warningLevel && warningLevel !== 'none') {
+    if (warningLevel === 'depleted') return 'bg-red-500 animate-pulse';
+    if (warningLevel === 'red') return 'bg-red-500';
+    if (warningLevel === 'amber') return 'bg-amber-500';
+    return 'bg-emerald-500';
+  }
+  if (warningLevel === 'none') return 'bg-emerald-500';
+  // Fallback to legacy projected days logic
   if (balance <= 0) return 'bg-red-500 animate-pulse';
-  if (projectedDays < 0) return 'bg-emerald-500'; // no usage data yet
+  if (projectedDays < 0) return 'bg-emerald-500';
   if (projectedDays < 7) return 'bg-red-500';
   if (projectedDays <= 14) return 'bg-amber-500';
   return 'bg-emerald-500';
@@ -77,14 +86,14 @@ function formatExpiry(dateStr: string | null): string {
 export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
   const navigate = useNavigate();
   const closeDropdown = useDropdownMenuClose();
-  const { balance, subscriptionCredits, onboardingCredits, packCredits, dailyBurnRate, projectedDaysRemaining, usageByFeature, recentTransactions } = data;
+  const { balance, subscriptionCredits, onboardingCredits, packCredits, dailyBurnRate, projectedDaysRemaining, effectiveRunwayDays, warningLevel, usageByFeature, recentTransactions } = data;
 
   const hasSubscriptionCredits = subscriptionCredits.balance > 0;
   const hasOnboardingCredits = onboardingCredits.balance > 0;
   const hasPackCredits = packCredits > 0;
   const showBreakdown = hasSubscriptionCredits || hasOnboardingCredits || hasPackCredits;
 
-  const dotClass = getBalanceDotClass(balance, projectedDaysRemaining);
+  const dotClass = getBalanceDotClass(balance, projectedDaysRemaining, warningLevel);
 
   // Top 5 features for the bar chart
   const topFeatures = usageByFeature.slice(0, 5);
@@ -121,12 +130,12 @@ export function CreditWidgetDropdown({ data }: CreditWidgetDropdownProps) {
           </span>
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400">
-          {projectedDaysRemaining < 0 ? (
+          {(effectiveRunwayDays ?? projectedDaysRemaining) < 0 ? (
             <span className="font-medium text-gray-500 dark:text-gray-400">no usage yet</span>
           ) : (
             <>
               ~<span className="font-medium text-gray-700 dark:text-gray-200">
-                {projectedDaysRemaining > 365 ? '365+' : projectedDaysRemaining}
+                {(effectiveRunwayDays ?? projectedDaysRemaining) > 365 ? '365+' : (effectiveRunwayDays ?? projectedDaysRemaining)}
               </span> days remaining
             </>
           )}
