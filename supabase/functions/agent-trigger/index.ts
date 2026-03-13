@@ -77,6 +77,7 @@ const VALID_EVENTS = [
   'deal_stage_changed',
   'deal_stalled',
   'meeting_completed',
+  'calendar_event_created',
   'contact_created',
   'task_overdue',
   'email_received',
