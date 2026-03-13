@@ -1,0 +1,881 @@
+{
+  "project": {
+    "name": "BetterContact Integration",
+    "stack": {
+      "framework": "react-vite",
+      "database": "supabase",
+      "auth": "supabase-auth",
+      "styling": "tailwind",
+      "testing": "vitest"
+    },
+    "createdAt": "2026-03-12T00:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "bettercontact",
+      "name": "BetterContact Integration",
+      "status": "pending",
+      "prd": null,
+      "consultReport": ".sixty/pipeline.json",
+      "createdAt": "2026-03-12T00:00:00Z"
+    }
+  ],
+
+  "apiReference": {
+    "baseUrl": "https://app.bettercontact.rocks/api/v2",
+    "auth": { "type": "header", "headerName": "X-API-Key" },
+    "rateLimit": "60 req/min per API key",
+    "endpoints": {
+      "submitEnrichment": { "method": "POST", "path": "/async" },
+      "getResults": { "method": "GET", "path": "/async/{request_id}" },
+      "submitLeadFinder": { "method": "POST", "path": "/lead_finder/async" },
+      "getLeadFinderResults": { "method": "GET", "path": "/lead_finder/async/{request_id}" },
+      "checkCredits": { "method": "GET", "path": "/account", "note": "Auth via query params: email + api_key" }
+    },
+    "enrichmentRequest": {
+      "data": [
+        { "field": "first_name", "type": "string", "required": true },
+        { "field": "last_name", "type": "string", "required": true },
+        { "field": "company", "type": "string", "required": false, "note": "Required if company_domain not provided" },
+        { "field": "company_domain", "type": "string", "required": false, "note": "Required if company not provided" },
+        { "field": "linkedin_url", "type": "string", "required": false, "note": "Recommended for phone enrichment" },
+        { "field": "custom_fields", "type": "object", "required": false, "note": "Pass-through for row_id, column_id mapping" }
+      ],
+      "flags": {
+        "enrich_email_address": "boolean (required)",
+        "enrich_phone_number": "boolean (required)",
+        "webhook": "string (optional URL)",
+        "process_flow": "string (optional process flow ID)"
+      }
+    },
+    "enrichmentResponse": {
+      "submit": { "success": "boolean", "id": "string (request_id)", "message": "string" },
+      "results": {
+        "id": "string",
+        "status": "string (terminated)",
+        "credits_consumed": "integer",
+        "credits_left": "integer",
+        "summary": {
+          "total": "integer",
+          "valid": "integer",
+          "catch_all": "integer",
+          "catch_all_safe": "integer",
+          "catch_all_not_safe": "integer",
+          "undeliverable": "integer",
+          "not_found": "integer"
+        },
+        "data": [
+          {
+            "enriched": "boolean",
+            "email_provider": "string (which sub-provider found the email)",
+            "contact_first_name": "string",
+            "contact_last_name": "string",
+            "contact_email_address": "string",
+            "contact_email_address_status": "string (deliverable|catch_all|catch_all_safe|catch_all_not_safe|undeliverable|not_found)",
+            "contact_gender": "string",
+            "contact_job_title": "string"
+          }
+        ]
+      }
+    }
+  },
+
+  "stories": [
+    {
+      "id": "BC-001",
+      "feature": "bettercontact",
+      "title": "Integration credentials hook + config modal",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 1,
+      "group": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/lib/hooks/useExploriumIntegration.ts",
+          "src/components/integrations/ExplloriumConfigModal.tsx",
+          "src/pages/Integrations.tsx"
+        ],
+        "schema": ["integration_credentials"]
+      },
+      "blocks": ["BC-004", "BC-008"],
+      "parallelWith": ["BC-002", "BC-003"],
+
+      "acceptance": [
+        "useBetterContactIntegration hook reads/writes integration_credentials with provider='bettercontact'",
+        "BetterContactConfigModal shows API key input, credit balance (via GET /account), connection status",
+        "Integrations page shows BetterContact card in 'Data & Enrichment' category with connected/disconnected badge",
+        "Connect/disconnect works with toast feedback",
+        "Credit balance fetched on modal open (calls BetterContact GET /account with stored api_key)"
+      ],
+
+      "estimatedMinutes": 45,
+      "actualMinutes": null,
+
+      "files": [
+        "src/lib/hooks/useBetterContactIntegration.ts",
+        "src/components/integrations/BetterContactConfigModal.tsx",
+        "src/pages/Integrations.tsx"
+      ],
+
+      "implementation": {
+        "useBetterContactIntegration.ts": {
+          "clone": "src/lib/hooks/useExploriumIntegration.ts",
+          "changes": [
+            "Replace 'explorium' with 'bettercontact' as provider string",
+            "Add fetchCredits() method that calls BetterContact GET /account endpoint via edge function proxy",
+            "Return { isConnected, loading, connectApiKey, disconnect, refreshStatus, credits }"
+          ]
+        },
+        "BetterContactConfigModal.tsx": {
+          "clone": "src/components/integrations/ExplloriumConfigModal.tsx",
+          "changes": [
+            "Update capability highlights: 'Waterfall Email Enrichment', 'Phone Number Discovery', 'Email Deliverability Verification', 'Lead Finder Search'",
+            "Add credit balance display section (fetched from hook)",
+            "BetterContact branding (use Lucide Globe icon, no custom logo needed)",
+            "API key instructions: 'Find your API key at app.bettercontact.rocks/api_requests'",
+            "Credit cost table: Email enrichment ~1 credit, Phone enrichment ~1 credit"
+          ]
+        },
+        "Integrations.tsx": {
+          "changes": [
+            "Import useBetterContactIntegration hook",
+            "Import BetterContactConfigModal",
+            "Add BetterContact card to 'Data & Enrichment' category",
+            "Wire isConnected from hook to status badge"
+          ]
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BC-002",
+      "feature": "bettercontact",
+      "title": "Database schema migration",
+      "type": "schema",
+      "status": "pending",
+      "priority": 1,
+      "group": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/migrations/20260226800001_add_explorium_integration.sql",
+          "supabase/migrations/20260206100000_apollo_property_column.sql"
+        ],
+        "schema": ["dynamic_tables", "dynamic_table_columns"]
+      },
+      "blocks": ["BC-004", "BC-005", "BC-008"],
+      "parallelWith": ["BC-001", "BC-003"],
+
+      "acceptance": [
+        "'bettercontact' added to dynamic_tables.source_type CHECK constraint",
+        "'bettercontact_property' added to dynamic_table_columns.column_type CHECK constraint",
+        "bettercontact_property_name TEXT column added to dynamic_table_columns",
+        "bettercontact_requests tracking table created with RLS policies",
+        "Migration is idempotent (DROP CONSTRAINT IF EXISTS, CREATE TABLE IF NOT EXISTS)"
+      ],
+
+      "estimatedMinutes": 40,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/migrations/20260312000001_add_bettercontact_integration.sql"
+      ],
+
+      "implementation": {
+        "migration": {
+          "sections": [
+            {
+              "name": "Expand source_type CHECK",
+              "sql_pattern": "DROP CONSTRAINT IF EXISTS dynamic_tables_source_type_check; ADD CONSTRAINT ... CHECK (source_type IN (...existing..., 'bettercontact'))"
+            },
+            {
+              "name": "Expand column_type CHECK",
+              "sql_pattern": "DROP CONSTRAINT IF EXISTS dynamic_table_columns_column_type_check; ADD CONSTRAINT ... CHECK (column_type IN (...existing..., 'bettercontact_property'))"
+            },
+            {
+              "name": "Add bettercontact_property_name column",
+              "sql_pattern": "ALTER TABLE dynamic_table_columns ADD COLUMN IF NOT EXISTS bettercontact_property_name TEXT DEFAULT NULL; COMMENT ON COLUMN ..."
+            },
+            {
+              "name": "Create bettercontact_requests table",
+              "columns": [
+                "id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+                "organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE",
+                "table_id UUID REFERENCES dynamic_tables(id) ON DELETE CASCADE",
+                "column_id UUID REFERENCES dynamic_table_columns(id) ON DELETE CASCADE",
+                "bettercontact_request_id TEXT NOT NULL",
+                "action TEXT NOT NULL CHECK (action IN ('enrich', 'lead_finder'))",
+                "status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'terminated', 'failed'))",
+                "total_contacts INTEGER NOT NULL DEFAULT 0",
+                "processed_contacts INTEGER NOT NULL DEFAULT 0",
+                "credits_consumed INTEGER DEFAULT 0",
+                "webhook_url TEXT",
+                "enrichment_job_id UUID REFERENCES enrichment_jobs(id)",
+                "error_message TEXT",
+                "submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
+                "completed_at TIMESTAMPTZ",
+                "created_by UUID NOT NULL REFERENCES auth.users(id)"
+              ],
+              "indexes": [
+                "(organization_id, bettercontact_request_id)",
+                "(table_id, status)",
+                "(status) WHERE status = 'pending'"
+              ],
+              "rls": [
+                "SELECT: org members via organization_memberships",
+                "ALL: service_role full access"
+              ]
+            }
+          ]
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BC-003",
+      "feature": "bettercontact",
+      "title": "Copilot skill definitions",
+      "type": "config",
+      "status": "pending",
+      "priority": 1,
+      "group": 1,
+
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "skills/atomic/ops-enrichment-manager/SKILL.md"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["BC-001", "BC-002"],
+
+      "acceptance": [
+        "skills/atomic/bettercontact-enrich/SKILL.md created with proper frontmatter",
+        "skills/atomic/bettercontact-lead-finder/SKILL.md created with proper frontmatter",
+        "Enrichment skill triggers on: 'enrich with bettercontact', 'find emails bettercontact', 'bettercontact phone numbers'",
+        "Lead Finder skill triggers on: 'search bettercontact', 'find leads bettercontact', 'bettercontact prospecting'"
+      ],
+
+      "estimatedMinutes": 30,
+      "actualMinutes": null,
+
+      "files": [
+        "skills/atomic/bettercontact-enrich/SKILL.md",
+        "skills/atomic/bettercontact-lead-finder/SKILL.md"
+      ],
+
+      "implementation": {
+        "bettercontact-enrich/SKILL.md": {
+          "clone": "skills/atomic/ops-enrichment-manager/SKILL.md",
+          "changes": [
+            "Update name, description, triggers for BetterContact enrichment",
+            "Inputs: table_id, column_id, enrich_email (bool), enrich_phone (bool), force_refresh",
+            "Outputs: enriched_count, cached_count, failed_count, credits_consumed",
+            "Edge function: bettercontact-enrich with action=submit"
+          ]
+        },
+        "bettercontact-lead-finder/SKILL.md": {
+          "changes": [
+            "Triggers: search contacts, find leads, prospecting",
+            "Inputs: company_name, company_domain, job_title, location, limit",
+            "Outputs: table_id (new ops table), row_count",
+            "Edge function: bettercontact-lead-finder"
+          ]
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BC-004",
+      "feature": "bettercontact",
+      "title": "Submit enrichment edge function",
+      "type": "backend",
+      "status": "pending",
+      "priority": 2,
+      "group": 2,
+
+      "dependencies": {
+        "stories": ["BC-002"],
+        "files": [
+          "supabase/functions/apollo-enrich/index.ts",
+          "supabase/functions/explorium-enrich/index.ts",
+          "supabase/functions/_shared/costTracking.ts",
+          "supabase/functions/_shared/rateLimiter.ts",
+          "supabase/functions/_shared/corsHelper.ts"
+        ],
+        "schema": ["bettercontact_requests", "dynamic_table_cells", "dynamic_table_rows", "enrichment_jobs"]
+      },
+      "blocks": ["BC-005", "BC-007", "BC-009"],
+      "parallelWith": ["BC-007", "BC-008"],
+
+      "acceptance": [
+        "Edge function bettercontact-enrich handles actions: submit, status, credits",
+        "submit: reads contacts from dynamic_table_rows, maps to BetterContact format (first_name, last_name, company/company_domain, linkedin_url)",
+        "submit: includes custom_fields with row_id + column_id for result mapping",
+        "submit: posts batch to BetterContact POST /async, stores request_id in bettercontact_requests",
+        "submit: creates enrichment_jobs row (status=queued), marks cells as pending",
+        "submit: registers webhook URL pointing to our webhook-integrations/bettercontact endpoint",
+        "status: polls BetterContact GET /async/{request_id} and returns current status",
+        "credits: calls BetterContact GET /account to check credit balance",
+        "Pre-flight credit check via checkCreditBalance() before submit",
+        "BYOK: reads API key from integration_credentials (provider='bettercontact'), no env fallback",
+        "Handles skip_completed flag to avoid re-enriching already-complete cells",
+        "Handles force_refresh flag to re-enrich even cached rows",
+        "Rate limiting: respects 60 req/min via fetchWithRetry with 429 handling"
+      ],
+
+      "estimatedMinutes": 90,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/bettercontact-enrich/index.ts"
+      ],
+
+      "implementation": {
+        "index.ts": {
+          "pattern": "Router pattern (like apollo-enrich)",
+          "structure": [
+            "1. CORS + preflight handling via getCorsHeaders(req)",
+            "2. Auth: extract user via JWT, get org via organization_memberships",
+            "3. Route by body.action: 'submit' | 'status' | 'credits'",
+            "",
+            "ACTION: submit",
+            "  - Input: { table_id, column_id, row_ids?, enrich_email_address, enrich_phone_number, force_refresh?, skip_completed? }",
+            "  - Get BetterContact API key from integration_credentials WHERE provider='bettercontact' AND org_id",
+            "  - Pre-flight: checkCreditBalance(serviceClient, orgId)",
+            "  - Fetch target column config (bettercontact_property_name)",
+            "  - Fetch ALL columns for field extraction (for matching first_name, last_name, company, etc.)",
+            "  - Fetch target rows + cells",
+            "  - Separate cached (source_data.bettercontact exists + not force_refresh) vs needs-enrichment",
+            "  - For cached: extract field from source_data.bettercontact, upsert cell with source='bettercontact_cache'",
+            "  - For needs-enrichment:",
+            "    a. Create enrichment_jobs row (status=queued, total_rows=count)",
+            "    b. Mark target cells as status='pending'",
+            "    c. Build BetterContact request: map row data to { first_name, last_name, company, company_domain, linkedin_url }",
+            "    d. Include custom_fields: { row_id, column_id, enrichment_job_id }",
+            "    e. Set webhook URL: https://{SUPABASE_URL}/functions/v1/webhook-integrations?provider=bettercontact",
+            "    f. POST to https://app.bettercontact.rocks/api/v2/async with X-API-Key header",
+            "    g. Store request_id in bettercontact_requests table",
+            "    h. Update enrichment_jobs status='running'",
+            "  - Return { processed, cached_hits, submitted, enrichment_job_id, bettercontact_request_id }",
+            "",
+            "ACTION: status",
+            "  - Input: { request_id }",
+            "  - GET /async/{request_id} from BetterContact with X-API-Key",
+            "  - Return status + summary",
+            "",
+            "ACTION: credits",
+            "  - Input: {} (uses stored credentials)",
+            "  - GET /account from BetterContact with email + api_key as query params",
+            "  - Return { credits_left, email }"
+          ],
+          "fieldMapping": {
+            "BETTERCONTACT_FIELD_MAP": {
+              "email": { "path": "contact_email_address", "label": "Work Email" },
+              "email_status": { "path": "contact_email_address_status", "label": "Email Status" },
+              "phone": { "path": "contact_phone_number", "label": "Phone Number" },
+              "first_name": { "path": "contact_first_name", "label": "First Name" },
+              "last_name": { "path": "contact_last_name", "label": "Last Name" },
+              "job_title": { "path": "contact_job_title", "label": "Job Title" },
+              "gender": { "path": "contact_gender", "label": "Gender" },
+              "email_provider": { "path": "email_provider", "label": "Email Provider" }
+            }
+          },
+          "smartMatching": {
+            "description": "Match ops table columns to BetterContact input fields by column label/key",
+            "patterns": [
+              "first_name / First Name → data[].first_name",
+              "last_name / Last Name → data[].last_name",
+              "company / Company / company_name → data[].company",
+              "domain / company_domain / website → data[].company_domain",
+              "linkedin / LinkedIn / linkedin_url → data[].linkedin_url",
+              "email / Email → skip (it's what we're enriching)"
+            ]
+          }
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BC-005",
+      "feature": "bettercontact",
+      "title": "Async result processing — webhook + polling fallback",
+      "type": "backend",
+      "status": "pending",
+      "priority": 3,
+      "group": 3,
+
+      "dependencies": {
+        "stories": ["BC-002", "BC-004"],
+        "files": [
+          "supabase/functions/webhook-integrations/index.ts",
+          "supabase/functions/_shared/costTracking.ts"
+        ],
+        "schema": ["bettercontact_requests", "dynamic_table_cells", "dynamic_table_rows", "enrichment_jobs"]
+      },
+      "blocks": ["BC-006", "BC-009", "BC-010"],
+      "parallelWith": ["BC-006"],
+
+      "acceptance": [
+        "Webhook handler registered in webhook-integrations router as 'bettercontact'",
+        "Webhook receives BetterContact callback, matches request_id to bettercontact_requests row",
+        "Results written to dynamic_table_cells: email in target column, status/provider in additional columns if they exist",
+        "Full response cached in dynamic_table_rows.source_data.bettercontact",
+        "enrichment_jobs updated: processed_rows incremented, status set to 'complete' when all done",
+        "bettercontact_requests updated: status='terminated', credits_consumed, completed_at",
+        "Credits deducted via logFlatRateCostEvent() based on credits_consumed from response",
+        "Polling fallback: bettercontact-enrich action=status polls with exponential backoff (2s→5s→10s→30s)",
+        "If webhook hasn't fired after 5 minutes, polling auto-processes results",
+        "Per-row error tracking: failed rows get status='failed' + error_message on cell"
+      ],
+
+      "estimatedMinutes": 120,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/webhook-integrations/handlers/bettercontact.ts",
+        "supabase/functions/webhook-integrations/index.ts",
+        "supabase/functions/bettercontact-enrich/index.ts"
+      ],
+
+      "implementation": {
+        "handlers/bettercontact.ts": {
+          "structure": [
+            "1. Parse webhook payload (BetterContact POST body with enrichment results)",
+            "2. Extract request_id from payload",
+            "3. Look up bettercontact_requests by bettercontact_request_id",
+            "4. If not found → 404 (unknown request)",
+            "5. Get associated table_id, column_id, enrichment_job_id from the request row",
+            "6. Process results:",
+            "   a. For each contact in data[]:",
+            "     - Match back to row via custom_fields.row_id",
+            "     - Cache full response in source_data.bettercontact (upsert dynamic_table_rows)",
+            "     - Extract target field value using BETTERCONTACT_FIELD_MAP",
+            "     - Upsert dynamic_table_cells with value, source='bettercontact', status='complete'",
+            "     - If enriched=false → status='failed', error_message='Not found by BetterContact'",
+            "   b. Track processed/failed counts",
+            "7. Update enrichment_jobs: processed_rows, failed_rows, status",
+            "8. Update bettercontact_requests: status='terminated', credits_consumed, completed_at",
+            "9. Deduct credits: logFlatRateCostEvent(client, userId, orgId, 'bettercontact', 'enrichment', creditsConsumed, 'bettercontact_enrichment')",
+            "10. Return 200 OK"
+          ]
+        },
+        "webhook-integrations/index.ts": {
+          "changes": [
+            "Import bettercontact handler: import { bettercontactWebhook } from './handlers/bettercontact.ts'",
+            "Add to providerHandlers: bettercontact: bettercontactWebhook"
+          ]
+        },
+        "bettercontact-enrich/index.ts (polling addition)": {
+          "changes": [
+            "ACTION: poll_and_process",
+            "  - Input: { request_id } OR { check_stale: true }",
+            "  - If request_id: GET /async/{request_id}, if terminated → process results (same logic as webhook)",
+            "  - If check_stale: find bettercontact_requests with status='pending' AND submitted_at < NOW() - 5min",
+            "  - Process any completed results",
+            "  - Exponential backoff: caller (frontend) handles retry timing (2s→5s→10s→30s)"
+          ]
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BC-006",
+      "feature": "bettercontact",
+      "title": "Email deliverability status column + enrichment templates",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 3,
+      "group": 3,
+
+      "dependencies": {
+        "stories": ["BC-005"],
+        "files": [
+          "src/components/ops/enrichmentTemplates.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["BC-005"],
+
+      "acceptance": [
+        "BetterContact enrichment templates added to enrichmentTemplates.ts",
+        "Templates include: Verified Email, Phone Number, Email Deliverability Status, Provider Attribution, Job Title",
+        "Email Status column renders color-coded badges: green=deliverable, yellow=catch_all, orange=catch_all_not_safe, red=undeliverable, gray=not_found",
+        "Templates are selectable when adding BetterContact enrichment columns to Ops tables"
+      ],
+
+      "estimatedMinutes": 45,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/ops/enrichmentTemplates.ts",
+        "src/components/ops/cells/BetterContactStatusCell.tsx"
+      ],
+
+      "implementation": {
+        "enrichmentTemplates.ts": {
+          "changes": [
+            "Add BETTERCONTACT_TEMPLATES array:",
+            "  - Verified Email: { name, prompt: 'Extract verified work email address', icon: Mail }",
+            "  - Phone Number: { name, prompt: 'Extract verified phone number', icon: Phone }",
+            "  - Email Status: { name, prompt: 'Email deliverability status', icon: ShieldCheck }",
+            "  - Provider: { name, prompt: 'Data provider attribution', icon: Database }",
+            "  - Job Title: { name, prompt: 'Contact job title', icon: Briefcase }",
+            "Export BETTERCONTACT_TEMPLATES alongside existing template arrays"
+          ]
+        },
+        "BetterContactStatusCell.tsx": {
+          "description": "Color-coded badge component for email status values",
+          "statusColors": {
+            "deliverable": "bg-green-100 text-green-800",
+            "catch_all": "bg-yellow-100 text-yellow-800",
+            "catch_all_safe": "bg-yellow-100 text-yellow-700",
+            "catch_all_not_safe": "bg-orange-100 text-orange-800",
+            "undeliverable": "bg-red-100 text-red-800",
+            "not_found": "bg-gray-100 text-gray-500"
+          }
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BC-007",
+      "feature": "bettercontact",
+      "title": "Frontend enrichment trigger + fire-and-forget UX",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 2,
+      "group": 2,
+
+      "dependencies": {
+        "stories": ["BC-004"],
+        "files": [
+          "src/components/copilot/responses/OpsEnrichmentStatusResponse.tsx"
+        ],
+        "schema": ["enrichment_jobs"]
+      },
+      "blocks": [],
+      "parallelWith": ["BC-004", "BC-008"],
+
+      "acceptance": [
+        "BetterContact appears as enrichment source option in Ops table column enrichment UI",
+        "User can select 'BetterContact' and choose email/phone/both enrichment",
+        "Submit triggers bettercontact-enrich edge function with action=submit",
+        "Toast notification on submit: 'BetterContact enrichment submitted for N contacts'",
+        "Progress tracked via enrichment_jobs polling (existing EnrichmentProgressBar works)",
+        "Toast notification on completion: 'Enrichment complete: N emails found, M phones found'",
+        "Confirmation dialog for batches >50 rows: 'This will use approximately N BetterContact credits'",
+        "Error toast if API key not configured: 'Connect BetterContact in Settings > Integrations'"
+      ],
+
+      "estimatedMinutes": 60,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/ops/BetterContactEnrichmentTrigger.tsx",
+        "src/lib/services/betterContactService.ts"
+      ],
+
+      "implementation": {
+        "betterContactService.ts": {
+          "pattern": "Static class with async methods",
+          "methods": [
+            "static async submitEnrichment({ tableId, columnId, rowIds, enrichEmail, enrichPhone, forceRefresh, skipCompleted }): invokes bettercontact-enrich edge function with action=submit",
+            "static async checkStatus(requestId): invokes bettercontact-enrich with action=status",
+            "static async checkCredits(): invokes bettercontact-enrich with action=credits",
+            "static async isConnected(orgId): checks integration_credentials for bettercontact provider"
+          ]
+        },
+        "BetterContactEnrichmentTrigger.tsx": {
+          "description": "UI component wired into Ops table enrichment column header menu",
+          "features": [
+            "Dropdown with email/phone/both toggles",
+            "Credit estimate display",
+            "Confirmation dialog for large batches",
+            "Submit button with loading state",
+            "Fire-and-forget: close dialog after submit, show toast"
+          ]
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BC-008",
+      "feature": "bettercontact",
+      "title": "Lead Finder — edge function + search UI + table import",
+      "type": "fullstack",
+      "status": "pending",
+      "priority": 2,
+      "group": 2,
+
+      "dependencies": {
+        "stories": ["BC-001", "BC-002"],
+        "files": [
+          "src/lib/services/apolloSearchService.ts",
+          "supabase/functions/bettercontact-enrich/index.ts"
+        ],
+        "schema": ["dynamic_tables", "dynamic_table_columns", "dynamic_table_rows", "bettercontact_requests"]
+      },
+      "blocks": [],
+      "parallelWith": ["BC-004", "BC-007"],
+
+      "acceptance": [
+        "bettercontact-lead-finder edge function created with submit + poll actions",
+        "submit: posts search filters to BetterContact POST /lead_finder/async, stores request_id",
+        "poll: checks GET /lead_finder/async/{request_id}, when results ready creates Ops table",
+        "Ops table created with source_type='bettercontact', appropriate columns (name, email, phone, title, company, linkedin)",
+        "Frontend: 'BetterContact Lead Finder' option in Ops table creation / source selection",
+        "Search form with filters: company name/domain, job title keywords, location",
+        "Fire-and-forget: submit search, poll in background, notify when table ready",
+        "Results populate dynamic_table_rows with source_data.bettercontact cache"
+      ],
+
+      "estimatedMinutes": 100,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/bettercontact-lead-finder/index.ts",
+        "src/lib/services/betterContactSearchService.ts",
+        "src/components/ops/BetterContactLeadFinderForm.tsx"
+      ],
+
+      "implementation": {
+        "bettercontact-lead-finder/index.ts": {
+          "structure": [
+            "1. CORS + auth (same pattern as bettercontact-enrich)",
+            "2. Get BetterContact API key from integration_credentials",
+            "3. Route by action: 'submit' | 'poll'",
+            "",
+            "ACTION: submit",
+            "  - Input: { filters: { company_name?, company_domain?, job_title?, location?, limit? } }",
+            "  - POST to /lead_finder/async with X-API-Key header",
+            "  - Store request_id in bettercontact_requests (action='lead_finder')",
+            "  - Return { request_id, message: 'Search submitted' }",
+            "",
+            "ACTION: poll",
+            "  - Input: { request_id, auto_create_table? }",
+            "  - GET /lead_finder/async/{request_id}",
+            "  - If status != 'terminated' → return { status, message: 'Still processing' }",
+            "  - If terminated + auto_create_table:",
+            "    a. Create dynamic_table (source_type='bettercontact', name='BetterContact Search [timestamp]')",
+            "    b. Create columns: First Name, Last Name, Email, Phone, Job Title, Company, LinkedIn, Email Status",
+            "    c. Create rows from results data[], cache in source_data.bettercontact",
+            "    d. Create cells for each field",
+            "    e. Update bettercontact_requests: status='terminated', completed_at",
+            "  - Return { status, table_id, row_count }"
+          ]
+        },
+        "betterContactSearchService.ts": {
+          "pattern": "Static class (like apolloSearchService.ts)",
+          "methods": [
+            "static async submitSearch(filters): calls bettercontact-lead-finder with action=submit",
+            "static async pollResults(requestId, autoCreateTable): calls with action=poll",
+            "static async searchAndCreateTable(filters): submit + poll loop with exponential backoff"
+          ]
+        },
+        "BetterContactLeadFinderForm.tsx": {
+          "description": "Search form component for Lead Finder",
+          "fields": [
+            "Company name (text input)",
+            "Company domain (text input)",
+            "Job title keywords (text input)",
+            "Location (text input)",
+            "Result limit (number input, default 100)"
+          ],
+          "behavior": [
+            "Submit calls betterContactSearchService.submitSearch()",
+            "Shows 'Search submitted' toast",
+            "Polls in background via betterContactSearchService.pollResults()",
+            "On complete: navigates to new Ops table or shows toast with link"
+          ]
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BC-009",
+      "feature": "bettercontact",
+      "title": "Cascade enrichment — BetterContact as fallback provider",
+      "type": "backend",
+      "status": "pending",
+      "priority": 4,
+      "group": 4,
+
+      "dependencies": {
+        "stories": ["BC-004", "BC-005"],
+        "files": [
+          "supabase/functions/enrich-router/index.ts",
+          "supabase/functions/enrich-router/handlers/cascade.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": ["BC-010"],
+
+      "acceptance": [
+        "BetterContact added as provider in cascade enrichment handler",
+        "Cascade order: Apollo → AI Ark → BetterContact (configurable)",
+        "When prior providers return no email, BetterContact waterfall is triggered",
+        "BetterContact results cached in source_data.bettercontact alongside other provider caches",
+        "Field attribution tracks source as 'bettercontact' in enrich_cascade data",
+        "Async handling: cascade waits for BetterContact results (polls with backoff) before continuing",
+        "If BetterContact API key not configured for org, skip silently (don't error the cascade)"
+      ],
+
+      "estimatedMinutes": 60,
+      "actualMinutes": null,
+
+      "files": [
+        "supabase/functions/enrich-router/handlers/cascade.ts"
+      ],
+
+      "implementation": {
+        "cascade.ts": {
+          "changes": [
+            "Add 'bettercontact' to PROVIDER_ORDER array (after ai_ark)",
+            "Add BetterContact enrichment logic:",
+            "  - Check if BetterContact API key exists for org (skip if not)",
+            "  - For rows still missing email after Apollo+AI Ark:",
+            "    a. Submit to BetterContact POST /async",
+            "    b. Poll GET /async/{request_id} with exponential backoff",
+            "    c. When terminated: extract results, update source_data.bettercontact",
+            "    d. Update cascade attribution: source='bettercontact'",
+            "  - Handle timeout gracefully (max 120s polling, then mark as failed)",
+            "Add BETTERCONTACT_FIELD_MAP to extract email, phone, title from response",
+            "Add 'bettercontact' and 'bettercontact_cache' to valid source values"
+          ]
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    },
+
+    {
+      "id": "BC-010",
+      "feature": "bettercontact",
+      "title": "Provider attribution + enrichment analytics",
+      "type": "frontend",
+      "status": "pending",
+      "priority": 4,
+      "group": 4,
+
+      "dependencies": {
+        "stories": ["BC-005"],
+        "files": [
+          "src/components/integrations/BetterContactConfigModal.tsx"
+        ],
+        "schema": ["bettercontact_requests", "dynamic_table_cells"]
+      },
+      "blocks": [],
+      "parallelWith": ["BC-009"],
+
+      "acceptance": [
+        "'Provider' column option available in Ops tables showing email_provider from BetterContact response",
+        "BetterContact config modal shows enrichment analytics: total enriched, success rate, credits consumed",
+        "Analytics queried from bettercontact_requests + enrichment_jobs data",
+        "Provider column renders as text (e.g., 'Hunter', 'Dropcontact', 'Lusha')"
+      ],
+
+      "estimatedMinutes": 45,
+      "actualMinutes": null,
+
+      "files": [
+        "src/components/integrations/BetterContactConfigModal.tsx",
+        "src/components/ops/enrichmentTemplates.ts"
+      ],
+
+      "implementation": {
+        "BetterContactConfigModal.tsx": {
+          "changes": [
+            "Add 'Usage & Analytics' section below connection status",
+            "Query bettercontact_requests for org: count by status, sum credits_consumed",
+            "Display: Total Searches, Contacts Enriched, Credits Used, Success Rate",
+            "Show 'No enrichments yet' if no data"
+          ]
+        },
+        "enrichmentTemplates.ts": {
+          "changes": [
+            "Ensure 'Provider' template in BETTERCONTACT_TEMPLATES maps to email_provider field"
+          ]
+        }
+      },
+
+      "startedAt": null,
+      "completedAt": null
+    }
+  ],
+
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 0,
+    "currentFeature": "bettercontact",
+    "lastUpdated": "2026-03-12T00:00:00Z",
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": ["BC-001", "BC-002", "BC-003"],
+        "description": "Foundation — credentials, schema, skills. All independent, run in parallel.",
+        "estimatedMinutes": 45,
+        "criticalPath": false
+      },
+      {
+        "group": 2,
+        "stories": ["BC-004", "BC-007", "BC-008"],
+        "description": "Core enrichment + Lead Finder + frontend trigger. BC-004 is critical path; BC-007 and BC-008 can start after BC-002 completes.",
+        "estimatedMinutes": 100,
+        "criticalPath": true
+      },
+      {
+        "group": 3,
+        "stories": ["BC-005", "BC-006"],
+        "description": "Webhook receiver + status columns. Depends on BC-004. Most complex story (BC-005).",
+        "estimatedMinutes": 120,
+        "criticalPath": true
+      },
+      {
+        "group": 4,
+        "stories": ["BC-009", "BC-010"],
+        "description": "Cascade integration + analytics. Polish layer, depends on full pipeline.",
+        "estimatedMinutes": 60,
+        "criticalPath": false
+      }
+    ],
+    "criticalPath": ["BC-002", "BC-004", "BC-005", "BC-009"],
+    "estimatedTotalMinutes": {
+      "sequential": 635,
+      "parallel": 325,
+      "note": "With 3 parallel workers, Groups 1-4 take ~5.5h total (critical path: BC-002→BC-004→BC-005→BC-009)"
+    }
+  }
+}

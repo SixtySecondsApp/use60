@@ -7,15 +7,19 @@ import { logFlatRateCostEvent } from '../../_shared/costTracking.ts'
  * enrich-cascade — Multi-provider contact enrichment with field-level source attribution.
  *
  * Cascade strategy (per row):
- *   1. Check source_data cache (ai_ark then apollo) — zero API calls if cached
+ *   1. Check source_data cache (ai_ark then apollo then bettercontact) — zero API calls if cached
  *   2. Try AI Ark reverse-lookup (email or linkedin required) — higher quality
  *   3. If AI Ark misses fields, try Apollo people/match to fill gaps
- *   4. Merge results: prefer AI Ark values, fill missing fields from Apollo
- *   5. Write merged cell value + source attribution per field into source_data
+ *   4. If email/phone still missing, try BetterContact (async submit + poll, max ~60s)
+ *   5. Merge results: prefer AI Ark values, fill from Apollo, then BetterContact
+ *   6. Write merged cell value + source attribution per field into source_data
+ *
+ * BetterContact is BYOK only — skipped silently if no API key configured.
  *
  * Rate limits respected:
  *   - AI Ark: 4 concurrent / 250ms delay between batches (~5/sec max)
  *   - Apollo: 5 concurrent
+ *   - BetterContact: async batch (submit all at once, poll for results)
  *
  * POST body:
  * {
@@ -39,10 +43,14 @@ import { logFlatRateCostEvent } from '../../_shared/costTracking.ts'
 
 const AI_ARK_API_BASE = 'https://api.ai-ark.com/api/developer-portal/v1'
 const APOLLO_API_BASE = 'https://api.apollo.io/api/v1'
+const BETTERCONTACT_API_BASE = 'https://app.bettercontact.rocks/api/v2'
 
 const AI_ARK_CONCURRENT = 4
 const AI_ARK_BATCH_DELAY_MS = 250
 const APOLLO_CONCURRENT = 5
+
+// BetterContact polling config (shorter timeout for cascade context)
+const BC_POLL_DELAYS = [2000, 4000, 8000, 16000, 30000] // ~60s max total
 
 // ---------------------------------------------------------------------------
 // Credit costs (per API call, flat rate regardless of results returned)
@@ -51,6 +59,7 @@ const APOLLO_CONCURRENT = 5
 const CREDIT_COSTS = {
   ai_ark_reverse_lookup: 1.25,
   apollo_people_match: 1.0,
+  bettercontact_enrich: 1.0,
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +141,7 @@ interface EnrichedPerson {
 }
 
 interface SourceAttribution {
-  // Per-field source: 'ai_ark' | 'apollo' | 'ai_ark_cache' | 'apollo_cache'
+  // Per-field source: 'ai_ark' | 'apollo' | 'bettercontact' | 'ai_ark_cache' | 'apollo_cache'
   [field: string]: string
 }
 
@@ -325,6 +334,113 @@ function buildApolloMatchParams(
 }
 
 // ---------------------------------------------------------------------------
+// Build BetterContact params from cell data
+// ---------------------------------------------------------------------------
+
+function buildBetterContactParams(
+  row: RowData,
+  columnIdToKey: Map<string, string>,
+  columnIdToMeta: Map<string, ColumnMeta>,
+): Record<string, string> | null {
+  let firstNameVal: string | null = null
+  let lastNameVal: string | null = null
+  let companyVal: string | null = null
+  let domainVal: string | null = null
+  let linkedinVal: string | null = null
+
+  for (const [, cell] of Object.entries(row.cells)) {
+    if (!cell.value) continue
+    const meta = columnIdToMeta.get(cell.column_id)
+    const key = columnIdToKey.get(cell.column_id) ?? ''
+    const label = (meta?.label ?? '').toLowerCase()
+    const colType = meta?.column_type ?? ''
+
+    if (key === 'first_name' || key === 'firstname' || label === 'first name') {
+      if (!firstNameVal) firstNameVal = cell.value
+    }
+    if (key === 'last_name' || key === 'lastname' || label === 'last name') {
+      if (!lastNameVal) lastNameVal = cell.value
+    }
+    if (colType === 'company' || key === 'company' || key === 'company_name' || label === 'company' || label === 'company name') {
+      if (!companyVal) companyVal = cell.value
+    }
+    if (key === 'company_domain' || key === 'domain' || label === 'domain' || label === 'company domain') {
+      if (!domainVal) domainVal = cell.value
+    }
+    if (colType === 'linkedin' || key === 'linkedin_url' || key === 'linkedin' || label.includes('linkedin')) {
+      if (!linkedinVal) linkedinVal = cell.value
+    }
+  }
+
+  // BetterContact requires first_name + last_name + (company or domain)
+  if (!firstNameVal || !lastNameVal) return null
+  if (!companyVal && !domainVal) return null
+
+  const params: Record<string, string> = {
+    first_name: firstNameVal,
+    last_name: lastNameVal,
+  }
+  if (companyVal) params.company = companyVal
+  if (domainVal) params.company_domain = domainVal
+  if (linkedinVal) params.linkedin_url = linkedinVal
+
+  return params
+}
+
+// ---------------------------------------------------------------------------
+// BetterContact async submit + poll (for cascade context)
+// ---------------------------------------------------------------------------
+
+async function submitAndPollBetterContact(
+  apiKey: string,
+  contactsPayload: Array<Record<string, unknown>>,
+): Promise<{ data: Array<Record<string, unknown>> | null; credits_consumed: number }> {
+  const submitResp = await fetch(`${BETTERCONTACT_API_BASE}/async`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+    body: JSON.stringify({
+      data: contactsPayload,
+      enrich_email_address: true,
+      enrich_phone_number: false,
+    }),
+  })
+
+  if (!submitResp.ok) {
+    const errorText = await submitResp.text()
+    throw new Error(`BetterContact API ${submitResp.status}: ${errorText.slice(0, 200)}`)
+  }
+
+  const submitResult = await submitResp.json()
+  const requestId = submitResult.id
+
+  if (!requestId) {
+    throw new Error('BetterContact did not return a request ID')
+  }
+
+  // Poll with exponential backoff (max ~60s for cascade)
+  for (let i = 0; i < BC_POLL_DELAYS.length; i++) {
+    await sleep(BC_POLL_DELAYS[i])
+
+    const pollResp = await fetch(`${BETTERCONTACT_API_BASE}/async/${requestId}`, {
+      headers: { 'X-API-Key': apiKey },
+    })
+
+    if (pollResp.ok) {
+      const pollResult = await pollResp.json()
+      if (pollResult.status === 'terminated') {
+        return {
+          data: pollResult.data ?? null,
+          credits_consumed: pollResult.credits_consumed ?? contactsPayload.length * CREDIT_COSTS.bettercontact_enrich,
+        }
+      }
+    }
+  }
+
+  // Timed out — results not ready within cascade window
+  return { data: null, credits_consumed: 0 }
+}
+
+// ---------------------------------------------------------------------------
 // Rate limiting sleep
 // ---------------------------------------------------------------------------
 
@@ -440,7 +556,7 @@ export async function handleCascade(req: Request): Promise<Response> {
     // ---------------------------------------------------------------------------
     // API key resolution
     // ---------------------------------------------------------------------------
-    const [aiArkCreds, apolloCreds] = await Promise.all([
+    const [aiArkCreds, apolloCreds, betterContactCreds] = await Promise.all([
       serviceClient
         .from('integration_credentials')
         .select('credentials')
@@ -453,6 +569,12 @@ export async function handleCascade(req: Request): Promise<Response> {
         .eq('organization_id', orgId)
         .eq('provider', 'apollo')
         .maybeSingle(),
+      serviceClient
+        .from('integration_credentials')
+        .select('credentials')
+        .eq('organization_id', orgId)
+        .eq('provider', 'bettercontact')
+        .maybeSingle(),
     ])
 
     const aiArkApiKey = (aiArkCreds.data?.credentials as Record<string, string>)?.api_key
@@ -460,6 +582,9 @@ export async function handleCascade(req: Request): Promise<Response> {
 
     const apolloApiKey = (apolloCreds.data?.credentials as Record<string, string>)?.api_key
       || Deno.env.get('APOLLO_API_KEY')
+
+    // BetterContact is BYOK only — no env fallback
+    const betterContactApiKey = (betterContactCreds.data?.credentials as Record<string, string>)?.api_key
 
     // ---------------------------------------------------------------------------
     // Parse request
@@ -550,6 +675,50 @@ export async function handleCascade(req: Request): Promise<Response> {
         }
       }
 
+      // Merge AI Ark + Apollo first
+      const { person, attribution } = mergePersonData(
+        aiArkPerson,
+        apolloPerson,
+        'ai_ark',
+        'apollo',
+      )
+
+      let bcCredits = 0
+      let bcUsed = false
+
+      // Step 3: BetterContact cascade (only if email still missing and API key configured)
+      if (betterContactApiKey && !person.email) {
+        try {
+          // Build a single-contact payload from whatever we know
+          const bcContact: Record<string, unknown> = { custom_fields: { idx: 0 } }
+          if (person.first_name) bcContact.first_name = person.first_name
+          if (person.last_name) bcContact.last_name = person.last_name
+          if (person.company_name || person.company) bcContact.company = person.company_name || person.company
+          if (person.company_domain) bcContact.company_domain = person.company_domain
+          if (linkedin_url) bcContact.linkedin_url = linkedin_url
+
+          // Only submit if we have enough data for BetterContact
+          if (bcContact.first_name && bcContact.last_name && (bcContact.company || bcContact.company_domain)) {
+            const bcResult = await submitAndPollBetterContact(betterContactApiKey, [bcContact])
+            if (bcResult.data && bcResult.data.length > 0) {
+              const contact = bcResult.data[0] as Record<string, unknown>
+              if (contact.enriched && contact.contact_email_address) {
+                person.email = String(contact.contact_email_address)
+                attribution.email = 'bettercontact'
+                if (contact.contact_phone_number && !person.phone) {
+                  person.phone = String(contact.contact_phone_number)
+                  attribution.phone = 'bettercontact'
+                }
+                bcUsed = true
+              }
+              bcCredits = bcResult.credits_consumed
+            }
+          }
+        } catch (bcErr) {
+          console.warn('[enrich-cascade] BetterContact lookup failed (non-blocking):', bcErr)
+        }
+      }
+
       // Log credits
       const logPromises: Promise<unknown>[] = []
       if (aiArkCredits > 0) {
@@ -562,14 +731,12 @@ export async function handleCascade(req: Request): Promise<Response> {
           logFlatRateCostEvent(userClient, user.id, orgId, 'apollo', 'enrich-cascade-apollo', apolloCredits, 'enrich_cascade')
         )
       }
+      if (bcCredits > 0) {
+        logPromises.push(
+          logFlatRateCostEvent(userClient, user.id, orgId, 'bettercontact', 'enrich-cascade-bettercontact', bcCredits, 'enrich_cascade')
+        )
+      }
       await Promise.allSettled(logPromises)
-
-      const { person, attribution } = mergePersonData(
-        aiArkPerson,
-        apolloPerson,
-        'ai_ark',
-        'apollo',
-      )
 
       // If a specific field was requested, return just that value
       const fieldValue = field ? (person[field] ?? null) : null
@@ -582,11 +749,13 @@ export async function handleCascade(req: Request): Promise<Response> {
           sources_used: {
             ai_ark: aiArkPerson != null,
             apollo: apolloPerson != null,
+            bettercontact: bcUsed,
           },
           credits_consumed: {
             ai_ark: aiArkCredits,
             apollo: apolloCredits,
-            total: aiArkCredits + apolloCredits,
+            bettercontact: bcCredits,
+            total: aiArkCredits + apolloCredits + bcCredits,
           },
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -710,9 +879,11 @@ export async function handleCascade(req: Request): Promise<Response> {
         cached_hits: 0,
         failed: 0,
         skipped: 0,
+        bettercontact_enriched: 0,
         credits_consumed: {
           ai_ark: 0,
           apollo: 0,
+          bettercontact: 0,
           total: 0,
         },
       }
@@ -926,6 +1097,145 @@ export async function handleCascade(req: Request): Promise<Response> {
         // Respect AI Ark 5/sec rate limit between batches
         if (i + AI_ARK_CONCURRENT < aiArkMatchable.length) {
           await sleep(AI_ARK_BATCH_DELAY_MS)
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // Step 3: BetterContact cascade (async with polling)
+      // Only for rows still missing the target field after AI Ark + Apollo.
+      // Skipped silently if no BetterContact API key configured (BYOK only).
+      // -----------------------------------------------------------------------
+      if (betterContactApiKey && APOLLO_PRIMARY_FIELDS.has(targetField)) {
+        try {
+          // Re-read rows that went through enrichment to check which still lack the target field
+          const enrichedRowIds = aiArkMatchable.map(m => m.row.id)
+          if (enrichedRowIds.length > 0) {
+            const { data: postEnrichCells } = await serviceClient
+              .from('dynamic_table_cells')
+              .select('row_id, value, status')
+              .eq('column_id', column_id)
+              .in('row_id', enrichedRowIds)
+
+            const stillMissingRowIds = new Set<string>()
+            for (const cell of postEnrichCells ?? []) {
+              if (!cell.value || cell.status === 'failed') {
+                stillMissingRowIds.add(cell.row_id)
+              }
+            }
+
+            if (stillMissingRowIds.size > 0) {
+              // Build BetterContact params for rows still missing data
+              const bcEligible: Array<{ row: RowData; params: Record<string, string> }> = []
+              for (const match of aiArkMatchable) {
+                if (!stillMissingRowIds.has(match.row.id)) continue
+                const bcParams = buildBetterContactParams(match.row, columnIdToKey, columnIdToMeta)
+                if (bcParams) {
+                  bcEligible.push({ row: match.row, params: bcParams })
+                }
+              }
+
+              if (bcEligible.length > 0) {
+                console.log(`[enrich-cascade] BetterContact: ${bcEligible.length} rows still missing "${targetField}", submitting`)
+
+                const contactsPayload = bcEligible.map(({ row, params }) => ({
+                  first_name: params.first_name,
+                  last_name: params.last_name,
+                  ...(params.company ? { company: params.company } : {}),
+                  ...(params.company_domain ? { company_domain: params.company_domain } : {}),
+                  ...(params.linkedin_url ? { linkedin_url: params.linkedin_url } : {}),
+                  custom_fields: { row_id: row.id },
+                }))
+
+                const bcResult = await submitAndPollBetterContact(betterContactApiKey, contactsPayload)
+
+                if (bcResult.credits_consumed > 0) {
+                  stats.credits_consumed.bettercontact += bcResult.credits_consumed
+                  stats.credits_consumed.total += bcResult.credits_consumed
+                  await logFlatRateCostEvent(
+                    userClient, user.id, orgId, 'bettercontact',
+                    'enrich-cascade-bettercontact', bcResult.credits_consumed, 'enrich_cascade',
+                  ).catch(() => {})
+                }
+
+                if (bcResult.data) {
+                  for (const contact of bcResult.data) {
+                    const rowId = (contact.custom_fields as Record<string, unknown>)?.row_id as string | undefined
+                    if (!rowId) continue
+
+                    const matchedEntry = bcEligible.find(e => e.row.id === rowId)
+                    if (!matchedEntry) continue
+
+                    const isEnriched = contact.enriched === true
+                    const emailValue = contact.contact_email_address as string | undefined
+                    const phoneValue = contact.contact_phone_number as string | undefined
+
+                    // Read existing row source_data to merge BetterContact results
+                    const { data: currentRow } = await serviceClient
+                      .from('dynamic_table_rows')
+                      .select('id, source_data')
+                      .eq('id', rowId)
+                      .maybeSingle()
+
+                    if (!currentRow) continue
+
+                    const existingSD = (currentRow.source_data ?? {}) as Record<string, unknown>
+                    const cascadePerson = (existingSD.enrich_cascade ?? {}) as Record<string, string | null>
+                    const cascadeAttrib = (existingSD.enrich_cascade_attribution ?? {}) as Record<string, string>
+
+                    if (isEnriched && emailValue) {
+                      cascadePerson.email = emailValue
+                      cascadeAttrib.email = 'bettercontact'
+                      if (phoneValue && !cascadePerson.phone) {
+                        cascadePerson.phone = phoneValue
+                        cascadeAttrib.phone = 'bettercontact'
+                      }
+                    }
+
+                    // Cache BetterContact raw response + update cascade merge
+                    await serviceClient
+                      .from('dynamic_table_rows')
+                      .update({
+                        source_data: {
+                          ...existingSD,
+                          bettercontact: contact,
+                          enrich_cascade: cascadePerson,
+                          enrich_cascade_attribution: cascadeAttrib,
+                        },
+                      })
+                      .eq('id', rowId)
+
+                    // Update cell if BetterContact found the target field
+                    const bcFieldValue = targetField === 'email' ? emailValue
+                      : targetField === 'phone' ? phoneValue
+                      : null
+
+                    if (isEnriched && bcFieldValue) {
+                      await serviceClient
+                        .from('dynamic_table_cells')
+                        .upsert({
+                          row_id: rowId,
+                          column_id,
+                          value: String(bcFieldValue),
+                          status: 'enriched',
+                          source: 'bettercontact',
+                          confidence: 0.95,
+                          error_message: null,
+                        }, { onConflict: 'row_id,column_id' })
+
+                      // Correct stats: was counted as failed, now enriched
+                      stats.failed = Math.max(0, stats.failed - 1)
+                      stats.enriched++
+                      stats.bettercontact_enriched++
+                    }
+                  }
+                } else {
+                  console.log('[enrich-cascade] BetterContact: results not ready within polling window, rows remain as-is')
+                }
+              }
+            }
+          }
+        } catch (bcErr) {
+          console.warn('[enrich-cascade] BetterContact cascade failed (non-blocking):', bcErr)
         }
       }
 
