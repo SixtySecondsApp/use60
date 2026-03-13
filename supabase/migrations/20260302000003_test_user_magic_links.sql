@@ -3,7 +3,7 @@
 -- to sign up with minimal onboarding and optional pre-loaded credits.
 -- Tokens expire after 7 days and can only be used once.
 
-CREATE TABLE public.test_user_magic_links (
+CREATE TABLE IF NOT EXISTS public.test_user_magic_links (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   token TEXT NOT NULL UNIQUE,
   org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -22,15 +22,16 @@ CREATE TABLE public.test_user_magic_links (
 );
 
 -- Indexes for fast lookups
-CREATE INDEX idx_test_magic_links_token ON public.test_user_magic_links(token);
-CREATE INDEX idx_test_magic_links_email ON public.test_user_magic_links(email);
-CREATE INDEX idx_test_magic_links_expires ON public.test_user_magic_links(expires_at);
-CREATE INDEX idx_test_magic_links_created_by ON public.test_user_magic_links(created_by);
+CREATE INDEX IF NOT EXISTS idx_test_magic_links_token ON public.test_user_magic_links(token);
+CREATE INDEX IF NOT EXISTS idx_test_magic_links_email ON public.test_user_magic_links(email);
+CREATE INDEX IF NOT EXISTS idx_test_magic_links_expires ON public.test_user_magic_links(expires_at);
+CREATE INDEX IF NOT EXISTS idx_test_magic_links_created_by ON public.test_user_magic_links(created_by);
 
 -- RLS
 ALTER TABLE public.test_user_magic_links ENABLE ROW LEVEL SECURITY;
 
 -- Service role can manage all tokens (create, update used_at, etc.)
+DROP POLICY IF EXISTS "Service role can manage test links" ON public.test_user_magic_links;
 CREATE POLICY "Service role can manage test links"
   ON public.test_user_magic_links
   AS PERMISSIVE FOR ALL
@@ -38,12 +39,14 @@ CREATE POLICY "Service role can manage test links"
   WITH CHECK (auth.role() = 'service_role');
 
 -- Public can read unexpired, unused tokens (for validation during signup)
+DROP POLICY IF EXISTS "Public can validate unexpired test links" ON public.test_user_magic_links;
 CREATE POLICY "Public can validate unexpired test links"
   ON public.test_user_magic_links
   AS PERMISSIVE FOR SELECT
   USING (expires_at > now() AND used_at IS NULL);
 
 -- Platform admins can view all tokens (for management UI)
+DROP POLICY IF EXISTS "Platform admins can view all test links" ON public.test_user_magic_links;
 CREATE POLICY "Platform admins can view all test links"
   ON public.test_user_magic_links
   AS PERMISSIVE FOR SELECT
