@@ -3,12 +3,13 @@
  *
  * Scatter chart of talk time vs sentiment, summary insight card with
  * talk-time buckets, and top coaching patterns (strengths + improvements).
+ * Win/Loss Patterns section (BA-010b) below existing coaching content.
  *
- * BA-008b
+ * BA-008b, BA-010b
  */
 
-import { useMemo } from 'react';
-import { TrendingUp, MessageSquare, Target, Loader2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { TrendingUp, MessageSquare, Target, Loader2, Trophy, AlertTriangle, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   ScatterChart,
@@ -20,9 +21,15 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase/clientV2';
+import { useAuth } from '@/lib/contexts/AuthContext';
+import { useOrgStore } from '@/lib/stores/orgStore';
 import {
   useCoachingPatterns,
   type ScatterPoint,
@@ -323,6 +330,210 @@ function EmptyState() {
 }
 
 // ============================================================================
+// Win/Loss Patterns (BA-010b)
+// ============================================================================
+
+interface WinLossMemory {
+  id: string;
+  subject: string;
+  content: string;
+}
+
+const WIN_LOSS_PATTERNS_KEY = 'win-loss-patterns' as const;
+
+function useWinLossPatterns() {
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  return useQuery<{ wins: WinLossMemory[]; losses: WinLossMemory[] }>({
+    queryKey: [WIN_LOSS_PATTERNS_KEY, userId],
+    queryFn: async () => {
+      if (!userId) return { wins: [], losses: [] };
+
+      const { data, error } = await supabase
+        .from('copilot_memories')
+        .select('id, subject, content')
+        .eq('user_id', userId)
+        .eq('category', 'fact')
+        .or('subject.like.Win pattern:%,subject.like.Loss pattern:%')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      const rows = (data ?? []) as WinLossMemory[];
+      const wins: WinLossMemory[] = [];
+      const losses: WinLossMemory[] = [];
+
+      for (const row of rows) {
+        if (row.subject.startsWith('Win pattern:')) {
+          wins.push(row);
+        } else if (row.subject.startsWith('Loss pattern:')) {
+          losses.push(row);
+        }
+      }
+
+      return { wins, losses };
+    },
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+function WinLossPatternCard({
+  patterns,
+  type,
+}: {
+  patterns: WinLossMemory[];
+  type: 'win' | 'loss';
+}) {
+  const isWin = type === 'win';
+  const Icon = isWin ? Trophy : AlertTriangle;
+  const borderClass = isWin
+    ? 'border-l-emerald-400 dark:border-l-emerald-500'
+    : 'border-l-red-400 dark:border-l-red-500';
+  const iconClass = isWin
+    ? 'text-emerald-500 dark:text-emerald-400'
+    : 'text-red-500 dark:text-red-400';
+  const header = isWin ? 'You win when...' : 'You lose when...';
+
+  return (
+    <Card className={`border-l-[3px] ${borderClass}`}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Icon className={`h-4 w-4 ${iconClass}`} />
+          {header}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0 pb-4">
+        {patterns.length === 0 ? (
+          <p className="text-xs text-slate-400 dark:text-gray-500">
+            No patterns detected yet
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {patterns.map((p) => {
+              const patternText = p.subject
+                .replace(/^Win pattern:\s*/, '')
+                .replace(/^Loss pattern:\s*/, '');
+              return (
+                <li key={p.id}>
+                  <p className="text-sm text-slate-700 dark:text-gray-200 leading-relaxed">
+                    &bull; {patternText}
+                  </p>
+                  {p.content && (
+                    <p className="text-xs text-slate-400 dark:text-gray-500 mt-0.5 ml-3">
+                      {p.content}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WinLossSection() {
+  const { user } = useAuth();
+  const orgId = useOrgStore((s) => s.activeOrgId);
+  const queryClient = useQueryClient();
+  const { data, isLoading: isLoadingPatterns } = useWinLossPatterns();
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const wins = data?.wins ?? [];
+  const losses = data?.losses ?? [];
+  const hasPatterns = wins.length > 0 || losses.length > 0;
+
+  async function handleGenerate() {
+    if (!user?.id || !orgId) {
+      toast.error('Missing user or organization context');
+      return;
+    }
+
+    setIsGenerating(true);
+    const toastId = toast.loading('Generating win/loss patterns...');
+
+    try {
+      const { data: result, error } = await supabase.functions.invoke(
+        'generate-win-loss-patterns',
+        { body: { org_id: orgId, user_id: user.id } },
+      );
+
+      if (error) throw error;
+
+      if (result?.skipped) {
+        toast.info('Not enough deal data to generate patterns yet.', { id: toastId });
+      } else {
+        const stored = result?.stored ?? 0;
+        toast.success(`Generated ${stored} pattern${stored !== 1 ? 's' : ''}.`, { id: toastId });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: [WIN_LOSS_PATTERNS_KEY] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to generate patterns';
+      toast.error(message, { id: toastId });
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  if (isLoadingPatterns) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-40 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Section header + generate button */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-gray-200">
+          Win/Loss Patterns
+        </h2>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleGenerate}
+          disabled={isGenerating}
+          className="gap-1.5"
+        >
+          {isGenerating ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" />
+          )}
+          Generate Patterns
+        </Button>
+      </div>
+
+      {/* Empty state or pattern cards */}
+      {!hasPatterns ? (
+        <Card className="bg-slate-50/60 dark:bg-gray-800/30">
+          <CardContent className="py-8 text-center">
+            <p className="text-sm text-slate-400 dark:text-gray-500">
+              No patterns generated yet. Click &quot;Generate Patterns&quot; to
+              analyze your win/loss history.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <WinLossPatternCard patterns={wins} type="win" />
+          <WinLossPatternCard patterns={losses} type="loss" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // Main component
 // ============================================================================
 
@@ -360,6 +571,9 @@ export default function BrainCoaching() {
           icon={Target}
         />
       </div>
+
+      {/* Win/Loss Patterns — BA-010b */}
+      <WinLossSection />
     </div>
   );
 }
