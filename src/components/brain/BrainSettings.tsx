@@ -3,11 +3,13 @@
  *
  * Sections:
  * 1. Memory Stats — counts per category, oldest/newest dates
- * 2. Category Toggles — enable/disable memory collection per category
- * 3. Decay Rate — slider per category to adjust decay speed
- * 4. Bulk Purge — purge by category, by date, or purge all
+ * 2. Brain Intelligence — per-feature toggles (Free/Smart/Pro tiers) + cost labels (BA-000)
+ * 3. Category Toggles — enable/disable memory collection per category
+ * 4. Decay Rate — slider per category to adjust decay speed
+ * 5. Bulk Purge — purge by category, by date, or purge all
  *
  * Preferences are stored in user_settings.preferences.memory_preferences JSONB.
+ * Brain intelligence toggles stored in user_settings.preferences.brain_intelligence JSONB.
  *
  * TRINITY-015
  */
@@ -23,8 +25,12 @@ import {
   ToggleLeft,
   Gauge,
   AlertTriangle,
+  Check,
+  Zap,
+  Crown,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -108,6 +114,55 @@ function rateToSliderIndex(rate: number): number {
   const idx = DECAY_RATE_STEPS.indexOf(rate as (typeof DECAY_RATE_STEPS)[number]);
   return idx === -1 ? 1 : idx; // default to 1x
 }
+
+// ---- Brain Intelligence types & constants ----
+
+interface BrainIntelligencePreferences {
+  post_meeting_extraction: boolean;
+  enhanced_morning_brief: boolean;
+  win_loss_patterns: boolean;
+  contact_intelligence: boolean;
+}
+
+type BrainIntelligenceKey = keyof BrainIntelligencePreferences;
+
+const DEFAULT_BRAIN_INTELLIGENCE: BrainIntelligencePreferences = {
+  post_meeting_extraction: true,
+  enhanced_morning_brief: true,
+  win_loss_patterns: true,
+  contact_intelligence: true,
+};
+
+const FREE_FEATURES = [
+  'Commitment deadline tracking',
+  'Contact decay alerts',
+  'Pipeline sentiment ticker',
+  'Coaching talk-time correlation',
+  'Daily Slack thread consolidation',
+] as const;
+
+interface SmartFeature {
+  key: BrainIntelligenceKey;
+  label: string;
+  cost: string;
+}
+
+const SMART_FEATURES: SmartFeature[] = [
+  { key: 'post_meeting_extraction', label: 'Post-meeting memory extraction', cost: '~2 credits/meeting' },
+  { key: 'enhanced_morning_brief', label: 'Enhanced morning brief', cost: '~1 credit/day' },
+];
+
+interface ProFeature {
+  key: BrainIntelligenceKey;
+  label: string;
+  cost: string;
+  sublabel?: string;
+}
+
+const PRO_FEATURES: ProFeature[] = [
+  { key: 'win_loss_patterns', label: 'Win/loss pattern analysis', cost: '~5 credits/month' },
+  { key: 'contact_intelligence', label: 'Contact intelligence in emails', cost: '~5 credits/month', sublabel: '(free — context injection)' },
+];
 
 const DEFAULT_PREFERENCES: MemoryPreferences = {
   category_enabled: {
@@ -236,6 +291,140 @@ function MemoryStatsSection({
             ? format(new Date(dateRange.newest), 'MMM d, yyyy')
             : 'N/A'}
         </span>
+      </div>
+    </Card>
+  );
+}
+
+// ============================================================================
+// Brain Intelligence Section
+// ============================================================================
+
+function BrainIntelligenceSection({
+  brainIntelligence,
+  onChange,
+}: {
+  brainIntelligence: BrainIntelligencePreferences;
+  onChange: (next: BrainIntelligencePreferences) => void;
+}) {
+  const handleToggle = (key: BrainIntelligenceKey, checked: boolean) => {
+    onChange({ ...brainIntelligence, [key]: checked });
+  };
+
+  return (
+    <Card className="p-5">
+      <SectionHeader
+        icon={Zap}
+        title="Brain Intelligence"
+        description="AI-powered features that surface insights and take action on your behalf"
+      />
+
+      <div className="space-y-5">
+        {/* Free tier */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 mb-3">
+            <Check className="h-4 w-4 text-emerald-500" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-gray-400">
+              Free
+            </span>
+            <Badge variant="success" className="text-[10px] px-1.5 py-0">
+              Always on
+            </Badge>
+          </div>
+          <div className="space-y-1.5">
+            {FREE_FEATURES.map((feature) => (
+              <div
+                key={feature}
+                className="flex items-center gap-2.5 py-1.5 px-3 rounded-lg bg-emerald-50/50 dark:bg-emerald-500/5"
+              >
+                <Check className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                <span className="text-sm text-slate-700 dark:text-gray-200">{feature}</span>
+                <Badge variant="success" className="ml-auto text-[10px] px-1.5 py-0">
+                  Free
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Smart tier */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="h-4 w-4 text-blue-500" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-gray-400">
+              Smart
+            </span>
+            <Badge className="text-[10px] px-1.5 py-0">
+              ~2 credits each
+            </Badge>
+          </div>
+          <div className="space-y-1">
+            {SMART_FEATURES.map((feature) => (
+              <div
+                key={feature.key}
+                className="flex items-center justify-between py-2.5 px-3 rounded-lg border border-slate-100 dark:border-gray-800/50"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <Label
+                    htmlFor={`bi-${feature.key}`}
+                    className="text-sm text-slate-700 dark:text-gray-200 cursor-pointer"
+                  >
+                    {feature.label}
+                  </Label>
+                  <span className="text-[11px] text-slate-400 dark:text-gray-500">
+                    {feature.cost}
+                  </span>
+                </div>
+                <Switch
+                  id={`bi-${feature.key}`}
+                  checked={brainIntelligence[feature.key]}
+                  onCheckedChange={(checked) => handleToggle(feature.key, checked)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Pro tier */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 mb-3">
+            <Crown className="h-4 w-4 text-amber-500" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-gray-400">
+              Pro
+            </span>
+            <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+              ~5 credits/month
+            </Badge>
+          </div>
+          <div className="space-y-1">
+            {PRO_FEATURES.map((feature) => (
+              <div
+                key={feature.key}
+                className="flex items-center justify-between py-2.5 px-3 rounded-lg border border-slate-100 dark:border-gray-800/50"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <Label
+                    htmlFor={`bi-${feature.key}`}
+                    className="text-sm text-slate-700 dark:text-gray-200 cursor-pointer"
+                  >
+                    {feature.label}
+                    {feature.sublabel && (
+                      <span className="text-slate-400 dark:text-gray-500 ml-1">{feature.sublabel}</span>
+                    )}
+                  </Label>
+                  <span className="text-[11px] text-slate-400 dark:text-gray-500">
+                    {feature.cost}
+                  </span>
+                </div>
+                <Switch
+                  id={`bi-${feature.key}`}
+                  checked={brainIntelligence[feature.key]}
+                  onCheckedChange={(checked) => handleToggle(feature.key, checked)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </Card>
   );
@@ -716,6 +905,7 @@ export default function BrainSettings() {
   const [stats, setStats] = useState<CategoryStats[]>([]);
   const [dateRange, setDateRange] = useState<MemoryDateRange>({ oldest: null, newest: null });
   const [preferences, setPreferences] = useState<MemoryPreferences>(DEFAULT_PREFERENCES);
+  const [brainIntelligence, setBrainIntelligence] = useState<BrainIntelligencePreferences>(DEFAULT_BRAIN_INTELLIGENCE);
 
   // ---- Load stats ----
   useEffect(() => {
@@ -800,6 +990,14 @@ export default function BrainSettings() {
               },
             });
           }
+
+          const biPrefs = prefs.brain_intelligence as Partial<BrainIntelligencePreferences> | undefined;
+          if (biPrefs) {
+            setBrainIntelligence({
+              ...DEFAULT_BRAIN_INTELLIGENCE,
+              ...biPrefs,
+            });
+          }
         }
       } catch (e) {
         toast.error('Failed to load memory preferences');
@@ -829,6 +1027,7 @@ export default function BrainSettings() {
       const nextPrefs = {
         ...currentPrefs,
         memory_preferences: preferences,
+        brain_intelligence: brainIntelligence,
       };
 
       const payload = {
@@ -848,7 +1047,7 @@ export default function BrainSettings() {
     } finally {
       setSaving(false);
     }
-  }, [userId, preferences]);
+  }, [userId, preferences, brainIntelligence]);
 
   // ---- Loading state ----
   if (!userId) {
@@ -887,6 +1086,11 @@ export default function BrainSettings() {
         </Card>
       ) : (
         <>
+          <BrainIntelligenceSection
+            brainIntelligence={brainIntelligence}
+            onChange={setBrainIntelligence}
+          />
+
           <CategoryTogglesSection
             preferences={preferences}
             onChange={setPreferences}
