@@ -18,6 +18,8 @@ import {
   Briefcase,
   Shield,
   TrendingUp,
+  TrendingDown,
+  Minus,
   Users,
   HeartPulse,
   Swords,
@@ -39,6 +41,7 @@ import {
   useDealMemoryDealsQuery,
   type DealMemoryEvent,
 } from '@/lib/hooks/useDealMemoryEvents';
+import { useDealMomentum, type MomentumStatus, type DealMomentum } from '@/lib/hooks/useDealMomentum';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -141,6 +144,93 @@ function getCategoryConfig(category: string) {
 
 function getSourceConfig(sourceType: string) {
   return SOURCE_TYPE_CONFIG[sourceType] ?? { label: sourceType, icon: FileText };
+}
+
+// ============================================================================
+// Momentum helpers
+// ============================================================================
+
+function MomentumArrow({ status }: { status: MomentumStatus }) {
+  switch (status) {
+    case 'accelerating':
+      return <TrendingUp className="h-3.5 w-3.5 text-green-500 shrink-0" />;
+    case 'steady':
+      return <Minus className="h-3.5 w-3.5 text-slate-400 dark:text-gray-500 shrink-0" />;
+    case 'decelerating':
+      return <TrendingDown className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+    case 'stalled':
+      return <TrendingDown className="h-3.5 w-3.5 text-red-500 shrink-0" />;
+  }
+}
+
+function momentumStatusColor(status: MomentumStatus): string {
+  switch (status) {
+    case 'accelerating':
+      return 'bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 border-green-200 dark:border-green-500/20';
+    case 'steady':
+      return 'bg-slate-50 dark:bg-gray-500/10 text-slate-600 dark:text-gray-400 border-slate-200 dark:border-gray-500/20';
+    case 'decelerating':
+      return 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20';
+    case 'stalled':
+      return 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/20';
+  }
+}
+
+function signalBarColor(value: number): string {
+  if (value > 0.3) return 'bg-green-500';
+  if (value >= -0.3) return 'bg-slate-400 dark:bg-gray-500';
+  return 'bg-red-500';
+}
+
+function SignalBar({ label, value }: { label: string; value: number }) {
+  // Map value from [-1, +1] to [0%, 100%] for bar width
+  const pct = Math.round(((value + 1) / 2) * 100);
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-slate-500 dark:text-gray-400 w-24 shrink-0 text-right">
+        {label}
+      </span>
+      <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-gray-800 relative overflow-hidden">
+        <div
+          className={cn('h-full rounded-full transition-all', signalBarColor(value))}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-[10px] tabular-nums text-slate-400 dark:text-gray-500 w-8 text-right">
+        {value > 0 ? '+' : ''}{value.toFixed(1)}
+      </span>
+    </div>
+  );
+}
+
+function MomentumCard({ momentum }: { momentum: DealMomentum }) {
+  return (
+    <div
+      className={cn(
+        'rounded-lg border p-3 mb-4',
+        momentumStatusColor(momentum.status),
+      )}
+    >
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-2">
+          <MomentumArrow status={momentum.status} />
+          <span className="text-xs font-medium capitalize">
+            {momentum.status}
+          </span>
+        </div>
+        <span className="text-sm font-bold tabular-nums">
+          {momentum.momentum > 0 ? '+' : ''}{momentum.momentum.toFixed(2)}
+        </span>
+      </div>
+      <div className="space-y-1">
+        <SignalBar label="Meeting Freq" value={momentum.signals.meetingFrequency} />
+        <SignalBar label="Sentiment" value={momentum.signals.sentimentTrajectory} />
+        <SignalBar label="Commitments" value={momentum.signals.commitmentHealth} />
+        <SignalBar label="Recency" value={momentum.signals.recency} />
+      </div>
+    </div>
+  );
 }
 
 // ============================================================================
@@ -297,6 +387,19 @@ export default function BrainDealMemory() {
     isLoading: eventsLoading,
     isFetching: eventsFetching,
   } = useDealMemoryEventsQuery(selectedDealId);
+  const { data: momentumData = [] } = useDealMomentum();
+
+  // Build a map of dealId -> DealMomentum for quick lookup
+  const momentumByDealId = useMemo(() => {
+    const map = new Map<string, DealMomentum>();
+    for (const m of momentumData) {
+      map.set(m.dealId, m);
+    }
+    return map;
+  }, [momentumData]);
+
+  // Momentum for the currently selected deal
+  const selectedMomentum = selectedDealId ? momentumByDealId.get(selectedDealId) ?? null : null;
 
   // Group events by category, preserving chronological order within each group
   const groupedEvents = useMemo(() => {
@@ -330,6 +433,7 @@ export default function BrainDealMemory() {
           selectedDealId={selectedDealId}
           onSelect={setSelectedDealId}
           loading={dealsLoading}
+          momentumByDealId={momentumByDealId}
         />
         <EmptyState
           message="Select a deal"
@@ -346,6 +450,7 @@ export default function BrainDealMemory() {
         selectedDealId={selectedDealId}
         onSelect={setSelectedDealId}
         loading={dealsLoading}
+        momentumByDealId={momentumByDealId}
       />
 
       {/* Loading state */}
@@ -370,6 +475,9 @@ export default function BrainDealMemory() {
       {/* Grouped events timeline */}
       {!eventsLoading && events.length > 0 && (
         <div className="space-y-6 pt-4">
+          {/* Compact momentum card above events */}
+          {selectedMomentum && <MomentumCard momentum={selectedMomentum} />}
+
           {groupedEvents.map(([category, catEvents]) => (
             <CategoryGroup
               key={category}
@@ -392,11 +500,13 @@ function DealSelector({
   selectedDealId,
   onSelect,
   loading,
+  momentumByDealId,
 }: {
   deals: { id: string; name: string; company: string; stage_name: string | null; stage_color: string | null }[];
   selectedDealId: string | null;
   onSelect: (id: string | null) => void;
   loading: boolean;
+  momentumByDealId: Map<string, DealMomentum>;
 }) {
   if (loading) {
     return <Skeleton className="h-10 w-full max-w-sm" />;
@@ -412,27 +522,31 @@ function DealSelector({
           <SelectValue placeholder="Select a deal..." />
         </SelectTrigger>
         <SelectContent>
-          {deals.map((deal) => (
-            <SelectItem key={deal.id} value={deal.id}>
-              <span className="flex items-center gap-2">
-                {deal.stage_color && (
-                  <span
-                    className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: deal.stage_color }}
-                  />
-                )}
-                <span className="truncate">
-                  {deal.name}
-                  {deal.company ? ` - ${deal.company}` : ''}
-                </span>
-                {deal.stage_name && (
-                  <span className="text-xs text-slate-400 dark:text-gray-500 ml-1">
-                    {deal.stage_name}
+          {deals.map((deal) => {
+            const momentum = momentumByDealId.get(deal.id);
+            return (
+              <SelectItem key={deal.id} value={deal.id}>
+                <span className="flex items-center gap-2">
+                  {deal.stage_color && (
+                    <span
+                      className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: deal.stage_color }}
+                    />
+                  )}
+                  <span className="truncate">
+                    {deal.name}
+                    {deal.company ? ` - ${deal.company}` : ''}
                   </span>
-                )}
-              </span>
-            </SelectItem>
-          ))}
+                  {momentum && <MomentumArrow status={momentum.status} />}
+                  {deal.stage_name && (
+                    <span className="text-xs text-slate-400 dark:text-gray-500 ml-1">
+                      {deal.stage_name}
+                    </span>
+                  )}
+                </span>
+              </SelectItem>
+            );
+          })}
           {deals.length === 0 && (
             <div className="py-3 px-4 text-sm text-slate-400 dark:text-gray-500 text-center">
               No deals found

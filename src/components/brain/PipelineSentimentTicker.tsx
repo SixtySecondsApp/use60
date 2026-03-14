@@ -27,6 +27,7 @@ import {
   usePipelineSentiment,
   type DealSentimentEntry,
 } from '@/lib/hooks/usePipelineSentiment';
+import { useDealMomentum, type MomentumStatus } from '@/lib/hooks/useDealMomentum';
 
 // ============================================================================
 // Helpers
@@ -66,10 +67,27 @@ function deltaColor(delta: number): string {
 }
 
 // ============================================================================
+// Momentum arrow helper
+// ============================================================================
+
+function MomentumArrow({ status }: { status: MomentumStatus }) {
+  switch (status) {
+    case 'accelerating':
+      return <TrendingUp className="h-3.5 w-3.5 text-green-500 shrink-0" />;
+    case 'steady':
+      return <Minus className="h-3.5 w-3.5 text-slate-400 dark:text-gray-500 shrink-0" />;
+    case 'decelerating':
+      return <TrendingDown className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+    case 'stalled':
+      return <TrendingDown className="h-3.5 w-3.5 text-red-500 shrink-0" />;
+  }
+}
+
+// ============================================================================
 // Sub-components
 // ============================================================================
 
-function DealRow({ deal }: { deal: DealSentimentEntry }) {
+function DealRow({ deal, momentumStatus }: { deal: DealSentimentEntry; momentumStatus?: MomentumStatus }) {
   const navigate = useNavigate();
 
   return (
@@ -94,6 +112,7 @@ function DealRow({ deal }: { deal: DealSentimentEntry }) {
           {deal.sentiment.toFixed(2)}
         </span>
         <TrendIcon trend={deal.trend} />
+        {momentumStatus && <MomentumArrow status={momentumStatus} />}
       </div>
     </button>
   );
@@ -124,6 +143,7 @@ function TickerSkeleton() {
 
 export default function PipelineSentimentTicker() {
   const { data, isLoading } = usePipelineSentiment();
+  const { data: momentumData = [] } = useDealMomentum();
   const [expanded, setExpanded] = useState(false);
 
   // Loading state
@@ -135,6 +155,9 @@ export default function PipelineSentimentTicker() {
   const sortedDeals = [...data.dealSentiments].sort(
     (a, b) => a.sentiment - b.sentiment,
   );
+
+  // Build a quick lookup map for momentum status by dealId
+  const momentumByDealId = new Map(momentumData.map((m) => [m.dealId, m.status]));
 
   return (
     <Collapsible open={expanded} onOpenChange={setExpanded}>
@@ -187,7 +210,11 @@ export default function PipelineSentimentTicker() {
         <CollapsibleContent>
           <div className="px-6 pb-3 pt-1 space-y-0.5 max-h-64 overflow-y-auto">
             {sortedDeals.map((deal) => (
-              <DealRow key={deal.dealId} deal={deal} />
+              <DealRow
+                key={deal.dealId}
+                deal={deal}
+                momentumStatus={momentumByDealId.get(deal.dealId)}
+              />
             ))}
           </div>
         </CollapsibleContent>
