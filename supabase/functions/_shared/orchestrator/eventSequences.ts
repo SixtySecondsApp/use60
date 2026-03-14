@@ -152,15 +152,6 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['detect-scheduling-intent'],
     },
-    // Wave 3: CAL-002 — Slack HITL DM with top 3 slot options; pauses sequence for rep approval
-    {
-      skill: 'calendar-slot-approval',
-      requires_context: ['tier1'],
-      requires_approval: true,
-      criticality: 'best-effort',
-      available: true,
-      depends_on: ['detect-scheduling-intent'],
-    },
     // Wave 3.5: HITL approval gate — pauses the sequence until the rep acts on the email draft
     {
       skill: 'email-draft-approval',

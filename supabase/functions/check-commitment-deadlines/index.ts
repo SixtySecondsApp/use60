@@ -226,12 +226,16 @@ serve(async (req: Request) => {
 
       const { data: deals } = await supabase
         .from('deals')
-        .select('id, name')
+        .select('id, name, owner_id')
         .in('id', dealIds);
 
       const dealNameMap = new Map<string, string>();
+      const dealOwnerMap = new Map<string, string>();
       for (const deal of deals || []) {
         dealNameMap.set(deal.id, deal.name || 'Untitled Deal');
+        if (deal.owner_id) {
+          dealOwnerMap.set(deal.id, deal.owner_id);
+        }
       }
 
       const enrichedOverdue = orgResult.overdue.map((c) => ({
@@ -248,7 +252,7 @@ serve(async (req: Request) => {
       // -------------------------------------------------------------------
 
       const { data: orgMembers } = await supabase
-        .from('organization_members')
+        .from('organization_memberships')
         .select('user_id')
         .eq('org_id', orgId);
 
@@ -326,8 +330,8 @@ serve(async (req: Request) => {
 
       for (const c of enrichedOverdue) {
         const daysOver = Math.abs(daysFromNow(c.detail.deadline as string, now));
-        // Find the first org member to assign to (deal owner preferred)
-        const assignUserId = orgMembers[0]?.user_id;
+        // Resolve deal owner from deals table; fall back to first org member
+        const assignUserId = dealOwnerMap.get(c.deal_id) ?? orgMembers[0]?.user_id;
         if (!assignUserId) continue;
 
         ccItems.push({
@@ -354,7 +358,8 @@ serve(async (req: Request) => {
 
       for (const c of enrichedApproaching) {
         const daysLeft = daysFromNow(c.detail.deadline as string, now);
-        const assignUserId = orgMembers[0]?.user_id;
+        // Resolve deal owner from deals table; fall back to first org member
+        const assignUserId = dealOwnerMap.get(c.deal_id) ?? orgMembers[0]?.user_id;
         if (!assignUserId) continue;
 
         ccItems.push({

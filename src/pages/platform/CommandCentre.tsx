@@ -437,29 +437,35 @@ export default function CommandCentre() {
 
   const handleBulkApprove = useCallback(async () => {
     const ids = [...selectedIds].slice(0, MAX_BULK);
-    for (const id of ids) {
-      approveItem.mutate(id);
+    try {
+      await Promise.all(ids.map((id) => approveItem.mutateAsync(id)));
+      toast.success(`Approved ${ids.length} item${ids.length !== 1 ? 's' : ''}`);
+    } catch {
+      toast.error('Some items failed to approve');
     }
-    toast.success(`Approved ${ids.length} item${ids.length !== 1 ? 's' : ''}`);
     clearSelection();
   }, [selectedIds, approveItem, clearSelection]);
 
   const handleBulkDismiss = useCallback(async () => {
     const ids = [...selectedIds].slice(0, MAX_BULK);
-    for (const id of ids) {
-      dismissItem.mutate(id);
+    try {
+      await Promise.all(ids.map((id) => dismissItem.mutateAsync(id)));
+      toast.success(`Dismissed ${ids.length} item${ids.length !== 1 ? 's' : ''}`);
+    } catch {
+      toast.error('Some items failed to dismiss');
     }
-    toast.success(`Dismissed ${ids.length} item${ids.length !== 1 ? 's' : ''}`);
     clearSelection();
   }, [selectedIds, dismissItem, clearSelection]);
 
   const handleBulkSnooze = useCallback(async () => {
     const ids = [...selectedIds].slice(0, MAX_BULK);
     const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    for (const id of ids) {
-      snoozeItem.mutate({ id, until });
+    try {
+      await Promise.all(ids.map((id) => snoozeItem.mutateAsync({ id, until })));
+      toast.success(`Snoozed ${ids.length} item${ids.length !== 1 ? 's' : ''} for 24h`);
+    } catch {
+      toast.error('Some items failed to snooze');
     }
-    toast.success(`Snoozed ${ids.length} item${ids.length !== 1 ? 's' : ''} for 24h`);
     clearSelection();
   }, [selectedIds, snoozeItem, clearSelection]);
 

@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/clientV2';
 import { useOrgStore } from '@/lib/stores/orgStore';
+import { useAuth } from '@/lib/contexts/AuthContext';
 
 // ============================================================================
 // Cache keys
@@ -158,11 +159,13 @@ export function useContactMemoryDetail(contactId: string | null) {
  */
 export function useContactRelatedMemories(contactId: string | null) {
   const activeOrgId = useOrgStore((s) => s.activeOrgId);
+  const { user } = useAuth();
+  const userId = user?.id;
 
   return useQuery<RelatedCopilotMemory[]>({
-    queryKey: [CONTACT_MEMORY_RELATED_MEMORIES_KEY, activeOrgId, contactId],
+    queryKey: [CONTACT_MEMORY_RELATED_MEMORIES_KEY, activeOrgId, contactId, userId],
     queryFn: async () => {
-      if (!activeOrgId || !contactId) return [];
+      if (!activeOrgId || !contactId || !userId) return [];
 
       const { data, error } = await supabase
         .from('copilot_memories')
@@ -170,13 +173,14 @@ export function useContactRelatedMemories(contactId: string | null) {
           'id, category, subject, content, confidence, decay_score, created_at'
         )
         .eq('contact_id', contactId)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(20);
 
       if (error) throw error;
       return (data ?? []) as RelatedCopilotMemory[];
     },
-    enabled: !!activeOrgId && !!contactId,
+    enabled: !!activeOrgId && !!contactId && !!userId,
     staleTime: 5 * 60 * 1000,
   });
 }

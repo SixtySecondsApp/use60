@@ -214,7 +214,7 @@ class CommandCentreItemsService {
     try {
       const { error } = await supabase
         .from('command_centre_items')
-        .update({ status: 'approved', resolved_via: 'manual' })
+        .update({ status: 'approved', resolved_at: new Date().toISOString(), resolved_via: 'manual' })
         .eq('id', id);
 
       if (error) {
