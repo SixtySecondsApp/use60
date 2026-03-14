@@ -48,6 +48,8 @@ import { CCCrmDiffPanel } from './panels/CCCrmDiffPanel';
 import { CCDealHealthPanel } from './panels/CCDealHealthPanel';
 import { CCSignalPanel } from './panels/CCSignalPanel';
 import { CCInlineActions } from './CCInlineActions';
+import { DocumentPreview } from '@/components/documents/DocumentPreview';
+import type { DocumentSection } from '@/components/documents/DocumentPreview';
 
 // ============================================================================
 // Props
@@ -793,9 +795,13 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
               const draftedAction = (item.drafted_action as Record<string, unknown>) ?? {};
               const actionType = draftedAction?.type as string | undefined;
 
-              type PanelType = 'email' | 'crm-diff' | 'deal-health' | 'signal' | 'generic';
+              type PanelType = 'email' | 'crm-diff' | 'deal-health' | 'signal' | 'document' | 'generic';
 
               function getPanelType(i: CCItem): PanelType {
+                if (
+                  i.item_type === 'document_draft' ||
+                  i.source_agent === 'document-intelligence'
+                ) return 'document';
                 if (
                   actionType === 'send_email' ||
                   actionType === 'email_draft' ||
@@ -818,6 +824,37 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
               }
 
               const panelType = getPanelType(item);
+
+              if (panelType === 'document') {
+                // Extract sections from drafted_action or context JSONB
+                const docSource = draftedAction ?? item.context ?? {};
+                const rawSections =
+                  (docSource.sections as DocumentSection[] | undefined) ??
+                  (item.context?.sections as DocumentSection[] | undefined) ??
+                  [];
+                const docType =
+                  (item.context?.document_type as string | undefined) ??
+                  (draftedAction?.document_type as string | undefined) ??
+                  'proposal';
+                const docTypeName =
+                  (item.context?.document_type_name as string | undefined) ??
+                  (draftedAction?.document_type_name as string | undefined) ??
+                  docType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+                return (
+                  <CollapsibleSection title="Document Preview" defaultOpen={true}>
+                    <DocumentPreview
+                      documentType={docType}
+                      documentTypeName={docTypeName}
+                      sections={rawSections}
+                      onCopy={() => {}}
+                      onEdit={() => {
+                        toast.info('Edit functionality coming soon');
+                      }}
+                    />
+                  </CollapsibleSection>
+                );
+              }
 
               if (panelType === 'email' && item.drafted_action) {
                 return (
@@ -897,7 +934,9 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
                 item.item_type?.includes('health') ||
                 item.item_type?.includes('risk_score') ||
                 item.item_type?.includes('signal') ||
-                item.item_type?.includes('alert');
+                item.item_type?.includes('alert') ||
+                item.item_type === 'document_draft' ||
+                item.source_agent === 'document-intelligence';
               if (!isTyped) return null;
               return (
                 <CollapsibleSection title="Enrichment Context" defaultOpen={false}>
