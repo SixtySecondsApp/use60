@@ -33,6 +33,7 @@ const DECAY_RULES: Array<{ daysThreshold: number; multiplier: number }> = [
 
 const RELATIONSHIP_STRENGTH_FLOOR = 0.1;
 const BATCH_SIZE = 100;
+const MAX_STRENGTH_HISTORY = 30;
 
 /** Threshold below which a contact is considered "decaying" and triggers an alert. */
 const DECAY_ALERT_THRESHOLD = 0.4;
@@ -113,7 +114,7 @@ async function runDecayInAppCode(
   // Fetch all rows that have a recorded interaction (no point decaying nulls)
   const { data: rows, error: fetchError } = await supabase
     .from('contact_memory')
-    .select('id, contact_id, org_id, relationship_strength, last_interaction_at')
+    .select('id, contact_id, org_id, relationship_strength, last_interaction_at, strength_history')
     .eq('org_id', orgId)
     .not('last_interaction_at', 'is', null);
 
@@ -129,8 +130,10 @@ async function runDecayInAppCode(
   let skipped = 0;
   const crossedBelow: CrossedContact[] = [];
 
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
   // Build update payloads, skipping contacts with no-decay multiplier (< 7 days)
-  type UpdatePayload = { id: string; relationship_strength: number };
+  type UpdatePayload = { id: string; relationship_strength: number; strength_history: unknown[] };
   const pendingUpdates: UpdatePayload[] = [];
 
   for (const row of rows) {
@@ -147,7 +150,16 @@ async function runDecayInAppCode(
       previousStrength * multiplier,
     );
 
-    pendingUpdates.push({ id: row.id as string, relationship_strength: newStrength });
+    // Append decay snapshot to strength_history (cap at 30 entries)
+    const existingHistory = Array.isArray(row.strength_history) ? row.strength_history : [];
+    const newEntry = { strength: parseFloat(newStrength.toFixed(4)), date: today, event: 'decay' };
+    const updatedHistory = [...existingHistory, newEntry].slice(-MAX_STRENGTH_HISTORY);
+
+    pendingUpdates.push({
+      id: row.id as string,
+      relationship_strength: newStrength,
+      strength_history: updatedHistory,
+    });
 
     // Track contacts crossing below the alert threshold
     if (previousStrength >= DECAY_ALERT_THRESHOLD && newStrength < DECAY_ALERT_THRESHOLD) {
@@ -171,7 +183,10 @@ async function runDecayInAppCode(
       chunk.map((payload) =>
         supabase
           .from('contact_memory')
-          .update({ relationship_strength: payload.relationship_strength })
+          .update({
+            relationship_strength: payload.relationship_strength,
+            strength_history: payload.strength_history,
+          })
           .eq('id', payload.id),
       ),
     );
