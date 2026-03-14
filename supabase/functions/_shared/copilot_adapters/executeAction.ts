@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { AdapterRegistry } from './registry.ts';
 import type { ActionResult, AdapterContext, ExecuteActionName, InvokeSkillParams, CreateTaskParams } from './types.ts';
 import { writeSkillMemory } from '../skills/writeSkillMemory.ts';
+import { matchDocumentType } from '../documents/documentTypeRegistry.ts';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -2648,6 +2649,94 @@ export async function executeAction(
         },
         source: 'upsert_target',
       };
+    }
+
+    // =========================================================================
+    // Document Generation (DOC-007)
+    // =========================================================================
+    case 'generate_document': {
+      const documentType = params.document_type ? String(params.document_type) : undefined;
+      const userMessage = params.user_message ? String(params.user_message) : undefined;
+
+      // Resolve document type — either explicitly provided or matched from user message
+      const resolvedDocType = documentType || (userMessage ? matchDocumentType(userMessage) : null);
+      if (!resolvedDocType) {
+        return {
+          success: false,
+          data: null,
+          error: 'Could not determine document type. Provide document_type or a user_message that matches a known type (proposal, next_steps, team_brief, scoping_document, project_plan, discussion_points, ideal_workflow, proposal_terms).',
+        };
+      }
+
+      const dealId = params.deal_id ? String(params.deal_id) : undefined;
+      const contactId = params.contact_id ? String(params.contact_id) : undefined;
+
+      if (!dealId && !contactId) {
+        return {
+          success: false,
+          data: null,
+          error: 'generate_document requires at least one of deal_id or contact_id to fetch meeting context.',
+        };
+      }
+
+      // Fetch the most recent meeting summary for this deal/contact
+      let meetingQuery = client
+        .from('meetings')
+        .select('id, title, summary, next_steps, transcript_summary, owner_user_id, created_at')
+        .eq('owner_user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (dealId) {
+        meetingQuery = meetingQuery.eq('deal_id', dealId);
+      }
+      if (contactId) {
+        meetingQuery = meetingQuery.eq('contact_id', contactId);
+      }
+
+      const { data: meetings, error: meetingError } = await meetingQuery;
+
+      if (meetingError) {
+        console.error('[generate_document] Failed to fetch meeting:', meetingError.message);
+        return { success: false, data: null, error: `Failed to fetch meeting context: ${meetingError.message}` };
+      }
+
+      const meeting = meetings?.[0];
+      const meetingContext = {
+        summary: meeting?.summary || meeting?.transcript_summary || 'No meeting summary available. Generate based on deal/contact context.',
+        next_steps: meeting?.next_steps || 'No next steps recorded.',
+        transcript_excerpt: meeting?.transcript_summary || undefined,
+      };
+
+      // Call generate-document edge function
+      try {
+        const { data: docResult, error: docError } = await client.functions.invoke('generate-document', {
+          body: {
+            document_type: resolvedDocType,
+            org_id: orgId,
+            user_id: userId,
+            deal_id: dealId,
+            contact_id: contactId,
+            meeting_context: meetingContext,
+          },
+        });
+
+        if (docError) {
+          return { success: false, data: null, error: `Document generation failed: ${docError.message}` };
+        }
+
+        return {
+          success: true,
+          data: {
+            document_type: resolvedDocType,
+            document: docResult?.document || docResult,
+            meeting_used: meeting ? { id: meeting.id, title: meeting.title, date: meeting.created_at } : null,
+          },
+          source: 'generate_document',
+        };
+      } catch (err: any) {
+        return { success: false, data: null, error: `Document generation error: ${err.message}` };
+      }
     }
 
     default:

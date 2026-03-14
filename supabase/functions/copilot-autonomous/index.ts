@@ -253,6 +253,9 @@ Use these when the user mentions goals, targets, KPIs, monthly goals, or asks to
 - get_targets: {} - Get the user's current monthly goals (revenue, outbound activities, meetings, proposals)
 - upsert_target: { field: "revenue_target"|"outbound_target"|"meetings_target"|"proposal_target", value: <number>, confirm: true } - Set or update a monthly sales goal. FIELD MAPPING: "new business"/"revenue"/"won deals" → revenue_target | "outbound"/"calls"/"activities" → outbound_target | "meetings"/"demos"/"booked" → meetings_target | "proposals"/"quotes" → proposal_target. Does NOT require any contact lookup — operates directly on the user's personal targets. Requires confirm=true.
 
+## Document Generation (on-demand)
+- generate_document: { document_type?, user_message?, deal_id?, contact_id? } - Generate a document (proposal, next_steps, team_brief, scoping_document, project_plan, discussion_points, ideal_workflow, proposal_terms). Either provide document_type directly OR provide user_message and the system will match the type from keywords. Requires at least one of deal_id or contact_id. Fetches latest meeting context automatically. Use when the user asks to "write a proposal", "create next steps", "draft a scoping document", "put together a project plan", etc.
+
 Write actions (create_task, create_ops_table, update_crm, upsert_target, etc.) require params.confirm=true. search_leads_create_table and enrich_table_column do NOT require confirmation.`,
     input_schema: {
       type: 'object' as const,
@@ -1866,9 +1869,10 @@ function buildSystemPrompt(
 
 1. **If user mentions a person by first name only** -> Use resolve_entity FIRST
 2. **If user needs data** (deals, contacts, meetings, pipeline) -> Use execute_action with the appropriate action
-3. **If task involves a skill or multi-step workflow** -> Use list_skills to discover, get_skill to retrieve, then follow the skill instructions
-4. Use execute_action to gather data or perform tasks
-5. **When discussing deals or contacts** -> Proactively call search_meeting_context to enrich your response with relevant meeting intelligence. This helps provide context from past conversations.
+3. **If user asks to write/create/draft a document** (proposal, next steps, scoping document, project plan, team brief, discussion points, ideal workflow, proposal with terms) -> Use execute_action with generate_document. Resolve the deal_id and/or contact_id first if not already known (from seed_context, DEAL_CONTEXT block, or by using resolve_entity / get_deal). Present the generated sections in a readable format and offer to send the document.
+4. **If task involves a skill or multi-step workflow** -> Use list_skills to discover, get_skill to retrieve, then follow the skill instructions
+5. Use execute_action to gather data or perform tasks
+6. **When discussing deals or contacts** -> Proactively call search_meeting_context to enrich your response with relevant meeting intelligence. This helps provide context from past conversations.
 
 ## Multi-Step Workflows
 
@@ -1923,7 +1927,14 @@ When the user message includes a [DEAL_CONTEXT] block, you are in **Deal Copilot
 | "prep me for the meeting" | execute_action("run_skill", { skill_key: "copilot-agenda", skill_context: { deal_id } }) |
 | "they went quiet" / "no response" | execute_action("run_skill", { skill_key: "copilot-chase", skill_context: { deal_id } }) |
 | "hand this off" / "transfer deal" | execute_action("run_skill", { skill_key: "deal-handoff-brief", skill_context: { deal_id } }) |
-| "write a proposal" | execute_action("run_skill", { skill_key: "generate-proposal-v2", skill_context: { deal_id, trigger_type: "copilot" } }) |
+| "write a proposal" | execute_action("generate_document", { document_type: "proposal", deal_id, contact_id }) |
+| "create next steps" / "action items" | execute_action("generate_document", { document_type: "next_steps", deal_id, contact_id }) |
+| "draft a scoping document" / "scope of work" | execute_action("generate_document", { document_type: "scoping_document", deal_id, contact_id }) |
+| "put together a project plan" | execute_action("generate_document", { document_type: "project_plan", deal_id, contact_id }) |
+| "team brief" / "brief the team" | execute_action("generate_document", { document_type: "team_brief", deal_id, contact_id }) |
+| "discussion points" / "talking points" | execute_action("generate_document", { document_type: "discussion_points", deal_id, contact_id }) |
+| "ideal workflow" / "process flow" | execute_action("generate_document", { document_type: "ideal_workflow", deal_id, contact_id }) |
+| "proposal with terms" / "contract proposal" | execute_action("generate_document", { document_type: "proposal_terms", deal_id, contact_id }) |
 | "they objected to..." | execute_action("run_skill", { skill_key: "copilot-objection", skill_context: { deal_id, objection_text } }) |
 | "we won!" / "deal closed" | execute_action("run_skill", { skill_key: "copilot-win", skill_context: { deal_id } }) |
 | "research this company" | execute_action("run_skill", { skill_key: "copilot-research", skill_context: { company_name } }) |
