@@ -54,6 +54,7 @@ import { classifyIntent } from '../_shared/agentClassifier.ts';
 import { runSpecialist, type StreamWriter } from '../_shared/agentSpecialist.ts';
 import { getSpecialistConfig, getAgentDisplayInfo } from '../_shared/agentDefinitions.ts';
 import { recordSignal, type ApprovalSignal } from '../_shared/autopilot/signals.ts';
+import { getBrainContext } from '../_shared/skills/brainContextCache.ts';
 
 // =============================================================================
 // Configuration
@@ -609,7 +610,9 @@ async function executeToolCall(
   userId: string,
   orgId: string | null,
   userAuthToken?: string,
-  contextTimezone?: string
+  contextTimezone?: string,
+  seedContext?: SeedContext,
+  userMessage?: string
 ): Promise<unknown> {
   // Resolve org for skills/execute_action tools
   const resolvedOrgId = await resolveOrgId(client, userId, orgId);
@@ -632,7 +635,61 @@ async function executeToolCall(
 
     case 'get_skill': {
       const skillKey = input.skill_key ? String(input.skill_key) : '';
-      return await handleGetSkill(client, resolvedOrgId, skillKey);
+      const skillResult = await handleGetSkill(client, resolvedOrgId, skillKey);
+
+      // SBI-002: Auto-inject Brain context into skill execution
+      try {
+        if (skillResult.success && skillResult.skill) {
+          const fm = skillResult.skill.frontmatter || {};
+          const brainContextTables = (fm.brain_context as string[] | undefined);
+          // Skip injection if brain_context is explicitly ['none']
+          const shouldInject = !brainContextTables ||
+            !(brainContextTables.length === 1 && brainContextTables[0] === 'none');
+
+          if (shouldInject) {
+            // Resolve contactId and dealId from seed_context or DEAL_CONTEXT block
+            let contactId: string | null = seedContext?.contactId || null;
+            let dealId: string | null = seedContext?.dealId || null;
+
+            // Fallback: parse DEAL_CONTEXT block from user message
+            if (userMessage) {
+              if (!dealId) {
+                const dealIdMatch = userMessage.match(/\[DEAL_CONTEXT\][\s\S]*?Deal ID:\s*([a-f0-9-]+)/i);
+                if (dealIdMatch) dealId = dealIdMatch[1].trim();
+              }
+              if (!contactId) {
+                const contactIdMatch = userMessage.match(/Primary Contact ID:\s*([a-f0-9-]+)/i);
+                if (contactIdMatch) contactId = contactIdMatch[1].trim();
+              }
+            }
+
+            // Only inject if we have at least one entity to query against
+            if (contactId || dealId) {
+              const tables = brainContextTables && brainContextTables.length > 0
+                ? brainContextTables
+                : ['contact_memory', 'deal_memory_events'];
+              const brainResult = await getBrainContext(
+                resolvedOrgId,
+                contactId,
+                dealId,
+                userId,
+                tables,
+                client,
+              );
+              if (brainResult.formatted) {
+                skillResult.skill.content = skillResult.skill.content +
+                  '\n\n' + brainResult.formatted;
+                console.log(`[copilot-autonomous] Injected Brain context for skill ${skillKey}`);
+              }
+            }
+          }
+        }
+      } catch (brainErr) {
+        // SBI-002: Failures never prevent skill execution
+        console.warn('[copilot-autonomous] SBI-002 Brain context injection failed:', brainErr);
+      }
+
+      return skillResult;
     }
 
     case 'execute_action': {
@@ -3544,7 +3601,9 @@ serve(async (req: Request) => {
                     userId,
                     organizationId || null,
                     token,
-                    (context?.temporalContext as Record<string, string> | undefined)?.timezone
+                    (context?.temporalContext as Record<string, string> | undefined)?.timezone,
+                    seed_context,
+                    message
                   );
 
                   const toolLatencyMs = Date.now() - toolStartTime;
@@ -3758,7 +3817,9 @@ serve(async (req: Request) => {
                 userId,
                 organizationId || null,
                 token,
-                (context?.temporalContext as Record<string, string> | undefined)?.timezone
+                (context?.temporalContext as Record<string, string> | undefined)?.timezone,
+                seed_context,
+                message
               );
 
               toolResults.push({
