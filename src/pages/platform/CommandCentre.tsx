@@ -8,14 +8,16 @@
  * Filters: All (default) | Needs You | Deals | Signals
  */
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   AlertTriangle,
+  ArrowLeft,
   ChevronDown,
   Filter,
   RefreshCw,
   X,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -218,6 +220,9 @@ export default function CommandCentre() {
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [detailItem, setDetailItem] = useState<CCItem | null>(null);
+  // Mobile: when true, show detail panel full-screen instead of item list
+  const [mobileShowDetail, setMobileShowDetail] = useState(false);
+  const leftRailRef = useRef<HTMLDivElement>(null);
 
   // CC-008: Realtime subscriptions — items appear without manual refresh
   useCommandCentreRealtime();
@@ -360,7 +365,6 @@ export default function CommandCentre() {
     withPending(id, () => snoozeItem.mutate({ id, until }));
   };
   const handleUndo = (id: string) => withPending(id, () => undoItem.mutate(id));
-  const handleViewDetail = (item: CCItem) => setDetailItem(item);
 
   // CC-009: Deep links — bookmarkable URLs for items and filters
   const { updateItemParam, updateFilterParam } = useCommandCentreDeepLinks({
@@ -370,15 +374,37 @@ export default function CommandCentre() {
   });
 
   // Update URL when detail panel opens/closes
-  const handleViewDetailWithDeepLink = (item: CCItem) => {
+  const handleViewDetailWithDeepLink = useCallback((item: CCItem) => {
     setDetailItem(item);
     updateItemParam(item.id);
-  };
+    setMobileShowDetail(true);
+  }, [updateItemParam]);
 
-  const handleCloseDetail = () => {
+  const handleCloseDetail = useCallback(() => {
     setDetailItem(null);
     updateItemParam(null);
-  };
+    setMobileShowDetail(false);
+  }, [updateItemParam]);
+
+  // Auto-select the first item when filtered items load (desktop shows detail immediately)
+  const hasAutoSelected = useRef(false);
+  useEffect(() => {
+    if (hasAutoSelected.current) return;
+    if (filteredItems.length > 0 && !detailItem) {
+      setDetailItem(filteredItems[0]);
+      updateItemParam(filteredItems[0].id);
+      hasAutoSelected.current = true;
+    }
+  }, [filteredItems, detailItem, updateItemParam]);
+
+  // Scroll highlighted item into view in the left rail
+  useEffect(() => {
+    if (!leftRailRef.current || !detailItem) return;
+    const card = leftRailRef.current.querySelector(`[data-item-id="${detailItem.id}"]`);
+    if (card) {
+      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [detailItem]);
 
   const handleFilterChange = (filter: CCFilter) => {
     setActiveFilter(filter);
@@ -457,8 +483,13 @@ export default function CommandCentre() {
           </Button>
         </div>
 
-        {/* Sub-filter bar (urgency/agent) */}
-        <div className="mt-3 mb-1">
+        {/* Filter bar + sub-filters */}
+        <div className="mt-3 flex items-center justify-between gap-4 flex-wrap">
+          <CCFilterBar
+            activeFilter={activeFilter}
+            onFilterChange={handleFilterChange}
+            needsYouCount={needsYouCount}
+          />
           <SubFilterBar
             urgencyFilter={urgencyFilter}
             agentFilter={agentFilter}
@@ -469,29 +500,27 @@ export default function CommandCentre() {
         </div>
       </div>
 
-      {/* ====== FILTER BAR + DETAIL PANEL (compression layout) ====== */}
+      {/* ====== LEFT RAIL + RIGHT PANEL ====== */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Feed area — compresses when panel opens */}
-        <div className="flex-1 min-w-0 overflow-hidden flex flex-col transition-all duration-200 ease-out">
-          {/* Main filter bar */}
-          <div className="flex-shrink-0 px-6 pt-3 pb-2 bg-white dark:bg-gray-900/80 border-b border-slate-200 dark:border-gray-800/60">
-            <CCFilterBar
-              activeFilter={activeFilter}
-              onFilterChange={handleFilterChange}
-              needsYouCount={needsYouCount}
-            />
+
+        {/* ---- Left rail: scrollable item list ---- */}
+        <div
+          className={cn(
+            'w-full md:w-[380px] md:shrink-0 flex flex-col border-r border-slate-200 dark:border-gray-800/60 bg-white dark:bg-gray-900/80 overflow-hidden',
+            // Mobile: hide left rail when detail is showing
+            mobileShowDetail ? 'hidden md:flex' : 'flex',
+          )}
+        >
+          {/* Agent Learning section — PST-015 */}
+          <div className="flex-shrink-0 px-3 pt-3 pb-2">
+            <CCAgentLearning />
           </div>
 
-          {/* Unified feed */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {/* Agent Learning section — PST-015 */}
-            <div className="mb-4">
-              <CCAgentLearning />
-            </div>
-
+          {/* Scrollable item list */}
+          <div ref={leftRailRef} className="flex-1 overflow-y-auto px-3 pb-3">
             {allItemsQuery.isLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((i) => (
                   <ItemSkeleton key={i} />
                 ))}
               </div>
@@ -510,28 +539,70 @@ export default function CommandCentre() {
                 actionsToday={statsQuery.data?.auto_completed_today ?? 0}
               />
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {filteredItems.map((item) => (
-                  <CCItemCard
-                    key={item.id}
-                    item={item}
-                    onApprove={handleApprove}
-                    onDismiss={handleDismiss}
-                    onSnooze={handleSnooze}
-                    onUndo={handleUndo}
-                    onViewDetail={handleViewDetailWithDeepLink}
-                    isPending={pendingIds.has(item.id)}
-                    animationClass={newItemIds.has(item.id) ? 'animate-slide-in-top' : undefined}
-                    isHighlighted={isHighlighted(item.id)}
-                  />
+                  <div key={item.id} data-item-id={item.id}>
+                    <CCItemCard
+                      item={item}
+                      onApprove={handleApprove}
+                      onDismiss={handleDismiss}
+                      onSnooze={handleSnooze}
+                      onUndo={handleUndo}
+                      onViewDetail={handleViewDetailWithDeepLink}
+                      isPending={pendingIds.has(item.id)}
+                      animationClass={newItemIds.has(item.id) ? 'animate-slide-in-top' : undefined}
+                      isHighlighted={isHighlighted(item.id)}
+                      isSelected={detailItem?.id === item.id}
+                      compact
+                    />
+                  </div>
                 ))}
               </div>
             )}
           </div>
         </div>
 
-        {/* Detail panel — inline, compresses the feed (no overlay) */}
-        <CCDetailPanel item={detailItem} onClose={handleCloseDetail} />
+        {/* ---- Right panel: detail view ---- */}
+        <div
+          className={cn(
+            'flex-1 min-w-0 flex flex-col overflow-hidden',
+            // Mobile: show full-screen when detail is selected, otherwise hidden
+            mobileShowDetail ? 'flex' : 'hidden md:flex',
+          )}
+        >
+          {/* Mobile back button */}
+          {mobileShowDetail && detailItem && (
+            <div className="md:hidden flex-shrink-0 px-4 py-2 border-b border-slate-200 dark:border-gray-800/60 bg-white dark:bg-gray-900/80">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-xs gap-1.5 text-slate-600 dark:text-gray-300"
+                onClick={() => setMobileShowDetail(false)}
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to list
+              </Button>
+            </div>
+          )}
+
+          {detailItem ? (
+            <CCDetailPanel item={detailItem} onClose={handleCloseDetail} />
+          ) : (
+            <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-gray-950">
+              <div className="text-center px-6">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
+                  <ArrowLeft className="h-6 w-6 text-slate-300 dark:text-gray-600" />
+                </div>
+                <p className="text-sm font-medium text-slate-500 dark:text-gray-400">
+                  Select an item to view details
+                </p>
+                <p className="text-xs text-slate-400 dark:text-gray-500 mt-1">
+                  Use j/k to navigate, Enter to toggle
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

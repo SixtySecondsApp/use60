@@ -6,12 +6,12 @@
  * or contenteditable elements (e.g. TipTap editor).
  *
  * Supported keys:
- *   j       — move highlight down (update panel if open)
- *   k       — move highlight up (update panel if open)
- *   Enter   — toggle side panel for highlighted item
+ *   j       — move selection down (detail panel updates immediately)
+ *   k       — move selection up (detail panel updates immediately)
+ *   Enter   — toggle side panel for highlighted item (legacy compat)
  *   a       — approve highlighted item (only if status is open/ready)
  *   d       — dismiss highlighted item
- *   Escape  — close side panel
+ *   Escape  — clear selection
  *
  * Note: 'e' shortcut for edit mode will be handled by dispatching a custom
  * event or passing a ref — deferred because edit mode is internal to
@@ -77,38 +77,31 @@ export function useCommandCentreKeyboard(
 
       switch (e.key) {
         case 'j': {
-          // Move highlight down
+          // Move selection down — detail panel updates immediately
           e.preventDefault();
           const newIndex = Math.min(highlightedIndex + 1, items.length - 1);
           setHighlightedIndex(newIndex);
-          // Keep the panel in sync when it is already open
-          if (options.isPanelOpen) {
-            options.onSelectItem(items[newIndex]);
-          }
+          options.onSelectItem(items[newIndex]);
           break;
         }
 
         case 'k': {
-          // Move highlight up
+          // Move selection up — detail panel updates immediately
           e.preventDefault();
           const newIndex = Math.max(highlightedIndex - 1, 0);
           setHighlightedIndex(newIndex);
-          if (options.isPanelOpen) {
-            options.onSelectItem(items[newIndex]);
-          }
+          options.onSelectItem(items[newIndex]);
           break;
         }
 
         case 'Enter': {
-          // Toggle panel open/close for the highlighted item
+          // Toggle panel open/close for the highlighted item (legacy compat)
           e.preventDefault();
           if (highlightedIndex >= 0 && highlightedIndex < items.length) {
             const item = items[highlightedIndex];
             if (options.selectedItem?.id === item.id) {
-              // Panel is already open for this item — close it
               options.onSelectItem(null);
             } else {
-              // Open the panel for the highlighted item
               options.onSelectItem(item);
             }
           }
@@ -138,11 +131,10 @@ export function useCommandCentreKeyboard(
         }
 
         case 'Escape': {
-          // Close the side panel
-          if (options.isPanelOpen) {
-            e.preventDefault();
-            options.onSelectItem(null);
-          }
+          // Clear selection (detail panel closes)
+          e.preventDefault();
+          setHighlightedIndex(-1);
+          options.onSelectItem(null);
           break;
         }
 

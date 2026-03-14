@@ -637,8 +637,6 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
     }, 5000);
   };
 
-  const isOpen = item !== null;
-
   // Derived state — only compute when item is present
   const enrichmentContext = (item?.enrichment_context as Record<string, unknown>) ?? {};
   const confidenceFactors = (item?.confidence_factors as Record<string, unknown>) ?? {};
@@ -649,8 +647,7 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
   return (
     <div
       className={cn(
-        'flex-shrink-0 flex flex-col border-l border-slate-200 dark:border-gray-800/60 bg-white dark:bg-gray-900/80 transition-all duration-200 ease-out overflow-hidden',
-        isOpen ? 'w-[460px]' : 'w-0',
+        'flex flex-col bg-white dark:bg-gray-900/80 overflow-hidden h-full',
       )}
     >
       {item && (
