@@ -88,6 +88,13 @@ export interface RoutingContext {
   latency_ms?: number;
 }
 
+export interface SeedContext {
+  itemId: string;
+  itemType: string;
+  dealId?: string;
+  contactId?: string;
+}
+
 export interface SendMessageOptions {
   /** If true, don't show the user message in chat (used for enriched prompts from preflight) */
   silent?: boolean;
@@ -96,6 +103,8 @@ export interface SendMessageOptions {
   /** When set, the UI displays the original `message` but the API receives this content instead.
    *  Used by landing page builder to inject context without exposing it in chat. */
   apiContent?: string;
+  /** Command Centre item context to inject into the copilot system prompt */
+  seedContext?: SeedContext;
 }
 
 export interface UseCopilotChatReturn {
@@ -288,6 +297,7 @@ export function useCopilotChat(options: UseCopilotChatOptions): UseCopilotChatRe
               stream: true,
               ...(sendOpts?.routingContext ? { routingContext: sendOpts.routingContext } : {}),
               ...(clientIp ? { client_ip: clientIp } : {}),
+              ...(sendOpts?.seedContext ? { seed_context: sendOpts.seedContext } : {}),
             }),
             signal: abortControllerRef.current.signal,
           }

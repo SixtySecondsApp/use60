@@ -27,6 +27,7 @@ import {
   Info,
   Loader2,
   Mail,
+  MessageSquare,
   RotateCcw,
   Save,
   User,
@@ -39,6 +40,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useCommandCentreItemMutations } from '@/lib/hooks/useCommandCentreItemsQuery';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
+import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { URGENCY_CONFIG } from './constants';
 import { CCEmailPanel } from './panels/CCEmailPanel';
 import { CCCrmDiffPanel } from './panels/CCCrmDiffPanel';
@@ -516,6 +518,7 @@ function TimelineSection({ item }: { item: CCItem }) {
 export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
   const { approveItem, dismissItem, snoozeItem, undoItem, updateDraftedAction, approveAndSendEmail, saveEmailAsDraft, markGoodSuggestion, regenerateWithFeedback } =
     useCommandCentreItemMutations();
+  const { openCopilot, sendMessage } = useCopilot();
 
   // Ref to hold the pending send timeout so it can be cancelled on undo
   const sendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -576,6 +579,24 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
   const handleRegenerate = (feedback: string) => {
     if (!item) return;
     regenerateWithFeedback.mutate({ id: item.id, feedback });
+  };
+
+  const handleAskCopilot = () => {
+    if (!item) return;
+    const query = `Help me with this Command Centre item: "${item.title}"`;
+    // Open the copilot with a fresh chat (no initial query to avoid double-send)
+    openCopilot(undefined, true);
+    // Send the message with seedContext so the edge function gets CC item context
+    setTimeout(() => {
+      sendMessage(query, {
+        seedContext: {
+          itemId: item.id,
+          itemType: item.item_type,
+          dealId: item.deal_id ?? undefined,
+          contactId: item.contact_id ?? undefined,
+        },
+      });
+    }, 250);
   };
 
   const handleApproveAndSend = (payload: { to: string; subject: string; body_html: string }) => {
@@ -720,6 +741,15 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
                   Dismiss
                 </Button>
               )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs text-violet-600 border-violet-200 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-500/30 dark:hover:bg-violet-500/10"
+                onClick={handleAskCopilot}
+              >
+                <MessageSquare className="h-3 w-3 mr-1" />
+                Ask Copilot
+              </Button>
             </div>
           </div>
 

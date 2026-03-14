@@ -71,6 +71,13 @@ const MAX_TOKENS = 4096;
 // Types
 // =============================================================================
 
+interface SeedContext {
+  itemId: string;
+  itemType: string;
+  dealId?: string;
+  contactId?: string;
+}
+
 interface RequestBody {
   message: string;
   organizationId?: string;
@@ -78,6 +85,7 @@ interface RequestBody {
   stream?: boolean;
   fact_profile_id?: string;
   product_profile_id?: string;
+  seed_context?: SeedContext;
 }
 
 // =============================================================================
@@ -2457,7 +2465,7 @@ serve(async (req: Request) => {
   try {
     // Parse request
     const body: RequestBody = await req.json();
-    const { message, organizationId, context = {}, stream = true, fact_profile_id, product_profile_id } = body;
+    const { message, organizationId, context = {}, stream = true, fact_profile_id, product_profile_id, seed_context } = body;
 
     // Prefer client_ip from request body (set by frontend) over header extraction
     if ((body as Record<string, unknown>).client_ip && !clientIp) {
@@ -2649,6 +2657,11 @@ serve(async (req: Request) => {
     // Append credit alert context to system prompt if one was surfaced
     if (creditAlertNote) {
       systemPrompt += creditAlertNote;
+    }
+
+    // Append Command Centre seed context to system prompt when provided
+    if (seed_context) {
+      systemPrompt += `\n\n[CONTEXT] The user is viewing a Command Centre item:\n- Item ID: ${seed_context.itemId}\n- Type: ${seed_context.itemType}${seed_context.dealId ? `\n- Deal: ${seed_context.dealId}` : ''}${seed_context.contactId ? `\n- Contact: ${seed_context.contactId}` : ''}\nUse this context to provide relevant, specific responses.`;
     }
 
     // Use the tool architecture (expanded from original 4-tool to include CRM index and more)
