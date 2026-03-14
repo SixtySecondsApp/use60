@@ -1346,6 +1346,227 @@ async function fetchProfileContext(
 }
 
 // =============================================================================
+// BA-007: Contact Intelligence for Email Drafts
+// =============================================================================
+
+interface ContactIntelligence {
+  relationshipStrength?: number;
+  communicationStyle?: Record<string, unknown>;
+  totalMeetings?: number;
+  lastInteractionAt?: string;
+  summary?: string;
+  recentMemories?: Array<{ category: string; subject: string; content: string }>;
+  recentObjections?: Array<{ summary: string; verbatimQuote?: string; sourceTimestamp: string }>;
+}
+
+/**
+ * Detect whether the current message is an email composition request and
+ * extract the target contact_id from the message body / seed_context.
+ * Returns null when no email context + contact is detected.
+ */
+function detectEmailContactId(
+  message: string,
+  seedContext?: SeedContext,
+): string | null {
+  const lower = message.toLowerCase();
+  const isEmailRequest =
+    (lower.includes('draft') && lower.includes('email')) ||
+    (lower.includes('write') && lower.includes('email')) ||
+    (lower.includes('follow up') && !lower.includes('task')) ||
+    (lower.includes('follow-up') && !lower.includes('task')) ||
+    lower.includes('email to') ||
+    lower.includes('compose email') ||
+    (lower.includes('send') && lower.includes('email'));
+
+  if (!isEmailRequest) return null;
+
+  // 1. seed_context.contactId (Command Centre)
+  if (seedContext?.contactId) return seedContext.contactId;
+
+  // 2. Primary Contact ID from DEAL_CONTEXT block
+  const contactIdMatch = message.match(/Primary Contact ID:\s*([a-f0-9-]+)/i);
+  if (contactIdMatch) return contactIdMatch[1];
+
+  // 3. contact_id explicitly referenced in message (e.g. from context injection)
+  const contactUuidMatch = message.match(/contact_id[:\s]+([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+  if (contactUuidMatch) return contactUuidMatch[1];
+
+  return null;
+}
+
+/**
+ * Check whether the user has contact_intelligence enabled in their
+ * brain_intelligence preferences. Defaults to true when no setting exists.
+ */
+async function isContactIntelligenceEnabled(
+  client: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await client
+      .from('user_settings')
+      .select('preferences')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error || !data) return true; // default enabled
+
+    const prefs = data.preferences as Record<string, unknown> | null;
+    if (!prefs) return true;
+
+    const bi = prefs.brain_intelligence as Record<string, unknown> | undefined;
+    if (!bi) return true;
+
+    // Explicit false means disabled; anything else (true / undefined) means enabled
+    return bi.contact_intelligence !== false;
+  } catch {
+    return true; // non-fatal, default enabled
+  }
+}
+
+/**
+ * Fetch contact intelligence from Brain tables and return a formatted block
+ * for system prompt injection. Returns empty string when no data exists.
+ * Capped at ~500 tokens to keep the context window lean.
+ */
+async function fetchContactIntelligence(
+  client: ReturnType<typeof createClient>,
+  contactId: string,
+  orgId: string,
+): Promise<string> {
+  try {
+    // Parallel queries: contact_memory, copilot_memories, deal_memory_events
+    const [contactMemoryResult, copilotMemoriesResult, objectionEventsResult] = await Promise.all([
+      // contact_memory uses contact_id as TEXT
+      client
+        .from('contact_memory')
+        .select('relationship_strength, communication_style, total_meetings, last_interaction_at, summary')
+        .eq('org_id', orgId)
+        .eq('contact_id', contactId)
+        .maybeSingle(),
+
+      // copilot_memories uses contact_id as UUID
+      client
+        .from('copilot_memories')
+        .select('category, subject, content')
+        .eq('contact_id', contactId)
+        .in('category', ['relationship', 'deal', 'preference'])
+        .order('updated_at', { ascending: false })
+        .limit(3),
+
+      // deal_memory_events where contact appears in contact_ids array
+      client
+        .from('deal_memory_events')
+        .select('summary, verbatim_quote, source_timestamp')
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .contains('contact_ids', [contactId])
+        .in('event_category', ['objection', 'competitive'])
+        .order('source_timestamp', { ascending: false })
+        .limit(2),
+    ]);
+
+    const contactMemory = contactMemoryResult.data;
+    const copilotMemories = copilotMemoriesResult.data ?? [];
+    const objections = objectionEventsResult.data ?? [];
+
+    // Nothing found — skip injection
+    if (!contactMemory && copilotMemories.length === 0 && objections.length === 0) {
+      return '';
+    }
+
+    // Build the intelligence block
+    const lines: string[] = ['[CONTACT INTELLIGENCE]'];
+
+    // Relationship strength + meetings
+    if (contactMemory) {
+      const strength = contactMemory.relationship_strength != null
+        ? `${Math.round(contactMemory.relationship_strength * 100)}%`
+        : 'unknown';
+      const meetings = contactMemory.total_meetings ?? 0;
+
+      let lastContactAgo = '';
+      if (contactMemory.last_interaction_at) {
+        const daysSince = Math.floor(
+          (Date.now() - new Date(contactMemory.last_interaction_at).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        lastContactAgo = daysSince === 0 ? 'today' : daysSince === 1 ? '1 day ago' : `${daysSince} days ago`;
+      }
+
+      lines.push(
+        `Relationship strength: ${strength}${meetings > 0 ? ` (${meetings} meeting${meetings !== 1 ? 's' : ''}${lastContactAgo ? `, last ${lastContactAgo}` : ''})` : ''}`
+      );
+
+      // Communication style
+      const style = contactMemory.communication_style as Record<string, unknown> | null;
+      if (style && Object.keys(style).length > 0) {
+        const styleParts: string[] = [];
+        if (style.tone) styleParts.push(`${style.tone} tone`);
+        if (style.preferred_channel) styleParts.push(`prefers ${style.preferred_channel}`);
+        if (style.length_preference) styleParts.push(`prefers ${style.length_preference} messages`);
+        if (style.formality) styleParts.push(`${style.formality}`);
+        if (styleParts.length > 0) {
+          lines.push(`Communication: ${styleParts.join(', ')}`);
+        }
+      }
+
+      // Summary from contact_memory
+      if (contactMemory.summary) {
+        // Truncate summary to keep under token budget
+        const truncatedSummary = contactMemory.summary.length > 200
+          ? contactMemory.summary.slice(0, 200) + '...'
+          : contactMemory.summary;
+        lines.push(`Profile: ${truncatedSummary}`);
+      }
+    }
+
+    // Known sensitivities / objections
+    if (objections.length > 0) {
+      const objectionParts = objections.map((o) => {
+        const quote = o.verbatim_quote ? ` ("${o.verbatim_quote.slice(0, 80)}")` : '';
+        return `${o.summary}${quote}`;
+      });
+      lines.push(`Known sensitivities: ${objectionParts.join('; ')}`);
+    }
+
+    // Relevant relationship memories
+    if (copilotMemories.length > 0) {
+      const memParts = copilotMemories.map(
+        (m) => `${m.subject}: ${m.content.slice(0, 100)}`
+      );
+      lines.push(`Recent context: ${memParts.join('; ')}`);
+    }
+
+    // Adaptive guidance
+    const adaptParts: string[] = [];
+    if (contactMemory?.communication_style) {
+      const style = contactMemory.communication_style as Record<string, unknown>;
+      if (style.tone === 'formal' || style.formality === 'formal') adaptParts.push('Use formal greeting');
+      if (style.tone === 'casual' || style.formality === 'casual') adaptParts.push('Use casual, friendly greeting');
+      if (style.length_preference === 'concise' || style.length_preference === 'short') adaptParts.push('Keep under 4 sentences');
+    }
+    if (objections.length > 0) {
+      adaptParts.push('Avoid leading with topics related to known sensitivities');
+    }
+    if (adaptParts.length > 0) {
+      lines.push(`Adapt: ${adaptParts.join(', ')}`);
+    }
+
+    const block = '\n\n' + lines.join('\n');
+
+    // Hard cap at ~500 tokens (~2000 chars)
+    if (block.length > 2000) {
+      return block.slice(0, 1997) + '...';
+    }
+
+    return block;
+  } catch (err) {
+    console.error('[fetchContactIntelligence] Error (non-fatal):', err);
+    return ''; // Non-fatal — never block copilot
+  }
+}
+
+// =============================================================================
 // System Prompt
 // =============================================================================
 
@@ -2651,8 +2872,37 @@ serve(async (req: Request) => {
       fetchEmailPersonalization(supabase, userId),
     ]);
 
+    // =========================================================================
+    // BA-007: Contact Intelligence Injection for Email Drafts
+    // =========================================================================
+    // When the user is composing an email and we can resolve a target contact,
+    // query Brain tables for relationship data and inject a concise intelligence
+    // block into the system prompt so the LLM adapts tone and content.
+    let contactIntelligenceBlock = '';
+    const emailContactId = detectEmailContactId(message, seed_context);
+    if (emailContactId && resolvedOrgForConfig) {
+      const ciEnabled = await isContactIntelligenceEnabled(supabase, userId);
+      if (ciEnabled) {
+        contactIntelligenceBlock = await fetchContactIntelligence(
+          supabase,
+          emailContactId,
+          resolvedOrgForConfig,
+        );
+        if (contactIntelligenceBlock) {
+          console.log(`[copilot-autonomous] BA-007: Contact intelligence injected for contact ${emailContactId} (${contactIntelligenceBlock.length} chars)`);
+        }
+      } else {
+        console.log('[copilot-autonomous] BA-007: Contact intelligence disabled by user setting');
+      }
+    }
+
     // Build system prompt (no longer depends on per-skill tool defs)
     let systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext, emailPersonalization);
+
+    // Append contact intelligence block to system prompt (BA-007)
+    if (contactIntelligenceBlock) {
+      systemPrompt += contactIntelligenceBlock;
+    }
 
     // Append credit alert context to system prompt if one was surfaced
     if (creditAlertNote) {
