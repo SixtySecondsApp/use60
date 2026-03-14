@@ -22,6 +22,7 @@ import { verifyCronSecret, isServiceRoleAuth } from '../_shared/edgeAuth.ts';
 import { sendSlackDM } from '../_shared/proactive/deliverySlack.ts';
 import { logAICostEvent } from '../_shared/costTracking.ts';
 import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
+import { getDailyThreadTs } from '../_shared/slack/dailyThread.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -78,8 +79,11 @@ serve(async (req) => {
           ? await generateNarrativeBriefing(briefing, persona, supabase)
           : formatFallbackBriefing(briefing, persona);
 
-        // Deliver via Slack DM
-        await deliverBriefingToSlack(supabase, persona, narrativeBriefing);
+        // BA-003c: Get or create today's daily Slack thread
+        const threadTs = await getDailyThreadTs(persona.user_id, persona.org_id, supabase);
+
+        // Deliver via Slack DM (threaded if daily thread exists)
+        await deliverBriefingToSlack(supabase, persona, narrativeBriefing, threadTs);
 
         // Write to agent_activity for in-app feed
         await supabase.rpc('insert_agent_activity', {
@@ -348,6 +352,7 @@ async function deliverBriefingToSlack(
   supabase: any,
   persona: Record<string, any>,
   briefing: string,
+  threadTs?: string | null,
 ): Promise<void> {
   // Look up Slack credentials
   const { data: slackOrg } = await supabase
@@ -403,6 +408,7 @@ async function deliverBriefingToSlack(
     slackUserId: mapping.slack_user_id,
     text: `${agentName}'s Morning Briefing`,
     blocks,
+    ...(threadTs ? { thread_ts: threadTs } : {}),
   });
 }
 

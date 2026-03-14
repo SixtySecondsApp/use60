@@ -14,6 +14,7 @@ interface SlackDeliveryOptions {
   text?: string;
   icon_url?: string;
   username?: string;
+  thread_ts?: string;
 }
 
 /**
@@ -22,7 +23,7 @@ interface SlackDeliveryOptions {
 export async function sendSlackDM(
   options: SlackDeliveryOptions
 ): Promise<{ success: boolean; channelId?: string; ts?: string; error?: string }> {
-  const { botToken, slackUserId, blocks, text, icon_url, username } = options;
+  const { botToken, slackUserId, blocks, text, icon_url, username, thread_ts } = options;
 
   try {
     // Open DM channel
@@ -56,6 +57,7 @@ export async function sendSlackDM(
 
     if (icon_url) messagePayload.icon_url = icon_url;
     if (username) messagePayload.username = username;
+    if (thread_ts) messagePayload.thread_ts = thread_ts;
 
     if (blocks && blocks.length > 0) {
       // Validate and truncate blocks if needed
@@ -257,6 +259,7 @@ export async function deliverToSlack(
     slackUserId: payload.recipientSlackUserId,
     blocks: payload.blocks,
     text: payload.message,
+    thread_ts: payload.thread_ts,
   });
 
   // Record notification interaction for Smart Engagement Algorithm

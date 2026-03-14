@@ -26,6 +26,7 @@ import {
 } from '../../slackBlocks.ts';
 import { deliverToSlack } from '../../proactive/deliverySlack.ts';
 import type { ProactiveNotificationPayload } from '../../proactive/types.ts';
+import { getDailyThreadTs } from '../../slack/dailyThread.ts';
 
 /**
  * Parse the meeting.summary field which may be:
@@ -285,6 +286,16 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
       const botToken = slackIntegration?.access_token;
       const recipientSlackUserId = slackMapping?.slack_user_id;
 
+      // BA-003c: Look up today's daily thread so the debrief replies in-thread
+      let threadTs: string | null = null;
+      if (botToken && recipientSlackUserId) {
+        try {
+          threadTs = await getDailyThreadTs(state.event.user_id, state.event.org_id, supabase);
+        } catch (err) {
+          console.warn('[notify-slack-summary] Failed to get daily thread_ts, sending as top-level DM:', err);
+        }
+      }
+
       let slackDelivered = false;
       let deliveryError: string | undefined;
 
@@ -313,6 +324,7 @@ export const notifySlackSummaryAdapter: SkillAdapter = {
             crm_fields_updated: crmFieldsUpdated,
           },
           priority: 'medium',
+          ...(threadTs ? { thread_ts: threadTs } : {}),
         };
 
         const deliveryResult = await deliverToSlack(supabase, payload, botToken);

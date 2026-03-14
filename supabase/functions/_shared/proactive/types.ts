@@ -52,6 +52,9 @@ export interface ProactiveNotificationPayload {
     style?: 'primary' | 'danger';
   }>;
   
+  // Threading (BA-003c: daily Slack thread)
+  thread_ts?: string;
+
   // In-app notification mapping
   inAppCategory?: 'workflow' | 'deal' | 'task' | 'meeting' | 'system' | 'team';
   inAppType?: 'info' | 'success' | 'warning' | 'error';
