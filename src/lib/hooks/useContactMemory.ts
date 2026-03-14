@@ -38,6 +38,7 @@ export interface ContactMemoryRow {
   last_interaction_at: string | null;
   avg_response_time_hours: number | null;
   summary: string | null;
+  strength_history: { strength: number; date: string; event?: string }[];
   summary_updated_at: string | null;
   created_at: string;
   updated_at: string;
@@ -79,7 +80,7 @@ export function useContactMemoryList() {
       const { data, error } = await supabase
         .from('contact_memory')
         .select(
-          'id, org_id, contact_id, communication_style, decision_style, interests, buying_role_history, relationship_strength, total_meetings, total_emails_sent, total_emails_received, last_interaction_at, avg_response_time_hours, summary, summary_updated_at, created_at, updated_at'
+          'id, org_id, contact_id, communication_style, decision_style, interests, buying_role_history, relationship_strength, strength_history, total_meetings, total_emails_sent, total_emails_received, last_interaction_at, avg_response_time_hours, summary, summary_updated_at, created_at, updated_at'
         )
         .eq('org_id', activeOrgId)
         .order('relationship_strength', { ascending: false })
@@ -140,7 +141,7 @@ export function useContactMemoryDetail(contactId: string | null) {
       const { data, error } = await supabase
         .from('contact_memory')
         .select(
-          'id, org_id, contact_id, communication_style, decision_style, interests, buying_role_history, relationship_strength, total_meetings, total_emails_sent, total_emails_received, last_interaction_at, avg_response_time_hours, summary, summary_updated_at, created_at, updated_at'
+          'id, org_id, contact_id, communication_style, decision_style, interests, buying_role_history, relationship_strength, strength_history, total_meetings, total_emails_sent, total_emails_received, last_interaction_at, avg_response_time_hours, summary, summary_updated_at, created_at, updated_at'
         )
         .eq('org_id', activeOrgId)
         .eq('contact_id', contactId)

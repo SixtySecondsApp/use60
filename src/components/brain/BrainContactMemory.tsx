@@ -33,6 +33,7 @@ import {
   type RelatedCopilotMemory,
 } from '@/lib/hooks/useContactMemory';
 import { cn } from '@/lib/utils';
+import RelationshipPulseGraph from './RelationshipPulseGraph';
 
 // ============================================================================
 // Helpers
@@ -206,6 +207,13 @@ function DetailPanel({
             <div
               className={cn('h-full rounded-full transition-all', strengthColor(memory.relationship_strength))}
               style={{ width: `${pct}%` }}
+            />
+          </div>
+          {/* Relationship pulse sparkline */}
+          <div className="mt-3">
+            <RelationshipPulseGraph
+              strengthHistory={memory.strength_history ?? []}
+              currentStrength={memory.relationship_strength}
             />
           </div>
         </Card>
