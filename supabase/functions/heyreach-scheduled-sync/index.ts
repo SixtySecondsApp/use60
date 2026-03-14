@@ -181,8 +181,8 @@ serve(async (req) => {
           try {
             await heyreach.request({
               method: 'POST',
-              path: `/api/v1/campaign/${link.campaign_id}/leads`,
-              body: { leads: leadsToSend },
+              path: '/api/public/campaign/AddLeadsToListV2',
+              body: { campaignId: link.campaign_id, leads: leadsToSend },
             })
             batchSucceeded += batch.length
 

@@ -112,13 +112,20 @@ serve(async (req) => {
       const apiKey = body.api_key
       if (!apiKey || typeof apiKey !== 'string') return errorResponse('Missing api_key')
 
-      // Verify the key by listing campaigns
+      // Verify the key by listing campaigns (confirms key is valid and has correct scope)
       const testClient = new HeyReachClient({ apiKey })
       try {
-        await testClient.request({ method: 'GET', path: '/api/v1/campaign/GetAllCampaigns', query: { offset: 0, limit: 1 }, retries: 1 })
+        await testClient.request({ method: 'POST', path: '/api/public/campaign/GetAll', body: {}, retries: 1 })
       } catch (e: any) {
-        const msg = e?.status === 401 ? 'Invalid API key' : `HeyReach API error: ${e.message}`
-        return errorResponse(msg)
+        console.error('[heyreach-admin] Key verification failed:', { status: e?.status, message: e?.message, body: e?.responseBody })
+        const body = typeof e?.responseBody === 'string' ? e.responseBody : e?.message || ''
+        if (body.includes('workspace-level')) {
+          return errorResponse('This is a personal API key. HeyReach requires a workspace-level key. Go to HeyReach Settings > Integrations > API and generate a Workspace API Key.')
+        }
+        if (e?.status === 401 || e?.status === 403) {
+          return errorResponse('Invalid API key. Make sure you are using a workspace-level key from HeyReach Settings > Integrations > API.')
+        }
+        return errorResponse(`HeyReach API error (HTTP ${e?.status || 'unknown'}): ${e?.message || 'unknown error'}`)
       }
 
       // Generate a webhook API key for this org
@@ -217,9 +224,9 @@ serve(async (req) => {
       const limit = body.limit ?? 50
 
       const data = await heyreach.request<any>({
-        method: 'GET',
-        path: '/api/v1/campaign/GetAllCampaigns',
-        query: { offset, limit },
+        method: 'POST',
+        path: '/api/public/campaign/GetAll',
+        body: {},
       })
 
       const campaigns = Array.isArray(data) ? data : data?.items ?? data?.campaigns ?? []
@@ -236,7 +243,8 @@ serve(async (req) => {
 
       const data = await heyreach.request<any>({
         method: 'GET',
-        path: `/api/v1/campaign/${campaignId}`,
+        path: '/api/public/campaign/GetById',
+        query: { campaignId },
       })
 
       return jsonResponse({ success: true, campaign: data })
@@ -247,8 +255,9 @@ serve(async (req) => {
     // =========================================================================
     if (action === 'list_senders') {
       const data = await heyreach.request<any>({
-        method: 'GET',
-        path: '/api/v1/linkedin-account/GetAllSenderAccounts',
+        method: 'POST',
+        path: '/api/public/MyNetwork/GetMyNetworkForSender',
+        body: { pageNumber: 0, pageSize: 100 },
       })
 
       const senders = Array.isArray(data) ? data : data?.items ?? data?.accounts ?? []
@@ -264,9 +273,9 @@ serve(async (req) => {
       const limit = body.limit ?? 50
 
       const data = await heyreach.request<any>({
-        method: 'GET',
-        path: '/api/v1/list/GetAllLists',
-        query: { offset, limit },
+        method: 'POST',
+        path: '/api/public/list/GetAllLists',
+        body: { offset, limit },
       })
 
       const lists = Array.isArray(data) ? data : data?.items ?? data?.lists ?? []

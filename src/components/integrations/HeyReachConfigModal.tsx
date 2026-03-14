@@ -81,7 +81,7 @@ export function HeyReachConfigModal({ open, onOpenChange }: HeyReachConfigModalP
       {!isConnected ? (
         <ConfigSection title="Connect HeyReach">
           <p className="text-xs text-gray-500 mb-3">
-            Enter your HeyReach API key to connect. Find it in your HeyReach dashboard under Settings &gt; Integrations &gt; API.
+            Enter your HeyReach <span className="font-medium text-gray-700 dark:text-gray-300">workspace</span> API key. In HeyReach, go to Integrations &gt; HeyReach API &gt; Get API Key. The master API key will not work — you need the key generated from within the workspace.
           </p>
           <div className="flex gap-2">
             <Input

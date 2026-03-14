@@ -63,6 +63,7 @@ export class HeyReachClient {
           headers: {
             'X-API-KEY': this.apiKey,
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
           body: args.body !== undefined ? JSON.stringify(args.body) : undefined,
         })

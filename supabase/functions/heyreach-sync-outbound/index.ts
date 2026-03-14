@@ -177,11 +177,11 @@ serve(async (req) => {
       try {
         const result = await heyreach.request<any>({
           method: 'POST',
-          path: `/api/v1/campaign/${link.campaign_id}/leads`,
-          body: { leads: leadsToSend },
+          path: '/api/public/campaign/AddLeadsToListV2',
+          body: { campaignId: link.campaign_id, leads: leadsToSend },
         })
 
-        const addedCount = result?.addedLeadsCount ?? result?.added_leads_count ?? leadsToSend.length
+        const addedCount = result?.addedCount ?? result?.addedLeadsCount ?? result?.added_leads_count ?? leadsToSend.length
         succeeded += addedCount
 
         // Update heyreach_lead_id on rows

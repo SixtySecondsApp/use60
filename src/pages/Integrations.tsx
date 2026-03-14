@@ -1100,6 +1100,10 @@ export default function Integrations() {
         setActiveConfigModal('instantly');
         return;
       }
+      if (integrationId === 'heyreach') {
+        setActiveConfigModal('heyreach');
+        return;
+      }
       if (integrationId === 'apify') {
         setActiveConfigModal('apify');
         return;

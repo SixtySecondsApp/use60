@@ -355,8 +355,8 @@ serve(async (req: Request) => {
           // 6. Call HeyReach API to push lead
           const apiResult = await heyreach.request<any>({
             method: 'POST',
-            path: `/api/v1/campaign/${campaignLink.campaign_id}/leads`,
-            body: { leads: [lead] },
+            path: '/api/public/campaign/AddLeadsToListV2',
+            body: { campaignId: campaignLink.campaign_id, leads: [lead] },
           })
 
           const duration = Date.now() - startTime
