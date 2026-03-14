@@ -21,18 +21,19 @@
  *   deal_id?: string
  * }
  *
- * Returns: { events: DealMemoryExtraction[] } or { skipped, reason } or { error }
+ * Returns: { events: DealMemoryExtraction[], written: number, contact_updated: boolean }
+ *       or { skipped, reason } or { error }
  *
  * Deploy with --no-verify-jwt (staging ES256 JWT issue).
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import {
-  getCorsHeaders,
   handleCorsPreflightRequest,
   jsonResponse,
   errorResponse,
 } from '../_shared/corsHelper.ts';
+import { updateContactFromEvent } from '../_shared/memory/contacts.ts';
 
 // ============================================================================
 // Types
@@ -291,6 +292,119 @@ function validateEvents(events: unknown[]): DealMemoryExtraction[] {
 }
 
 // ============================================================================
+// Parse next_steps_oneliner into commitment events
+// ============================================================================
+
+function parseNextStepsIntoCommitments(
+  nextSteps: string,
+): DealMemoryExtraction[] {
+  if (!nextSteps || nextSteps.trim().length === 0) return [];
+
+  // Split by semicolons or numbered items (1., 2., etc.)
+  const items = nextSteps
+    .split(/(?:;\s*)|(?:\d+\.\s+)/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  return items.map((item) => ({
+    event_type: 'commitment_made',
+    event_category: 'commitment',
+    summary: item,
+    confidence: 0.85,
+    detail: { owner: 'rep', status: 'pending', action: item },
+    verbatim_quote: undefined,
+    speaker: 'rep',
+  }));
+}
+
+// ============================================================================
+// Write events to deal_memory_events + update contact_memory
+// ============================================================================
+
+async function writeEventsToDb(
+  supabase: ReturnType<typeof createClient>,
+  events: DealMemoryExtraction[],
+  body: ExtractDealMemoriesRequest,
+): Promise<{ written: number; contact_updated: boolean }> {
+  const now = new Date().toISOString();
+  const contactIds = body.contact_id ? [body.contact_id] : [];
+
+  // Build rows for batch insert
+  const rows = events.map((e) => ({
+    org_id: body.org_id,
+    deal_id: body.deal_id ?? null,
+    event_type: e.event_type,
+    event_category: e.event_category,
+    source_type: 'transcript',
+    source_id: body.meeting_id,
+    source_timestamp: now,
+    summary: e.summary,
+    detail: e.detail,
+    verbatim_quote: e.verbatim_quote ?? null,
+    speaker: e.speaker ?? null,
+    confidence: e.confidence,
+    salience: e.confidence > 0.8 ? 'high' : 'medium',
+    extracted_by: 'extract-deal-memories',
+    contact_ids: contactIds,
+  }));
+
+  if (rows.length === 0) {
+    return { written: 0, contact_updated: false };
+  }
+
+  // Batch insert into deal_memory_events
+  const { data: inserted, error: insertError } = await supabase
+    .from('deal_memory_events')
+    .insert(rows)
+    .select('id, event_type, event_category, detail, source_timestamp, contact_ids, deal_id, org_id');
+
+  if (insertError) {
+    console.error(
+      '[extract-deal-memories] Failed to insert deal_memory_events:',
+      insertError.message,
+    );
+    return { written: 0, contact_updated: false };
+  }
+
+  const written = inserted?.length ?? 0;
+  console.log(`[extract-deal-memories] Wrote ${written} events to deal_memory_events`);
+
+  // Update contact_memory for events that have a contact_id
+  let contactUpdated = false;
+
+  if (body.contact_id && inserted && inserted.length > 0) {
+    try {
+      // Call updateContactFromEvent for each inserted event
+      for (const evt of inserted) {
+        await updateContactFromEvent(
+          {
+            event_type: evt.event_type,
+            event_category: evt.event_category,
+            detail: evt.detail as Record<string, unknown>,
+            source_timestamp: evt.source_timestamp,
+            contact_ids: evt.contact_ids as string[],
+            deal_id: evt.deal_id,
+            org_id: evt.org_id,
+          },
+          supabase,
+        );
+      }
+      contactUpdated = true;
+      console.log(
+        `[extract-deal-memories] Updated contact_memory for contact ${body.contact_id}`,
+      );
+    } catch (contactErr) {
+      console.error(
+        '[extract-deal-memories] Failed to update contact_memory:',
+        contactErr instanceof Error ? contactErr.message : String(contactErr),
+      );
+    }
+  }
+
+  return { written, contact_updated: contactUpdated };
+}
+
+// ============================================================================
 // Entry point
 // ============================================================================
 
@@ -357,11 +471,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Parse next_steps_oneliner into commitment events
+    const commitmentEvents = parseNextStepsIntoCommitments(body.next_steps_oneliner ?? '');
+
+    // Merge LLM-extracted events with parsed commitment events
+    const allEvents = [...events, ...commitmentEvents];
+
     console.log(
-      `[extract-deal-memories] Extracted ${events.length} events for meeting ${body.meeting_id}`,
+      `[extract-deal-memories] Extracted ${events.length} LLM events + ${commitmentEvents.length} commitment events for meeting ${body.meeting_id}`,
     );
 
-    return jsonResponse({ events }, req);
+    // Write to deal_memory_events + update contact_memory
+    const { written, contact_updated } = await writeEventsToDb(supabase, allEvents, body);
+
+    return jsonResponse({ events: allEvents, written, contact_updated }, req);
   } catch (err) {
     console.error(
       '[extract-deal-memories] Error:',
