@@ -18,6 +18,10 @@ import {
   ChevronUp,
   ChevronDown,
   Mic,
+  Lock,
+  ArrowRight,
+  Linkedin,
+  Globe,
 } from 'lucide-react';
 import { HelpPanel } from '@/components/docs/HelpPanel';
 import { motion } from 'framer-motion';
@@ -43,7 +47,9 @@ import { FirefliesConfigModal } from '@/components/integrations/FirefliesConfigM
 import { ApolloConfigModal } from '@/components/integrations/ApolloConfigModal';
 import { AiArkConfigModal } from '@/components/integrations/AiArkConfigModal';
 import { ExplloriumConfigModal } from '@/components/integrations/ExplloriumConfigModal';
+import { BetterContactConfigModal } from '@/components/integrations/BetterContactConfigModal';
 import { InstantlyConfigModal } from '@/components/integrations/InstantlyConfigModal';
+import { HeyReachConfigModal } from '@/components/integrations/HeyReachConfigModal';
 import { ApifyConfigModal } from '@/components/integrations/ApifyConfigModal';
 import { LinkedInConfigModal } from '@/components/integrations/LinkedInConfigModal';
 import { HeyGenConfigModal } from '@/components/integrations/HeyGenConfigModal';
@@ -63,7 +69,9 @@ import { useFirefliesIntegration } from '@/lib/hooks/useFirefliesIntegration';
 import { useApolloIntegration } from '@/lib/hooks/useApolloIntegration';
 import { useAiArkIntegration } from '@/lib/hooks/useAiArkIntegration';
 import { useExploriumIntegration } from '@/lib/hooks/useExploriumIntegration';
+import { useBetterContactIntegration } from '@/lib/hooks/useBetterContactIntegration';
 import { useInstantlyIntegration } from '@/lib/hooks/useInstantlyIntegration';
+import { useHeyReachIntegration } from '@/lib/hooks/useHeyReachIntegration';
 import { useApifyIntegration } from '@/lib/hooks/useApifyIntegration';
 import { useLinkedInIntegration } from '@/lib/hooks/useLinkedInIntegration';
 import { useHeyGenIntegration } from '@/lib/hooks/useHeyGenIntegration';
@@ -545,6 +553,21 @@ const builtIntegrations: IntegrationConfig[] = [
     isBuilt: true,
   },
   {
+    id: 'bettercontact',
+    name: 'BetterContact',
+    description: 'Waterfall email & phone enrichment — aggregates 20+ data providers for verified contact data.',
+    permissions: [
+      { title: 'Enrich contacts', description: 'Find verified emails and phone numbers via waterfall enrichment.' },
+      { title: 'Lead Finder', description: 'Search for new leads by company, job title, and location.' },
+      { title: 'Email verification', description: 'Verify email deliverability status (deliverable, catch-all, undeliverable).' },
+    ],
+    brandColor: 'cyan',
+    iconBgColor: 'bg-cyan-50 dark:bg-cyan-900/20',
+    iconBorderColor: 'border-cyan-100 dark:border-cyan-800/40',
+    fallbackIcon: <Globe className="w-6 h-6 text-cyan-600 dark:text-cyan-400" />,
+    isBuilt: true,
+  },
+  {
     id: 'instantly',
     name: 'Instantly',
     description: 'Cold email campaigns at scale.',
@@ -556,6 +579,21 @@ const builtIntegrations: IntegrationConfig[] = [
     iconBgColor: 'bg-gray-50 dark:bg-gray-800',
     iconBorderColor: 'border-gray-200 dark:border-gray-700',
     fallbackIcon: <Mail className="w-6 h-6 text-gray-600 dark:text-gray-400" />,
+    isBuilt: true,
+  },
+  {
+    id: 'heyreach',
+    name: 'HeyReach',
+    description: 'LinkedIn outreach automation at scale.',
+    permissions: [
+      { title: 'Push leads', description: 'Add leads to HeyReach LinkedIn campaigns.' },
+      { title: 'Receive webhooks', description: 'Track connection accepts, replies, and engagement.' },
+      { title: 'Sync engagement', description: 'Pull LinkedIn activity data into Ops tables.' },
+    ],
+    brandColor: 'blue',
+    iconBgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    iconBorderColor: 'border-blue-100 dark:border-blue-800/40',
+    fallbackIcon: <Linkedin className="w-6 h-6 text-blue-600 dark:text-blue-400" />,
     isBuilt: true,
   },
   {
@@ -827,9 +865,19 @@ export default function Integrations() {
   } = useExploriumIntegration();
 
   const {
+    isConnected: bettercontactConnected,
+    loading: bettercontactLoading,
+  } = useBetterContactIntegration();
+
+  const {
     isConnected: instantlyConnected,
     loading: instantlyLoading,
   } = useInstantlyIntegration();
+
+  const {
+    isConnected: heyreachConnected,
+    loading: heyreachLoading,
+  } = useHeyReachIntegration();
 
   const {
     isConnected: apifyConnected,
@@ -965,8 +1013,12 @@ export default function Integrations() {
         return aiArkConnected ? 'active' : 'inactive';
       case 'explorium':
         return exploriumConnected ? 'active' : 'inactive';
+      case 'bettercontact':
+        return bettercontactConnected ? 'active' : 'inactive';
       case 'instantly':
         return instantlyConnected ? 'active' : 'inactive';
+      case 'heyreach':
+        return heyreachConnected ? 'active' : 'inactive';
       case 'apify':
         return apifyConnected ? 'active' : 'inactive';
       case 'linkedin':
@@ -1040,8 +1092,16 @@ export default function Integrations() {
         setActiveConfigModal('explorium');
         return;
       }
+      if (integrationId === 'bettercontact') {
+        setActiveConfigModal('bettercontact');
+        return;
+      }
       if (integrationId === 'instantly') {
         setActiveConfigModal('instantly');
+        return;
+      }
+      if (integrationId === 'heyreach') {
+        setActiveConfigModal('heyreach');
         return;
       }
       if (integrationId === 'apify') {
@@ -1159,12 +1219,13 @@ export default function Integrations() {
       apollo: apolloLoading,
       'ai-ark': aiArkLoading,
       explorium: exploriumLoading,
+      bettercontact: bettercontactLoading,
       instantly: instantlyLoading,
       apify: apifyLoading,
       linkedin: linkedinLoading,
       'fal-ai': falLoading,
     }),
-    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, instantlyLoading, apifyLoading, linkedinLoading, falLoading]
+    [googleLoading, fathomLoading, slackLoading, justcallLoading, savvycalLoading, hubspotLoading, notetakerLoading, firefliesLoading, apolloLoading, aiArkLoading, exploriumLoading, bettercontactLoading, instantlyLoading, apifyLoading, linkedinLoading, falLoading]
   );
 
   // Preload logo.dev URLs on page load to prevent any visible swap/flicker.
@@ -1340,8 +1401,16 @@ export default function Integrations() {
         open={activeConfigModal === 'explorium'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
+      <BetterContactConfigModal
+        open={activeConfigModal === 'bettercontact'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
       <InstantlyConfigModal
         open={activeConfigModal === 'instantly'}
+        onOpenChange={(open) => !open && setActiveConfigModal(null)}
+      />
+      <HeyReachConfigModal
+        open={activeConfigModal === 'heyreach'}
         onOpenChange={(open) => !open && setActiveConfigModal(null)}
       />
       <ApifyConfigModal

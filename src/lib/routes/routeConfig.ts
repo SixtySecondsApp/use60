@@ -932,6 +932,14 @@ export const ROUTE_CONFIGS: RouteConfig[] = [
     order: 51,
   },
   {
+    path: '/platform/dev/migrations',
+    access: 'platformAdmin',
+    label: 'Migration Tracker',
+    showInNav: false,
+    navSection: 'platform',
+    order: 51.5,
+  },
+  {
     path: '/platform/onboarding-simulator',
     access: 'internal',
     label: 'Onboarding Simulator',

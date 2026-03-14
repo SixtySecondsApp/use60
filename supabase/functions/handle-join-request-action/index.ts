@@ -470,7 +470,7 @@ serve(async (req: Request): Promise<Response> => {
 Reason: ${rejectionReason}
 
 If you have questions, contact support@use60.com`,
-          from: 'noreply@use60.com',
+          from: 'app@use60.com',
           fromName: '60',
         });
         if (!emailResult.success) {

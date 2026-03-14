@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Send } from 'lucide-react';
 import type { OpsTableColumn } from '@/lib/services/opsTableService';
 
 // ---------------------------------------------------------------------------
@@ -22,12 +22,6 @@ interface RuleBuilderProps {
   isSaving?: boolean;
 }
 
-const TRIGGER_TYPES = [
-  { value: 'cell_updated', label: 'When a cell is updated' },
-  { value: 'enrichment_complete', label: 'When enrichment completes' },
-  { value: 'row_created', label: 'When a new row is created' },
-];
-
 const CONDITION_OPERATORS = [
   { value: 'equals', label: 'Equals' },
   { value: 'not_equals', label: 'Not equals' },
@@ -46,6 +40,7 @@ const ACTION_TYPES = [
   { value: 'run_enrichment', label: 'Run enrichment' },
   { value: 'notify', label: 'Log notification' },
   { value: 'webhook', label: 'Webhook' },
+  { value: 'push_to_heyreach', label: 'Push to HeyReach campaign' },
 ];
 
 const NO_VALUE_OPERATORS = ['is_empty', 'is_not_empty'];
@@ -130,6 +125,9 @@ export function RuleBuilder({ columns, onSave, onCancel, userId, isSaving }: Rul
         }
         break;
       }
+      case 'push_to_heyreach':
+        actionConfig.use_linked_campaign = true;
+        break;
     }
 
     onSave({
@@ -171,9 +169,23 @@ export function RuleBuilder({ columns, onSave, onCancel, userId, isSaving }: Rul
           onChange={(e) => setTriggerType(e.target.value)}
           className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white outline-none"
         >
-          {TRIGGER_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
-          ))}
+          <optgroup label="Standard">
+            <option value="cell_updated">When a cell is updated</option>
+            <option value="enrichment_complete">When enrichment completes</option>
+            <option value="row_created">When a new row is created</option>
+          </optgroup>
+          <optgroup label="LinkedIn / HeyReach">
+            <option value="heyreach_connection_sent">Connection request sent</option>
+            <option value="heyreach_connection_accepted">Connection accepted</option>
+            <option value="heyreach_message_sent">Message sent</option>
+            <option value="heyreach_reply_received">Reply received</option>
+            <option value="heyreach_inmail_sent">InMail sent</option>
+            <option value="heyreach_inmail_reply_received">InMail reply received</option>
+            <option value="heyreach_follow_sent">Follow sent</option>
+            <option value="heyreach_liked_post">Liked post</option>
+            <option value="heyreach_viewed_profile">Viewed profile</option>
+            <option value="heyreach_tag_updated">Lead tag updated</option>
+          </optgroup>
         </select>
       </div>
 
@@ -382,6 +394,18 @@ export function RuleBuilder({ columns, onSave, onCancel, userId, isSaving }: Rul
                   2,
                 )}
               </pre>
+            </div>
+          </div>
+        )}
+
+        {actionType === 'push_to_heyreach' && (
+          <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-3 space-y-2">
+            <p className="text-xs text-gray-400">
+              When triggered, matching rows will be pushed to the linked HeyReach campaign using the configured field mapping.
+            </p>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <Send className="w-3.5 h-3.5" />
+              <span>Uses the campaign linked to this table</span>
             </div>
           </div>
         )}

@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "runSlug": "smart-credit-warnings",
+  "project": "Smart Credit Warning System",
+  "description": "Replace naive 14-day credit warning with smart effective runway that accounts for auto top-up, subscription renewal, and relative thresholds",
+  "phase": "deliver",
+  "startedAt": "2026-03-13T00:00:00Z",
+  "lastUpdatedAt": "2026-03-13T00:00:00Z",
+  "phaseGates": {
+    "launch": { "status": "skipped", "completedAt": null },
+    "discover": { "status": "complete", "completedAt": "2026-03-13T00:00:00Z" },
+    "define": { "status": "complete", "completedAt": "2026-03-13T00:00:00Z" },
+    "plan": { "status": "complete", "completedAt": "2026-03-13T00:00:00Z" },
+    "build": { "status": "complete", "completedAt": "2026-03-13T00:00:00Z" },
+    "deliver": { "status": "in_progress", "completedAt": null },
+    "housekeeping": { "status": "pending", "completedAt": null }
+  },
+  "stories": [
+    { "id": "CREDIT-001", "title": "Compute Effective Runway in Edge Function", "status": "complete" },
+    { "id": "CREDIT-002", "title": "Server-Side Warning Level Calculation", "status": "complete" },
+    { "id": "CREDIT-003", "title": "Update Frontend Banner to Use Server Warning Level", "status": "complete" },
+    { "id": "CREDIT-004", "title": "Update Credit Widget Dot Color", "status": "complete" },
+    { "id": "CREDIT-005", "title": "Update CreditService Types & Mapping", "status": "complete" },
+    { "id": "CREDIT-006", "title": "Update Credit Health Widget & Billing Section", "status": "complete" },
+    { "id": "CREDIT-007", "title": "Update Alert Function for Smart Thresholds", "status": "complete" }
+  ],
+  "execution": { "totalStories": 7, "completedStories": 7, "lastUpdated": "2026-03-13T00:00:00Z" }
+}

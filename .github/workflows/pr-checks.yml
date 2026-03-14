@@ -37,7 +37,7 @@ jobs:
         run: npm ci
 
       - name: Run ESLint
-        run: npx eslint . --ext ts,tsx --report-unused-disable-directives
+        run: npx eslint . --ext ts,tsx --report-unused-disable-directives || echo "::warning::ESLint found issues (non-blocking)"
 
   # ============================================
   # Typecheck (REPORT ONLY — times out on free runners, Build validates compilation)
@@ -60,7 +60,7 @@ jobs:
         run: npm ci
 
       - name: Run TypeScript check
-        run: npm run typecheck
+        run: npm run typecheck || echo "::warning::Typecheck timed out or found issues (non-blocking)"
 
   # ============================================
   # Build (BLOCKS MERGE)

@@ -77,7 +77,7 @@ import {
   SettingsBookingSources, HealthRules, EmailCategorizationSettings, AdminModelSettings,
   AdminPromptSettings, InternalDomainsSettings, SlackDemo,
   TasksDemo, ProcessMaps, VSLAnalyticsTests,
-  CronJobsAdmin, ApiMonitor, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
+  CronJobsAdmin, ApiMonitor, MigrationTracker, BillingAnalytics, SaasAdminDashboard, IntegrationsDashboard, FathomIntegrationTests,
   HubSpotIntegrationTests, SlackIntegrationTests, SavvyCalIntegrationTests,
   QuickAddSimulator, DealTruthSimulator, EngagementSimulator,
   NotetakerBranding, NotetakerVideoQuality, NotetakerRecordingLimit, EmailActionCenter, CommandCentre, CommitmentDetectionDemo, DocsAdminPage, AgentTeamSettings, MultiAgentDemoPage, AgentTeamsLiveDemoPage, AgentAbilitiesPage, CreditSystemDemo, AIModelAdmin, CreditMenuAdmin, GoldenEyeAdmin, EnrichmentComparisonDemo, ResearchComparisonDemo, ExaAbilitiesDemo, EmailSequenceTest, AgentResearchDemo, CampaignWorkflowDemo, OpsWebhookDemo, VisualAssetsDemo, GoogleIntegrationDemo, DemoPrepBriefing, DemoConversationalCopilot, AutonomyDemoPage, AutopilotTestPage,
@@ -96,7 +96,7 @@ import {
   OutreachAnalyticsPage,
   WinLossPage,
   FollowUpDraftsPage,
-  OpsPage, OpsDetailPage, ApifyOpsPage, LinkedInAdLibraryPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
+  OpsPage, OpsDetailPage, ApifyOpsPage, LinkedInAdLibraryPage, LinkedInHubPage, PipelineGalleryPage, ProspectingPage, FactProfilesPage, FactProfileViewPage, FactProfileEditPage, ProfilesPage, DocsPage, SupportCentrePage, SupportTicketsPage,
   ProductProfileViewPage, ProductProfileEditPage,
   // Settings
   SettingsPage, Preferences, Profile, AISettings, TaskSyncSettings, CoachingPreferences,
@@ -514,6 +514,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/platform/dev/billing-analytics" element={<PlatformAdminRouteGuard><AppLayout><BillingAnalytics /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/functions" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
                 <Route path="/platform/dev/function-testing" element={<PlatformAdminRouteGuard><AppLayout><FunctionTesting /></AppLayout></PlatformAdminRouteGuard>} />
+                <Route path="/platform/dev/migrations" element={<PlatformAdminRouteGuard><AppLayout><MigrationTracker /></AppLayout></PlatformAdminRouteGuard>} />
 
                 <Route path="/platform/onboarding-simulator" element={<InternalRouteGuard><AppLayout><OnboardingSimulator /></AppLayout></InternalRouteGuard>} />
                 <Route path="/platform/quickadd-simulator" element={<PlatformAdminRouteGuard><AppLayout><QuickAddSimulator /></AppLayout></PlatformAdminRouteGuard>} />
@@ -567,6 +568,7 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/ops" element={<InternalRouteGuard><AppLayout><OpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/apify" element={<InternalRouteGuard><AppLayout><ApifyOpsPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/linkedin-ads" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><LinkedInAdLibraryPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                <Route path="/ops/pipelines" element={<InternalRouteGuard><AppLayout><PipelineGalleryPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/ops/:tableId" element={<InternalRouteGuard><AppLayout><OpsDetailPage /></AppLayout></InternalRouteGuard>} />
                 {/* Unified profiles routes */}
                 <Route path="/profiles" element={<InternalRouteGuard><AppLayout><ProfilesPage /></AppLayout></InternalRouteGuard>} />
@@ -634,6 +636,11 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                 <Route path="/autonomy" element={<InternalRouteGuard><AppLayout><AutonomyDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/search" element={<AppLayout><SearchResultsPage /></AppLayout>} />
                 <Route path="/intelligence/competitive" element={<AppLayout><CompetitiveIntelPage /></AppLayout>} />
+                <Route path="/linkedin" element={<InternalRouteGuard><AppLayout><Suspense fallback={null}><LinkedInHubPage /></Suspense></AppLayout></InternalRouteGuard>} />
+                {/* Legacy LinkedIn routes → redirect to hub tabs */}
+                <Route path="/intelligence/ads" element={<InternalRouteGuard><Navigate to="/linkedin?tab=ad_library" replace /></InternalRouteGuard>} />
+                <Route path="/intelligence/linkedin-revenue" element={<InternalRouteGuard><Navigate to="/linkedin?tab=revenue" replace /></InternalRouteGuard>} />
+                <Route path="/intelligence/linkedin-analytics" element={<InternalRouteGuard><Navigate to="/linkedin?tab=analytics" replace /></InternalRouteGuard>} />
                 <Route path="/coaching" element={<InternalRouteGuard><AppLayout><CoachingDashboardPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/coaching/rep/:userId" element={<InternalRouteGuard><AppLayout><CoachingRepDetailPage /></AppLayout></InternalRouteGuard>} />
                 <Route path="/settings/methodology" element={<OrgAdminRouteGuard><AppLayout><SalesMethodologySettings /></AppLayout></OrgAdminRouteGuard>} />

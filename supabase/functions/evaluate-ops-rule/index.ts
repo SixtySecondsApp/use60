@@ -1,6 +1,7 @@
 // @ts-nocheck — Deno edge function
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4'
+import { HeyReachClient } from '../_shared/heyreach.ts'
 
 /**
  * evaluate-ops-rule — Evaluate an automation rule against a row.
@@ -277,6 +278,128 @@ serve(async (req: Request) => {
         case 'push_to_hubspot': {
           // Will invoke push-to-hubspot for single row
           actionResult = { action: 'push_to_hubspot', row_id, status: 'queued' }
+          break
+        }
+
+        case 'push_to_heyreach': {
+          const startTime = Date.now()
+
+          // 1. Get campaign link — use action_config.campaign_link_id if specified, otherwise first linked campaign
+          let campaignLinkQuery = supabase
+            .from('heyreach_campaign_links')
+            .select('id, campaign_id, campaign_name, field_mapping, sender_column_key, org_id')
+            .eq('table_id', rule.table_id)
+
+          if (actionConfig.campaign_link_id) {
+            campaignLinkQuery = campaignLinkQuery.eq('id', actionConfig.campaign_link_id)
+          }
+
+          const { data: campaignLink, error: linkErr } = await campaignLinkQuery
+            .limit(1)
+            .maybeSingle()
+
+          if (linkErr || !campaignLink) {
+            throw new Error('No HeyReach campaign linked to this table')
+          }
+
+          // 2. Get org credentials — org_id is on the campaign link itself
+          const { data: creds } = await supabase
+            .from('heyreach_org_credentials')
+            .select('api_key')
+            .eq('org_id', campaignLink.org_id)
+            .maybeSingle()
+
+          if (!creds?.api_key) {
+            throw new Error('HeyReach not connected for this organization')
+          }
+
+          const heyreach = new HeyReachClient({ apiKey: creds.api_key })
+
+          // 3. Build lead payload from row data using field_mapping
+          const fieldMapping: Record<string, any> = campaignLink.field_mapping || {}
+          const lead: Record<string, any> = {}
+
+          for (const [heyreachField, opsColKey] of Object.entries(fieldMapping)) {
+            if (heyreachField === 'custom_variables') continue
+            const value = rowData[opsColKey as string]
+            if (value) lead[heyreachField] = value
+          }
+
+          // Map custom variables if configured
+          if (fieldMapping.custom_variables && typeof fieldMapping.custom_variables === 'object') {
+            lead.custom_variables = {}
+            for (const [varName, colKey] of Object.entries(fieldMapping.custom_variables as Record<string, string>)) {
+              const value = rowData[colKey]
+              if (value) lead.custom_variables[varName] = value
+            }
+          }
+
+          // 4. Validate required fields
+          const linkedinUrl = lead.linkedin_url || lead.linkedinUrl || lead.professional_url
+          if (!linkedinUrl) {
+            throw new Error('Missing required field: linkedin_url')
+          }
+          if (!lead.first_name && !lead.firstName) {
+            throw new Error('Missing required field: first_name')
+          }
+          if (!lead.last_name && !lead.lastName) {
+            throw new Error('Missing required field: last_name')
+          }
+
+          // 5. Include sender assignment if sender_column_key is set
+          if (campaignLink.sender_column_key) {
+            const senderId = rowData[campaignLink.sender_column_key]
+            if (senderId) lead.sender_id = senderId
+          }
+
+          // 6. Call HeyReach API to push lead
+          const apiResult = await heyreach.request<any>({
+            method: 'POST',
+            path: '/api/public/campaign/AddLeadsToListV2',
+            body: { campaignId: campaignLink.campaign_id, leads: [lead] },
+          })
+
+          const duration = Date.now() - startTime
+
+          // 7. Update heyreach_lead_id on the row
+          await supabase
+            .from('dynamic_table_rows')
+            .update({ heyreach_lead_id: linkedinUrl })
+            .eq('id', row_id)
+
+          // 8. Update last_push_at on campaign link
+          await supabase
+            .from('heyreach_campaign_links')
+            .update({ last_push_at: new Date().toISOString() })
+            .eq('id', campaignLink.id)
+
+          // 9. Log to heyreach_sync_history
+          await supabase.from('heyreach_sync_history').insert({
+            org_id: campaignLink.org_id,
+            table_id: rule.table_id,
+            campaign_id: campaignLink.campaign_id,
+            sync_type: 'lead_push',
+            rows_processed: 1,
+            rows_succeeded: 1,
+            rows_failed: 0,
+            sync_duration_ms: duration,
+            metadata: {
+              trigger: trigger_type,
+              rule_id,
+              row_id,
+              campaign_name: campaignLink.campaign_name,
+              added_leads_count: apiResult?.addedLeadsCount ?? apiResult?.added_leads_count ?? 1,
+            },
+          })
+
+          actionResult = {
+            action: 'push_to_heyreach',
+            row_id,
+            campaign_id: campaignLink.campaign_id,
+            campaign_name: campaignLink.campaign_name,
+            linkedin_url: linkedinUrl,
+            duration_ms: duration,
+          }
           break
         }
 

@@ -47,9 +47,11 @@ function setDismissed(): void {
 interface CreditMigrationModalProps {
   /** Override: force show even if already dismissed (for testing) */
   forceShow?: boolean;
+  /** Suppress when another modal (e.g. purchase) is already open */
+  suppress?: boolean;
 }
 
-export function CreditMigrationModal({ forceShow }: CreditMigrationModalProps) {
+export function CreditMigrationModal({ forceShow, suppress }: CreditMigrationModalProps) {
   const navigate = useNavigate();
   const { data: balance } = useCreditBalance();
   const getActiveOrg = useOrgStore((s) => s.getActiveOrg);
@@ -64,12 +66,13 @@ export function CreditMigrationModal({ forceShow }: CreditMigrationModalProps) {
   const [manuallyDismissed, setManuallyDismissed] = useState(false);
 
   const open = useMemo(() => {
+    if (suppress) return false; // Another modal is already open
     if (manuallyDismissed) return false;
     if (forceShow) return true;
     if (hasDismissed()) return false;
     if (!activeOrg) return false; // Not loaded yet — don't flash the modal
     return !isNewOrg;
-  }, [manuallyDismissed, forceShow, activeOrg, isNewOrg]);
+  }, [suppress, manuallyDismissed, forceShow, activeOrg, isNewOrg]);
 
   if (!open) return null;
 

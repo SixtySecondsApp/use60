@@ -6,6 +6,7 @@ import { handleWebhook as fathomWebhook } from './handlers/fathom.ts'
 import { handleWebhook as stripeWebhook } from './handlers/stripe.ts'
 import { handleWebhook as sentryWebhook } from './handlers/sentry.ts'
 import { handleWebhook as justcallWebhook } from './handlers/justcall.ts'
+import { handleWebhook as bettercontactWebhook } from './handlers/bettercontact.ts'
 
 const providerHandlers: Record<string, (req: Request) => Promise<Response>> = {
   apify: apifyWebhook,
@@ -13,6 +14,7 @@ const providerHandlers: Record<string, (req: Request) => Promise<Response>> = {
   stripe: stripeWebhook,
   sentry: sentryWebhook,
   justcall: justcallWebhook,
+  bettercontact: bettercontactWebhook,
 }
 
 serve(async (req) => {

@@ -16,7 +16,7 @@
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS "public"."personal_email_domains" (
-  "domain" citext PRIMARY KEY,
+  "domain" extensions.citext PRIMARY KEY,
   "created_at" timestamptz DEFAULT now(),
   "updated_at" timestamptz DEFAULT now(),
   CONSTRAINT "personal_email_domains_domain_not_empty" CHECK (domain != '')

@@ -22,8 +22,8 @@ export interface UseIntegrationLogoOptions {
 const HARDCODED_LOGOS: Record<string, string> = {
   teams: 'https://erg-application-logos.s3.eu-west-2.amazonaws.com/logos/microsoft-teams.png',
   'microsoft-teams': 'https://erg-application-logos.s3.eu-west-2.amazonaws.com/logos/microsoft-teams.png',
-  'microsoft-365':
-    'https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg',
+  'microsoft-365': 'https://cdn-dynmedia-1.microsoft.com/is/image/microsoftcorp/Outlook-m365-apps?fmt=png-alpha&wid=128',
+  heygen: 'https://app.heygen.com/apple-touch-icon.png',
 };
 
 // Map integration names to their official domains for logo.dev lookup
@@ -181,9 +181,15 @@ const INTEGRATION_DOMAINS: Record<string, string> = {
   looker: 'looker.com',
   metabase: 'metabase.com',
 
+  // Data Enrichment & Prospecting
+  explorium: 'explorium.ai',
+  heyreach: 'heyreach.io',
+  bettercontact: 'bettercontact.rocks',
+
   // AI Video & Audio
   heygen: 'heygen.com',
   elevenlabs: 'elevenlabs.io',
+  'fal-ai': 'fal.ai',
 
   // AI & Productivity
   openai: 'openai.com',

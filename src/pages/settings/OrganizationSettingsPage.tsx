@@ -93,7 +93,10 @@ export default function OrganizationSettingsPage() {
   const [currencyCode, setCurrencyCode] = useState<CurrencyCode>(
     ((activeOrg?.currency_code as CurrencyCode | undefined) || 'GBP')
   );
-  const [companyWebsite, setCompanyWebsite] = useState(activeOrg?.company_website || activeOrg?.company_domain || '');
+  // TSK-0499 Bug #7/#8: Don't fall back to company_domain for website field.
+  // company_domain is the email domain (e.g. "acme.com"), company_website is
+  // the user-entered URL (e.g. "https://www.acme.io"). Mixing them is confusing.
+  const [companyWebsite, setCompanyWebsite] = useState(activeOrg?.company_website || '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Brand guidelines
@@ -117,7 +120,7 @@ export default function OrganizationSettingsPage() {
   // Update org profile settings when activeOrg changes
   useEffect(() => {
     setCurrencyCode(((activeOrg?.currency_code as CurrencyCode | undefined) || 'GBP'));
-    setCompanyWebsite(activeOrg?.company_website || activeOrg?.company_domain || '');
+    setCompanyWebsite(activeOrg?.company_website || '');
     const bg = (activeOrg as any)?.brand_guidelines || {};
     setBrandColors(bg.colors || []);
     setBrandFont(bg.heading_font || '');
@@ -725,6 +728,24 @@ export default function OrganizationSettingsPage() {
                 This changes how money is displayed across your organization (no automatic conversion).
               </p>
             </div>
+
+            {/* Company domain (read-only, from email/enrichment) */}
+            {(activeOrg as any)?.company_domain && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Company Domain
+                </label>
+                <input
+                  type="text"
+                  value={(activeOrg as any)?.company_domain || ''}
+                  disabled
+                  className="w-full bg-gray-100 dark:bg-gray-800/30 border border-gray-300 dark:border-gray-700/50 rounded-xl px-4 py-2 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Detected from your email domain. Used for matching and enrichment.
+                </p>
+              </div>
+            )}
 
             {/* Company website */}
             <div className="space-y-2">
