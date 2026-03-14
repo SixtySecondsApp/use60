@@ -139,6 +139,16 @@ const FEATURES = [
     supportsDM: false,
     hasThresholds: true,
   },
+  {
+    key: 'critical_meeting_alert' as SlackFeature,
+    title: 'Critical Meeting Alerts',
+    description: 'Alert the team when a meeting detects client termination, severe dissatisfaction, or high-risk signals.',
+    icon: AlertTriangle,
+    supportsDM: true,
+    dmDescription: 'DM org admins with role-gated detail',
+    channelDescription: 'Post to team channel (e.g. #client-updates)',
+    supportsBothDelivery: true,
+  },
 ];
 
 export const AGENT_ALERT_CATEGORIES = [

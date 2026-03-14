@@ -10157,6 +10157,136 @@ serve(async (req) => {
         }
 
         // =====================================================================
+        // US-009: Critical Meeting Alert action handlers
+        // =====================================================================
+        if (action.action_id.startsWith('critical_dismiss_')) {
+          const meetingId = action.action_id.replace('critical_dismiss_', '');
+          try {
+            // Open a modal for false positive reason
+            if (payload.trigger_id) {
+              await fetch('https://slack.com/api/views.open', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${botToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  trigger_id: payload.trigger_id,
+                  view: {
+                    type: 'modal',
+                    callback_id: `critical_dismiss_modal_${meetingId}`,
+                    title: { type: 'plain_text', text: 'Dismiss Alert' },
+                    submit: { type: 'plain_text', text: 'Dismiss' },
+                    blocks: [
+                      {
+                        type: 'input',
+                        block_id: 'reason_block',
+                        label: { type: 'plain_text', text: 'Why is this a false positive?' },
+                        element: {
+                          type: 'static_select',
+                          action_id: 'dismiss_reason',
+                          options: [
+                            { text: { type: 'plain_text', text: 'Normal negotiation' }, value: 'normal_negotiation' },
+                            { text: { type: 'plain_text', text: 'Already resolved' }, value: 'already_resolved' },
+                            { text: { type: 'plain_text', text: 'Not relevant to team' }, value: 'not_relevant' },
+                            { text: { type: 'plain_text', text: 'Other' }, value: 'other' },
+                          ],
+                        },
+                      },
+                      {
+                        type: 'input',
+                        block_id: 'detail_block',
+                        optional: true,
+                        label: { type: 'plain_text', text: 'Additional detail (optional)' },
+                        element: {
+                          type: 'plain_text_input',
+                          action_id: 'dismiss_detail',
+                          multiline: true,
+                        },
+                      },
+                    ],
+                  },
+                }),
+              });
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          } catch (err) {
+            console.error('[CriticalMeetingAlert] Dismiss modal error:', err);
+          }
+        }
+
+        if (action.action_id.startsWith('critical_email_approve_')) {
+          try {
+            const valueData = JSON.parse(action.value || '{}');
+            // Find the stored email draft
+            const { data: draft } = await supabase
+              .from('command_centre_items')
+              .select('metadata')
+              .eq('org_id', orgId)
+              .eq('type', 'critical_meeting_email_draft')
+              .eq('status', 'pending_approval')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (draft?.metadata?.html) {
+              // Import and send via SES
+              const { sendEmail } = await import('../_shared/ses.ts');
+              const result = await sendEmail({
+                to: draft.metadata.to,
+                subject: draft.metadata.subject,
+                html: draft.metadata.html,
+                replyTo: draft.metadata.replyTo,
+              });
+
+              // Update draft status
+              await supabase
+                .from('command_centre_items')
+                .update({ status: result.success ? 'completed' : 'failed' })
+                .eq('org_id', orgId)
+                .eq('type', 'critical_meeting_email_draft')
+                .eq('status', 'pending_approval');
+
+              if (payload.response_url) {
+                await fetch(payload.response_url, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    replace_original: true,
+                    text: result.success
+                      ? `Email sent to ${draft.metadata.to.length} recipients.`
+                      : `Email failed: ${result.error}`,
+                  }),
+                });
+              }
+            }
+            return new Response(JSON.stringify({ ok: true }), {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          } catch (err) {
+            console.error('[CriticalMeetingAlert] Email approve error:', err);
+          }
+        }
+
+        if (action.action_id.startsWith('critical_email_dismiss_')) {
+          if (payload.response_url) {
+            await fetch(payload.response_url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ replace_original: true, text: 'Email draft dismissed.' }),
+            });
+          }
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // =====================================================================
         // PROACTIVE-005: Route proactive/copilot actions to slack-copilot-actions
         // =====================================================================
         const proactiveActionPrefixes = [
@@ -10463,6 +10593,49 @@ serve(async (req) => {
           handlePrepBriefingAskSubmission(payload).catch(err =>
             console.error('[PrepBriefing ask] Submission handler error:', err),
           );
+          return new Response('', { status: 200, headers: corsHeaders });
+        }
+        // US-009: Critical Meeting Alert dismiss modal submission
+        if (payload.view?.callback_id?.startsWith('critical_dismiss_modal_')) {
+          const meetingId = payload.view.callback_id.replace('critical_dismiss_modal_', '');
+          const reason = payload.view?.state?.values?.reason_block?.dismiss_reason?.selected_option?.value || 'other';
+          const detail = payload.view?.state?.values?.detail_block?.dismiss_detail?.value || null;
+
+          // Store feedback (fire-and-forget)
+          (async () => {
+            try {
+              // Get org from meeting
+              const { data: meetingData } = await supabase
+                .from('meetings')
+                .select('org_id')
+                .eq('id', meetingId)
+                .maybeSingle();
+
+              if (meetingData?.org_id) {
+                // Get sixty user ID from Slack user
+                const slackUserId = payload.user?.id;
+                const { data: mapping } = await supabase
+                  .from('slack_user_mappings')
+                  .select('sixty_user_id')
+                  .eq('slack_user_id', slackUserId)
+                  .maybeSingle();
+
+                if (mapping?.sixty_user_id) {
+                  await supabase.from('alert_feedback').insert({
+                    org_id: meetingData.org_id,
+                    meeting_id: meetingId,
+                    dismissed_by: mapping.sixty_user_id,
+                    reason,
+                    reason_detail: detail,
+                  });
+                  console.log(`[CriticalMeetingAlert] Dismiss feedback recorded for meeting ${meetingId}: ${reason}`);
+                }
+              }
+            } catch (err) {
+              console.error('[CriticalMeetingAlert] Dismiss feedback storage error:', err);
+            }
+          })();
+
           return new Response('', { status: 200, headers: corsHeaders });
         }
         if (payload.view?.callback_id === 'prep_briefing_feedback_modal') {

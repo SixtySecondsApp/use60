@@ -22,7 +22,8 @@ export type ProactiveNotificationType =
   | 'account_intelligence_digest'
   | 'deal_risk_scan'
   | 'campaign_daily_check'
-  | 'coaching_weekly';
+  | 'coaching_weekly'
+  | 'critical_meeting_alert';
 
 export interface ProactiveNotificationPayload {
   type: ProactiveNotificationType;
