@@ -73,7 +73,28 @@ serve(async (req) => {
 
     for (const persona of usersToProcess) {
       try {
-        const briefing = await assembleBriefing(supabase, persona);
+        // BA-002b: Check brain_intelligence.enhanced_morning_brief setting
+        let brainEnabled = true; // default: enabled
+        try {
+          const { data: userSettings } = await supabase
+            .from('user_settings')
+            .select('preferences')
+            .eq('user_id', persona.user_id)
+            .maybeSingle();
+
+          if (userSettings?.preferences?.brain_intelligence) {
+            const bi = userSettings.preferences.brain_intelligence as Record<string, unknown>;
+            // Only disable if explicitly set to false (default is enabled)
+            if (bi.enhanced_morning_brief === false) {
+              brainEnabled = false;
+            }
+          }
+        } catch (settingsErr) {
+          // Settings lookup failure must not block briefing — default to enabled
+          console.warn('[agent-morning-briefing] user_settings lookup failed, defaulting brainEnabled=true:', settingsErr);
+        }
+
+        const briefing = await assembleBriefing(supabase, persona, brainEnabled);
         if (!briefing) continue; // Nothing to report
 
         // Generate natural language briefing via Haiku
@@ -105,20 +126,30 @@ serve(async (req) => {
           },
         });
 
-        // Write to Command Centre for inbox feed
+        // BA-002b: Write to Command Centre as morning_brief item
+        const briefDate = new Date().toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          ...(persona.timezone ? { timeZone: persona.timezone } : {}),
+        });
         try {
           await writeToCommandCentre({
             org_id: persona.org_id,
             user_id: persona.user_id,
-            source_agent: 'morning-brief',
-            item_type: 'insight',
-            title: `Morning Briefing: ${briefing.deals.length} deal${briefing.deals.length !== 1 ? 's' : ''}, ${briefing.meetings.length} meeting${briefing.meetings.length !== 1 ? 's' : ''} today`,
+            source_agent: 'morning-briefing',
+            item_type: 'morning_brief',
+            title: `Morning Brief — ${briefDate}`,
             summary: narrativeBriefing.substring(0, 500),
             context: {
               deals_count: briefing.deals.length,
               meetings_count: briefing.meetings.length,
               tasks_count: briefing.tasks.length,
               overnight_alerts: briefing.overnightAlerts.length,
+              brain_overdue_commitments: briefing.brainInsights.overdueCommitments.length,
+              brain_decaying_contacts: briefing.brainInsights.decayingContacts.length,
+              brain_at_risk_deals: briefing.brainInsights.atRiskDeals.length,
+              brain_enabled: brainEnabled,
             },
             urgency: 'normal',
           });
@@ -155,9 +186,9 @@ serve(async (req) => {
 // ============================================================================
 
 interface BrainInsights {
-  overdueCommitments: Array<Commitment & { deal_id: string }>;
-  decayingContacts: Array<{ contact_id: string; relationship_strength: number; last_interaction_at: string | null }>;
-  atRiskDeals: Array<{ deal_id: string; event_type: string; summary: string; confidence: number; detail: Record<string, unknown> }>;
+  overdueCommitments: Array<Commitment & { deal_id: string; deal_name?: string }>;
+  decayingContacts: Array<{ contact_id: string; contact_name?: string; relationship_strength: number; last_interaction_at: string | null; days_since_interaction: number }>;
+  atRiskDeals: Array<{ deal_id: string; deal_name?: string; event_type: string; summary: string; confidence: number; detail: Record<string, unknown>; last_sentiment?: number }>;
 }
 
 interface BriefingData {
@@ -172,6 +203,7 @@ interface BriefingData {
 async function assembleBriefing(
   supabase: any,
   persona: Record<string, any>,
+  brainEnabled = true,
 ): Promise<BriefingData | null> {
   const userId = persona.user_id;
   const orgId = persona.org_id;
@@ -255,73 +287,133 @@ async function assembleBriefing(
   }));
 
   // 5. Brain insights — best-effort, never block the briefing
+  //    BA-002b: Only query Brain data if the user has enhanced_morning_brief enabled
   const brainInsights: BrainInsights = {
     overdueCommitments: [],
     decayingContacts: [],
     atRiskDeals: [],
   };
 
-  // 5a. Overdue commitments from deal_memory_events
-  try {
-    brainInsights.overdueCommitments = await getOverdueCommitments(orgId, supabase);
-  } catch (err) {
-    console.warn('[agent-morning-briefing] Brain: overdue commitments query failed:', err);
-  }
-
-  // 5b. Decaying contacts — relationship_strength below 0.4
-  try {
-    const { data: decayingData } = await supabase
-      .from('contact_memory')
-      .select('contact_id, relationship_strength, last_interaction_at')
-      .eq('org_id', orgId)
-      .lt('relationship_strength', 0.4)
-      .order('relationship_strength', { ascending: true })
-      .limit(5);
-
-    brainInsights.decayingContacts = (decayingData || []).map((c: any) => ({
-      contact_id: c.contact_id,
-      relationship_strength: c.relationship_strength,
-      last_interaction_at: c.last_interaction_at,
-    }));
-  } catch (err) {
-    console.warn('[agent-morning-briefing] Brain: decaying contacts query failed:', err);
-  }
-
-  // 5c. At-risk deals — recent sentiment_shift or risk_flag events with low sentiment
-  try {
-    const { data: riskEvents } = await supabase
-      .from('deal_memory_events')
-      .select('deal_id, event_type, summary, confidence, detail, source_timestamp')
-      .eq('org_id', orgId)
-      .in('event_category', ['sentiment', 'signal'])
-      .in('event_type', ['sentiment_shift', 'risk_flag'])
-      .gt('confidence', 0.7)
-      .eq('is_active', true)
-      .order('source_timestamp', { ascending: false })
-      .limit(50);
-
-    // Deduplicate: keep only the latest event per deal_id, then filter for low sentiment
-    const latestByDeal = new Map<string, any>();
-    for (const evt of (riskEvents || [])) {
-      if (!latestByDeal.has(evt.deal_id)) {
-        latestByDeal.set(evt.deal_id, evt);
-      }
+  if (brainEnabled) {
+    // 5a. Overdue commitments from deal_memory_events
+    try {
+      brainInsights.overdueCommitments = await getOverdueCommitments(orgId, supabase);
+    } catch (err) {
+      console.warn('[agent-morning-briefing] Brain: overdue commitments query failed:', err);
     }
 
-    brainInsights.atRiskDeals = Array.from(latestByDeal.values())
-      .filter((evt: any) => {
-        const sentiment = evt.detail?.sentiment ?? evt.detail?.score ?? null;
-        return sentiment !== null && sentiment < 0.5;
-      })
-      .map((evt: any) => ({
-        deal_id: evt.deal_id,
-        event_type: evt.event_type,
-        summary: evt.summary,
-        confidence: evt.confidence,
-        detail: evt.detail,
+    // 5b. Decaying contacts — relationship_strength below 0.4
+    try {
+      const { data: decayingData } = await supabase
+        .from('contact_memory')
+        .select('contact_id, relationship_strength, last_interaction_at')
+        .eq('org_id', orgId)
+        .lt('relationship_strength', 0.4)
+        .order('relationship_strength', { ascending: true })
+        .limit(5);
+
+      const now = Date.now();
+      brainInsights.decayingContacts = (decayingData || []).map((c: any) => ({
+        contact_id: c.contact_id,
+        relationship_strength: c.relationship_strength,
+        last_interaction_at: c.last_interaction_at,
+        days_since_interaction: c.last_interaction_at
+          ? Math.floor((now - new Date(c.last_interaction_at).getTime()) / (1000 * 60 * 60 * 24))
+          : -1,
       }));
-  } catch (err) {
-    console.warn('[agent-morning-briefing] Brain: at-risk deals query failed:', err);
+    } catch (err) {
+      console.warn('[agent-morning-briefing] Brain: decaying contacts query failed:', err);
+    }
+
+    // 5c. At-risk deals — recent sentiment_shift or risk_flag events with low sentiment
+    try {
+      const { data: riskEvents } = await supabase
+        .from('deal_memory_events')
+        .select('deal_id, event_type, summary, confidence, detail, source_timestamp')
+        .eq('org_id', orgId)
+        .in('event_category', ['sentiment', 'signal'])
+        .in('event_type', ['sentiment_shift', 'risk_flag'])
+        .gt('confidence', 0.7)
+        .eq('is_active', true)
+        .order('source_timestamp', { ascending: false })
+        .limit(50);
+
+      // Deduplicate: keep only the latest event per deal_id, then filter for low sentiment
+      const latestByDeal = new Map<string, any>();
+      for (const evt of (riskEvents || [])) {
+        if (!latestByDeal.has(evt.deal_id)) {
+          latestByDeal.set(evt.deal_id, evt);
+        }
+      }
+
+      brainInsights.atRiskDeals = Array.from(latestByDeal.values())
+        .filter((evt: any) => {
+          const sentiment = evt.detail?.sentiment ?? evt.detail?.score ?? null;
+          return sentiment !== null && sentiment < 0.5;
+        })
+        .map((evt: any) => ({
+          deal_id: evt.deal_id,
+          event_type: evt.event_type,
+          summary: evt.summary,
+          confidence: evt.confidence,
+          detail: evt.detail,
+          last_sentiment: evt.detail?.sentiment ?? evt.detail?.score ?? null,
+        }));
+    } catch (err) {
+      console.warn('[agent-morning-briefing] Brain: at-risk deals query failed:', err);
+    }
+
+    // 5d. Resolve deal names for overdue commitments and at-risk deals
+    try {
+      const brainDealIds = new Set<string>();
+      for (const c of brainInsights.overdueCommitments) brainDealIds.add(c.deal_id);
+      for (const d of brainInsights.atRiskDeals) brainDealIds.add(d.deal_id);
+      const uniqueDealIds = Array.from(brainDealIds);
+
+      if (uniqueDealIds.length > 0) {
+        const { data: dealNames } = await supabase
+          .from('deals')
+          .select('id, name')
+          .in('id', uniqueDealIds);
+
+        const dealNameMap = new Map<string, string>();
+        for (const d of (dealNames || [])) dealNameMap.set(d.id, d.name);
+
+        for (const c of brainInsights.overdueCommitments) {
+          c.deal_name = dealNameMap.get(c.deal_id) ?? undefined;
+        }
+        for (const d of brainInsights.atRiskDeals) {
+          d.deal_name = dealNameMap.get(d.deal_id) ?? undefined;
+        }
+      }
+    } catch (err) {
+      console.warn('[agent-morning-briefing] Brain: deal name resolution failed:', err);
+    }
+
+    // 5e. Resolve contact names for decaying contacts
+    try {
+      const contactIds = brainInsights.decayingContacts.map(c => c.contact_id);
+      if (contactIds.length > 0) {
+        const { data: contactNames } = await supabase
+          .from('contacts')
+          .select('id, first_name, last_name')
+          .in('id', contactIds);
+
+        const contactNameMap = new Map<string, string>();
+        for (const c of (contactNames || [])) {
+          const name = [c.first_name, c.last_name].filter(Boolean).join(' ');
+          contactNameMap.set(c.id, name || 'Unknown');
+        }
+
+        for (const c of brainInsights.decayingContacts) {
+          c.contact_name = contactNameMap.get(c.contact_id) ?? undefined;
+        }
+      }
+    } catch (err) {
+      console.warn('[agent-morning-briefing] Brain: contact name resolution failed:', err);
+    }
+  } else {
+    console.log('[agent-morning-briefing] Brain insights disabled for user', userId, '(enhanced_morning_brief = false)');
   }
 
   // Check if there's anything to report
@@ -354,20 +446,61 @@ async function generateNarrativeBriefing(
   const tone = toneInstructions[persona.tone] || toneInstructions.concise;
   const agentName = persona.agent_name || 'Sixty';
 
-  // Build brain insights section for prompt
+  // BA-002b: Build structured Brain insights sections for enhanced prompt
   const brain = data.brainInsights;
-  const brainLines: string[] = [];
-  if (brain.overdueCommitments.length > 0) {
-    brainLines.push(`- ${brain.overdueCommitments.length} overdue commitment${brain.overdueCommitments.length !== 1 ? 's' : ''}: ${brain.overdueCommitments.slice(0, 3).map(c => `"${c.action}" (deadline: ${c.deadline || 'unknown'})`).join('; ')}`);
+  const hasBrainInsights = brain.overdueCommitments.length > 0
+    || brain.decayingContacts.length > 0
+    || brain.atRiskDeals.length > 0;
+
+  let brainSection = '';
+  if (hasBrainInsights) {
+    const sections: string[] = [];
+
+    if (brain.overdueCommitments.length > 0) {
+      const commitmentLines = brain.overdueCommitments.slice(0, 5).map(c => {
+        const daysOverdue = c.deadline
+          ? Math.floor((Date.now() - new Date(c.deadline).getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+        const dealLabel = c.deal_name || 'Unknown deal';
+        return `  - "${c.action}" on ${dealLabel} (${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue)`;
+      });
+      sections.push(
+        `COMMITMENTS SLIPPING: ${brain.overdueCommitments.length} overdue commitment${brain.overdueCommitments.length !== 1 ? 's' : ''} need attention\n${commitmentLines.join('\n')}`,
+      );
+    }
+
+    if (brain.decayingContacts.length > 0) {
+      const contactLines = brain.decayingContacts.slice(0, 5).map(c => {
+        const name = c.contact_name || 'Unknown contact';
+        const strengthPct = Math.round(c.relationship_strength * 100);
+        const daysLabel = c.days_since_interaction >= 0
+          ? `${c.days_since_interaction} day${c.days_since_interaction !== 1 ? 's' : ''} since last interaction`
+          : 'no recorded interaction';
+        return `  - ${name} (strength: ${strengthPct}%, ${daysLabel})`;
+      });
+      sections.push(
+        `CONTACTS GOING COLD: ${brain.decayingContacts.length} relationship${brain.decayingContacts.length !== 1 ? 's' : ''} decaying\n${contactLines.join('\n')}`,
+      );
+    }
+
+    if (brain.atRiskDeals.length > 0) {
+      const riskLines = brain.atRiskDeals.slice(0, 5).map(d => {
+        const dealLabel = d.deal_name || 'Unknown deal';
+        const sentimentLabel = d.last_sentiment !== undefined && d.last_sentiment !== null
+          ? `sentiment: ${Math.round(d.last_sentiment * 100)}%`
+          : 'low sentiment';
+        return `  - ${dealLabel} (${sentimentLabel})`;
+      });
+      sections.push(
+        `DEALS AT RISK: ${brain.atRiskDeals.length} deal${brain.atRiskDeals.length !== 1 ? 's' : ''} with negative sentiment\n${riskLines.join('\n')}`,
+      );
+    }
+
+    brainSection = `\n\nBrain insights (from relationship memory):\n${sections.join('\n\n')}`;
   }
-  if (brain.decayingContacts.length > 0) {
-    brainLines.push(`- ${brain.decayingContacts.length} contact${brain.decayingContacts.length !== 1 ? 's' : ''} with weakening relationships (strength below 0.4)`);
-  }
-  if (brain.atRiskDeals.length > 0) {
-    brainLines.push(`- ${brain.atRiskDeals.length} at-risk deal${brain.atRiskDeals.length !== 1 ? 's' : ''}: ${brain.atRiskDeals.slice(0, 3).map(d => d.summary).join('; ')}`);
-  }
-  const brainSection = brainLines.length > 0
-    ? `\n\nBrain insights (from relationship memory):\n${brainLines.join('\n')}`
+
+  const brainInstruction = hasBrainInsights
+    ? '\n\nPrioritize actionable nudges over informational summaries. Include up to 3 specific action items with contact/deal names based on the Brain insights above.'
     : '';
 
   const prompt = `You are ${agentName}, an AI sales assistant. Write a morning briefing for a sales rep.
@@ -380,7 +513,7 @@ Today's data:
 - ${data.tasks.filter(t => t.isOverdue).length} overdue tasks, ${data.tasks.filter(t => !t.isOverdue).length} due today
 - ${data.overnightAlerts.length} overnight alerts: ${data.overnightAlerts.slice(0, 3).map(a => a.title).join(', ') || 'none'}${brainSection}
 
-Write a 2-3 paragraph briefing. Start with the most urgent item. End with one actionable recommendation. No headers or bullet points unless tone is concise.`;
+Write a 2-3 paragraph briefing. Start with the most urgent item. End with one actionable recommendation. No headers or bullet points unless tone is concise.${brainInstruction}`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -442,16 +575,22 @@ function formatFallbackBriefing(data: BriefingData, persona: Record<string, any>
     lines.push(`Consider updating ${staleDeal.name} — it's been ${staleDeal.daysSinceUpdate} days since last activity.`);
   }
 
-  // Brain insights in fallback
+  // Brain insights in fallback (with enriched names)
   const brain = data.brainInsights;
   if (brain.overdueCommitments.length > 0) {
-    lines.push(`${brain.overdueCommitments.length} overdue commitment${brain.overdueCommitments.length !== 1 ? 's' : ''} need follow-up.`);
+    const top = brain.overdueCommitments[0];
+    const dealLabel = top.deal_name || 'a deal';
+    lines.push(`${brain.overdueCommitments.length} overdue commitment${brain.overdueCommitments.length !== 1 ? 's' : ''} need follow-up (e.g. "${top.action}" on ${dealLabel}).`);
   }
   if (brain.decayingContacts.length > 0) {
-    lines.push(`${brain.decayingContacts.length} contact${brain.decayingContacts.length !== 1 ? 's' : ''} with weakening relationships — consider reaching out.`);
+    const top = brain.decayingContacts[0];
+    const contactLabel = top.contact_name || 'a contact';
+    lines.push(`${brain.decayingContacts.length} contact${brain.decayingContacts.length !== 1 ? 's' : ''} going cold — ${contactLabel} is at ${Math.round(top.relationship_strength * 100)}% strength.`);
   }
   if (brain.atRiskDeals.length > 0) {
-    lines.push(`${brain.atRiskDeals.length} deal${brain.atRiskDeals.length !== 1 ? 's' : ''} flagged at risk.`);
+    const top = brain.atRiskDeals[0];
+    const dealLabel = top.deal_name || 'a deal';
+    lines.push(`${brain.atRiskDeals.length} deal${brain.atRiskDeals.length !== 1 ? 's' : ''} at risk — ${dealLabel} showing negative sentiment.`);
   }
 
   return lines.join(' ');
