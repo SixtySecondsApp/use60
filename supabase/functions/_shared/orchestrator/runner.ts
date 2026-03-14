@@ -191,6 +191,13 @@ export async function runSequence(
       'email.received': 'email_signals',
       'coaching.trigger': 'coaching_digest',
       'contact.updated': 'crm_update',
+      // Brain event types (US-007 to US-013)
+      'calendar_event_created': 'morning_briefing',
+      'meeting_completed': 'internal_meeting_prep',
+      'deal_stage_changed': 'deal_risk',
+      'deal_stalled': 'reengagement',
+      'task_overdue': 'global',
+      'deal_risk_rescore': 'deal_risk',
     };
     const agentType = agentTypeMap[event.type] || 'global';
     agentConfig = await getAgentConfig(supabase, event.org_id, event.user_id || null, agentType as any);

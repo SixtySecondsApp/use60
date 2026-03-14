@@ -33,6 +33,12 @@ import { loadAgentTeamConfig } from '../_shared/agentConfig.ts';
 import type { AgentName } from '../_shared/agentConfig.ts';
 import { checkAgentBudget } from '../_shared/costTracking.ts';
 import { verifyCronSecret } from '../_shared/edgeAuth.ts';
+import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
+import { deliverToSlack } from '../_shared/proactive/deliverySlack.ts';
+import { shouldSendNotification, recordNotificationSent } from '../_shared/proactive/dedupe.ts';
+import { getSlackRecipient } from '../_shared/proactive/recipients.ts';
+import type { EventType, EventSource } from '../_shared/orchestrator/types.ts';
+import type { SourceAgent, ItemType, Urgency } from '../_shared/commandCentre/types.ts';
 
 // =============================================================================
 // Types
@@ -77,6 +83,7 @@ const VALID_EVENTS = [
   'deal_stage_changed',
   'deal_stalled',
   'meeting_completed',
+  'calendar_event_created',
   'contact_created',
   'task_overdue',
   'email_received',
@@ -112,6 +119,348 @@ export const TRIGGER_TEMPLATES = [
     delivery_channel: 'in_app',
   },
 ] as const;
+
+// =============================================================================
+// Brain Event Dispatch (US-007 to US-013)
+// =============================================================================
+
+/** Events that should be dispatched to the fleet orchestrator (brain sequences) */
+const BRAIN_EVENTS: Record<string, {
+  orchestratorEventType: EventType;
+  source: EventSource;
+  /** If true, skip traditional trigger execution and only dispatch to orchestrator */
+  orchestratorOnly: boolean;
+}> = {
+  calendar_event_created: {
+    orchestratorEventType: 'calendar_event_created',
+    source: 'trigger:brain_pre_call',
+    orchestratorOnly: false,
+  },
+  meeting_completed: {
+    orchestratorEventType: 'meeting_completed',
+    source: 'trigger:brain_post_call',
+    orchestratorOnly: false,
+  },
+  deal_stage_changed: {
+    orchestratorEventType: 'deal_stage_changed',
+    source: 'trigger:brain_deal_stage',
+    orchestratorOnly: false,
+  },
+  deal_stalled: {
+    orchestratorEventType: 'deal_stalled',
+    source: 'trigger:brain_stale_deal',
+    orchestratorOnly: false,
+  },
+};
+
+/** Events that create CC items directly (no fleet orchestration needed) */
+const DIRECT_CC_EVENTS = new Set(['task_overdue']);
+
+interface BrainDispatchResult {
+  dispatched: boolean;
+  method: 'orchestrator' | 'direct_cc' | 'skipped';
+  idempotencyKey?: string;
+  ccItemId?: string | null;
+  error?: string;
+}
+
+/**
+ * Dispatch a brain event to the fleet orchestrator or handle directly.
+ *
+ * US-007: calendar_event_created → fleet orchestrator (brain_pre_call sequence)
+ * US-010: meeting_completed → fleet orchestrator (brain_post_call sequence)
+ * US-012: deal_stage_changed → fleet orchestrator (brain_deal_stage sequence)
+ * US-013: task_overdue → direct CC item + Slack DM
+ * US-013: deal_stalled → fleet orchestrator (stale_deal_revival sequence)
+ */
+async function dispatchBrainEvent(
+  supabase: ReturnType<typeof createClient>,
+  event: string,
+  payload: Record<string, unknown>,
+  orgId: string,
+  userId: string,
+): Promise<BrainDispatchResult> {
+  const entityId = (payload.id || payload.entity_id || payload.deal_id || payload.meeting_id || payload.event_id || '') as string;
+  const idempotencyKey = `brain:${event}:${entityId || crypto.randomUUID()}`;
+
+  try {
+    // US-013: Task overdue — create CC item directly (no fleet orchestration)
+    if (DIRECT_CC_EVENTS.has(event)) {
+      return await handleDirectCCEvent(supabase, event, payload, orgId, userId, idempotencyKey);
+    }
+
+    // Fleet orchestrator dispatch for brain sequences
+    const brainConfig = BRAIN_EVENTS[event];
+    if (!brainConfig) {
+      return { dispatched: false, method: 'skipped' };
+    }
+
+    // Dedup check: skip if we recently dispatched the same event for this entity
+    const { data: existingRun } = await supabase
+      .from('agent_trigger_runs')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('trigger_event', event)
+      .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    if (existingRun && entityId) {
+      // Check for same entity within the last hour
+      const { data: entityRun } = await supabase
+        .from('sequence_jobs')
+        .select('id')
+        .eq('idempotency_key', idempotencyKey)
+        .not('status', 'eq', 'failed')
+        .maybeSingle();
+
+      if (entityRun) {
+        console.log(`[brain] Dedup: skipping ${event} for entity ${entityId} — recent run exists`);
+        return { dispatched: false, method: 'skipped', idempotencyKey };
+      }
+    }
+
+    // Fire orchestrator call (fire-and-forget for async processing)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+    console.log(`[brain] Dispatching ${event} → orchestrator (${brainConfig.orchestratorEventType}, source: ${brainConfig.source})`);
+
+    fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'orchestrator',
+        type: brainConfig.orchestratorEventType,
+        source: brainConfig.source,
+        org_id: orgId,
+        user_id: userId,
+        payload,
+        idempotency_key: idempotencyKey,
+      }),
+    }).catch(err => {
+      console.error(`[brain] Orchestrator dispatch failed for ${event}:`, err);
+    });
+
+    return { dispatched: true, method: 'orchestrator', idempotencyKey };
+  } catch (err) {
+    console.error(`[brain] dispatchBrainEvent error for ${event}:`, err);
+    return { dispatched: false, method: 'skipped', error: String(err) };
+  }
+}
+
+/**
+ * US-013: Handle task_overdue and cold deal events directly with CC items + Slack.
+ *
+ * These are simple events that don't need fleet orchestration — they just need
+ * a CC item created and a Slack DM sent.
+ */
+async function handleDirectCCEvent(
+  supabase: ReturnType<typeof createClient>,
+  event: string,
+  payload: Record<string, unknown>,
+  orgId: string,
+  userId: string,
+  idempotencyKey: string,
+): Promise<BrainDispatchResult> {
+  try {
+    if (event === 'task_overdue') {
+      const taskTitle = (payload.title || payload.task_title || 'Untitled task') as string;
+      const taskId = (payload.id || payload.task_id || '') as string;
+      const dueDate = (payload.due_date || '') as string;
+      const assignedTo = (payload.assigned_to || userId) as string;
+      const dealId = (payload.deal_id || null) as string | null;
+      const contactId = (payload.contact_id || null) as string | null;
+
+      // Dedup: check if we already sent a notification for this task recently
+      const canSend = await shouldSendNotification(
+        supabase,
+        'stale_deal_alert', // Closest existing notification type for overdue alerts
+        orgId,
+        assignedTo,
+        taskId,
+      );
+
+      if (!canSend) {
+        console.log(`[brain] Dedup: skipping task_overdue notification for task ${taskId}`);
+        return { dispatched: false, method: 'skipped', idempotencyKey };
+      }
+
+      // Write CC item with high urgency
+      const ccItemId = await writeToCommandCentre({
+        org_id: orgId,
+        user_id: assignedTo,
+        source_agent: 'notification-bridge' as SourceAgent,
+        item_type: 'alert' as ItemType,
+        title: `Overdue task: ${taskTitle}`,
+        summary: dueDate
+          ? `Task "${taskTitle}" was due on ${dueDate} and needs attention.`
+          : `Task "${taskTitle}" is overdue and needs attention.`,
+        urgency: 'high' as Urgency,
+        deal_id: dealId ?? undefined,
+        contact_id: contactId ?? undefined,
+        source_event_id: taskId || undefined,
+        context: {
+          brain_event: 'task_overdue',
+          task_id: taskId,
+          task_title: taskTitle,
+          due_date: dueDate,
+          idempotency_key: idempotencyKey,
+        },
+      });
+
+      // Send Slack DM (best-effort — don't break flow on failure)
+      try {
+        const recipient = await getSlackRecipient(supabase, orgId, assignedTo);
+        if (recipient?.slackUserId) {
+          const { data: slackIntegration } = await supabase
+            .from('slack_integrations')
+            .select('access_token')
+            .eq('user_id', assignedTo)
+            .maybeSingle();
+
+          const botToken = slackIntegration?.access_token;
+          if (botToken) {
+            const slackResult = await deliverToSlack(supabase, {
+              type: 'stale_deal_alert',
+              orgId,
+              recipientUserId: assignedTo,
+              recipientSlackUserId: recipient.slackUserId,
+              title: `Overdue Task: ${taskTitle}`,
+              message: dueDate
+                ? `Your task "${taskTitle}" was due on ${dueDate}. Take action to keep things on track.`
+                : `Your task "${taskTitle}" is overdue. Take action to keep things on track.`,
+              blocks: [
+                {
+                  type: 'header',
+                  text: { type: 'plain_text', text: 'Overdue Task', emoji: false },
+                },
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `*${taskTitle}*\n${dueDate ? `Due: ${dueDate}` : 'Overdue'}`,
+                  },
+                },
+                {
+                  type: 'actions',
+                  elements: [
+                    {
+                      type: 'button',
+                      text: { type: 'plain_text', text: 'View in 60', emoji: false },
+                      url: `https://app.use60.com/tasks`,
+                      action_id: 'brain_task_overdue_view',
+                    },
+                  ],
+                },
+              ],
+              entityType: 'task',
+              entityId: taskId,
+            }, botToken);
+
+            if (slackResult.sent) {
+              await recordNotificationSent(
+                supabase,
+                'stale_deal_alert',
+                orgId,
+                recipient.slackUserId,
+                slackResult.channelId,
+                slackResult.ts,
+                taskId,
+              );
+            } else {
+              console.warn(`[brain] Slack DM failed for task_overdue:`, slackResult.error);
+            }
+          }
+        }
+      } catch (slackErr) {
+        console.warn(`[brain] Slack delivery error for task_overdue (non-fatal):`, slackErr);
+      }
+
+      console.log(`[brain] task_overdue handled: CC item=${ccItemId}, task=${taskTitle}`);
+      return { dispatched: true, method: 'direct_cc', idempotencyKey, ccItemId };
+    }
+
+    return { dispatched: false, method: 'skipped' };
+  } catch (err) {
+    console.error(`[brain] handleDirectCCEvent error for ${event}:`, err);
+    return { dispatched: false, method: 'skipped', error: String(err) };
+  }
+}
+
+/**
+ * US-013: Check for cold deals (no activity >14 days) and dispatch stale_deal_revival.
+ *
+ * Called when a deal_stalled event fires (from DB trigger or cron).
+ * The stale_deal_revival sequence in the fleet orchestrator handles the re-engagement.
+ */
+async function checkAndDispatchColdDeals(
+  supabase: ReturnType<typeof createClient>,
+  payload: Record<string, unknown>,
+  orgId: string,
+  userId: string,
+): Promise<void> {
+  try {
+    const dealId = (payload.deal_id || payload.id || '') as string;
+    if (!dealId) return;
+
+    // Check if deal has had any activity in the last 14 days
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentActivity } = await supabase
+      .from('activities')
+      .select('id')
+      .eq('deal_id', dealId)
+      .gte('created_at', fourteenDaysAgo)
+      .limit(1);
+
+    if (recentActivity && recentActivity.length > 0) {
+      console.log(`[brain] Deal ${dealId} has recent activity, skipping cold deal dispatch`);
+      return;
+    }
+
+    // Check per-org ability enablement for stale deal revival
+    const { data: orgConfig } = await supabase
+      .from('proactive_agent_config')
+      .select('enabled_sequences')
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    const staleDealEnabled = orgConfig?.enabled_sequences?.stale_deal_revival?.enabled;
+    if (orgConfig && !staleDealEnabled) {
+      console.log(`[brain] stale_deal_revival disabled for org ${orgId}, skipping cold deal`);
+      return;
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+    console.log(`[brain] Cold deal detected: ${dealId} — dispatching stale_deal_revival`);
+
+    fetch(`${supabaseUrl}/functions/v1/agent-fleet-router`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${supabaseServiceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'orchestrator',
+        type: 'stale_deal_revival' as EventType,
+        source: 'trigger:brain_stale_deal' as EventSource,
+        org_id: orgId,
+        user_id: userId,
+        payload: { ...payload, deal_id: dealId, cold_deal: true },
+        idempotency_key: `brain:cold_deal:${dealId}`,
+      }),
+    }).catch(err => {
+      console.error(`[brain] Cold deal dispatch failed for ${dealId}:`, err);
+    });
+  } catch (err) {
+    console.error(`[brain] checkAndDispatchColdDeals error:`, err);
+  }
+}
 
 // =============================================================================
 // Rate Limiting
@@ -349,6 +698,29 @@ serve(async (req) => {
       );
     }
 
+    // =========================================================================
+    // Brain Event Dispatch (US-007 to US-013)
+    // Dispatch brain events to fleet orchestrator in parallel with legacy triggers.
+    // For task_overdue, creates CC items directly (no fleet orchestration).
+    // For deal_stalled, also checks for cold deals (>14 days no activity).
+    // =========================================================================
+    let brainDispatchResult: BrainDispatchResult | null = null;
+
+    if (event && !isTestMode) {
+      const isBrainEvent = BRAIN_EVENTS[event] || DIRECT_CC_EVENTS.has(event);
+      if (isBrainEvent) {
+        brainDispatchResult = await dispatchBrainEvent(
+          supabase, event, payload, organization_id, user_id,
+        );
+        console.log(`[brain] Dispatch result for ${event}: method=${brainDispatchResult.method}, dispatched=${brainDispatchResult.dispatched}`);
+
+        // US-013: For deal_stalled events, also check for cold deals
+        if (event === 'deal_stalled') {
+          await checkAndDispatchColdDeals(supabase, payload, organization_id, user_id);
+        }
+      }
+    }
+
     const anthropic = new Anthropic({ apiKey: anthropicKey });
 
     let triggersToRun: TriggerRow[];
@@ -379,6 +751,15 @@ serve(async (req) => {
 
       if (triggerError) {
         if (triggerError.message.includes('relation') || triggerError.message.includes('does not exist')) {
+          // If brain dispatch handled it, return success with brain info
+          if (brainDispatchResult?.dispatched) {
+            return jsonResponse({
+              success: true,
+              message: `Brain event dispatched for '${event}'`,
+              brain: brainDispatchResult,
+              executed: 0,
+            }, req);
+          }
           return jsonResponse({ success: true, message: 'agent_triggers table not found', executed: 0 }, req);
         }
         console.error('[agent-trigger] Failed to fetch triggers:', triggerError);
@@ -386,6 +767,18 @@ serve(async (req) => {
       }
 
       if (!triggers || triggers.length === 0) {
+        // If brain dispatch handled it, return success with brain info
+        if (brainDispatchResult?.dispatched) {
+          return jsonResponse(
+            {
+              success: true,
+              message: `Brain event dispatched for '${event}' (no legacy triggers)`,
+              brain: brainDispatchResult,
+              executed: 0,
+            },
+            req
+          );
+        }
         return jsonResponse(
           { success: true, message: `No active triggers for event '${event}'`, executed: 0 },
           req
@@ -594,6 +987,8 @@ serve(async (req) => {
         executed: results.filter((r) => r.success).length,
         failed: results.filter((r) => !r.success).length,
         results,
+        // Include brain dispatch info when present (US-007 to US-013)
+        ...(brainDispatchResult ? { brain: brainDispatchResult } : {}),
       },
       req
     );
