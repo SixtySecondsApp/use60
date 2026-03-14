@@ -13,6 +13,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import BrainMemoryFeed from '@/components/brain/BrainMemoryFeed';
 
 const BrainDealMemory = lazy(() => import('@/components/brain/BrainDealMemory'));
+const BrainCommitments = lazy(() => import('@/components/brain/BrainCommitments'));
+const BrainContactMemory = lazy(() => import('@/components/brain/BrainContactMemory'));
 
 // ============================================================================
 // Tab definitions
@@ -21,6 +23,7 @@ const BrainDealMemory = lazy(() => import('@/components/brain/BrainDealMemory'))
 const BRAIN_TABS = [
   { id: 'memory-feed', label: 'Memory Feed' },
   { id: 'deal-memory', label: 'Deal Memory' },
+  { id: 'commitments', label: 'Commitments' },
   { id: 'contact-memory', label: 'Contact Memory' },
   { id: 'agent-log', label: 'Agent Log' },
   { id: 'settings', label: 'Settings' },
@@ -98,7 +101,29 @@ export default function BrainPage() {
                 <BrainDealMemory />
               </Suspense>
             </TabsContent>
-            {BRAIN_TABS.filter((tab) => tab.id !== 'memory-feed' && tab.id !== 'deal-memory').map((tab) => (
+            <TabsContent value={'commitments' satisfies BrainTab}>
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-24">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                  </div>
+                }
+              >
+                <BrainCommitments />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value={'contact-memory' satisfies BrainTab}>
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-24">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                  </div>
+                }
+              >
+                <BrainContactMemory />
+              </Suspense>
+            </TabsContent>
+            {BRAIN_TABS.filter((tab) => tab.id !== 'memory-feed' && tab.id !== 'deal-memory' && tab.id !== 'commitments' && tab.id !== 'contact-memory').map((tab) => (
               <TabsContent key={tab.id} value={tab.id}>
                 <TabPlaceholder label={tab.label} />
               </TabsContent>
