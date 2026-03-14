@@ -20,7 +20,8 @@ export type SourceAgent =
   | 'notification-bridge'
   | 'pipeline_scan'
   | 'pipeline_hygiene'
-  | 'commitment-tracker';
+  | 'commitment-tracker'
+  | 'contact_decay';
 
 // Item types — matches item_type column values in command_centre_items
 export type ItemType =
@@ -33,7 +34,8 @@ export type ItemType =
   | 'alert'
   | 'meeting_prep'
   | 'insight'
-  | 'morning_brief';
+  | 'morning_brief'
+  | 'decay_alert';
 
 // Status enum — must match CHECK constraint in command_centre_items
 export type ItemStatus =
