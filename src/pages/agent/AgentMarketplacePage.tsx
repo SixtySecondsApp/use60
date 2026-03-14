@@ -86,7 +86,7 @@ export default function AgentMarketplacePage() {
         return isBackendEnabled(sequenceType);
       }
 
-      // Fallback for any abilities without a sequence type mapping (e.g. cron-job)
+      // Fallback for any abilities without a sequence type mapping
       return true;
     },
     [isBackendEnabled]

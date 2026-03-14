@@ -74,8 +74,7 @@ export type TriggerType =
   | 'manual';    // Triggered by user action (button click)
 
 export type BackendType =
-  | 'orchestrator'   // Runs via agent-orchestrator edge function
-  | 'cron-job';      // Edge function invoked by Supabase cron
+  | 'orchestrator';  // Runs via agent-orchestrator edge function
 
 export type DeliveryChannel = 'slack' | 'email' | 'in-app';
 
@@ -611,7 +610,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-red-500 to-rose-600',
     eventType: 'deal_heartbeat_scan',
     triggerType: 'cron',
-    backendType: 'cron-job',
+    backendType: 'orchestrator',
     stepCount: 3,
     hasApproval: false,
     status: 'active',
@@ -630,7 +629,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-cyan-500 to-teal-600',
     eventType: 'deal_heartbeat_scan',
     triggerType: 'cron',
-    backendType: 'cron-job',
+    backendType: 'orchestrator',
     stepCount: 2,
     hasApproval: false,
     status: 'active',
@@ -650,7 +649,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-pink-500 to-fuchsia-600',
     eventType: 'deal_heartbeat_scan',
     triggerType: 'cron',
-    backendType: 'cron-job',
+    backendType: 'orchestrator',
     stepCount: 2,
     hasApproval: false,
     status: 'active',
@@ -669,7 +668,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-teal-500 to-emerald-600',
     eventType: 'pipeline_hygiene_digest',
     triggerType: 'cron',
-    backendType: 'cron-job',
+    backendType: 'orchestrator',
     stepCount: 2,
     hasApproval: true,
     status: 'active',
@@ -688,7 +687,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-violet-500 to-purple-600',
     eventType: 'learning_preference_extract',
     triggerType: 'event',
-    backendType: 'cron-job',
+    backendType: 'orchestrator',
     stepCount: 2,
     hasApproval: false,
     status: 'active',
@@ -765,7 +764,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-amber-500 to-orange-600',
     eventType: 'reply_gap_detection',
     triggerType: 'cron',
-    backendType: 'cron-job',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -784,7 +783,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-sky-500 to-cyan-600',
     eventType: 'sent_received_ratio',
     triggerType: 'cron',
-    backendType: 'cron-job',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -803,7 +802,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-slate-500 to-gray-600',
     eventType: 'document_linking',
     triggerType: 'cron',
-    backendType: 'cron-job',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -822,7 +821,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-indigo-500 to-violet-600',
     eventType: 'attendee_enrichment',
     triggerType: 'cron',
-    backendType: 'cron-job',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -994,8 +993,7 @@ export const EVENT_TYPE_TO_SEQUENCE_TYPE: Record<string, string> = {
   'sent_received_ratio': 'sent_received_ratio',
   'document_linking': 'document_linking',
   'attendee_enrichment': 'attendee_enrichment',
-  // Migrated from V1-simulate (SBI-008)
-  // NOTE: These need CHECK constraint extension in SBI-009
+  // Migrated from V1-simulate (SBI-008), CHECK constraint extended in SBI-009
   'overdue_deal_scan': 'overdue_deal_scan',
   'ghost_deal_scan': 'ghost_deal_scan',
   'morning_brief': 'morning_brief',

@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Play, Loader2, RotateCcw, Zap, MessageSquare, Mail, Bell } from 'lucide-react';
+import { Play, Loader2, RotateCcw, MessageSquare, Mail, Bell } from 'lucide-react';
 import type { AbilityDefinition, DeliveryChannel } from '@/lib/agent/abilityRegistry';
 
 interface AbilityRunPanelProps {
@@ -280,36 +280,6 @@ export function AbilityRunPanel({ ability, activeChannels, isEnabled }: AbilityR
     </div>
   );
 
-  const renderCronJobPanel = () => (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Schedule</label>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary">
-            <Zap className="w-3 h-3 mr-1" />
-            Cron schedule not configured
-          </Badge>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Button disabled variant="outline">
-          <Play className="w-4 h-4 mr-2" />
-          Run Now
-        </Button>
-
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-muted-foreground">Enable</label>
-          <input
-            type="checkbox"
-            disabled
-            className="w-4 h-4 rounded border-input"
-          />
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <Card>
       <CardHeader>
@@ -334,8 +304,7 @@ export function AbilityRunPanel({ ability, activeChannels, isEnabled }: AbilityR
       </CardHeader>
 
       <CardContent>
-        {ability.backendType === 'orchestrator' && renderOrchestratorPanel()}
-        {ability.backendType === 'cron-job' && renderCronJobPanel()}
+        {renderOrchestratorPanel()}
       </CardContent>
     </Card>
   );
