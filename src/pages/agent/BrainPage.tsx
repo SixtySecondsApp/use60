@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import BrainMemoryFeed from '@/components/brain/BrainMemoryFeed';
 import PipelineSentimentTicker from '@/components/brain/PipelineSentimentTicker';
 import BrainInsightCards from '@/components/brain/BrainInsightCards';
+import MeetingPrepCard from '@/components/brain/MeetingPrepCard';
 
 const BrainDealMemory = lazy(() => import('@/components/brain/BrainDealMemory'));
 const BrainCommitments = lazy(() => import('@/components/brain/BrainCommitments'));
@@ -66,6 +67,9 @@ export default function BrainPage() {
 
       {/* ====== PROACTIVE INSIGHT CARDS ====== */}
       <BrainInsightCards />
+
+      {/* ====== MEETING PREP CARD ====== */}
+      <MeetingPrepCard />
 
       {/* ====== TABS ====== */}
       <div className="flex-1 overflow-y-auto">
