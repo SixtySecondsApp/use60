@@ -25,6 +25,7 @@ import {
 import type { RiskScorerConfig } from '../_shared/orchestrator/riskScorerConfig.ts';
 import { isCircuitAllowed, recordSuccess, recordFailure } from '../_shared/orchestrator/circuitBreaker.ts';
 import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
+import { isAbilityEnabledForOrg } from '../_shared/proactive/cronPreferenceGate.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -69,6 +70,13 @@ serve(async (req) => {
 
     if (!orgId) {
       return errorResponse('Missing required field: org_id', req, 400);
+    }
+
+    // TRINITY-007: Check org preference gate before doing any work
+    const abilityGate = await isAbilityEnabledForOrg(supabase, orgId, 'deal_risk_scan');
+    if (!abilityGate.allowed) {
+      console.log(`[agent-deal-risk-batch] ${abilityGate.reason} — skipping`);
+      return jsonResponse({ scored_deals: 0, alerts_flagged: 0, errors: [], skipped: 0, skipped_reason: abilityGate.reason }, req);
     }
 
     // Circuit breaker check

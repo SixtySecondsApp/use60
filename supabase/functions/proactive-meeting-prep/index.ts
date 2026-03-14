@@ -17,6 +17,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getCorsHeaders, handleCorsPreflightRequest } from '../_shared/corsHelper.ts';
 import { shouldSendNotification, recordNotificationSent } from '../_shared/proactive/dedupe.ts';
 import { writeToCommandCentre } from '../_shared/commandCentre/writeAdapter.ts';
+import {
+  isAbilityEnabledForOrg,
+  isAbilityEnabledForUser,
+} from '../_shared/proactive/cronPreferenceGate.ts';
 
 // ============================================================================
 // Types
@@ -402,6 +406,22 @@ async function prepMeetingsForUserInternal(
         .maybeSingle();
 
       const orgId = membership?.org_id;
+
+      // TRINITY-007: Check org + user preference gates before doing any work
+      if (orgId) {
+        const orgGate = await isAbilityEnabledForOrg(supabase, orgId, 'pre_meeting_90min');
+        if (!orgGate.allowed) {
+          console.log(`[MeetingPrep] ${orgGate.reason} — skipping`);
+          results.push({ meetingId: meeting.id, title: meeting.title, prepGenerated: false, slackNotified: false });
+          continue;
+        }
+        const userGate = await isAbilityEnabledForUser(supabase, userId, orgId, 'pre_meeting_90min');
+        if (!userGate.allowed) {
+          console.log(`[MeetingPrep] ${userGate.reason} — skipping`);
+          results.push({ meetingId: meeting.id, title: meeting.title, prepGenerated: false, slackNotified: false });
+          continue;
+        }
+      }
 
       // Cross-dedup: skip if meeting_prep was already sent for this meeting (e.g. from morning brief)
       if (orgId) {
