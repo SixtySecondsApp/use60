@@ -11,11 +11,13 @@ import { lazy, Suspense } from 'react';
 import { Brain, Loader2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import BrainMemoryFeed from '@/components/brain/BrainMemoryFeed';
+import PipelineSentimentTicker from '@/components/brain/PipelineSentimentTicker';
 
 const BrainDealMemory = lazy(() => import('@/components/brain/BrainDealMemory'));
 const BrainCommitments = lazy(() => import('@/components/brain/BrainCommitments'));
 const BrainContactMemory = lazy(() => import('@/components/brain/BrainContactMemory'));
 const BrainAgentLog = lazy(() => import('@/components/brain/BrainAgentLog'));
+const BrainCoaching = lazy(() => import('@/components/brain/BrainCoaching'));
 const BrainSettings = lazy(() => import('@/components/brain/BrainSettings'));
 
 // ============================================================================
@@ -28,6 +30,7 @@ const BRAIN_TABS = [
   { id: 'commitments', label: 'Commitments' },
   { id: 'contact-memory', label: 'Contact Memory' },
   { id: 'agent-log', label: 'Agent Log' },
+  { id: 'coaching', label: 'Coaching' },
   { id: 'settings', label: 'Settings' },
 ] as const;
 
@@ -56,6 +59,9 @@ export default function BrainPage() {
           </div>
         </div>
       </div>
+
+      {/* ====== PIPELINE SENTIMENT TICKER ====== */}
+      <PipelineSentimentTicker />
 
       {/* ====== TABS ====== */}
       <div className="flex-1 overflow-y-auto">
@@ -114,6 +120,17 @@ export default function BrainPage() {
                 }
               >
                 <BrainAgentLog />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value={'coaching' satisfies BrainTab}>
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-24">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                  </div>
+                }
+              >
+                <BrainCoaching />
               </Suspense>
             </TabsContent>
             <TabsContent value={'settings' satisfies BrainTab}>
