@@ -70,7 +70,8 @@ interface Commitment {
   speaker_side?: 'seller' | 'buyer';
   phrase: string;
   source_quote?: string;
-  intent: 'send_proposal' | 'schedule_meeting' | 'send_content' | 'check_with_team' | 'pricing_request' | 'stakeholder_introduction' | 'competitive_mention' | 'timeline_signal' | 'objection_blocker' | 'general';
+  intent: 'send_proposal' | 'send_proposal_terms' | 'send_next_steps' | 'send_team_brief' | 'send_discussion_points' | 'send_scoping_doc' | 'send_workflow' | 'send_project_plan' | 'schedule_meeting' | 'send_content' | 'check_with_team' | 'pricing_request' | 'stakeholder_introduction' | 'competitive_mention' | 'timeline_signal' | 'objection_blocker' | 'general';
+  document_type?: 'send_proposal' | 'send_proposal_terms' | 'send_next_steps' | 'send_team_brief' | 'send_discussion_points' | 'send_scoping_doc' | 'send_workflow' | 'send_project_plan';
   action_type?: string;
   confidence: number;
   confidence_tier?: 'explicit' | 'strong_implied' | 'weak_implied';
@@ -176,6 +177,13 @@ Detect explicit and implied promises. Classify by confidence tier:
 
 Map each commitment to an intent type:
 - **send_proposal**: "I'll send you a proposal", "Let me put together pricing", "You'll have the quote by Friday"
+- **send_proposal_terms**: "I'll send over a proposal with terms", "Let me include terms and conditions", "I'll draft a contract for you"
+- **send_next_steps**: "I'll send over next steps", "Let me follow up with the action items we discussed", "I'll email you what we agreed on"
+- **send_team_brief**: "I'll brief the team on this", "Let me update the team internally", "I'll put together an internal summary"
+- **send_discussion_points**: "I'll prepare discussion points for our next call", "Let me put together talking points", "I'll draft an agenda for the follow-up"
+- **send_scoping_doc**: "Let me scope this out for you", "I'll put together a scoping document", "I'll draft up the requirements doc"
+- **send_workflow**: "I'll map out the workflow", "Let me document the ideal workflow", "I'll send over the process flow"
+- **send_project_plan**: "I'll put together a project plan", "Let me draft an implementation plan", "I'll send you a rollout plan"
 - **schedule_meeting**: "Let's schedule a follow-up", "We should set up a technical review", "I'll send a calendar invite"
 - **send_content**: "I'll send over the case study", "Let me share that whitepaper", "I'll email you the deck"
 - **check_with_team**: "Let me check with our technical team", "I'll run this by engineering", "I need to talk to our security team about that"
@@ -208,7 +216,8 @@ Return JSON with the following structure (no markdown code blocks):
     {
       "speaker": "rep|prospect",
       "phrase": "exact quote from transcript",
-      "intent": "send_proposal|schedule_meeting|send_content|check_with_team|pricing_request|stakeholder_introduction|competitive_mention|timeline_signal|objection_blocker|general",
+      "intent": "send_proposal|send_proposal_terms|send_next_steps|send_team_brief|send_discussion_points|send_scoping_doc|send_workflow|send_project_plan|schedule_meeting|send_content|check_with_team|pricing_request|stakeholder_introduction|competitive_mention|timeline_signal|objection_blocker|general",
+      "document_type": "send_proposal|send_proposal_terms|send_next_steps|send_team_brief|send_discussion_points|send_scoping_doc|send_workflow|send_project_plan (set this field ONLY when the intent is one of these 8 document types, null otherwise)",
       "confidence": 0.0-1.0,
       "confidence_tier": "explicit|strong_implied|weak_implied",
       "deadline": "if mentioned (e.g., 'by Friday', 'end of day Thursday')",
@@ -231,7 +240,7 @@ Return JSON with the following structure (no markdown code blocks):
       "owner": "rep|prospect",
       "action": "description of action item",
       "deadline": "if mentioned",
-      "intent_type": "send_proposal|schedule_meeting|send_content|check_with_team|pricing_request|stakeholder_introduction|competitive_mention|timeline_signal|objection_blocker if applicable",
+      "intent_type": "send_proposal|send_proposal_terms|send_next_steps|send_team_brief|send_discussion_points|send_scoping_doc|send_workflow|send_project_plan|schedule_meeting|send_content|check_with_team|pricing_request|stakeholder_introduction|competitive_mention|timeline_signal|objection_blocker if applicable",
       "priority": "P0|P1|P2|P3"
     }
   ]
