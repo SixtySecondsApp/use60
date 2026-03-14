@@ -17,6 +17,7 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -37,6 +38,7 @@ import { useCommandCentreDeepLinks } from '@/lib/hooks/useCommandCentreDeepLinks
 import { useCommandCentreKeyboard } from '@/lib/hooks/useCommandCentreKeyboard';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
 import { CCAgentLearning } from '@/components/commandCentre/CCAgentLearning';
+import { CCBulkActionBar } from '@/components/commandCentre/CCBulkActionBar';
 import { CCDetailPanel } from '@/components/commandCentre/CCDetailPanel';
 import { CCEmptyState } from '@/components/commandCentre/CCEmptyState';
 import { CCFilterBar, type CCFilter } from '@/components/commandCentre/CCFilterBar';
@@ -222,6 +224,9 @@ export default function CommandCentre() {
   const [detailItem, setDetailItem] = useState<CCItem | null>(null);
   // Mobile: when true, show detail panel full-screen instead of item list
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
+  // TRINITY-019: Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const lastSelectedIdRef = useRef<string | null>(null);
   const leftRailRef = useRef<HTMLDivElement>(null);
 
   // CC-008: Realtime subscriptions — items appear without manual refresh
@@ -365,6 +370,98 @@ export default function CommandCentre() {
     withPending(id, () => snoozeItem.mutate({ id, until }));
   };
   const handleUndo = (id: string) => withPending(id, () => undoItem.mutate(id));
+
+  // ========================================================================
+  // TRINITY-019: Bulk selection handlers
+  // ========================================================================
+
+  const handleItemSelect = useCallback(
+    (id: string, event: React.MouseEvent) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+
+        // Shift+click: range select from last selected to current
+        if (event.shiftKey && lastSelectedIdRef.current) {
+          const lastIdx = filteredItems.findIndex((i) => i.id === lastSelectedIdRef.current);
+          const currentIdx = filteredItems.findIndex((i) => i.id === id);
+          if (lastIdx !== -1 && currentIdx !== -1) {
+            const start = Math.min(lastIdx, currentIdx);
+            const end = Math.max(lastIdx, currentIdx);
+            for (let idx = start; idx <= end; idx++) {
+              next.add(filteredItems[idx].id);
+            }
+            return next;
+          }
+        }
+
+        // Toggle individual item
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        lastSelectedIdRef.current = id;
+        return next;
+      });
+    },
+    [filteredItems],
+  );
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    lastSelectedIdRef.current = null;
+  }, []);
+
+  // Clear selection when filter changes
+  useEffect(() => {
+    clearSelection();
+  }, [activeFilter, urgencyFilter, agentFilter, clearSelection]);
+
+  // Cmd/Ctrl+A to select all visible items
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        // Only intercept if focus is not in an input/textarea
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        e.preventDefault();
+        setSelectedIds(new Set(filteredItems.map((i) => i.id)));
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [filteredItems]);
+
+  // Max 25 items per bulk action
+  const MAX_BULK = 25;
+
+  const handleBulkApprove = useCallback(async () => {
+    const ids = [...selectedIds].slice(0, MAX_BULK);
+    for (const id of ids) {
+      approveItem.mutate(id);
+    }
+    toast.success(`Approved ${ids.length} item${ids.length !== 1 ? 's' : ''}`);
+    clearSelection();
+  }, [selectedIds, approveItem, clearSelection]);
+
+  const handleBulkDismiss = useCallback(async () => {
+    const ids = [...selectedIds].slice(0, MAX_BULK);
+    for (const id of ids) {
+      dismissItem.mutate(id);
+    }
+    toast.success(`Dismissed ${ids.length} item${ids.length !== 1 ? 's' : ''}`);
+    clearSelection();
+  }, [selectedIds, dismissItem, clearSelection]);
+
+  const handleBulkSnooze = useCallback(async () => {
+    const ids = [...selectedIds].slice(0, MAX_BULK);
+    const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    for (const id of ids) {
+      snoozeItem.mutate({ id, until });
+    }
+    toast.success(`Snoozed ${ids.length} item${ids.length !== 1 ? 's' : ''} for 24h`);
+    clearSelection();
+  }, [selectedIds, snoozeItem, clearSelection]);
 
   // CC-009: Deep links — bookmarkable URLs for items and filters
   const { updateItemParam, updateFilterParam } = useCommandCentreDeepLinks({
@@ -516,6 +613,19 @@ export default function CommandCentre() {
             <CCAgentLearning />
           </div>
 
+          {/* TRINITY-019: Bulk action bar */}
+          {selectedIds.size >= 2 && (
+            <div className="flex-shrink-0 px-3">
+              <CCBulkActionBar
+                selectedCount={Math.min(selectedIds.size, MAX_BULK)}
+                onApproveAll={handleBulkApprove}
+                onDismissAll={handleBulkDismiss}
+                onSnoozeAll={handleBulkSnooze}
+                onClearSelection={clearSelection}
+              />
+            </div>
+          )}
+
           {/* Scrollable item list */}
           <div ref={leftRailRef} className="flex-1 overflow-y-auto px-3 pb-3">
             {allItemsQuery.isLoading ? (
@@ -554,6 +664,8 @@ export default function CommandCentre() {
                       isHighlighted={isHighlighted(item.id)}
                       isSelected={detailItem?.id === item.id}
                       compact
+                      isChecked={selectedIds.has(item.id)}
+                      onSelect={handleItemSelect}
                     />
                   </div>
                 ))}

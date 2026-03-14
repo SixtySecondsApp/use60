@@ -22,6 +22,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
 import { URGENCY_CONFIG } from './constants';
 
@@ -115,6 +116,10 @@ export interface CCItemCardProps {
   isSelected?: boolean;
   /** Compact mode for left-rail display — less padding, truncated text, no action buttons */
   compact?: boolean;
+  /** Whether the multi-select checkbox is checked (TRINITY-019) */
+  isChecked?: boolean;
+  /** Callback when the multi-select checkbox is toggled (TRINITY-019) */
+  onSelect?: (id: string, event: React.MouseEvent) => void;
 }
 
 // ============================================================================
@@ -144,6 +149,8 @@ export function CCItemCard({
   isHighlighted,
   isSelected,
   compact,
+  isChecked,
+  onSelect,
 }: CCItemCardProps) {
   const draftedAction = item.drafted_action as Record<string, unknown> | null;
   const displayText = draftedAction?.display_text as string | undefined;
@@ -177,6 +184,25 @@ export function CCItemCard({
       onClick={() => onViewDetail(item)}
     >
       <CardContent className={cn(compact ? 'p-3' : 'p-4')}>
+        <div className={cn(onSelect && compact && 'flex gap-2')}>
+          {/* Multi-select checkbox — TRINITY-019 */}
+          {onSelect && compact && (
+            <div
+              className="flex-shrink-0 pt-0.5"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(item.id, e);
+              }}
+            >
+              <Checkbox
+                checked={isChecked}
+                className="h-4 w-4"
+                tabIndex={-1}
+              />
+            </div>
+          )}
+
+          <div className="flex-1 min-w-0">
         {/* Auto-sent banner */}
         {isAutoExec && (
           <div className={cn(
@@ -301,6 +327,8 @@ export function CCItemCard({
             )}
           </div>
         )}
+          </div>{/* end flex-1 min-w-0 */}
+        </div>{/* end conditional flex row */}
       </CardContent>
     </Card>
   );
