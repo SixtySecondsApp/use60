@@ -16,7 +16,7 @@ import {
   Calendar,
   Clock,
   MessageSquare,
-  Handshake,
+  Users,
   AlertCircle,
   Lightbulb,
   User,
@@ -123,7 +123,7 @@ function buildBullets(prep: UpcomingMeetingPrep): PrepBullet[] {
         ? latest.summary.slice(0, 77) + '...'
         : latest.summary;
     bullets.push({
-      icon: Handshake,
+      icon: Users,
       text: `You promised: ${summary}`,
       iconClassName: 'text-amber-500 dark:text-amber-400',
     });

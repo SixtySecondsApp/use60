@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Clock, TrendingDown, Handshake, X } from 'lucide-react';
+import { AlertTriangle, Clock, TrendingDown, Users, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useBrainInsights, type BrainInsight } from '@/lib/hooks/useBrainInsights';
@@ -39,7 +39,7 @@ const ICON_MAP: Record<BrainInsight['icon'], typeof AlertTriangle> = {
   alert: AlertTriangle,
   clock: Clock,
   'trending-down': TrendingDown,
-  handshake: Handshake,
+  handshake: Users,
 };
 
 const ICON_COLOR: Record<BrainInsight['urgency'], string> = {
