@@ -1567,6 +1567,223 @@ async function fetchContactIntelligence(
 }
 
 // =============================================================================
+// NL-005: Memory Recall — Proactive Memory Playback on Entity Mention
+// =============================================================================
+
+interface DetectedEntity {
+  type: 'deal' | 'contact';
+  id: string;
+  name: string;
+}
+
+/**
+ * Detect entity mentions in the user message by matching against known
+ * deal/contact names from the DEAL_CONTEXT block and seed_context.
+ * Lightweight — no DB lookups for name matching; relies on context already
+ * available in the message/seed_context.
+ */
+function detectMentionedEntities(
+  message: string,
+  seedContext?: SeedContext,
+): DetectedEntity[] {
+  const entities: DetectedEntity[] = [];
+  const seen = new Set<string>();
+
+  // 1. DEAL_CONTEXT block — structured deal + contact IDs and names
+  const dealIdMatch = message.match(/\[DEAL_CONTEXT\][\s\S]*?Deal ID:\s*([a-f0-9-]+)/i);
+  const dealNameMatch = message.match(/\[DEAL_CONTEXT\][\s\S]*?Deal:\s*([^\n]+)/i);
+  if (dealIdMatch) {
+    const dealId = dealIdMatch[1].trim();
+    const dealName = dealNameMatch ? dealNameMatch[1].trim() : 'deal';
+    if (!seen.has(`deal:${dealId}`)) {
+      entities.push({ type: 'deal', id: dealId, name: dealName });
+      seen.add(`deal:${dealId}`);
+    }
+  }
+
+  const contactIdFromContext = message.match(/Primary Contact ID:\s*([a-f0-9-]+)/i);
+  const contactNameFromContext = message.match(/Contact\s*Name:\s*([^\n]+)/i);
+  if (contactIdFromContext) {
+    const contactId = contactIdFromContext[1].trim();
+    const contactName = contactNameFromContext ? contactNameFromContext[1].trim() : 'contact';
+    if (!seen.has(`contact:${contactId}`)) {
+      entities.push({ type: 'contact', id: contactId, name: contactName });
+      seen.add(`contact:${contactId}`);
+    }
+  }
+
+  // 2. seed_context — Command Centre context
+  if (seedContext?.dealId && !seen.has(`deal:${seedContext.dealId}`)) {
+    entities.push({ type: 'deal', id: seedContext.dealId, name: 'deal' });
+    seen.add(`deal:${seedContext.dealId}`);
+  }
+  if (seedContext?.contactId && !seen.has(`contact:${seedContext.contactId}`)) {
+    entities.push({ type: 'contact', id: seedContext.contactId, name: 'contact' });
+    seen.add(`contact:${seedContext.contactId}`);
+  }
+
+  return entities;
+}
+
+/**
+ * Fetch memory recall data for detected entities from Brain tables and build
+ * a formatted [MEMORY RECALL] block. Capped at ~400 tokens (~1600 chars).
+ * Returns empty string when no memory data exists.
+ */
+async function fetchMemoryRecall(
+  client: ReturnType<typeof createClient>,
+  entities: DetectedEntity[],
+  orgId: string,
+): Promise<string> {
+  try {
+    if (entities.length === 0) return '';
+
+    // Collect all contact IDs and deal IDs
+    const contactIds = entities.filter(e => e.type === 'contact').map(e => e.id);
+    const dealIds = entities.filter(e => e.type === 'deal').map(e => e.id);
+
+    // Primary entity for the header (first deal, or first contact)
+    const primaryEntity = entities[0];
+
+    // Parallel queries — lightweight, indexed lookups
+    const queries: Promise<unknown>[] = [];
+
+    // 1. contact_memory for the first contact (if any)
+    const contactId = contactIds[0];
+    if (contactId) {
+      queries.push(
+        client
+          .from('contact_memory')
+          .select('relationship_strength, communication_style, total_meetings, last_interaction_at')
+          .eq('org_id', orgId)
+          .eq('contact_id', contactId)
+          .maybeSingle()
+      );
+    } else {
+      queries.push(Promise.resolve({ data: null }));
+    }
+
+    // 2. deal_memory_events — last 5 events across all detected deals
+    if (dealIds.length > 0) {
+      queries.push(
+        client
+          .from('deal_memory_events')
+          .select('event_category, summary, verbatim_quote, source_timestamp')
+          .eq('org_id', orgId)
+          .eq('is_active', true)
+          .in('deal_id', dealIds)
+          .in('event_category', ['commitment', 'objection', 'signal', 'sentiment', 'competitive'])
+          .order('source_timestamp', { ascending: false })
+          .limit(5)
+      );
+    } else {
+      queries.push(Promise.resolve({ data: [] }));
+    }
+
+    // 3. copilot_memories for the contact or deal (last 3)
+    const memoryFilter = contactId
+      ? client
+          .from('copilot_memories')
+          .select('category, subject, content')
+          .eq('contact_id', contactId)
+          .in('category', ['relationship', 'deal', 'commitment', 'preference'])
+          .order('updated_at', { ascending: false })
+          .limit(3)
+      : dealIds.length > 0
+        ? client
+            .from('copilot_memories')
+            .select('category, subject, content')
+            .eq('deal_id', dealIds[0])
+            .in('category', ['relationship', 'deal', 'commitment', 'preference'])
+            .order('updated_at', { ascending: false })
+            .limit(3)
+        : Promise.resolve({ data: [] });
+
+    queries.push(memoryFilter);
+
+    const [contactMemoryResult, dealEventsResult, copilotMemoriesResult] = await Promise.all(queries) as [
+      { data: { relationship_strength: number | null; communication_style: Record<string, unknown> | null; total_meetings: number; last_interaction_at: string | null } | null },
+      { data: { event_category: string; summary: string; verbatim_quote: string | null; source_timestamp: string }[] | null },
+      { data: { category: string; subject: string; content: string }[] | null },
+    ];
+
+    const contactMemory = contactMemoryResult.data;
+    const dealEvents = dealEventsResult.data ?? [];
+    const copilotMemories = copilotMemoriesResult.data ?? [];
+
+    // Nothing found — skip injection
+    if (!contactMemory && dealEvents.length === 0 && copilotMemories.length === 0) {
+      return '';
+    }
+
+    // Build the memory recall block
+    const lines: string[] = [`[MEMORY RECALL — What you remember about ${primaryEntity.name}]`];
+
+    // Relationship line
+    if (contactMemory) {
+      const strength = contactMemory.relationship_strength != null
+        ? `${Math.round(contactMemory.relationship_strength * 100)}%`
+        : 'unknown';
+      const meetings = contactMemory.total_meetings ?? 0;
+      let lastContactAgo = '';
+      if (contactMemory.last_interaction_at) {
+        const daysSince = Math.floor(
+          (Date.now() - new Date(contactMemory.last_interaction_at).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        lastContactAgo = daysSince === 0 ? 'today' : daysSince === 1 ? '1 day ago' : `${daysSince} days ago`;
+      }
+      lines.push(
+        `Relationship: ${strength} strength, ${meetings} meeting${meetings !== 1 ? 's' : ''}${lastContactAgo ? `, last interaction ${lastContactAgo}` : ''}`
+      );
+    }
+
+    // Deal events — commitments, objections, signals
+    if (dealEvents.length > 0) {
+      const commitments = dealEvents.filter(e => e.event_category === 'commitment');
+      const objections = dealEvents.filter(e => e.event_category === 'objection');
+      const signals = dealEvents.filter(e => e.event_category === 'signal' || e.event_category === 'sentiment' || e.event_category === 'competitive');
+
+      if (commitments.length > 0) {
+        lines.push(`Open commitments: ${commitments.map(c => c.summary).join('; ')}`);
+      }
+      if (objections.length > 0) {
+        const objParts = objections.map(o => {
+          const quote = o.verbatim_quote ? ` ("${o.verbatim_quote.slice(0, 60)}")` : '';
+          return `${o.summary}${quote}`;
+        });
+        lines.push(`Recent objections: ${objParts.join('; ')}`);
+      }
+      if (signals.length > 0) {
+        lines.push(`Recent signals: ${signals.map(s => s.summary).join('; ')}`);
+      }
+    }
+
+    // Key context from copilot memories
+    if (copilotMemories.length > 0) {
+      const memParts = copilotMemories.map(
+        m => `${m.subject}: ${m.content.slice(0, 80)}`
+      );
+      lines.push(`Key context: ${memParts.join('; ')}`);
+    }
+
+    lines.push('');
+    lines.push('Use this memory to provide specific, contextual responses. Reference what you know.');
+
+    const block = '\n\n' + lines.join('\n');
+
+    // Hard cap at ~400 tokens (~1600 chars)
+    if (block.length > 1600) {
+      return block.slice(0, 1597) + '...';
+    }
+
+    return block;
+  } catch (err) {
+    console.error('[fetchMemoryRecall] Error (non-fatal):', err);
+    return ''; // Non-fatal — never block copilot
+  }
+}
+
+// =============================================================================
 // System Prompt
 // =============================================================================
 
@@ -2896,8 +3113,45 @@ serve(async (req: Request) => {
       }
     }
 
+    // =========================================================================
+    // NL-005: Memory Recall — Proactive Memory Playback
+    // =========================================================================
+    // When the user's message mentions a deal or contact (via DEAL_CONTEXT,
+    // seed_context, or IDs), query Brain tables and inject a [MEMORY RECALL]
+    // block so the LLM can reference past interactions proactively.
+    // First-message only: skip if already present in prior system prompt.
+    let memoryRecallBlock = '';
+    if (resolvedOrgForConfig) {
+      const mentionedEntities = detectMentionedEntities(message, seed_context);
+      if (mentionedEntities.length > 0) {
+        memoryRecallBlock = await fetchMemoryRecall(
+          supabase,
+          mentionedEntities,
+          resolvedOrgForConfig,
+        );
+        if (memoryRecallBlock) {
+          // Don't duplicate with CONTACT INTELLIGENCE — if CI already covers
+          // the same contact, skip the contact portion of memory recall.
+          const ciContactId = emailContactId;
+          const recallContactId = mentionedEntities.find(e => e.type === 'contact')?.id;
+          if (ciContactId && recallContactId && ciContactId === recallContactId && contactIntelligenceBlock) {
+            // CI covers this contact — skip memory recall entirely to avoid duplication
+            memoryRecallBlock = '';
+            console.log('[copilot-autonomous] NL-005: Skipped memory recall — contact already covered by BA-007 contact intelligence');
+          } else {
+            console.log(`[copilot-autonomous] NL-005: Memory recall injected for ${mentionedEntities.map(e => `${e.type}:${e.id}`).join(', ')} (${memoryRecallBlock.length} chars)`);
+          }
+        }
+      }
+    }
+
     // Build system prompt (no longer depends on per-skill tool defs)
     let systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext, emailPersonalization);
+
+    // Prepend memory recall block BEFORE contact intelligence (NL-005)
+    if (memoryRecallBlock) {
+      systemPrompt += memoryRecallBlock;
+    }
 
     // Append contact intelligence block to system prompt (BA-007)
     if (contactIntelligenceBlock) {
