@@ -117,6 +117,8 @@ import {
 
 // Agent Marketplace (org admin accessible)
 const AgentMarketplacePage = lazy(() => import('./pages/agent/AgentMarketplacePage'));
+// Agent Brain — TRINITY-004
+const BrainPage = lazy(() => import('./pages/agent/BrainPage'));
 const DemoExperiencePage = lazy(() => import('./pages/settings/DemoExperiencePage'));
 
 // ============================================================
@@ -664,6 +666,8 @@ function AppContent({ performanceMetrics, measurePerformance }: any) {
                     </AppLayout>
                   </OrgAdminRouteGuard>
                 } />
+                {/* Agent Brain — TRINITY-004 */}
+                <Route path="/agent/brain" element={<ProtectedRoute><AppLayout><BrainPage /></AppLayout></ProtectedRoute>} />
                 <Route path="/settings/billing" element={<OrgAdminRouteGuard><AppLayout><BillingSettingsPage /></AppLayout></OrgAdminRouteGuard>} />
                 <Route path="/settings/credits" element={<AppLayout><CreditsSettingsPage /></AppLayout>} />
                 <Route path="/settings/model-preferences" element={<OrgAdminRouteGuard><AppLayout><ModelPreferencesPage /></AppLayout></OrgAdminRouteGuard>} />

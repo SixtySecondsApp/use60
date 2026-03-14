@@ -1357,6 +1357,151 @@ export const generateBriefingAdapter: SkillAdapter = {
         }
       }
 
+      // ---- BA-006: Load Brain memory context for primary contact ----
+      let brainMemoryContext = '';
+      try {
+        // Resolve primary contact ID from enrich-attendees output
+        const primaryContactEntry = (enrichAttendeesOutput?.attendees || [])
+          .find((a: any) => a.is_known_contact && !a.is_internal);
+        let primaryContactId: string | null = null;
+
+        if (primaryContactEntry?.email) {
+          const { data: contactRow } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('email', primaryContactEntry.email.toLowerCase())
+            .maybeSingle();
+          primaryContactId = contactRow?.id || null;
+        }
+
+        // Fall back to CRM history contact if available
+        if (!primaryContactId) {
+          const crmContact = crmHistoryOutput?.contact;
+          if (crmContact?.id && !crmContact.id.startsWith('attendee:') && !crmContact.id.startsWith('cal:')) {
+            primaryContactId = crmContact.id;
+          }
+        }
+
+        if (primaryContactId && state.event.org_id) {
+          const brainParts: string[] = [];
+          const orgId = state.event.org_id;
+          const userId = state.event.user_id;
+
+          // 1. contact_memory — relationship strength, style, interaction stats
+          const { data: contactMem } = await supabase
+            .from('contact_memory')
+            .select(
+              'relationship_strength, communication_style, total_meetings, last_interaction_at'
+            )
+            .eq('contact_id', primaryContactId)
+            .eq('org_id', orgId)
+            .maybeSingle();
+
+          // 2. copilot_memories — recent memories for this contact
+          const { data: copilotMems } = await supabase
+            .from('copilot_memories')
+            .select('subject, content, category')
+            .eq('contact_id', primaryContactId)
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(5);
+
+          // 3. deal_memory_events — open commitments and recent objections for linked deal
+          let dealCommitments: any[] = [];
+          let dealObjections: any[] = [];
+          const dealId = enrichAttendeesOutput?.deal?.id;
+          if (dealId) {
+            const [commitmentsResult, objectionsResult] = await Promise.all([
+              supabase
+                .from('deal_memory_events')
+                .select('summary, detail')
+                .eq('org_id', orgId)
+                .eq('deal_id', dealId)
+                .eq('is_active', true)
+                .eq('event_type', 'commitment_made')
+                .order('source_timestamp', { ascending: false })
+                .limit(5),
+              supabase
+                .from('deal_memory_events')
+                .select('summary, detail, source_timestamp')
+                .eq('org_id', orgId)
+                .eq('deal_id', dealId)
+                .eq('is_active', true)
+                .eq('event_type', 'objection_raised')
+                .order('source_timestamp', { ascending: false })
+                .limit(3),
+            ]);
+
+            dealCommitments = (commitmentsResult.data ?? [])
+              .filter((c: any) => c.detail?.status === 'pending');
+            dealObjections = objectionsResult.data ?? [];
+          }
+
+          // 4. Build brain context block (only if we have data)
+          if (contactMem) {
+            const strengthPct = Math.round((contactMem.relationship_strength ?? 0.5) * 100);
+            const meetings = contactMem.total_meetings ?? 0;
+            let lastInteraction = 'unknown';
+            if (contactMem.last_interaction_at) {
+              const daysDiff = Math.floor(
+                (Date.now() - new Date(contactMem.last_interaction_at).getTime()) / (1000 * 60 * 60 * 24)
+              );
+              lastInteraction = daysDiff === 0 ? 'today' : `${daysDiff} day${daysDiff === 1 ? '' : 's'} ago`;
+            }
+            brainParts.push(`Relationship: ${strengthPct}% strength, ${meetings} meetings, last interaction ${lastInteraction}`);
+
+            // Communication style
+            const style = contactMem.communication_style;
+            if (style && typeof style === 'object' && Object.keys(style).length > 0) {
+              const styleDescriptors: string[] = [];
+              if (style.formality) styleDescriptors.push(style.formality);
+              if (style.preferred_time) styleDescriptors.push(`prefers ${style.preferred_time} meetings`);
+              if (style.communication_preference) styleDescriptors.push(style.communication_preference);
+              if (styleDescriptors.length > 0) {
+                brainParts.push(`Style: ${styleDescriptors.join(', ')}`);
+              }
+            }
+          }
+
+          if (dealCommitments.length > 0) {
+            const commitmentLines = dealCommitments
+              .map((c: any) => {
+                const deadline = c.detail?.deadline ? ` by ${c.detail.deadline}` : '';
+                return c.summary + deadline;
+              })
+              .join('; ');
+            brainParts.push(`Open commitments: ${commitmentLines}`);
+          }
+
+          if (dealObjections.length > 0) {
+            const objectionLines = dealObjections
+              .map((o: any) => {
+                const blocker = o.detail?.is_blocker ? ' (blocker)' : '';
+                return o.summary + blocker;
+              })
+              .join('; ');
+            brainParts.push(`Recent objections: ${objectionLines}`);
+          }
+
+          if (copilotMems && copilotMems.length > 0) {
+            const memoryLines = copilotMems
+              .map((m: any) => `${m.subject}: ${m.content}`)
+              .slice(0, 3)
+              .join('; ');
+            brainParts.push(`Memories: ${memoryLines}`);
+          }
+
+          if (brainParts.length > 0) {
+            brainMemoryContext = `[BRAIN MEMORY — What you know about this contact]\n${brainParts.join('\n')}`;
+            console.log(`[generate-briefing] BA-006: Brain memory loaded (${brainParts.length} sections)`);
+          }
+        }
+      } catch (brainErr) {
+        // Never block prep if Brain data is unavailable
+        console.warn('[generate-briefing] BA-006: Brain memory loading failed (non-blocking):', brainErr);
+      }
+      // ---- END BA-006 ----
+
       // ---- NEW: Detect return meeting and fire targeted RAG queries ----
       let meetingHistory: Awaited<ReturnType<typeof detectMeetingHistory>> | null = null;
       let ragHistoricalContext: HistoricalContext | null = null;
@@ -1466,6 +1611,11 @@ export const generateBriefingAdapter: SkillAdapter = {
         // Also include deal memory context if available
         if (dealMemoryContext) {
           promptText += `\n\n## ADDITIONAL DEAL MEMORY\n${dealMemoryContext}`;
+        }
+
+        // BA-006: Inject Brain memory context
+        if (brainMemoryContext) {
+          promptText += `\n\n## ${brainMemoryContext}`;
         }
       } else {
         // First meeting or no RAG: use the existing prompt logic
@@ -1692,6 +1842,12 @@ export const generateBriefingAdapter: SkillAdapter = {
       // Deal memory (institutional knowledge from past meetings and events)
       if (dealMemoryContext) {
         promptSections.push(`\n## Deal Memory (Institutional Knowledge)\n${dealMemoryContext}`);
+        promptSections.push('');
+      }
+
+      // BA-006: Brain memory context (contact-level intelligence)
+      if (brainMemoryContext) {
+        promptSections.push(`\n## ${brainMemoryContext}`);
         promptSections.push('');
       }
 
@@ -1956,6 +2112,7 @@ function generateFallbackBriefing(
 
 import { deliverToSlack } from '../../proactive/deliverySlack.ts';
 import type { ProactiveNotificationPayload } from '../../proactive/types.ts';
+import { getDailyThreadTs } from '../../slack/dailyThread.ts';
 
 export const deliverSlackBriefingAdapter: SkillAdapter = {
   name: 'deliver-slack-briefing',
@@ -2086,6 +2243,18 @@ export const deliverSlackBriefingAdapter: SkillAdapter = {
           }
         }
 
+        // BA-006: Get daily thread_ts for threaded delivery
+        let threadTs: string | undefined;
+        try {
+          const dailyTs = await getDailyThreadTs(state.event.user_id, state.event.org_id, supabase);
+          if (dailyTs) {
+            threadTs = dailyTs;
+            console.log('[deliver-slack-briefing] BA-006: Using daily thread_ts for threaded delivery');
+          }
+        } catch (threadErr) {
+          console.warn('[deliver-slack-briefing] BA-006: getDailyThreadTs failed (non-blocking):', threadErr);
+        }
+
         const payload: ProactiveNotificationPayload = {
           type: 'pre_meeting_90min',
           orgId: state.event.org_id,
@@ -2096,6 +2265,7 @@ export const deliverSlackBriefingAdapter: SkillAdapter = {
           title: `Meeting Briefing: ${meetingTitle}`,
           message: briefing.executive_summary || 'Meeting briefing prepared.',
           blocks,
+          thread_ts: threadTs,
           metadata: {
             meeting_id: meetingId,
             meeting_title: meetingTitle,

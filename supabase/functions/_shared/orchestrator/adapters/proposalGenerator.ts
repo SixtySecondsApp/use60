@@ -9,24 +9,32 @@ import type { SkillAdapter, SequenceState, SequenceStep, StepResult } from '../t
 import { logAICostEvent, extractAnthropicUsage } from '../../costTracking.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { getServiceClient } from './contextEnrichment.ts';
+import { getDocumentTypeConfig, type DocumentType } from '../../documents/documentTypeRegistry.ts';
+import { writeToCommandCentre } from '../../commandCentre/writeAdapter.ts';
 
 // =============================================================================
 // detect-proposal-intent — PROP-001
 // =============================================================================
 
 /**
- * Detects a send_proposal commitment in detect-intents output and, when found,
- * calls proposal-pipeline-v2 with enriched deal-memory context to kick off an
- * async proposal job.  The resulting proposal_id is stored in the step
- * output so that the downstream HITL step (PROP-002) can surface it.
+ * Detects document-related commitments in detect-intents output and routes to
+ * the appropriate generation pipeline:
+ *
+ * - If `commitment.document_type` is present (set by DOC-002), calls the
+ *   `generate-document` edge function for any of the 8 document types.
+ * - If `document_type` is null/undefined but intent is `send_proposal`, uses
+ *   the existing proposal pipeline (V2 default, V1 fallback) for backward compat.
  *
  * V2 pipeline (default): calls proposal-pipeline-v2 with trigger_type: 'auto_post_meeting'.
  * V1 fallback: set pipeline_version: 'v1' in the step config to use generate-proposal.
  *
+ * After successful generation, creates a command_centre_items entry so the
+ * document draft appears in the rep's Command Centre.
+ *
  * Skip conditions (all return success with skipped:true, no error):
  *   - detect-intents step produced no output
- *   - no commitment of type 'send_proposal' found in commitments array
- *   - deal_id is unavailable (proposal has no CRM anchor)
+ *   - no commitment of type 'send_proposal' or with document_type found
+ *   - deal_id is unavailable (document has no CRM anchor)
  */
 export const detectProposalIntentAdapter: SkillAdapter = {
   name: 'detect-proposal-intent',
@@ -35,12 +43,19 @@ export const detectProposalIntentAdapter: SkillAdapter = {
     const start = Date.now();
 
     try {
-      console.log('[detect-proposal-intent] Checking for send_proposal intent');
+      console.log('[detect-proposal-intent] Checking for document/proposal intent');
 
       // ---- 1. Read detect-intents output ----------------------------------
       const intentsOutput = state.outputs['detect-intents'] as
         | {
-            commitments?: Array<{ intent?: string; type?: string; phrase?: string; source_quote?: string; confidence?: number }>;
+            commitments?: Array<{
+              intent?: string;
+              type?: string;
+              phrase?: string;
+              source_quote?: string;
+              confidence?: number;
+              document_type?: DocumentType;
+            }>;
             skipped?: boolean;
           }
         | undefined;
@@ -54,14 +69,19 @@ export const detectProposalIntentAdapter: SkillAdapter = {
         };
       }
 
-      // ---- 2. Find send_proposal commitment --------------------------------
+      // ---- 2. Find document or proposal commitment -------------------------
+      // First check for any commitment with a document_type (DOC-002 enrichment)
       const commitments = intentsOutput.commitments || [];
-      const proposalCommitment = commitments.find(
+      const documentCommitment = commitments.find(
+        (c) => !!c.document_type,
+      );
+      // Fall back to legacy send_proposal intent if no document_type found
+      const proposalCommitment = documentCommitment || commitments.find(
         (c) => c.intent === 'send_proposal' || c.type === 'send_proposal',
       );
 
       if (!proposalCommitment) {
-        console.log('[detect-proposal-intent] No send_proposal intent found, skipping');
+        console.log('[detect-proposal-intent] No document or send_proposal intent found, skipping');
         return {
           success: true,
           output: { skipped: true, reason: 'no_send_proposal_intent' },
@@ -69,8 +89,14 @@ export const detectProposalIntentAdapter: SkillAdapter = {
         };
       }
 
+      // Determine if this is a document-type route or legacy proposal route
+      const detectedDocumentType: DocumentType | null = proposalCommitment.document_type ?? null;
+      const useDocumentPipeline = !!detectedDocumentType;
+
       console.log(
-        `[detect-proposal-intent] Found send_proposal intent (confidence=${proposalCommitment.confidence ?? 'n/a'})`,
+        `[detect-proposal-intent] Found intent: document_type=${detectedDocumentType ?? 'none'}, ` +
+        `intent=${proposalCommitment.intent ?? proposalCommitment.type ?? 'n/a'}, ` +
+        `confidence=${proposalCommitment.confidence ?? 'n/a'}`,
       );
 
       // ---- 3. Require deal_id — proposal needs a CRM anchor ---------------
@@ -141,8 +167,132 @@ export const detectProposalIntentAdapter: SkillAdapter = {
         trigger_phrase: proposalCommitment.phrase || proposalCommitment.source_quote || null,
       };
 
-      // ---- 6. Call proposal-pipeline-v2 (default) or generate-proposal (V1 fallback) ----
-      // V1 fallback: set pipeline_version: 'v1' in step config to use legacy generate-proposal.
+      // ---- 6. Route to document pipeline or proposal pipeline ----------------
+
+      if (useDocumentPipeline && detectedDocumentType) {
+        // ---- 6a. Document pipeline — call generate-document edge function ----
+        const docConfig = getDocumentTypeConfig(detectedDocumentType);
+
+        // Build meeting_context for generate-document from orchestrator state
+        const summaryOutput = state.outputs['meeting-summary'] as
+          | { summary?: string; next_steps?: string }
+          | undefined;
+        const transcriptExcerpt = state.context.tier2?.meetingHistory?.[0]?.transcript
+          ? state.context.tier2.meetingHistory[0].transcript.substring(0, 3000)
+          : undefined;
+
+        const docPayload = {
+          document_type: detectedDocumentType,
+          org_id: state.event.org_id,
+          user_id: state.event.user_id,
+          deal_id: deal.id,
+          contact_id: contact?.id,
+          meeting_context: {
+            summary: summaryOutput?.summary || 'Meeting summary not available',
+            next_steps: summaryOutput?.next_steps || 'Next steps not available',
+            transcript_excerpt: transcriptExcerpt,
+          },
+        };
+
+        console.log(`[detect-proposal-intent] Calling generate-document for type=${detectedDocumentType}`);
+
+        const docResponse = await fetch(`${supabaseUrl}/functions/v1/generate-document`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(docPayload),
+        });
+
+        if (!docResponse.ok) {
+          const errorText = await docResponse.text().catch(() => '');
+          console.warn(
+            `[detect-proposal-intent] generate-document returned ${docResponse.status}: ${errorText}`,
+          );
+          return {
+            success: true,
+            output: {
+              skipped: true,
+              reason: 'generate_document_error',
+              document_type: detectedDocumentType,
+              http_status: docResponse.status,
+            },
+            duration_ms: Date.now() - start,
+          };
+        }
+
+        const docResult = await docResponse.json();
+        const documentId: string | undefined = docResult.document_id;
+
+        console.log(
+          `[detect-proposal-intent] Document generated: document_id=${documentId ?? 'n/a'}, ` +
+          `type=${detectedDocumentType}, sections=${docResult.sections?.length ?? 0}`,
+        );
+
+        // ---- 6a-CC. Create Command Centre item for document draft ----
+        const contactName = contact?.name || 'the prospect';
+        const dealNameForCC = deal.name || 'Untitled Deal';
+        const displayName = docConfig.displayName;
+
+        // Build a preview from executive_summary or first section content
+        let sectionPreview = '';
+        if (docResult.sections && Array.isArray(docResult.sections)) {
+          const execSection = docResult.sections.find(
+            (s: { type: string; content?: string }) => s.type === 'executive_summary',
+          );
+          const firstSection = docResult.sections[0] as { content?: string } | undefined;
+          const previewContent = execSection?.content || firstSection?.content || '';
+          sectionPreview = previewContent.length > 300
+            ? previewContent.substring(0, 300) + '...'
+            : previewContent;
+        }
+
+        writeToCommandCentre({
+          org_id: state.event.org_id,
+          user_id: state.event.user_id,
+          source_agent: 'document-intelligence',
+          item_type: 'document_draft',
+          title: `${displayName} ready: ${dealNameForCC}`,
+          summary: `${displayName} auto-generated from meeting with ${contactName}.`,
+          context: {
+            document_id: documentId,
+            document_type: detectedDocumentType,
+            deal_id: deal.id,
+            contact_id: contact?.id,
+            meeting_id: state.event.payload.meeting_id,
+            generation_time_ms: docResult.generation_time_ms,
+            sections_preview: sectionPreview,
+          },
+          deal_id: deal.id,
+          contact_id: contact?.id,
+          urgency: 'normal',
+        }).catch((err) => {
+          // Fire-and-forget: CC write failure must not block the pipeline
+          console.warn('[detect-proposal-intent] CC write failed (non-fatal):', err);
+        });
+
+        return {
+          success: true,
+          output: {
+            proposal_id: documentId,
+            document_id: documentId,
+            document_type: detectedDocumentType,
+            document_display_name: displayName,
+            sections: docResult.sections,
+            generation_time_ms: docResult.generation_time_ms,
+            deal_id: deal.id,
+            deal_name: deal.name,
+            trigger_phrase: proposalCommitment.phrase || proposalCommitment.source_quote,
+            confidence: proposalCommitment.confidence,
+            pipeline_version: 'document',
+            generate_proposal_response: docResult,
+          },
+          duration_ms: Date.now() - start,
+        };
+      }
+
+      // ---- 6b. Legacy proposal pipeline — proposal-pipeline-v2 (default) or V1 fallback ----
       const pipelineVersion = (_step.config as Record<string, unknown> | undefined)?.pipeline_version ?? 'v2';
       const useV2 = pipelineVersion !== 'v1';
 
@@ -658,8 +808,24 @@ function buildProposalApprovalBlocks(params: {
   executiveSummary: string;
   pricingSection: string | null;
   appUrl: string;
+  documentTypeName?: string;
+  documentTypeEmoji?: string;
 }): unknown[] {
-  const { approvalId, dealName, contactName, meetingTitle, executiveSummary, pricingSection, appUrl } = params;
+  const {
+    approvalId,
+    dealName,
+    contactName,
+    meetingTitle,
+    executiveSummary,
+    pricingSection,
+    appUrl,
+    documentTypeName,
+    documentTypeEmoji,
+  } = params;
+
+  // Use document type display name if available, otherwise default to "Proposal"
+  const docLabel = documentTypeName || 'Proposal';
+  const emoji = documentTypeEmoji || ':briefcase:';
 
   const summaryPreview = executiveSummary.length > 500
     ? executiveSummary.substring(0, 500) + '...'
@@ -668,10 +834,10 @@ function buildProposalApprovalBlocks(params: {
   const editUrl = `${appUrl}/deals?proposal_approval=${approvalId}`;
 
   const blocks: unknown[] = [
-    _paHeader('Proposal Ready for Review'),
-    _paContextBlock([`Deal: *${dealName}* | Contact: ${contactName} | Meeting: ${meetingTitle}`]),
+    _paHeader(`${docLabel} Ready for Review`),
+    _paContextBlock([`${emoji} Deal: *${dealName}* | Contact: ${contactName} | Meeting: ${meetingTitle}`]),
     _paDivider(),
-    _paSection(`*Executive Summary*\n${summaryPreview}`),
+    _paSection(`*Preview*\n${summaryPreview}`),
   ];
 
   if (pricingSection) {
@@ -701,7 +867,7 @@ function buildProposalApprovalBlocks(params: {
     ]),
   );
 
-  blocks.push(_paContextBlock(['Expires in 24 hours | View full proposal in Sixty']));
+  blocks.push(_paContextBlock([`Expires in 24 hours | View full ${docLabel.toLowerCase()} in Sixty`]));
 
   return blocks;
 }
@@ -730,6 +896,11 @@ export const proposalApprovalAdapter: SkillAdapter = {
             deal_name?: string;
             trigger_phrase?: string;
             generate_proposal_response?: Record<string, unknown>;
+            // DOC-004: document pipeline fields
+            document_id?: string;
+            document_type?: DocumentType;
+            document_display_name?: string;
+            sections?: Array<{ type: string; title: string; content: string }>;
           }
         | undefined;
 
@@ -755,16 +926,46 @@ export const proposalApprovalAdapter: SkillAdapter = {
       const meetingTitle = (state.event.payload.title as string | undefined) || 'Our meeting';
       const meetingId = state.event.payload.meeting_id as string | undefined;
 
-      // --- 2. Try to fetch proposal content for preview ---
+      // --- 2. Resolve document type metadata for display ---
+      const isDocumentPipeline = intentOutput.pipeline_version === 'document' && !!intentOutput.document_type;
+      let documentTypeName: string | undefined;
+      let documentTypeEmoji: string | undefined;
+
+      if (isDocumentPipeline && intentOutput.document_type) {
+        try {
+          const docTypeConfig = getDocumentTypeConfig(intentOutput.document_type);
+          documentTypeName = docTypeConfig.displayName;
+          documentTypeEmoji = docTypeConfig.slackEmoji;
+        } catch {
+          // Unknown document type — fall back to defaults
+          documentTypeName = 'Document';
+          documentTypeEmoji = ':page_facing_up:';
+        }
+      }
+
+      // --- 3. Try to fetch proposal/document content for preview ---
+      // Document pipeline: sections are already in intent output
       // V2: read from proposals.sections (ProposalSection[] jsonb)
       // V1: fall back to proposal_jobs table (legacy)
-      let executiveSummary = 'Executive summary will be available once the proposal is generated.';
+      let executiveSummary = 'Content will be available once generated.';
       let pricingSection: string | null = null;
 
       const isV2 = intentOutput.pipeline_version === 'v2' || !!intentOutput.proposal_id;
 
       try {
-        if (isV2 && intentOutput.proposal_id) {
+        if (isDocumentPipeline && intentOutput.sections) {
+          // Document pipeline: sections are directly available from PROP-001
+          const execSection = intentOutput.sections.find((s) => s.type === 'executive_summary');
+          const firstSection = intentOutput.sections[0];
+          // Use executive_summary if available, otherwise first section content (first 300 chars)
+          const previewContent = execSection?.content || firstSection?.content || '';
+          executiveSummary = previewContent.length > 300
+            ? previewContent.substring(0, 300) + '...'
+            : previewContent;
+          // Pricing section still relevant for some document types
+          const pricingSecObj = intentOutput.sections.find((s) => s.type === 'pricing');
+          if (pricingSecObj?.content) pricingSection = pricingSecObj.content;
+        } else if (isV2 && intentOutput.proposal_id) {
           // V2: read sections from proposals table
           const { data: proposalRow } = await supabase
             .from('proposals')
@@ -868,7 +1069,7 @@ export const proposalApprovalAdapter: SkillAdapter = {
           created_by: state.event.user_id,
           resource_type: 'proposal',
           resource_id: intentOutput.deal_id || deal?.id || state.event.org_id,
-          resource_name: `Proposal: ${dealName}`,
+          resource_name: `${documentTypeName || 'Proposal'}: ${dealName}`,
           slack_team_id: slackTeamId,
           slack_channel_id: dmChannelId,
           slack_message_ts: '', // updated after message is sent
@@ -879,6 +1080,10 @@ export const proposalApprovalAdapter: SkillAdapter = {
             // V1 compat: proposal_job_id holds the canonical ref (same value for V2)
             proposal_job_id: proposalJobId,
             pipeline_version: intentOutput.pipeline_version ?? 'v2',
+            // DOC-004: document pipeline fields
+            document_id: intentOutput.document_id,
+            document_type: intentOutput.document_type,
+            document_display_name: documentTypeName,
             deal_id: intentOutput.deal_id || deal?.id,
             deal_name: dealName,
             contact_name: contactName,
@@ -921,6 +1126,7 @@ export const proposalApprovalAdapter: SkillAdapter = {
       const approvalId = approval.id;
 
       // --- 6. Build and send Slack Block Kit message ---
+      const docLabel = documentTypeName || 'Proposal';
       const blocks = buildProposalApprovalBlocks({
         approvalId,
         dealName,
@@ -929,9 +1135,11 @@ export const proposalApprovalAdapter: SkillAdapter = {
         executiveSummary,
         pricingSection,
         appUrl,
+        documentTypeName,
+        documentTypeEmoji,
       });
 
-      const fallbackText = `Proposal ready for review: ${dealName} — ${contactName}`;
+      const fallbackText = `${docLabel} ready for review: ${dealName} — ${contactName}`;
 
       const slackResponse = await fetch('https://slack.com/api/chat.postMessage', {
         method: 'POST',

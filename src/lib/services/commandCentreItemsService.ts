@@ -37,6 +37,9 @@ export interface CCItem {
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
+  resolved_via: 'copilot' | 'manual' | 'auto' | 'slack' | null;
+  resolved_conversation_id: string | null;
+  thread_id: string | null;
   deal_id: string | null;
   contact_id: string | null;
   enrichment_context: Record<string, unknown>;
@@ -87,6 +90,9 @@ const CC_ITEM_COLUMNS = [
   'created_at',
   'updated_at',
   'resolved_at',
+  'resolved_via',
+  'resolved_conversation_id',
+  'thread_id',
   'deal_id',
   'contact_id',
   'enrichment_context',
@@ -208,7 +214,7 @@ class CommandCentreItemsService {
     try {
       const { error } = await supabase
         .from('command_centre_items')
-        .update({ status: 'approved' })
+        .update({ status: 'approved', resolved_at: new Date().toISOString(), resolved_via: 'manual' })
         .eq('id', id);
 
       if (error) {
@@ -231,7 +237,7 @@ class CommandCentreItemsService {
     try {
       const { error } = await supabase
         .from('command_centre_items')
-        .update({ status: 'dismissed', resolved_at: new Date().toISOString() })
+        .update({ status: 'dismissed', resolved_at: new Date().toISOString(), resolved_via: 'manual' })
         .eq('id', id);
 
       if (error) {
@@ -329,6 +335,7 @@ class CommandCentreItemsService {
           status: 'completed',
           resolution_channel: 'manual_approved_and_sent',
           resolved_at: new Date().toISOString(),
+          resolved_via: 'manual',
         })
         .eq('id', id);
 
@@ -367,6 +374,7 @@ class CommandCentreItemsService {
           status: 'completed',
           resolution_channel: 'saved_as_draft',
           resolved_at: new Date().toISOString(),
+          resolved_via: 'manual',
         })
         .eq('id', id);
 
@@ -408,6 +416,7 @@ class CommandCentreItemsService {
         .update({
           status: 'approved',
           resolution_channel: 'autonomy_positive',
+          resolved_via: 'manual',
         })
         .eq('id', id);
 

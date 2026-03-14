@@ -98,6 +98,12 @@ export interface DailyDigestData {
     activitiesCount: number;
     pipelineValue: number;
   };
+  criticalMeetings?: Array<{
+    title: string;
+    severity: string;
+    riskFlag: string;
+    meetingId: string;
+  }>;
   appUrl: string;
 }
 
@@ -6356,4 +6362,238 @@ export function buildPipelineHygieneDigest(data: PipelineHygieneDigestData): Sla
     blocks,
     text: `Pipeline Hygiene: ${data.deals.length} deals need attention`,
   };
+}
+
+// =============================================================================
+// Critical Meeting Alert (US-005)
+// =============================================================================
+
+export interface CriticalMeetingAlertData {
+  meetingId: string;
+  meetingTitle: string;
+  attendees: string[];
+  duration: number;
+  dealName?: string;
+  dealId?: string;
+  dealStage?: string;
+  companyName?: string;
+  summary: string;
+  sentimentScore: number; // 0-100
+  sentimentReasoning?: string;
+  riskFlags: Array<{ flag: string; severity: 'critical' | 'high' | 'medium'; evidence: string }>;
+  actionItems: Array<{ task: string; suggestedOwner?: string; dueInDays?: number }>;
+  commitments: Array<{ description: string; suggestedOwner?: string; suggestedDueDate?: string }>;
+  severity: 'critical' | 'high' | 'medium';
+  reasons: string[];
+  appUrl: string;
+  detailLevel?: 'full' | 'summary';
+}
+
+/**
+ * Build a rich Slack Block Kit message for a critical meeting alert.
+ * Follows the buildRiskAlertBlocks pattern with severity badges, evidence,
+ * action items, commitments, and interactive buttons.
+ */
+export function buildCriticalMeetingAlert(data: CriticalMeetingAlertData): SlackMessage {
+  const blocks: SlackBlock[] = [];
+  const isSummary = data.detailLevel === 'summary';
+
+  // 1. Header with severity
+  const severityEmoji = data.severity === 'critical' ? '🔴' : data.severity === 'high' ? '🟠' : '🟡';
+  const severityLabel = data.severity.toUpperCase();
+
+  blocks.push({
+    type: 'header',
+    text: {
+      type: 'plain_text',
+      text: safeHeaderText(`${severityEmoji} ${severityLabel} ALERT — ${data.meetingTitle}`),
+      emoji: true,
+    },
+  });
+
+  // 2. Context: attendees, duration, deal
+  const contextParts: string[] = [];
+  if (data.attendees.length > 0) {
+    const attendeeStr = data.attendees.slice(0, 3).join(', ');
+    contextParts.push(attendeeStr);
+  }
+  if (data.duration) contextParts.push(`${data.duration}min`);
+  if (data.dealName) contextParts.push(`Deal: ${data.dealName}`);
+  if (data.dealStage) contextParts.push(data.dealStage);
+  if (data.companyName) contextParts.push(data.companyName);
+
+  if (contextParts.length > 0) {
+    blocks.push({
+      type: 'context',
+      elements: [{
+        type: 'mrkdwn',
+        text: safeContextMrkdwn(contextParts.join(' • ')),
+      }],
+    });
+  }
+
+  // 3. Summary
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: safeMrkdwn(data.summary),
+    },
+  });
+
+  // 4. Sentiment
+  const sentimentBar = getSentimentBar(data.sentimentScore);
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: safeMrkdwn(`*Sentiment:* ${sentimentBar} ${data.sentimentScore}/100`),
+    },
+  });
+
+  blocks.push({ type: 'divider' });
+
+  // 5. Risk flags (full detail shows evidence, summary omits it)
+  if (data.riskFlags.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '*Risk Signals:*',
+      },
+    });
+
+    for (const flag of data.riskFlags.slice(0, 5)) {
+      const flagEmoji = flag.severity === 'critical' ? '🔴' : flag.severity === 'high' ? '🟠' : '🟡';
+      const flagName = flag.flag.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      let flagText = `${flagEmoji} *${flagName}*`;
+
+      if (!isSummary && flag.evidence) {
+        flagText += `\n> _${truncate(flag.evidence, 200)}_`;
+      }
+
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeMrkdwn(flagText),
+        },
+      });
+    }
+
+    blocks.push({ type: 'divider' });
+  }
+
+  // 6. Commitments (both full and summary)
+  if (data.commitments.length > 0) {
+    const commitmentLines = data.commitments.slice(0, 5).map((c) => {
+      let line = `• ${c.description}`;
+      if (c.suggestedOwner) line += ` _(${c.suggestedOwner})_`;
+      if (c.suggestedDueDate) line += ` — by ${c.suggestedDueDate}`;
+      return line;
+    });
+
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: safeMrkdwn(`*Commitments:*\n${commitmentLines.join('\n')}`),
+      },
+    });
+
+    blocks.push({ type: 'divider' });
+  }
+
+  // 7. Action items
+  if (data.actionItems.length > 0) {
+    const actionLines = data.actionItems.slice(0, 5).map((a) => {
+      let line = `• ${a.task}`;
+      if (a.suggestedOwner) line += ` _(${a.suggestedOwner})_`;
+      if (a.dueInDays) line += ` — ${a.dueInDays}d`;
+      return line;
+    });
+
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: safeMrkdwn(`*Action Items:*\n${actionLines.join('\n')}`),
+      },
+    });
+
+    blocks.push({ type: 'divider' });
+  }
+
+  // 8. Detection reasons (full only)
+  if (!isSummary && data.reasons.length > 0) {
+    blocks.push({
+      type: 'context',
+      elements: [{
+        type: 'mrkdwn',
+        text: safeContextMrkdwn(`Why this alert: ${data.reasons.join(' | ')}`),
+      }],
+    });
+  }
+
+  // 9. Action buttons
+  const meetingUrl = `${data.appUrl}/meetings?id=${data.meetingId}`;
+  const actionElements: SlackBlock[] = [];
+
+  actionElements.push({
+    type: 'button',
+    text: { type: 'plain_text', text: safeButtonText('View Meeting'), emoji: true },
+    url: meetingUrl,
+    style: 'primary',
+    action_id: `critical_view_meeting_${data.meetingId}`,
+  });
+
+  if (data.dealId) {
+    actionElements.push({
+      type: 'button',
+      text: { type: 'plain_text', text: safeButtonText('View Deal'), emoji: true },
+      url: `${data.appUrl}/deals?id=${data.dealId}`,
+      action_id: `critical_view_deal_${data.meetingId}`,
+    });
+  }
+
+  actionElements.push({
+    type: 'button',
+    text: { type: 'plain_text', text: safeButtonText('Assign Follow-up'), emoji: true },
+    action_id: `critical_assign_followup_${data.meetingId}`,
+    value: safeButtonValue(JSON.stringify({ meetingId: data.meetingId, dealId: data.dealId })),
+  });
+
+  actionElements.push({
+    type: 'button',
+    text: { type: 'plain_text', text: safeButtonText('Draft Recovery Email'), emoji: true },
+    action_id: `critical_draft_recovery_${data.meetingId}`,
+    value: safeButtonValue(JSON.stringify({ meetingId: data.meetingId })),
+  });
+
+  actionElements.push({
+    type: 'button',
+    text: { type: 'plain_text', text: safeButtonText('Dismiss'), emoji: true },
+    action_id: `critical_dismiss_${data.meetingId}`,
+    value: safeButtonValue(JSON.stringify({ meetingId: data.meetingId })),
+  });
+
+  blocks.push({
+    type: 'actions',
+    elements: actionElements,
+  });
+
+  const fallbackText = `${severityEmoji} ${severityLabel} ALERT: ${data.meetingTitle} — ${data.summary}`;
+
+  return {
+    blocks,
+    text: truncate(fallbackText, 300),
+  };
+}
+
+function getSentimentBar(score: number): string {
+  if (score <= 20) return '🔴🔴🔴🔴🔴';
+  if (score <= 30) return '🔴🔴🔴🔴⚪';
+  if (score <= 40) return '🟠🟠🟠⚪⚪';
+  if (score <= 50) return '🟡🟡⚪⚪⚪';
+  return '🟢🟢🟢⚪⚪';
 }

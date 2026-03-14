@@ -38,12 +38,13 @@ export default function AgentMarketplacePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Backend preferences for orchestrator abilities
-  const { isEnabled: isBackendEnabled, toggleEnabled: toggleBackendEnabled } =
-    useAgentAbilityPreferences();
-
-  // localStorage state for V1 abilities (trigger re-render on change)
-  const [localToggleKey, setLocalToggleKey] = useState(0);
+  // Backend preferences for all abilities (DB-backed)
+  const {
+    isEnabled: isBackendEnabled,
+    toggleEnabled: toggleBackendEnabled,
+    getLastRunAt,
+    getRunCount,
+  } = useAgentAbilityPreferences();
 
   // Fetch per-ability stats from sequence_jobs
   const { data: abilityStats } = useQuery({
@@ -74,7 +75,7 @@ export default function AgentMarketplacePage() {
     staleTime: 30_000,
   });
 
-  // Check if an ability is enabled (backend or localStorage)
+  // Check if an ability is enabled (DB-backed via sequence preferences)
   const isAbilityEnabled = useCallback(
     (abilityId: string): boolean => {
       const ability = ABILITY_REGISTRY.find((a) => a.id === abilityId);
@@ -85,15 +86,13 @@ export default function AgentMarketplacePage() {
         return isBackendEnabled(sequenceType);
       }
 
-      // V1 abilities: localStorage
-      // localToggleKey forces re-evaluation
-      void localToggleKey;
-      return localStorage.getItem(`agent-ability-enabled-${abilityId}`) !== 'false';
+      // Fallback for any abilities without a sequence type mapping
+      return true;
     },
-    [isBackendEnabled, localToggleKey]
+    [isBackendEnabled]
   );
 
-  // Toggle ability enabled state
+  // Toggle ability enabled state (DB-backed)
   const handleToggleEnabled = useCallback(
     async (abilityId: string, enabled: boolean) => {
       const ability = ABILITY_REGISTRY.find((a) => a.id === abilityId);
@@ -102,9 +101,6 @@ export default function AgentMarketplacePage() {
       const sequenceType = getSequenceTypeForEventType(ability.eventType);
       if (sequenceType) {
         await toggleBackendEnabled(sequenceType, enabled);
-      } else {
-        localStorage.setItem(`agent-ability-enabled-${abilityId}`, enabled.toString());
-        setLocalToggleKey((k) => k + 1);
       }
     },
     [toggleBackendEnabled]
@@ -175,7 +171,20 @@ export default function AgentMarketplacePage() {
             {/* Ability Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {abilities.map((ability) => {
-                const stats = abilityStats?.[ability.eventType];
+                const jobStats = abilityStats?.[ability.eventType];
+                const seqType = getSequenceTypeForEventType(ability.eventType);
+                // Prefer preference-based run tracking (authoritative from runner),
+                // fall back to sequence_jobs query for non-orchestrator abilities
+                const prefLastRun = seqType ? getLastRunAt(seqType) : null;
+                const prefRunCount = seqType ? getRunCount(seqType) : 0;
+                const stats: AbilityStats | undefined =
+                  (prefRunCount > 0 || (jobStats && jobStats.totalRuns > 0))
+                    ? {
+                        lastRunAt: prefLastRun || jobStats?.lastRunAt || null,
+                        totalRuns: prefRunCount || jobStats?.totalRuns || 0,
+                        successCount: jobStats?.successCount || 0,
+                      }
+                    : undefined;
                 return (
                   <MarketplaceAbilityCard
                     key={ability.id}

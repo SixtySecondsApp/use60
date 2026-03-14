@@ -4,14 +4,12 @@ import { supabase } from '@/lib/supabase/clientV2';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { useOrgStore } from '@/lib/stores/orgStore';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Loader2, Shuffle, Target, Play, RotateCcw, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { type AbilityDefinition, getRequiredEntityType } from '@/lib/agent/abilityRegistry';
 import { useOrchestratorJob } from '@/hooks/useOrchestratorJob';
 import { LiveStepVisualizer } from '@/components/agent/LiveStepVisualizer';
 import { LiveOutputPanel } from '@/components/agent/LiveOutputPanel';
-import { V1ResultPreview } from '@/components/agent/V1ResultPreview';
 
 interface AbilityTestPanelProps {
   ability: AbilityDefinition;
@@ -25,7 +23,6 @@ export function AbilityTestPanel({ ability }: AbilityTestPanelProps) {
   const [selectedMeetingId, setSelectedMeetingId] = useState('');
   const [selectedDealId, setSelectedDealId] = useState('');
   const [isRunning, setIsRunning] = useState(false);
-  const [v1Result, setV1Result] = useState<Record<string, unknown> | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
 
   const entityType = getRequiredEntityType(ability.eventType);
@@ -96,84 +93,53 @@ export function AbilityTestPanel({ ability }: AbilityTestPanelProps) {
     }
 
     setIsRunning(true);
-    setV1Result(null);
     setJobId(null);
 
     try {
-      if (ability.backendType === 'v1-simulate') {
-        // V1 path: safe dry-run preview, no external delivery
-        const { data, error } = await supabase.functions.invoke('proactive-simulate', {
-          body: {
-            orgId,
-            feature: ability.eventType,
-            targetUserId: user.id,
-            sendSlack: false,
-            createInApp: false,
-            dryRun: true,
-            simulationMode: mode === 'sample',
-            entityIds: mode === 'specific' ? {
-              ...(selectedMeetingId ? { meetingId: selectedMeetingId } : {}),
-              ...(selectedDealId ? { dealId: selectedDealId } : {}),
-            } : {},
-          },
+      // Orchestrator path: run with in-app channel only (safe)
+      const selectedMeeting = meetings?.find(m => m.id === selectedMeetingId);
+
+      const { data, error } = await supabase.functions.invoke('agent-fleet-router', {
+        body: {
+          action: 'orchestrator',
+          type: ability.eventType,
+          source: 'manual',
+          org_id: selectedMeeting?.org_id || orgId,
+          user_id: user.id,
+          channels: ['in-app'],
+          payload: entityType === 'meeting' && selectedMeetingId
+            ? { meeting_id: selectedMeetingId, title: selectedMeeting?.title, transcript_available: true }
+            : {},
+        },
+      });
+
+      if (error) {
+        let errorMsg = error.message || 'Unknown error';
+        try {
+          if (error.context && typeof error.context.json === 'function') {
+            const body = await error.context.json();
+            errorMsg = body?.error || errorMsg;
+          }
+        } catch { /* ignore parse errors */ }
+        throw new Error(errorMsg);
+      }
+
+      if (data?.job_id) {
+        setJobId(data.job_id);
+        toast.success('Orchestrator started', {
+          description: `Job ID: ${data.job_id.slice(0, 8)}...`,
         });
-
-        if (error) throw error;
-        if (!data?.success) throw new Error(data?.error || 'Simulation failed');
-
-        setV1Result(data as Record<string, unknown>);
-        toast.success('Test completed', { description: 'Dry run — nothing was sent' });
       } else {
-        // Orchestrator path: run with in-app channel only (safe)
-        const selectedMeeting = meetings?.find(m => m.id === selectedMeetingId);
-
-        const { data, error } = await supabase.functions.invoke('agent-fleet-router', {
-          body: {
-            action: 'orchestrator',
-            type: ability.eventType,
-            source: 'manual',
-            org_id: selectedMeeting?.org_id || orgId,
-            user_id: user.id,
-            channels: ['in-app'],
-            payload: entityType === 'meeting' && selectedMeetingId
-              ? { meeting_id: selectedMeetingId, title: selectedMeeting?.title, transcript_available: true }
-              : {},
-          },
-        });
-
-        if (error) {
-          let errorMsg = error.message || 'Unknown error';
-          try {
-            if (error.context && typeof error.context.json === 'function') {
-              const body = await error.context.json();
-              errorMsg = body?.error || errorMsg;
-            }
-          } catch { /* ignore parse errors */ }
-          throw new Error(errorMsg);
-        }
-
-        if (data?.job_id) {
-          setJobId(data.job_id);
-          toast.success('Orchestrator started', {
-            description: `Job ID: ${data.job_id.slice(0, 8)}...`,
-          });
-        } else {
-          throw new Error('No job ID returned');
-        }
+        throw new Error('No job ID returned');
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to run test';
       toast.error(msg);
       setIsRunning(false);
-    } finally {
-      if (ability.backendType === 'v1-simulate') {
-        setIsRunning(false);
-      }
     }
   };
 
   const handleReset = () => {
-    setV1Result(null);
     setJobId(null);
     setIsRunning(false);
     resetJob();
@@ -281,11 +247,7 @@ export function AbilityTestPanel({ ability }: AbilityTestPanelProps) {
       </Button>
 
       {/* Results */}
-      {v1Result && ability.backendType === 'v1-simulate' && (
-        <V1ResultPreview result={v1Result} v1UseRealData={mode === 'specific'} />
-      )}
-
-      {jobId && ability.backendType !== 'v1-simulate' && (
+      {jobId && (
         <div className="space-y-4">
           <LiveStepVisualizer stepResults={stepResults} jobStatus={jobStatus} eventType={ability.eventType} />
           <LiveOutputPanel stepResults={stepResults} jobStatus={jobStatus} jobId={jobId} eventType={ability.eventType} />
@@ -293,7 +255,7 @@ export function AbilityTestPanel({ ability }: AbilityTestPanelProps) {
       )}
 
       {/* Reset button */}
-      {(v1Result || jobId) && (
+      {jobId && (
         <Button
           size="sm"
           variant="outline"

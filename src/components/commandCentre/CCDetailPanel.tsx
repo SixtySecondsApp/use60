@@ -27,6 +27,7 @@ import {
   Info,
   Loader2,
   Mail,
+  MessageSquare,
   RotateCcw,
   Save,
   User,
@@ -39,11 +40,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useCommandCentreItemMutations } from '@/lib/hooks/useCommandCentreItemsQuery';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
+import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { URGENCY_CONFIG } from './constants';
+import { CCChainReplay } from './CCChainReplay';
 import { CCEmailPanel } from './panels/CCEmailPanel';
 import { CCCrmDiffPanel } from './panels/CCCrmDiffPanel';
 import { CCDealHealthPanel } from './panels/CCDealHealthPanel';
 import { CCSignalPanel } from './panels/CCSignalPanel';
+import { CCInlineActions } from './CCInlineActions';
+import { DocumentPreview } from '@/components/documents/DocumentPreview';
+import type { DocumentSection } from '@/components/documents/DocumentPreview';
 
 // ============================================================================
 // Props
@@ -516,6 +522,7 @@ function TimelineSection({ item }: { item: CCItem }) {
 export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
   const { approveItem, dismissItem, snoozeItem, undoItem, updateDraftedAction, approveAndSendEmail, saveEmailAsDraft, markGoodSuggestion, regenerateWithFeedback } =
     useCommandCentreItemMutations();
+  const { openCopilot, sendMessage } = useCopilot();
 
   // Ref to hold the pending send timeout so it can be cancelled on undo
   const sendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -578,6 +585,24 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
     regenerateWithFeedback.mutate({ id: item.id, feedback });
   };
 
+  const handleAskCopilot = () => {
+    if (!item) return;
+    const query = `Help me with this Command Centre item: "${item.title}"`;
+    // Open the copilot with a fresh chat (no initial query to avoid double-send)
+    openCopilot(undefined, true);
+    // Send the message with seedContext so the edge function gets CC item context
+    setTimeout(() => {
+      sendMessage(query, {
+        seedContext: {
+          itemId: item.id,
+          itemType: item.item_type,
+          dealId: item.deal_id ?? undefined,
+          contactId: item.contact_id ?? undefined,
+        },
+      });
+    }, 250);
+  };
+
   const handleApproveAndSend = (payload: { to: string; subject: string; body_html: string }) => {
     if (!item) return;
 
@@ -616,8 +641,6 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
     }, 5000);
   };
 
-  const isOpen = item !== null;
-
   // Derived state — only compute when item is present
   const enrichmentContext = (item?.enrichment_context as Record<string, unknown>) ?? {};
   const confidenceFactors = (item?.confidence_factors as Record<string, unknown>) ?? {};
@@ -628,8 +651,7 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
   return (
     <div
       className={cn(
-        'flex-shrink-0 flex flex-col border-l border-slate-200 dark:border-gray-800/60 bg-white dark:bg-gray-900/80 transition-all duration-200 ease-out overflow-hidden',
-        isOpen ? 'w-[460px]' : 'w-0',
+        'flex flex-col bg-white dark:bg-gray-900/80 overflow-hidden h-full',
       )}
     >
       {item && (
@@ -720,6 +742,15 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
                   Dismiss
                 </Button>
               )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs text-violet-600 border-violet-200 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-500/30 dark:hover:bg-violet-500/10"
+                onClick={handleAskCopilot}
+              >
+                <MessageSquare className="h-3 w-3 mr-1" />
+                Ask Copilot
+              </Button>
             </div>
           </div>
 
@@ -756,14 +787,21 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
               </div>
             )}
 
+            {/* ---- Inline actions (TRINITY-017) ---- */}
+            <CCInlineActions item={item} />
+
             {/* ---- Typed panel registry ---- */}
             {(() => {
               const draftedAction = (item.drafted_action as Record<string, unknown>) ?? {};
               const actionType = draftedAction?.type as string | undefined;
 
-              type PanelType = 'email' | 'crm-diff' | 'deal-health' | 'signal' | 'generic';
+              type PanelType = 'email' | 'crm-diff' | 'deal-health' | 'signal' | 'document' | 'generic';
 
               function getPanelType(i: CCItem): PanelType {
+                if (
+                  i.item_type === 'document_draft' ||
+                  i.source_agent === 'document-intelligence'
+                ) return 'document';
                 if (
                   actionType === 'send_email' ||
                   actionType === 'email_draft' ||
@@ -786,6 +824,37 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
               }
 
               const panelType = getPanelType(item);
+
+              if (panelType === 'document') {
+                // Extract sections from drafted_action or context JSONB
+                const docSource = draftedAction ?? item.context ?? {};
+                const rawSections =
+                  (docSource.sections as DocumentSection[] | undefined) ??
+                  (item.context?.sections as DocumentSection[] | undefined) ??
+                  [];
+                const docType =
+                  (item.context?.document_type as string | undefined) ??
+                  (draftedAction?.document_type as string | undefined) ??
+                  'proposal';
+                const docTypeName =
+                  (item.context?.document_type_name as string | undefined) ??
+                  (draftedAction?.document_type_name as string | undefined) ??
+                  docType.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+                return (
+                  <CollapsibleSection title="Document Preview" defaultOpen={true}>
+                    <DocumentPreview
+                      documentType={docType}
+                      documentTypeName={docTypeName}
+                      sections={rawSections}
+                      onCopy={() => {}}
+                      onEdit={() => {
+                        toast.info('Edit functionality coming soon');
+                      }}
+                    />
+                  </CollapsibleSection>
+                );
+              }
 
               if (panelType === 'email' && item.drafted_action) {
                 return (
@@ -865,7 +934,9 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
                 item.item_type?.includes('health') ||
                 item.item_type?.includes('risk_score') ||
                 item.item_type?.includes('signal') ||
-                item.item_type?.includes('alert');
+                item.item_type?.includes('alert') ||
+                item.item_type === 'document_draft' ||
+                item.source_agent === 'document-intelligence';
               if (!isTyped) return null;
               return (
                 <CollapsibleSection title="Enrichment Context" defaultOpen={false}>
@@ -878,6 +949,15 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
             <CollapsibleSection title="Confidence Breakdown" defaultOpen={false}>
               <ConfidenceSection score={item.confidence_score} factors={confidenceFactors} />
             </CollapsibleSection>
+
+            {/* Chain replay — TRINITY-018 */}
+            {(() => {
+              const chainId =
+                (item.context?.chain_id as string | undefined) ??
+                (item.enrichment_context?.chain_id as string | undefined) ??
+                null;
+              return <CCChainReplay chainId={chainId} />;
+            })()}
 
             {/* Timeline */}
             <CollapsibleSection title="Timeline" defaultOpen={false}>

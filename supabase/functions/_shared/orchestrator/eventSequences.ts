@@ -106,6 +106,15 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['extract-action-items'],
     },
+    // Wave 2b: BA-001c — Extract deal memories (preferences, objections, context) from transcript
+    {
+      skill: 'extract-deal-memories',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['extract-action-items'],
+    },
     // Wave 2b: Infer attendee stakeholder roles from transcript (REL-003)
     {
       skill: 'infer-attendee-roles',
@@ -133,15 +142,6 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       criticality: 'best-effort',
       available: true,
       depends_on: ['extract-action-items', 'detect-intents'],
-    },
-    // Wave 3: CAL-002 — Slack HITL DM with top 3 slot options; pauses sequence for rep approval
-    {
-      skill: 'calendar-slot-approval',
-      requires_context: ['tier1'],
-      requires_approval: true,
-      criticality: 'best-effort',
-      available: true,
-      depends_on: ['detect-scheduling-intent'],
     },
     // Wave 3: CAL-002 — Slack HITL DM with top 3 slot options; pauses sequence for rep approval
     {
@@ -516,6 +516,191 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       criticality: 'best-effort',
       available: true,
       depends_on: ['score-deal-risks'],
+    },
+  ],
+  // =========================================================================
+  // Brain Pre-Call (US-007): calendar_event_created → research + dossier + notify
+  // DB-driven route: brain_pre_call (seeded in migration 20260313142351)
+  // This hardcoded fallback mirrors the DB definition.
+  // =========================================================================
+  calendar_event_created: [
+    {
+      skill: 'lead-research',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+    {
+      skill: 'company-research',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+    {
+      skill: 'meeting-prep-brief',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'critical',
+      available: true,
+      depends_on: ['lead-research', 'company-research'],
+    },
+    {
+      skill: 'cc-notify',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['meeting-prep-brief'],
+    },
+  ],
+
+  // =========================================================================
+  // Brain Post-Call (US-010): meeting_completed → digest + followup + CRM + notify
+  // DB-driven route: brain_post_call (seeded in migration 20260313142351)
+  // =========================================================================
+  meeting_completed: [
+    {
+      skill: 'meeting-digest-truth-extractor',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'critical',
+      available: true,
+      depends_on: [],
+    },
+    {
+      skill: 'post-meeting-followup-pack-builder',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['meeting-digest-truth-extractor'],
+    },
+    {
+      skill: 'copilot-crm-update',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['meeting-digest-truth-extractor'],
+    },
+    {
+      skill: 'cc-notify',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['post-meeting-followup-pack-builder', 'copilot-crm-update'],
+    },
+  ],
+
+  // =========================================================================
+  // Brain Deal Stage (US-012): deal_stage_changed → risk rescore + next actions + notify
+  // DB-driven route: brain_deal_stage (seeded in migration 20260313142351)
+  // =========================================================================
+  deal_stage_changed: [
+    {
+      skill: 'deal-risk-scorer',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+    {
+      skill: 'deal-next-best-actions',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['deal-risk-scorer'],
+    },
+    {
+      skill: 'cc-notify',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['deal-next-best-actions'],
+    },
+  ],
+
+  // =========================================================================
+  // Brain Task Overdue (US-013): Handled directly by agent-trigger (not fleet)
+  // Included here for completeness — single-step CC notify.
+  // =========================================================================
+  task_overdue: [
+    {
+      skill: 'cc-notify',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+  ],
+
+  // =========================================================================
+  // Brain Deal Stalled (US-013): deal_stalled → stale_deal_revival (reuses existing)
+  // Falls through to stale_deal_revival sequence.
+  // =========================================================================
+  deal_stalled: [
+    {
+      skill: 'research-trigger-events',
+      requires_context: ['tier2', 'tier3:news', 'tier3:linkedin'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+    {
+      skill: 'analyse-stall-reason',
+      requires_context: ['tier2'],
+      requires_approval: false,
+      criticality: 'critical',
+      available: true,
+      depends_on: ['research-trigger-events'],
+    },
+    {
+      skill: 'draft-reengagement',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: true,
+      criticality: 'critical',
+      available: true,
+      depends_on: ['analyse-stall-reason'],
+    },
+    {
+      skill: 'signal-task-processor',
+      requires_context: ['tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['analyse-stall-reason'],
+    },
+  ],
+
+  // =========================================================================
+  // Brain Deal Risk Rescore (US-012 handoff from post-call CRM update)
+  // =========================================================================
+  deal_risk_rescore: [
+    {
+      skill: 'deal-risk-scorer',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: [],
+    },
+    {
+      skill: 'cc-notify',
+      requires_context: ['tier1'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['deal-risk-scorer'],
     },
   ],
 };

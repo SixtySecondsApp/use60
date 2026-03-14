@@ -28,13 +28,19 @@ export default function Signup() {
 
   // Get redirect destination from URL params (e.g., when coming from /invite/:token)
   const redirectPath = searchParams.get('redirect') || null;
+  const planParam = searchParams.get('plan') || null;
 
   // Redirect authenticated users to their intended destination
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
-      navigate(redirectPath || '/dashboard', { replace: true });
+      // Founding Member: redirect to checkout instead of dashboard
+      if (planParam === 'founding') {
+        navigate('/settings/billing?checkout=founding', { replace: true });
+      } else {
+        navigate(redirectPath || '/dashboard', { replace: true });
+      }
     }
-  }, [isAuthenticated, authLoading, navigate, redirectPath]);
+  }, [isAuthenticated, authLoading, navigate, redirectPath, planParam]);
   const emailParam = searchParams.get('email') || null;
 
   // Pre-fill form from invitation email param, waitlist data, or localStorage

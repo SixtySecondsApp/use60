@@ -54,6 +54,7 @@ import { classifyIntent } from '../_shared/agentClassifier.ts';
 import { runSpecialist, type StreamWriter } from '../_shared/agentSpecialist.ts';
 import { getSpecialistConfig, getAgentDisplayInfo } from '../_shared/agentDefinitions.ts';
 import { recordSignal, type ApprovalSignal } from '../_shared/autopilot/signals.ts';
+import { getBrainContext } from '../_shared/skills/brainContextCache.ts';
 
 // =============================================================================
 // Configuration
@@ -71,6 +72,13 @@ const MAX_TOKENS = 4096;
 // Types
 // =============================================================================
 
+interface SeedContext {
+  itemId: string;
+  itemType: string;
+  dealId?: string;
+  contactId?: string;
+}
+
 interface RequestBody {
   message: string;
   organizationId?: string;
@@ -78,6 +86,7 @@ interface RequestBody {
   stream?: boolean;
   fact_profile_id?: string;
   product_profile_id?: string;
+  seed_context?: SeedContext;
 }
 
 // =============================================================================
@@ -243,6 +252,9 @@ ACTION PARAMETERS:
 Use these when the user mentions goals, targets, KPIs, monthly goals, or asks to set/update/view their sales targets. These update the Dashboard progress bars.
 - get_targets: {} - Get the user's current monthly goals (revenue, outbound activities, meetings, proposals)
 - upsert_target: { field: "revenue_target"|"outbound_target"|"meetings_target"|"proposal_target", value: <number>, confirm: true } - Set or update a monthly sales goal. FIELD MAPPING: "new business"/"revenue"/"won deals" → revenue_target | "outbound"/"calls"/"activities" → outbound_target | "meetings"/"demos"/"booked" → meetings_target | "proposals"/"quotes" → proposal_target. Does NOT require any contact lookup — operates directly on the user's personal targets. Requires confirm=true.
+
+## Document Generation (on-demand)
+- generate_document: { document_type?, user_message?, deal_id?, contact_id? } - Generate a document (proposal, next_steps, team_brief, scoping_document, project_plan, discussion_points, ideal_workflow, proposal_terms). Either provide document_type directly OR provide user_message and the system will match the type from keywords. Requires at least one of deal_id or contact_id. Fetches latest meeting context automatically. Use when the user asks to "write a proposal", "create next steps", "draft a scoping document", "put together a project plan", etc.
 
 Write actions (create_task, create_ops_table, update_crm, upsert_target, etc.) require params.confirm=true. search_leads_create_table and enrich_table_column do NOT require confirmation.`,
     input_schema: {
@@ -601,7 +613,9 @@ async function executeToolCall(
   userId: string,
   orgId: string | null,
   userAuthToken?: string,
-  contextTimezone?: string
+  contextTimezone?: string,
+  seedContext?: SeedContext,
+  userMessage?: string
 ): Promise<unknown> {
   // Resolve org for skills/execute_action tools
   const resolvedOrgId = await resolveOrgId(client, userId, orgId);
@@ -624,7 +638,61 @@ async function executeToolCall(
 
     case 'get_skill': {
       const skillKey = input.skill_key ? String(input.skill_key) : '';
-      return await handleGetSkill(client, resolvedOrgId, skillKey);
+      const skillResult = await handleGetSkill(client, resolvedOrgId, skillKey);
+
+      // SBI-002: Auto-inject Brain context into skill execution
+      try {
+        if (skillResult.success && skillResult.skill) {
+          const fm = skillResult.skill.frontmatter || {};
+          const brainContextTables = (fm.brain_context as string[] | undefined);
+          // Skip injection if brain_context is explicitly ['none']
+          const shouldInject = !brainContextTables ||
+            !(brainContextTables.length === 1 && brainContextTables[0] === 'none');
+
+          if (shouldInject) {
+            // Resolve contactId and dealId from seed_context or DEAL_CONTEXT block
+            let contactId: string | null = seedContext?.contactId || null;
+            let dealId: string | null = seedContext?.dealId || null;
+
+            // Fallback: parse DEAL_CONTEXT block from user message
+            if (userMessage) {
+              if (!dealId) {
+                const dealIdMatch = userMessage.match(/\[DEAL_CONTEXT\][\s\S]*?Deal ID:\s*([a-f0-9-]+)/i);
+                if (dealIdMatch) dealId = dealIdMatch[1].trim();
+              }
+              if (!contactId) {
+                const contactIdMatch = userMessage.match(/Primary Contact ID:\s*([a-f0-9-]+)/i);
+                if (contactIdMatch) contactId = contactIdMatch[1].trim();
+              }
+            }
+
+            // Only inject if we have at least one entity to query against
+            if (contactId || dealId) {
+              const tables = brainContextTables && brainContextTables.length > 0
+                ? brainContextTables
+                : ['contact_memory', 'deal_memory_events'];
+              const brainResult = await getBrainContext(
+                resolvedOrgId,
+                contactId,
+                dealId,
+                userId,
+                tables,
+                client,
+              );
+              if (brainResult.formatted) {
+                skillResult.skill.content = skillResult.skill.content +
+                  '\n\n' + brainResult.formatted;
+                console.log(`[copilot-autonomous] Injected Brain context for skill ${skillKey}`);
+              }
+            }
+          }
+        }
+      } catch (brainErr) {
+        // SBI-002: Failures never prevent skill execution
+        console.warn('[copilot-autonomous] SBI-002 Brain context injection failed:', brainErr);
+      }
+
+      return skillResult;
     }
 
     case 'execute_action': {
@@ -1338,6 +1406,444 @@ async function fetchProfileContext(
 }
 
 // =============================================================================
+// BA-007: Contact Intelligence for Email Drafts
+// =============================================================================
+
+interface ContactIntelligence {
+  relationshipStrength?: number;
+  communicationStyle?: Record<string, unknown>;
+  totalMeetings?: number;
+  lastInteractionAt?: string;
+  summary?: string;
+  recentMemories?: Array<{ category: string; subject: string; content: string }>;
+  recentObjections?: Array<{ summary: string; verbatimQuote?: string; sourceTimestamp: string }>;
+}
+
+/**
+ * Detect whether the current message is an email composition request and
+ * extract the target contact_id from the message body / seed_context.
+ * Returns null when no email context + contact is detected.
+ */
+function detectEmailContactId(
+  message: string,
+  seedContext?: SeedContext,
+): string | null {
+  const lower = message.toLowerCase();
+  const isEmailRequest =
+    (lower.includes('draft') && lower.includes('email')) ||
+    (lower.includes('write') && lower.includes('email')) ||
+    (lower.includes('follow up') && !lower.includes('task')) ||
+    (lower.includes('follow-up') && !lower.includes('task')) ||
+    lower.includes('email to') ||
+    lower.includes('compose email') ||
+    (lower.includes('send') && lower.includes('email'));
+
+  if (!isEmailRequest) return null;
+
+  // 1. seed_context.contactId (Command Centre)
+  if (seedContext?.contactId) return seedContext.contactId;
+
+  // 2. Primary Contact ID from DEAL_CONTEXT block
+  const contactIdMatch = message.match(/Primary Contact ID:\s*([a-f0-9-]+)/i);
+  if (contactIdMatch) return contactIdMatch[1];
+
+  // 3. contact_id explicitly referenced in message (e.g. from context injection)
+  const contactUuidMatch = message.match(/contact_id[:\s]+([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+  if (contactUuidMatch) return contactUuidMatch[1];
+
+  return null;
+}
+
+/**
+ * Check whether the user has contact_intelligence enabled in their
+ * brain_intelligence preferences. Defaults to true when no setting exists.
+ */
+async function isContactIntelligenceEnabled(
+  client: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await client
+      .from('user_settings')
+      .select('preferences')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error || !data) return true; // default enabled
+
+    const prefs = data.preferences as Record<string, unknown> | null;
+    if (!prefs) return true;
+
+    const bi = prefs.brain_intelligence as Record<string, unknown> | undefined;
+    if (!bi) return true;
+
+    // Explicit false means disabled; anything else (true / undefined) means enabled
+    return bi.contact_intelligence !== false;
+  } catch {
+    return true; // non-fatal, default enabled
+  }
+}
+
+/**
+ * Fetch contact intelligence from Brain tables and return a formatted block
+ * for system prompt injection. Returns empty string when no data exists.
+ * Capped at ~500 tokens to keep the context window lean.
+ */
+async function fetchContactIntelligence(
+  client: ReturnType<typeof createClient>,
+  contactId: string,
+  orgId: string,
+): Promise<string> {
+  try {
+    // Parallel queries: contact_memory, copilot_memories, deal_memory_events
+    const [contactMemoryResult, copilotMemoriesResult, objectionEventsResult] = await Promise.all([
+      // contact_memory uses contact_id as TEXT
+      client
+        .from('contact_memory')
+        .select('relationship_strength, communication_style, total_meetings, last_interaction_at, summary')
+        .eq('org_id', orgId)
+        .eq('contact_id', contactId)
+        .maybeSingle(),
+
+      // copilot_memories uses contact_id as UUID
+      client
+        .from('copilot_memories')
+        .select('category, subject, content')
+        .eq('contact_id', contactId)
+        .in('category', ['relationship', 'deal', 'preference'])
+        .order('updated_at', { ascending: false })
+        .limit(3),
+
+      // deal_memory_events where contact appears in contact_ids array
+      client
+        .from('deal_memory_events')
+        .select('summary, verbatim_quote, source_timestamp')
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+        .contains('contact_ids', [contactId])
+        .in('event_category', ['objection', 'competitive'])
+        .order('source_timestamp', { ascending: false })
+        .limit(2),
+    ]);
+
+    const contactMemory = contactMemoryResult.data;
+    const copilotMemories = copilotMemoriesResult.data ?? [];
+    const objections = objectionEventsResult.data ?? [];
+
+    // Nothing found — skip injection
+    if (!contactMemory && copilotMemories.length === 0 && objections.length === 0) {
+      return '';
+    }
+
+    // Build the intelligence block
+    const lines: string[] = ['[CONTACT INTELLIGENCE]'];
+
+    // Relationship strength + meetings
+    if (contactMemory) {
+      const strength = contactMemory.relationship_strength != null
+        ? `${Math.round(contactMemory.relationship_strength * 100)}%`
+        : 'unknown';
+      const meetings = contactMemory.total_meetings ?? 0;
+
+      let lastContactAgo = '';
+      if (contactMemory.last_interaction_at) {
+        const daysSince = Math.floor(
+          (Date.now() - new Date(contactMemory.last_interaction_at).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        lastContactAgo = daysSince === 0 ? 'today' : daysSince === 1 ? '1 day ago' : `${daysSince} days ago`;
+      }
+
+      lines.push(
+        `Relationship strength: ${strength}${meetings > 0 ? ` (${meetings} meeting${meetings !== 1 ? 's' : ''}${lastContactAgo ? `, last ${lastContactAgo}` : ''})` : ''}`
+      );
+
+      // Communication style
+      const style = contactMemory.communication_style as Record<string, unknown> | null;
+      if (style && Object.keys(style).length > 0) {
+        const styleParts: string[] = [];
+        if (style.tone) styleParts.push(`${style.tone} tone`);
+        if (style.preferred_channel) styleParts.push(`prefers ${style.preferred_channel}`);
+        if (style.length_preference) styleParts.push(`prefers ${style.length_preference} messages`);
+        if (style.formality) styleParts.push(`${style.formality}`);
+        if (styleParts.length > 0) {
+          lines.push(`Communication: ${styleParts.join(', ')}`);
+        }
+      }
+
+      // Summary from contact_memory
+      if (contactMemory.summary) {
+        // Truncate summary to keep under token budget
+        const truncatedSummary = contactMemory.summary.length > 200
+          ? contactMemory.summary.slice(0, 200) + '...'
+          : contactMemory.summary;
+        lines.push(`Profile: ${truncatedSummary}`);
+      }
+    }
+
+    // Known sensitivities / objections
+    if (objections.length > 0) {
+      const objectionParts = objections.map((o) => {
+        const quote = o.verbatim_quote ? ` ("${o.verbatim_quote.slice(0, 80)}")` : '';
+        return `${o.summary}${quote}`;
+      });
+      lines.push(`Known sensitivities: ${objectionParts.join('; ')}`);
+    }
+
+    // Relevant relationship memories
+    if (copilotMemories.length > 0) {
+      const memParts = copilotMemories.map(
+        (m) => `${m.subject}: ${m.content.slice(0, 100)}`
+      );
+      lines.push(`Recent context: ${memParts.join('; ')}`);
+    }
+
+    // Adaptive guidance
+    const adaptParts: string[] = [];
+    if (contactMemory?.communication_style) {
+      const style = contactMemory.communication_style as Record<string, unknown>;
+      if (style.tone === 'formal' || style.formality === 'formal') adaptParts.push('Use formal greeting');
+      if (style.tone === 'casual' || style.formality === 'casual') adaptParts.push('Use casual, friendly greeting');
+      if (style.length_preference === 'concise' || style.length_preference === 'short') adaptParts.push('Keep under 4 sentences');
+    }
+    if (objections.length > 0) {
+      adaptParts.push('Avoid leading with topics related to known sensitivities');
+    }
+    if (adaptParts.length > 0) {
+      lines.push(`Adapt: ${adaptParts.join(', ')}`);
+    }
+
+    const block = '\n\n' + lines.join('\n');
+
+    // Hard cap at ~500 tokens (~2000 chars)
+    if (block.length > 2000) {
+      return block.slice(0, 1997) + '...';
+    }
+
+    return block;
+  } catch (err) {
+    console.error('[fetchContactIntelligence] Error (non-fatal):', err);
+    return ''; // Non-fatal — never block copilot
+  }
+}
+
+// =============================================================================
+// NL-005: Memory Recall — Proactive Memory Playback on Entity Mention
+// =============================================================================
+
+interface DetectedEntity {
+  type: 'deal' | 'contact';
+  id: string;
+  name: string;
+}
+
+/**
+ * Detect entity mentions in the user message by matching against known
+ * deal/contact names from the DEAL_CONTEXT block and seed_context.
+ * Lightweight — no DB lookups for name matching; relies on context already
+ * available in the message/seed_context.
+ */
+function detectMentionedEntities(
+  message: string,
+  seedContext?: SeedContext,
+): DetectedEntity[] {
+  const entities: DetectedEntity[] = [];
+  const seen = new Set<string>();
+
+  // 1. DEAL_CONTEXT block — structured deal + contact IDs and names
+  const dealIdMatch = message.match(/\[DEAL_CONTEXT\][\s\S]*?Deal ID:\s*([a-f0-9-]+)/i);
+  const dealNameMatch = message.match(/\[DEAL_CONTEXT\][\s\S]*?Deal:\s*([^\n]+)/i);
+  if (dealIdMatch) {
+    const dealId = dealIdMatch[1].trim();
+    const dealName = dealNameMatch ? dealNameMatch[1].trim() : 'deal';
+    if (!seen.has(`deal:${dealId}`)) {
+      entities.push({ type: 'deal', id: dealId, name: dealName });
+      seen.add(`deal:${dealId}`);
+    }
+  }
+
+  const contactIdFromContext = message.match(/Primary Contact ID:\s*([a-f0-9-]+)/i);
+  const contactNameFromContext = message.match(/Contact\s*Name:\s*([^\n]+)/i);
+  if (contactIdFromContext) {
+    const contactId = contactIdFromContext[1].trim();
+    const contactName = contactNameFromContext ? contactNameFromContext[1].trim() : 'contact';
+    if (!seen.has(`contact:${contactId}`)) {
+      entities.push({ type: 'contact', id: contactId, name: contactName });
+      seen.add(`contact:${contactId}`);
+    }
+  }
+
+  // 2. seed_context — Command Centre context
+  if (seedContext?.dealId && !seen.has(`deal:${seedContext.dealId}`)) {
+    entities.push({ type: 'deal', id: seedContext.dealId, name: 'deal' });
+    seen.add(`deal:${seedContext.dealId}`);
+  }
+  if (seedContext?.contactId && !seen.has(`contact:${seedContext.contactId}`)) {
+    entities.push({ type: 'contact', id: seedContext.contactId, name: 'contact' });
+    seen.add(`contact:${seedContext.contactId}`);
+  }
+
+  return entities;
+}
+
+/**
+ * Fetch memory recall data for detected entities from Brain tables and build
+ * a formatted [MEMORY RECALL] block. Capped at ~400 tokens (~1600 chars).
+ * Returns empty string when no memory data exists.
+ */
+async function fetchMemoryRecall(
+  client: ReturnType<typeof createClient>,
+  entities: DetectedEntity[],
+  orgId: string,
+): Promise<string> {
+  try {
+    if (entities.length === 0) return '';
+
+    // Collect all contact IDs and deal IDs
+    const contactIds = entities.filter(e => e.type === 'contact').map(e => e.id);
+    const dealIds = entities.filter(e => e.type === 'deal').map(e => e.id);
+
+    // Primary entity for the header (first deal, or first contact)
+    const primaryEntity = entities[0];
+
+    // Parallel queries — lightweight, indexed lookups
+    const queries: Promise<unknown>[] = [];
+
+    // 1. contact_memory for the first contact (if any)
+    const contactId = contactIds[0];
+    if (contactId) {
+      queries.push(
+        client
+          .from('contact_memory')
+          .select('relationship_strength, communication_style, total_meetings, last_interaction_at')
+          .eq('org_id', orgId)
+          .eq('contact_id', contactId)
+          .maybeSingle()
+      );
+    } else {
+      queries.push(Promise.resolve({ data: null }));
+    }
+
+    // 2. deal_memory_events — last 5 events across all detected deals
+    if (dealIds.length > 0) {
+      queries.push(
+        client
+          .from('deal_memory_events')
+          .select('event_category, summary, verbatim_quote, source_timestamp')
+          .eq('org_id', orgId)
+          .eq('is_active', true)
+          .in('deal_id', dealIds)
+          .in('event_category', ['commitment', 'objection', 'signal', 'sentiment', 'competitive'])
+          .order('source_timestamp', { ascending: false })
+          .limit(5)
+      );
+    } else {
+      queries.push(Promise.resolve({ data: [] }));
+    }
+
+    // 3. copilot_memories for the contact or deal (last 3)
+    const memoryFilter = contactId
+      ? client
+          .from('copilot_memories')
+          .select('category, subject, content')
+          .eq('contact_id', contactId)
+          .in('category', ['relationship', 'deal', 'commitment', 'preference'])
+          .order('updated_at', { ascending: false })
+          .limit(3)
+      : dealIds.length > 0
+        ? client
+            .from('copilot_memories')
+            .select('category, subject, content')
+            .eq('deal_id', dealIds[0])
+            .in('category', ['relationship', 'deal', 'commitment', 'preference'])
+            .order('updated_at', { ascending: false })
+            .limit(3)
+        : Promise.resolve({ data: [] });
+
+    queries.push(memoryFilter);
+
+    const [contactMemoryResult, dealEventsResult, copilotMemoriesResult] = await Promise.all(queries) as [
+      { data: { relationship_strength: number | null; communication_style: Record<string, unknown> | null; total_meetings: number; last_interaction_at: string | null } | null },
+      { data: { event_category: string; summary: string; verbatim_quote: string | null; source_timestamp: string }[] | null },
+      { data: { category: string; subject: string; content: string }[] | null },
+    ];
+
+    const contactMemory = contactMemoryResult.data;
+    const dealEvents = dealEventsResult.data ?? [];
+    const copilotMemories = copilotMemoriesResult.data ?? [];
+
+    // Nothing found — skip injection
+    if (!contactMemory && dealEvents.length === 0 && copilotMemories.length === 0) {
+      return '';
+    }
+
+    // Build the memory recall block
+    const lines: string[] = [`[MEMORY RECALL — What you remember about ${primaryEntity.name}]`];
+
+    // Relationship line
+    if (contactMemory) {
+      const strength = contactMemory.relationship_strength != null
+        ? `${Math.round(contactMemory.relationship_strength * 100)}%`
+        : 'unknown';
+      const meetings = contactMemory.total_meetings ?? 0;
+      let lastContactAgo = '';
+      if (contactMemory.last_interaction_at) {
+        const daysSince = Math.floor(
+          (Date.now() - new Date(contactMemory.last_interaction_at).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        lastContactAgo = daysSince === 0 ? 'today' : daysSince === 1 ? '1 day ago' : `${daysSince} days ago`;
+      }
+      lines.push(
+        `Relationship: ${strength} strength, ${meetings} meeting${meetings !== 1 ? 's' : ''}${lastContactAgo ? `, last interaction ${lastContactAgo}` : ''}`
+      );
+    }
+
+    // Deal events — commitments, objections, signals
+    if (dealEvents.length > 0) {
+      const commitments = dealEvents.filter(e => e.event_category === 'commitment');
+      const objections = dealEvents.filter(e => e.event_category === 'objection');
+      const signals = dealEvents.filter(e => e.event_category === 'signal' || e.event_category === 'sentiment' || e.event_category === 'competitive');
+
+      if (commitments.length > 0) {
+        lines.push(`Open commitments: ${commitments.map(c => c.summary).join('; ')}`);
+      }
+      if (objections.length > 0) {
+        const objParts = objections.map(o => {
+          const quote = o.verbatim_quote ? ` ("${o.verbatim_quote.slice(0, 60)}")` : '';
+          return `${o.summary}${quote}`;
+        });
+        lines.push(`Recent objections: ${objParts.join('; ')}`);
+      }
+      if (signals.length > 0) {
+        lines.push(`Recent signals: ${signals.map(s => s.summary).join('; ')}`);
+      }
+    }
+
+    // Key context from copilot memories
+    if (copilotMemories.length > 0) {
+      const memParts = copilotMemories.map(
+        m => `${m.subject}: ${m.content.slice(0, 80)}`
+      );
+      lines.push(`Key context: ${memParts.join('; ')}`);
+    }
+
+    lines.push('');
+    lines.push('Use this memory to provide specific, contextual responses. Reference what you know.');
+
+    const block = '\n\n' + lines.join('\n');
+
+    // Hard cap at ~400 tokens (~1600 chars)
+    if (block.length > 1600) {
+      return block.slice(0, 1597) + '...';
+    }
+
+    return block;
+  } catch (err) {
+    console.error('[fetchMemoryRecall] Error (non-fatal):', err);
+    return ''; // Non-fatal — never block copilot
+  }
+}
+
+// =============================================================================
 // System Prompt
 // =============================================================================
 
@@ -1363,9 +1869,10 @@ function buildSystemPrompt(
 
 1. **If user mentions a person by first name only** -> Use resolve_entity FIRST
 2. **If user needs data** (deals, contacts, meetings, pipeline) -> Use execute_action with the appropriate action
-3. **If task involves a skill or multi-step workflow** -> Use list_skills to discover, get_skill to retrieve, then follow the skill instructions
-4. Use execute_action to gather data or perform tasks
-5. **When discussing deals or contacts** -> Proactively call search_meeting_context to enrich your response with relevant meeting intelligence. This helps provide context from past conversations.
+3. **If user asks to write/create/draft a document** (proposal, next steps, scoping document, project plan, team brief, discussion points, ideal workflow, proposal with terms) -> Use execute_action with generate_document. Resolve the deal_id and/or contact_id first if not already known (from seed_context, DEAL_CONTEXT block, or by using resolve_entity / get_deal). Present the generated sections in a readable format and offer to send the document.
+4. **If task involves a skill or multi-step workflow** -> Use list_skills to discover, get_skill to retrieve, then follow the skill instructions
+5. Use execute_action to gather data or perform tasks
+6. **When discussing deals or contacts** -> Proactively call search_meeting_context to enrich your response with relevant meeting intelligence. This helps provide context from past conversations.
 
 ## Multi-Step Workflows
 
@@ -1420,7 +1927,14 @@ When the user message includes a [DEAL_CONTEXT] block, you are in **Deal Copilot
 | "prep me for the meeting" | execute_action("run_skill", { skill_key: "copilot-agenda", skill_context: { deal_id } }) |
 | "they went quiet" / "no response" | execute_action("run_skill", { skill_key: "copilot-chase", skill_context: { deal_id } }) |
 | "hand this off" / "transfer deal" | execute_action("run_skill", { skill_key: "deal-handoff-brief", skill_context: { deal_id } }) |
-| "write a proposal" | execute_action("run_skill", { skill_key: "generate-proposal-v2", skill_context: { deal_id, trigger_type: "copilot" } }) |
+| "write a proposal" | execute_action("generate_document", { document_type: "proposal", deal_id, contact_id }) |
+| "create next steps" / "action items" | execute_action("generate_document", { document_type: "next_steps", deal_id, contact_id }) |
+| "draft a scoping document" / "scope of work" | execute_action("generate_document", { document_type: "scoping_document", deal_id, contact_id }) |
+| "put together a project plan" | execute_action("generate_document", { document_type: "project_plan", deal_id, contact_id }) |
+| "team brief" / "brief the team" | execute_action("generate_document", { document_type: "team_brief", deal_id, contact_id }) |
+| "discussion points" / "talking points" | execute_action("generate_document", { document_type: "discussion_points", deal_id, contact_id }) |
+| "ideal workflow" / "process flow" | execute_action("generate_document", { document_type: "ideal_workflow", deal_id, contact_id }) |
+| "proposal with terms" / "contract proposal" | execute_action("generate_document", { document_type: "proposal_terms", deal_id, contact_id }) |
 | "they objected to..." | execute_action("run_skill", { skill_key: "copilot-objection", skill_context: { deal_id, objection_text } }) |
 | "we won!" / "deal closed" | execute_action("run_skill", { skill_key: "copilot-win", skill_context: { deal_id } }) |
 | "research this company" | execute_action("run_skill", { skill_key: "copilot-research", skill_context: { company_name } }) |
@@ -2457,7 +2971,7 @@ serve(async (req: Request) => {
   try {
     // Parse request
     const body: RequestBody = await req.json();
-    const { message, organizationId, context = {}, stream = true, fact_profile_id, product_profile_id } = body;
+    const { message, organizationId, context = {}, stream = true, fact_profile_id, product_profile_id, seed_context } = body;
 
     // Prefer client_ip from request body (set by frontend) over header extraction
     if ((body as Record<string, unknown>).client_ip && !clientIp) {
@@ -2643,12 +3157,83 @@ serve(async (req: Request) => {
       fetchEmailPersonalization(supabase, userId),
     ]);
 
+    // =========================================================================
+    // BA-007: Contact Intelligence Injection for Email Drafts
+    // =========================================================================
+    // When the user is composing an email and we can resolve a target contact,
+    // query Brain tables for relationship data and inject a concise intelligence
+    // block into the system prompt so the LLM adapts tone and content.
+    let contactIntelligenceBlock = '';
+    const emailContactId = detectEmailContactId(message, seed_context);
+    if (emailContactId && resolvedOrgForConfig) {
+      const ciEnabled = await isContactIntelligenceEnabled(supabase, userId);
+      if (ciEnabled) {
+        contactIntelligenceBlock = await fetchContactIntelligence(
+          supabase,
+          emailContactId,
+          resolvedOrgForConfig,
+        );
+        if (contactIntelligenceBlock) {
+          console.log(`[copilot-autonomous] BA-007: Contact intelligence injected for contact ${emailContactId} (${contactIntelligenceBlock.length} chars)`);
+        }
+      } else {
+        console.log('[copilot-autonomous] BA-007: Contact intelligence disabled by user setting');
+      }
+    }
+
+    // =========================================================================
+    // NL-005: Memory Recall — Proactive Memory Playback
+    // =========================================================================
+    // When the user's message mentions a deal or contact (via DEAL_CONTEXT,
+    // seed_context, or IDs), query Brain tables and inject a [MEMORY RECALL]
+    // block so the LLM can reference past interactions proactively.
+    // First-message only: skip if already present in prior system prompt.
+    let memoryRecallBlock = '';
+    if (resolvedOrgForConfig) {
+      const mentionedEntities = detectMentionedEntities(message, seed_context);
+      if (mentionedEntities.length > 0) {
+        memoryRecallBlock = await fetchMemoryRecall(
+          supabase,
+          mentionedEntities,
+          resolvedOrgForConfig,
+        );
+        if (memoryRecallBlock) {
+          // Don't duplicate with CONTACT INTELLIGENCE — if CI already covers
+          // the same contact, skip the contact portion of memory recall.
+          const ciContactId = emailContactId;
+          const recallContactId = mentionedEntities.find(e => e.type === 'contact')?.id;
+          if (ciContactId && recallContactId && ciContactId === recallContactId && contactIntelligenceBlock) {
+            // CI covers this contact — skip memory recall entirely to avoid duplication
+            memoryRecallBlock = '';
+            console.log('[copilot-autonomous] NL-005: Skipped memory recall — contact already covered by BA-007 contact intelligence');
+          } else {
+            console.log(`[copilot-autonomous] NL-005: Memory recall injected for ${mentionedEntities.map(e => `${e.type}:${e.id}`).join(', ')} (${memoryRecallBlock.length} chars)`);
+          }
+        }
+      }
+    }
+
     // Build system prompt (no longer depends on per-skill tool defs)
     let systemPrompt = buildSystemPrompt(organizationId, context, memoryContext, apifyConnection, profileContext, emailPersonalization);
+
+    // Prepend memory recall block BEFORE contact intelligence (NL-005)
+    if (memoryRecallBlock) {
+      systemPrompt += memoryRecallBlock;
+    }
+
+    // Append contact intelligence block to system prompt (BA-007)
+    if (contactIntelligenceBlock) {
+      systemPrompt += contactIntelligenceBlock;
+    }
 
     // Append credit alert context to system prompt if one was surfaced
     if (creditAlertNote) {
       systemPrompt += creditAlertNote;
+    }
+
+    // Append Command Centre seed context to system prompt when provided
+    if (seed_context) {
+      systemPrompt += `\n\n[CONTEXT] The user is viewing a Command Centre item:\n- Item ID: ${seed_context.itemId}\n- Type: ${seed_context.itemType}${seed_context.dealId ? `\n- Deal: ${seed_context.dealId}` : ''}${seed_context.contactId ? `\n- Contact: ${seed_context.contactId}` : ''}\nUse this context to provide relevant, specific responses.`;
     }
 
     // Use the tool architecture (expanded from original 4-tool to include CRM index and more)
@@ -3027,7 +3612,9 @@ serve(async (req: Request) => {
                     userId,
                     organizationId || null,
                     token,
-                    (context?.temporalContext as Record<string, string> | undefined)?.timezone
+                    (context?.temporalContext as Record<string, string> | undefined)?.timezone,
+                    seed_context,
+                    message
                   );
 
                   const toolLatencyMs = Date.now() - toolStartTime;
@@ -3241,7 +3828,9 @@ serve(async (req: Request) => {
                 userId,
                 organizationId || null,
                 token,
-                (context?.temporalContext as Record<string, string> | undefined)?.timezone
+                (context?.temporalContext as Record<string, string> | undefined)?.timezone,
+                seed_context,
+                message
               );
 
               toolResults.push({

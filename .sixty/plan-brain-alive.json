@@ -1,0 +1,880 @@
+{
+  "feature": {
+    "id": "brain-alive",
+    "name": "Brain Alive \u2014 10 Intelligence Features That Make 60 a Teammate",
+    "status": "complete",
+    "createdAt": "2026-03-14T00:00:00Z",
+    "description": "Post-meeting auto-extract, Morning Brief 2.0, Daily Slack thread, commitment tracker, decay alerts, pre-meeting memory injection, contact intelligence in emails, coaching dashboard, pipeline sentiment ticker, win/loss patterns.",
+    "complexity": {
+      "total": 8,
+      "tier": 3,
+      "label": "High"
+    }
+  },
+  "stories": [
+    {
+      "id": "BA-000",
+      "feature": "brain-alive",
+      "title": "Brain intelligence settings \u2014 per-feature toggles + cost labels",
+      "type": "component",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/components/brain/BrainSettings.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "BA-001a"
+      ],
+      "parallelWith": [
+        "BA-003a"
+      ],
+      "acceptance": [
+        "BrainSettings.tsx gains Brain Intelligence section above existing category toggles",
+        "Three feature groups: Free (always on, no toggle), Smart (per-feature on/off), Pro (per-feature on/off)",
+        "Free group (no toggles, just labels): Commitment tracking, Decay alerts, Sentiment ticker, Coaching dashboard, Slack threading",
+        "Smart group (toggles): Post-meeting memory extraction (~2 credits/meeting), Enhanced morning brief (~1 credit/day)",
+        "Pro group (toggles): Win/loss pattern analysis (~5 credits/month), Contact intelligence in emails (free \u2014 context injection)",
+        "Settings saved to user_settings.preferences.brain_intelligence JSONB",
+        "Defaults: all Smart features ON, all Pro features ON",
+        "Credit cost shown next to each toggle as muted text",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/brain/BrainSettings.tsx"
+      ],
+      "completedAt": "2026-03-14T15:30:00Z"
+    },
+    {
+      "id": "BA-001a",
+      "feature": "brain-alive",
+      "title": "Create extraction prompt + edge function for deal memory extraction",
+      "type": "api",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [
+          "BA-000"
+        ],
+        "files": [],
+        "schema": [
+          "deal_memory_events",
+          "contact_memory"
+        ]
+      },
+      "blocks": [
+        "BA-001b",
+        "BA-001c"
+      ],
+      "parallelWith": [
+        "BA-003a"
+      ],
+      "acceptance": [
+        "New edge function supabase/functions/extract-deal-memories/index.ts created",
+        "Uses Claude Haiku (claude-haiku-4-5-20251001) \u2014 NOT Opus/Sonnet (cost control)",
+        "Checks brain_intelligence.post_meeting_extraction setting before running (skip if disabled)",
+        "Prompt extracts: commitments (owner+deadline), objections (blocker flag), signals, stakeholder roles, sentiment",
+        "Returns typed array of DealMemoryExtraction objects",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/extract-deal-memories/index.ts"
+      ],
+      "completedAt": "2026-03-14T16:00:00Z"
+    },
+    {
+      "id": "BA-001b",
+      "feature": "brain-alive",
+      "title": "Write extracted memories to deal_memory_events + contact_memory",
+      "type": "api",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [
+          "BA-001a"
+        ],
+        "files": [],
+        "schema": [
+          "deal_memory_events"
+        ]
+      },
+      "blocks": [
+        "BA-001c"
+      ],
+      "parallelWith": [
+        "BA-003b"
+      ],
+      "acceptance": [
+        "extract-deal-memories writes each extracted item to deal_memory_events with correct event_type and event_category",
+        "source_type set to 'transcript' with meeting_id in source_id",
+        "Contact memory updated via updateContactFromEvent() \u2014 relationship_strength boosted",
+        "next_steps_oneliner parsed into individual commitment events with detail.owner and detail.status='pending'",
+        "Events created with deal_id=NULL if no deal linked (contact-level memory)",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/extract-deal-memories/index.ts"
+      ],
+      "completedAt": "2026-03-14T16:15:00Z"
+    },
+    {
+      "id": "BA-001c",
+      "feature": "brain-alive",
+      "title": "Wire extract-deal-memories into meeting_ended orchestrator sequence",
+      "type": "api",
+      "status": "complete",
+      "priority": 1,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "BA-001b"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/eventSequences.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "BA-002a"
+      ],
+      "parallelWith": [
+        "BA-003c"
+      ],
+      "acceptance": [
+        "New step extract-deal-memories added to meeting_ended sequence in Wave 2b",
+        "Step depends on extract-action-items (needs parsed transcript context)",
+        "Step is best-effort (errors logged, never blocks sequence)",
+        "Step passes meeting transcript + summary + contact_id + company_id to the edge function",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/orchestrator/eventSequences.ts"
+      ],
+      "completedAt": "2026-03-14T16:30:00Z"
+    },
+    {
+      "id": "BA-003a",
+      "feature": "brain-alive",
+      "title": "Add thread_ts support to send-slack-message edge function",
+      "type": "api",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/send-slack-message/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "BA-003b"
+      ],
+      "parallelWith": [
+        "BA-001a"
+      ],
+      "acceptance": [
+        "send-slack-message accepts optional thread_ts in request body",
+        "When thread_ts provided, chat.postMessage includes thread_ts (posts as reply)",
+        "Response includes the message's ts for chaining further replies",
+        "Existing behavior unchanged when thread_ts not provided",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/send-slack-message/index.ts"
+      ],
+      "completedAt": "2026-03-14T15:30:00Z"
+    },
+    {
+      "id": "BA-003b",
+      "feature": "brain-alive",
+      "title": "Create getDailyThreadTs utility for daily thread management",
+      "type": "api",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [
+          "BA-003a"
+        ],
+        "files": [],
+        "schema": [
+          "agent_daily_logs"
+        ]
+      },
+      "blocks": [
+        "BA-003c"
+      ],
+      "parallelWith": [
+        "BA-001b"
+      ],
+      "acceptance": [
+        "New utility supabase/functions/_shared/slack/dailyThread.ts created",
+        "getDailyThreadTs(userId, orgId, supabase) finds today's thread_ts from agent_daily_logs metadata",
+        "If no thread exists for today, creates a new one via send-slack-message and stores thread_ts",
+        "Thread keyed by date (ISO date string) \u2014 new thread each day",
+        "Falls back to null if Slack unavailable (caller sends as direct DM)",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/slack/dailyThread.ts"
+      ],
+      "completedAt": "2026-03-14T15:30:00Z"
+    },
+    {
+      "id": "BA-003c",
+      "feature": "brain-alive",
+      "title": "Wire morning brief to create daily thread + post-meeting to reply",
+      "type": "api",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "BA-003b"
+        ],
+        "files": [
+          "supabase/functions/agent-morning-briefing/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "BA-002a",
+        "BA-004a"
+      ],
+      "parallelWith": [
+        "BA-001c"
+      ],
+      "acceptance": [
+        "Morning brief creates daily thread and stores thread_ts via getDailyThreadTs",
+        "Post-meeting Slack summary (notify-slack-summary step) posts as reply to daily thread",
+        "If thread doesn't exist yet (no morning brief ran), creates it on first post-meeting notification",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/agent-morning-briefing/index.ts",
+        "supabase/functions/_shared/orchestrator/eventSequences.ts"
+      ],
+      "completedAt": "2026-03-14T16:00:00Z"
+    },
+    {
+      "id": "BA-002a",
+      "feature": "brain-alive",
+      "title": "Query Brain tables in morning brief assembleBriefing()",
+      "type": "api",
+      "status": "complete",
+      "priority": 2,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "BA-001c",
+          "BA-003c"
+        ],
+        "files": [
+          "supabase/functions/agent-morning-briefing/index.ts"
+        ],
+        "schema": [
+          "deal_memory_events",
+          "contact_memory"
+        ]
+      },
+      "blocks": [
+        "BA-002b"
+      ],
+      "parallelWith": [
+        "BA-004a",
+        "BA-005a"
+      ],
+      "acceptance": [
+        "assembleBriefing() queries: getOverdueCommitments() for pending commitments past deadline",
+        "Queries contact_memory for contacts with relationship_strength < 0.4",
+        "Queries deal_memory_events for deals with last sentiment_score < 0.5",
+        "Data passed to narrative prompt as structured context",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/agent-morning-briefing/index.ts"
+      ],
+      "completedAt": "2026-03-14T17:00:00Z"
+    },
+    {
+      "id": "BA-002b",
+      "feature": "brain-alive",
+      "title": "Enhance morning brief Haiku prompt with Brain insights",
+      "type": "api",
+      "status": "complete",
+      "priority": 2,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "BA-002a"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "BA-004b",
+        "BA-005b"
+      ],
+      "acceptance": [
+        "Checks brain_intelligence.enhanced_morning_brief setting \u2014 if disabled, uses standard brief (no Brain queries)",
+        "Haiku narrative prompt includes: Commitments slipping, Contacts going cold, Deals at risk sections",
+        "Brief prioritizes actionable nudges over informational summaries",
+        "Up to 3 specific contact/deal-named action items in output",
+        "CC item created with item_type morning_brief containing the full brief",
+        "Posts to daily Slack thread",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/agent-morning-briefing/index.ts"
+      ],
+      "completedAt": "2026-03-14T17:00:00Z"
+    },
+    {
+      "id": "BA-004a",
+      "feature": "brain-alive",
+      "title": "Create check-commitment-deadlines cron edge function",
+      "type": "api",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "BA-003c"
+        ],
+        "files": [],
+        "schema": [
+          "deal_memory_events"
+        ]
+      },
+      "blocks": [
+        "BA-004b"
+      ],
+      "parallelWith": [
+        "BA-002a",
+        "BA-005a"
+      ],
+      "acceptance": [
+        "New edge function supabase/functions/check-commitment-deadlines/index.ts",
+        "Scans deal_memory_events for commitment_made with detail.deadline < NOW()+48h and detail.status=pending",
+        "Separates into overdue (past deadline) and approaching (within 48h) buckets",
+        "Checks proactive_agent_config.is_enabled and user opt-out before processing each org",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/check-commitment-deadlines/index.ts"
+      ],
+      "completedAt": "2026-03-14T16:30:00Z"
+    },
+    {
+      "id": "BA-004b",
+      "feature": "brain-alive",
+      "title": "Wire commitment alerts to Slack thread + CC items + cron schedule",
+      "type": "api",
+      "status": "complete",
+      "priority": 3,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "BA-004a"
+        ],
+        "files": [],
+        "schema": [
+          "command_centre_items"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "BA-005b",
+        "BA-006"
+      ],
+      "acceptance": [
+        "Overdue commitments fire Slack alert via daily thread with deal/contact names and days overdue",
+        "Approaching commitments fire gentle nudge in daily thread",
+        "CC item created with urgency high for overdue, normal for approaching",
+        "Migration creates pg_cron schedule for daily 9am UTC execution",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/check-commitment-deadlines/index.ts",
+        "supabase/migrations/new_commitment_deadline_cron.sql"
+      ],
+      "completedAt": "2026-03-14T17:00:00Z"
+    },
+    {
+      "id": "BA-005a",
+      "feature": "brain-alive",
+      "title": "Enhance runRelationshipDecay to return threshold-crossing contacts",
+      "type": "api",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "BA-003c"
+        ],
+        "files": [
+          "supabase/functions/_shared/memory/decay.ts"
+        ],
+        "schema": [
+          "contact_memory"
+        ]
+      },
+      "blocks": [
+        "BA-005b"
+      ],
+      "parallelWith": [
+        "BA-002a",
+        "BA-004a"
+      ],
+      "acceptance": [
+        "runRelationshipDecay() return type extended to include crossedBelow: ContactMemory[]",
+        "Contacts whose relationship_strength dropped below 0.4 during this run captured",
+        "Existing decay logic unchanged \u2014 new data is additive",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/functions/_shared/memory/decay.ts"
+      ],
+      "completedAt": "2026-03-14T16:30:00Z"
+    },
+    {
+      "id": "BA-005b",
+      "feature": "brain-alive",
+      "title": "Create decay alert edge function with Slack + CC delivery",
+      "type": "api",
+      "status": "complete",
+      "priority": 3,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "BA-005a"
+        ],
+        "files": [],
+        "schema": [
+          "command_centre_items"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "BA-004b",
+        "BA-006"
+      ],
+      "acceptance": [
+        "New edge function check-contact-decay/index.ts runs decay + fires alerts",
+        "Groups multiple decaying contacts into one Slack message (not spam)",
+        "Each contact shows: name, company, days since last interaction, strength %",
+        "CC item created with item_type decay_alert and suggested re-engagement actions",
+        "Wired to existing weekly decay cron schedule",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/check-contact-decay/index.ts"
+      ],
+      "completedAt": "2026-03-14T17:00:00Z"
+    },
+    {
+      "id": "BA-006",
+      "feature": "brain-alive",
+      "title": "Inject Brain memory context into pre-meeting prep",
+      "type": "api",
+      "status": "complete",
+      "priority": 4,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "BA-001c",
+          "BA-003c"
+        ],
+        "files": [
+          "supabase/functions/proactive-meeting-prep/index.ts"
+        ],
+        "schema": [
+          "contact_memory",
+          "copilot_memories",
+          "deal_memory_events"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "BA-004b",
+        "BA-005b",
+        "BA-007"
+      ],
+      "acceptance": [
+        "proactive-meeting-prep queries contact_memory, copilot_memories, deal_memory_events for meeting contact",
+        "Prep output includes What the Brain knows section: relationship strength, open commitments, last sentiment, coaching tips",
+        "Falls back to standard prep if no Brain data exists (no errors)",
+        "Posts to daily Slack thread",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/proactive-meeting-prep/index.ts"
+      ],
+      "completedAt": "2026-03-14T17:00:00Z"
+    },
+    {
+      "id": "BA-007",
+      "feature": "brain-alive",
+      "title": "Add contact intelligence to copilot email drafts",
+      "type": "api",
+      "status": "complete",
+      "priority": 4,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "BA-001c"
+        ],
+        "files": [
+          "supabase/functions/copilot-autonomous/index.ts"
+        ],
+        "schema": [
+          "contact_memory",
+          "copilot_memories"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "BA-006"
+      ],
+      "acceptance": [
+        "copilot-autonomous fetches contact_memory + copilot_memories when composing emails (contact resolved from thread)",
+        "CONTACT INTELLIGENCE block injected into system prompt \u2014 max 500 tokens",
+        "Adapts: formal/casual tone, length, known objections to preempt, re-engagement warmth for low strength",
+        "Existing behavior unchanged when no contact intelligence exists",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "completedAt": "2026-03-14T17:00:00Z"
+    },
+    {
+      "id": "BA-008a",
+      "feature": "brain-alive",
+      "title": "Create useCoachingPatterns hook \u2014 aggregate talk time vs sentiment",
+      "type": "component",
+      "status": "complete",
+      "priority": 5,
+      "group": 5,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "meetings"
+        ]
+      },
+      "blocks": [
+        "BA-008b"
+      ],
+      "parallelWith": [
+        "BA-009a"
+      ],
+      "acceptance": [
+        "New hook src/lib/hooks/useCoachingPatterns.ts",
+        "Queries meetings with talk_time_rep_pct and sentiment_score for the org",
+        "Computes: avg sentiment at <45% talk, 45-55% talk, >55% talk",
+        "Aggregates top 3 strengths and top 3 improvements from coach_summary JSON",
+        "Uses React Query with 5-minute stale time",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useCoachingPatterns.ts"
+      ],
+      "completedAt": "2026-03-14T17:00:00Z"
+    },
+    {
+      "id": "BA-008b",
+      "feature": "brain-alive",
+      "title": "Build BrainCoaching tab \u2014 scatter chart + pattern cards",
+      "type": "component",
+      "status": "complete",
+      "priority": 5,
+      "group": 5,
+      "dependencies": {
+        "stories": [
+          "BA-008a"
+        ],
+        "files": [
+          "src/pages/agent/BrainPage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "BA-010"
+      ],
+      "parallelWith": [
+        "BA-009b"
+      ],
+      "acceptance": [
+        "New component src/components/brain/BrainCoaching.tsx",
+        "Recharts ScatterChart: talk_time_rep_pct (x) vs sentiment_score (y) with color coding",
+        "Summary card: Your avg sentiment is X when talk time <45% vs Y when >55%",
+        "Top 3 strengths and improvements shown as cards with meeting count evidence",
+        "Wired into BrainPage as new Coaching tab",
+        "Empty state when no coaching data exists",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/brain/BrainCoaching.tsx",
+        "src/pages/agent/BrainPage.tsx"
+      ],
+      "completedAt": "2026-03-14T18:00:00Z"
+    },
+    {
+      "id": "BA-009a",
+      "feature": "brain-alive",
+      "title": "Create usePipelineSentiment hook \u2014 latest sentiment per deal",
+      "type": "component",
+      "status": "complete",
+      "priority": 5,
+      "group": 5,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "meetings",
+          "deals"
+        ]
+      },
+      "blocks": [
+        "BA-009b"
+      ],
+      "parallelWith": [
+        "BA-008a"
+      ],
+      "acceptance": [
+        "New hook src/lib/hooks/usePipelineSentiment.ts",
+        "Queries most recent meeting sentiment per company/deal for active pipeline",
+        "Computes: overall avg, 7-day trend (current vs prior 7 days), count trending negative",
+        "Returns typed PipelineSentiment object",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/hooks/usePipelineSentiment.ts"
+      ],
+      "completedAt": "2026-03-14T17:00:00Z"
+    },
+    {
+      "id": "BA-009b",
+      "feature": "brain-alive",
+      "title": "Build PipelineSentimentTicker component on Brain page header",
+      "type": "component",
+      "status": "complete",
+      "priority": 5,
+      "group": 5,
+      "dependencies": {
+        "stories": [
+          "BA-009a"
+        ],
+        "files": [
+          "src/pages/agent/BrainPage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "BA-008b"
+      ],
+      "acceptance": [
+        "New component src/components/brain/PipelineSentimentTicker.tsx",
+        "Shows: overall sentiment avg, trend arrow (up/down), count of deals trending negative",
+        "Traffic light: <0.5 red, 0.5-0.7 amber, >0.7 green",
+        "Positioned on Brain page header below title",
+        "Clicking a deal navigates to deal detail",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/brain/PipelineSentimentTicker.tsx",
+        "src/pages/agent/BrainPage.tsx"
+      ],
+      "completedAt": "2026-03-14T18:00:00Z"
+    },
+    {
+      "id": "BA-010a",
+      "feature": "brain-alive",
+      "title": "Create win/loss pattern extraction edge function",
+      "type": "api",
+      "status": "complete",
+      "priority": 6,
+      "group": 6,
+      "dependencies": {
+        "stories": [
+          "BA-008b"
+        ],
+        "files": [],
+        "schema": [
+          "meetings",
+          "deals",
+          "copilot_memories"
+        ]
+      },
+      "blocks": [
+        "BA-010b"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "New edge function generate-win-loss-patterns/index.ts",
+        "Uses Claude Haiku (claude-haiku-4-5-20251001) for pattern synthesis \u2014 NOT Opus",
+        "Checks brain_intelligence.win_loss_patterns setting \u2014 skip if disabled",
+        "Queries deals with status won/lost + linked meetings with coaching data",
+        "For won: extracts common strengths, avg talk_time, avg sentiment",
+        "For lost: extracts common improvements, avg talk_time, common objections",
+        "Produces You win when and You lose when pattern summaries",
+        "Stores patterns in copilot_memories category=fact",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/generate-win-loss-patterns/index.ts"
+      ],
+      "completedAt": "2026-03-14T18:00:00Z"
+    },
+    {
+      "id": "BA-010b",
+      "feature": "brain-alive",
+      "title": "Add win/loss patterns section to BrainCoaching tab",
+      "type": "component",
+      "status": "complete",
+      "priority": 6,
+      "group": 6,
+      "dependencies": {
+        "stories": [
+          "BA-010a"
+        ],
+        "files": [
+          "src/components/brain/BrainCoaching.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "BrainCoaching.tsx gains Win/Loss Patterns section below scatter chart",
+        "Shows You win when cards (green) and You lose when cards (red)",
+        "Each card shows: pattern summary, evidence count, avg metrics",
+        "Generate Patterns button triggers edge function on-demand",
+        "Loading state while generating",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/brain/BrainCoaching.tsx"
+      ],
+      "completedAt": "2026-03-14T18:00:00Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 23,
+    "completedStories": 23,
+    "estimatedMinutes": 565,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": [
+          "BA-000",
+          "BA-001a",
+          "BA-001b",
+          "BA-003a",
+          "BA-003b"
+        ],
+        "reason": "Foundation: intelligence settings + extraction fn + thread_ts + daily thread utility"
+      },
+      {
+        "group": 2,
+        "stories": [
+          "BA-001c",
+          "BA-003c"
+        ],
+        "reason": "Wiring: orchestrator step + morning brief thread creation"
+      },
+      {
+        "group": 3,
+        "stories": [
+          "BA-002a",
+          "BA-004a",
+          "BA-005a"
+        ],
+        "reason": "Data layer: morning brief queries + commitment scanner + decay enhancement"
+      },
+      {
+        "group": 4,
+        "stories": [
+          "BA-002b",
+          "BA-004b",
+          "BA-005b",
+          "BA-006",
+          "BA-007"
+        ],
+        "reason": "Delivery: enhanced prompts + alerts to Slack/CC + memory injection"
+      },
+      {
+        "group": 5,
+        "stories": [
+          "BA-008a",
+          "BA-008b",
+          "BA-009a",
+          "BA-009b"
+        ],
+        "reason": "Analytics UI: coaching dashboard + sentiment ticker (independent)"
+      },
+      {
+        "group": 6,
+        "stories": [
+          "BA-010a",
+          "BA-010b"
+        ],
+        "reason": "Pattern recognition: needs coaching data aggregated"
+      }
+    ],
+    "lastUpdated": "2026-03-14T18:00:00Z"
+  },
+  "team": {
+    "tier": 3,
+    "workers": "sonnet x3",
+    "reviewer": "opus"
+  },
+  "references": {
+    "orchestratorSequences": "supabase/functions/_shared/orchestrator/eventSequences.ts",
+    "morningBrief": "supabase/functions/agent-morning-briefing/index.ts",
+    "slackMessage": "supabase/functions/send-slack-message/index.ts",
+    "commitments": "supabase/functions/_shared/memory/commitments.ts",
+    "decay": "supabase/functions/_shared/memory/decay.ts",
+    "contacts": "supabase/functions/_shared/memory/contacts.ts",
+    "copilotAutonomous": "supabase/functions/copilot-autonomous/index.ts",
+    "meetingPrep": "supabase/functions/proactive-meeting-prep/index.ts",
+    "cronGate": "supabase/functions/_shared/proactive/cronPreferenceGate.ts",
+    "brainPage": "src/pages/agent/BrainPage.tsx",
+    "prd": "tasks/prd-brain-alive.md"
+  }
+}

@@ -22,6 +22,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
 import { URGENCY_CONFIG } from './constants';
 
@@ -111,6 +112,14 @@ export interface CCItemCardProps {
   animationClass?: string;
   /** Whether this item is highlighted via keyboard navigation */
   isHighlighted?: boolean;
+  /** Whether this item is currently selected (shown in detail panel) */
+  isSelected?: boolean;
+  /** Compact mode for left-rail display — less padding, truncated text, no action buttons */
+  compact?: boolean;
+  /** Whether the multi-select checkbox is checked (TRINITY-019) */
+  isChecked?: boolean;
+  /** Callback when the multi-select checkbox is toggled (TRINITY-019) */
+  onSelect?: (id: string, event: React.MouseEvent) => void;
 }
 
 // ============================================================================
@@ -138,6 +147,10 @@ export function CCItemCard({
   showUndo,
   animationClass,
   isHighlighted,
+  isSelected,
+  compact,
+  isChecked,
+  onSelect,
 }: CCItemCardProps) {
   const draftedAction = item.drafted_action as Record<string, unknown> | null;
   const displayText = draftedAction?.display_text as string | undefined;
@@ -159,6 +172,7 @@ export function CCItemCard({
         statusOpacity,
         animationClass,
         isHighlighted && 'ring-2 ring-blue-500 dark:ring-blue-400',
+        isSelected && 'bg-accent dark:bg-accent/40 border-primary/50 dark:border-primary/40',
         // Auto-exec: full emerald border takes precedence (CC-012)
         isAutoExec
           ? 'border-2 border-emerald-500/70 dark:border-emerald-500/50 hover:border-emerald-500 dark:hover:border-emerald-400'
@@ -169,38 +183,71 @@ export function CCItemCard({
       )}
       onClick={() => onViewDetail(item)}
     >
-      <CardContent className="p-4">
+      <CardContent className={cn(compact ? 'p-3' : 'p-4')}>
+        <div className={cn(onSelect && compact && 'flex gap-2')}>
+          {/* Multi-select checkbox — TRINITY-019 */}
+          {onSelect && compact && (
+            <div
+              className="flex-shrink-0 pt-0.5"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(item.id, e);
+              }}
+            >
+              <Checkbox
+                checked={isChecked}
+                className="h-4 w-4"
+                tabIndex={-1}
+              />
+            </div>
+          )}
+
+          <div className="flex-1 min-w-0">
         {/* Auto-sent banner */}
         {isAutoExec && (
-          <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20">
+          <div className={cn(
+            'flex items-center gap-1.5 mb-2 px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20',
+            compact && 'mb-1.5',
+          )}>
             <Zap className="h-3 w-3 text-emerald-400 flex-shrink-0" />
             <span className="text-xs font-medium text-emerald-400">
-              Auto-sent — undo within 24h
+              {compact ? 'Auto-sent' : 'Auto-sent — undo within 24h'}
             </span>
           </div>
         )}
 
         {/* Top row: urgency + title + source agent */}
-        <div className="flex items-start gap-2 mb-2">
+        <div className={cn('flex items-start gap-2', compact ? 'mb-1' : 'mb-2')}>
           <UrgencyBadge urgency={item.urgency} />
-          <p className="flex-1 font-semibold text-sm text-slate-800 dark:text-gray-100 leading-snug">
+          <p className={cn(
+            'flex-1 font-semibold text-sm text-slate-800 dark:text-gray-100 leading-snug',
+            compact && 'line-clamp-1',
+          )}>
             {item.title}
           </p>
-          <AgentTag agent={item.source_agent} />
+          {!compact && <AgentTag agent={item.source_agent} />}
         </div>
 
-        {/* Enriched summary */}
+        {/* Enriched summary — truncated more aggressively in compact mode */}
         {item.summary && (
-          <p className="text-sm text-slate-500 dark:text-gray-400 line-clamp-3 mb-3">
+          <p className={cn(
+            'text-slate-500 dark:text-gray-400',
+            compact
+              ? 'text-xs line-clamp-2 mb-1.5'
+              : 'text-sm line-clamp-3 mb-3',
+          )}>
             {item.summary}
           </p>
         )}
 
-        {/* Drafted action */}
+        {/* Drafted action — show slim version in compact, full in normal */}
         {displayText && (
-          <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-slate-50 dark:bg-gray-800/60 border border-slate-100 dark:border-gray-700/40">
-            <Check className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
-            <p className="text-xs text-slate-600 dark:text-gray-300 flex-1 line-clamp-2">
+          <div className={cn(
+            'flex items-center gap-2 rounded-lg bg-slate-50 dark:bg-gray-800/60 border border-slate-100 dark:border-gray-700/40',
+            compact ? 'p-1.5 mb-1.5' : 'p-2 mb-3',
+          )}>
+            <Check className={cn('text-emerald-500 flex-shrink-0', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
+            <p className={cn('text-slate-600 dark:text-gray-300 flex-1', compact ? 'text-[11px] line-clamp-1' : 'text-xs line-clamp-2')}>
               {displayText}
             </p>
             {item.confidence_score != null && (
@@ -209,65 +256,79 @@ export function CCItemCard({
           </div>
         )}
 
-        {/* Action buttons */}
-        <div
-          className="flex items-center gap-2 flex-wrap"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {!showUndo ? (
-            <>
-              {(item.status === 'open' || item.status === 'ready') && (
+        {/* Compact mode: show agent tag + confidence inline at bottom */}
+        {compact && (
+          <div className="flex items-center gap-2 mt-1">
+            <AgentTag agent={item.source_agent} />
+            {item.confidence_score != null && !displayText && (
+              <ConfidencePill score={item.confidence_score} />
+            )}
+          </div>
+        )}
+
+        {/* Action buttons — hidden in compact mode (actions live in detail panel) */}
+        {!compact && (
+          <div
+            className="flex items-center gap-2 flex-wrap"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!showUndo ? (
+              <>
+                {(item.status === 'open' || item.status === 'ready') && (
+                  <Button
+                    size="sm"
+                    variant="success"
+                    className="h-7 px-3 text-xs"
+                    onClick={() => onApprove(item.id)}
+                    disabled={isPending}
+                  >
+                    {isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Check className="h-3 w-3 mr-1" />
+                    )}
+                    Approve
+                  </Button>
+                )}
                 <Button
                   size="sm"
-                  variant="success"
+                  variant="outline"
                   className="h-7 px-3 text-xs"
-                  onClick={() => onApprove(item.id)}
+                  onClick={() => onSnooze(item.id)}
                   disabled={isPending}
                 >
-                  {isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Check className="h-3 w-3 mr-1" />
-                  )}
-                  Approve
+                  <Clock className="h-3 w-3 mr-1" />
+                  Snooze
                 </Button>
-              )}
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 px-3 text-xs"
-                onClick={() => onSnooze(item.id)}
-                disabled={isPending}
-              >
-                <Clock className="h-3 w-3 mr-1" />
-                Snooze
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-3 text-xs text-slate-500 dark:text-gray-400 hover:text-red-600"
-                onClick={() => onDismiss(item.id)}
-                disabled={isPending}
-              >
-                <X className="h-3 w-3 mr-1" />
-                Dismiss
-              </Button>
-            </>
-          ) : (
-            onUndo && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 px-3 text-xs"
-                onClick={() => onUndo(item.id)}
-                disabled={isPending}
-              >
-                <RotateCcw className="h-3 w-3 mr-1" />
-                Undo
-              </Button>
-            )
-          )}
-        </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-3 text-xs text-slate-500 dark:text-gray-400 hover:text-red-600"
+                  onClick={() => onDismiss(item.id)}
+                  disabled={isPending}
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Dismiss
+                </Button>
+              </>
+            ) : (
+              onUndo && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => onUndo(item.id)}
+                  disabled={isPending}
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  Undo
+                </Button>
+              )
+            )}
+          </div>
+        )}
+          </div>{/* end flex-1 min-w-0 */}
+        </div>{/* end conditional flex row */}
       </CardContent>
     </Card>
   );

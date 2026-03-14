@@ -1,0 +1,433 @@
+{
+  "feature": {
+    "id": "skills-brain-integration",
+    "name": "Skills x Brain Integration \u2014 Bidirectional Intelligence",
+    "status": "complete",
+    "createdAt": "2026-03-14T00:00:00Z",
+    "complexity": {
+      "total": 7,
+      "tier": 3,
+      "label": "High"
+    }
+  },
+  "stories": [
+    {
+      "id": "SBI-001",
+      "feature": "skills-brain-integration",
+      "title": "Add brain_context field to skill frontmatter V2 spec + compilation",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "docs/copilot/SKILL_FRONTMATTER_GUIDE.md"
+        ],
+        "schema": [
+          "platform_skills"
+        ]
+      },
+      "blocks": [
+        "SBI-002",
+        "SBI-003"
+      ],
+      "parallelWith": [
+        "SBI-004",
+        "SBI-010"
+      ],
+      "acceptance": [
+        "brain_context field documented in SKILL_FRONTMATTER_GUIDE.md",
+        "Accepted values: array of contact_memory, deal_memory_events, copilot_memories, commitments, none",
+        "Default: ['contact_memory', 'deal_memory_events']",
+        "Compilation pipeline passes brain_context through to compiled_frontmatter",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "docs/copilot/SKILL_FRONTMATTER_GUIDE.md"
+      ],
+      "completedAt": "2026-03-14T21:30:00Z"
+    },
+    {
+      "id": "SBI-004",
+      "feature": "skills-brain-integration",
+      "title": "Create skill execution \u2192 memory writer utility",
+      "type": "api",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "copilot_memories"
+        ]
+      },
+      "blocks": [
+        "SBI-005"
+      ],
+      "parallelWith": [
+        "SBI-001",
+        "SBI-010"
+      ],
+      "acceptance": [
+        "New utility _shared/skills/writeSkillMemory.ts created",
+        "Creates copilot_memories entry: category=fact, subject=skill summary, content=key output",
+        "Links contact_id and deal_id if provided",
+        "Deduplicates: same subject within 24h updates instead of inserting",
+        "Truncates content to 500 chars",
+        "Non-blocking: errors logged never fail execution",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/skills/writeSkillMemory.ts"
+      ],
+      "completedAt": "2026-03-14T21:30:00Z"
+    },
+    {
+      "id": "SBI-010",
+      "feature": "skills-brain-integration",
+      "title": "Create Brain context cache for skill execution",
+      "type": "api",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "contact_memory",
+          "deal_memory_events",
+          "copilot_memories"
+        ]
+      },
+      "blocks": [
+        "SBI-002"
+      ],
+      "parallelWith": [
+        "SBI-001",
+        "SBI-004"
+      ],
+      "acceptance": [
+        "New utility _shared/skills/brainContextCache.ts",
+        "getBrainContext(orgId, contactId, dealId, userId, tables, supabase) returns typed BrainContext",
+        "In-memory Map cache with 5-min TTL matching fleetRouter pattern",
+        "Cache key includes orgId (no cross-org leakage)",
+        "Formats into [BRAIN CONTEXT] markdown block max 400 tokens",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/skills/brainContextCache.ts"
+      ],
+      "completedAt": "2026-03-14T21:30:00Z"
+    },
+    {
+      "id": "SBI-002",
+      "feature": "skills-brain-integration",
+      "title": "Auto-inject Brain context into skill execution in copilot-autonomous",
+      "type": "api",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "SBI-001",
+          "SBI-010"
+        ],
+        "files": [
+          "supabase/functions/copilot-autonomous/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "SBI-003"
+      ],
+      "parallelWith": [
+        "SBI-005",
+        "SBI-006"
+      ],
+      "acceptance": [
+        "When get_skill returns skill with brain_context in frontmatter, call getBrainContext",
+        "Brain data fetched for active contact/deal from conversation context or seed_context",
+        "[BRAIN CONTEXT] block appended to compiled_content before Claude processes skill",
+        "If no Brain data exists skill executes normally",
+        "Uses cache (SBI-010) for performance",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "completedAt": "2026-03-14T22:00:00Z"
+    },
+    {
+      "id": "SBI-005",
+      "feature": "skills-brain-integration",
+      "title": "Wire skill memory writer into execute_action flow",
+      "type": "api",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "SBI-004"
+        ],
+        "files": [
+          "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBI-002",
+        "SBI-006"
+      ],
+      "acceptance": [
+        "executeAction calls writeSkillMemory after successful run_skill and invoke_skill actions",
+        "Memory includes skill_key, action summary (200 chars), entities referenced",
+        "Only writes for substantive output (skip data-access, format selections)",
+        "Skippable via brain_context=['none'] in frontmatter",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/functions/_shared/copilot_adapters/executeAction.ts"
+      ],
+      "completedAt": "2026-03-14T22:00:00Z"
+    },
+    {
+      "id": "SBI-006",
+      "feature": "skills-brain-integration",
+      "title": "Create useSuggestedSkills hook \u2014 Brain state \u2192 skill recommendations",
+      "type": "component",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "deal_memory_events",
+          "contact_memory"
+        ]
+      },
+      "blocks": [
+        "SBI-007"
+      ],
+      "parallelWith": [
+        "SBI-002",
+        "SBI-005"
+      ],
+      "acceptance": [
+        "New hook src/lib/hooks/useSuggestedSkills.ts",
+        "Maps Brain state to skill recommendations: overdue commitment \u2192 follow-up drafter, decaying contact \u2192 re-engagement, at-risk deal \u2192 rescue plan",
+        "Returns max 3 suggestions with skillKey, skillName, reason, urgency, entityId",
+        "React Query 5-min stale",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useSuggestedSkills.ts"
+      ],
+      "completedAt": "2026-03-14T22:00:00Z"
+    },
+    {
+      "id": "SBI-003",
+      "feature": "skills-brain-integration",
+      "title": "Update top 10 skills with brain_context declarations",
+      "type": "schema",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "SBI-002"
+        ],
+        "files": [],
+        "schema": [
+          "platform_skills"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBI-007",
+        "SBI-008"
+      ],
+      "acceptance": [
+        "Migration updates platform_skills.frontmatter JSONB for 10 most-used skills",
+        "Contact-handling skills get ['contact_memory', 'copilot_memories']",
+        "Deal-handling skills get ['deal_memory_events', 'commitments']",
+        "Both-handling skills get full array",
+        "Migration is re-runnable",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/new_skills_brain_context.sql"
+      ],
+      "completedAt": "2026-03-14T22:30:00Z"
+    },
+    {
+      "id": "SBI-007",
+      "feature": "skills-brain-integration",
+      "title": "Add Suggested Skills section to Brain page",
+      "type": "component",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "SBI-006"
+        ],
+        "files": [
+          "src/pages/agent/BrainPage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "SBI-003",
+        "SBI-008"
+      ],
+      "acceptance": [
+        "New component src/components/brain/BrainSuggestedSkills.tsx",
+        "Renders 2-3 skill suggestion cards on Brain page below insight cards",
+        "Each card: skill name, reason, Run button that opens copilot with pre-filled message",
+        "Hidden when no suggestions exist",
+        "Wired into BrainPage.tsx",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/brain/BrainSuggestedSkills.tsx",
+        "src/pages/agent/BrainPage.tsx"
+      ],
+      "completedAt": "2026-03-14T22:30:00Z"
+    },
+    {
+      "id": "SBI-008",
+      "feature": "skills-brain-integration",
+      "title": "Migrate V1-simulate abilities to orchestrator sequences",
+      "type": "component",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/lib/agent/abilityRegistry.ts",
+          "src/pages/agent/AgentMarketplacePage.tsx"
+        ],
+        "schema": [
+          "user_sequence_preferences"
+        ]
+      },
+      "blocks": [
+        "SBI-009"
+      ],
+      "parallelWith": [
+        "SBI-003",
+        "SBI-007"
+      ],
+      "acceptance": [
+        "All v1-simulate abilities in abilityRegistry.ts changed to backendType orchestrator",
+        "localStorage toggle logic removed from AgentMarketplacePage for migrated abilities",
+        "All toggles use useAgentAbilityPreferences hook (DB-backed)",
+        "Verify toggles persist across browsers",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts",
+        "src/pages/agent/AgentMarketplacePage.tsx"
+      ],
+      "completedAt": "2026-03-14T22:30:00Z"
+    },
+    {
+      "id": "SBI-009",
+      "feature": "skills-brain-integration",
+      "title": "Consolidate cron-job abilities into orchestrator event types",
+      "type": "component",
+      "status": "complete",
+      "priority": 4,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "SBI-008"
+        ],
+        "files": [
+          "src/lib/agent/abilityRegistry.ts"
+        ],
+        "schema": [
+          "user_sequence_preferences"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "All cron-job abilities in abilityRegistry.ts changed to backendType orchestrator",
+        "user_sequence_preferences CHECK constraint extended for new sequence types",
+        "Cron functions use correct sequence_type for preference checks",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "src/lib/agent/abilityRegistry.ts",
+        "supabase/migrations/new_extend_sequence_types.sql"
+      ],
+      "completedAt": "2026-03-14T23:00:00Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 10,
+    "estimatedMinutes": 230,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": [
+          "SBI-001",
+          "SBI-004",
+          "SBI-010"
+        ],
+        "reason": "Foundation: frontmatter spec, memory writer, context cache \u2014 all independent"
+      },
+      {
+        "group": 2,
+        "stories": [
+          "SBI-002",
+          "SBI-005",
+          "SBI-006"
+        ],
+        "reason": "Wiring: inject context, wire writer, suggested skills hook"
+      },
+      {
+        "group": 3,
+        "stories": [
+          "SBI-003",
+          "SBI-007",
+          "SBI-008"
+        ],
+        "reason": "Activation: update skills, UI, V1 migration"
+      },
+      {
+        "group": 4,
+        "stories": [
+          "SBI-009"
+        ],
+        "reason": "Cleanup: consolidate cron abilities"
+      }
+    ],
+    "lastUpdated": "2026-03-14T23:00:00Z"
+  },
+  "team": {
+    "tier": 3,
+    "workers": "sonnet x3",
+    "reviewer": "opus"
+  }
+}

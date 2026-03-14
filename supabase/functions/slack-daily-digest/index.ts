@@ -393,6 +393,50 @@ async function getStaleDeals(
 }
 
 /**
+ * Get critical meetings from the digest window (US-011)
+ */
+async function getCriticalMeetings(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  window: { startIso: string; endIso: string },
+): Promise<Array<{ title: string; severity: string; riskFlag: string; meetingId: string }>> {
+  try {
+    const { data, error } = await supabase
+      .from('meetings')
+      .select('id, title, risk_flags, sentiment_score')
+      .eq('org_id', orgId)
+      .gte('meeting_start', window.startIso)
+      .lte('meeting_start', window.endIso)
+      .not('risk_flags', 'eq', '[]')
+      .order('meeting_start', { ascending: false })
+      .limit(10);
+
+    if (error || !data) return [];
+
+    return data
+      .filter((m: any) => {
+        const flags = m.risk_flags as any[] | null;
+        return flags && flags.length > 0;
+      })
+      .map((m: any) => {
+        const flags = m.risk_flags as Array<{ flag: string; severity: string }>;
+        const topFlag = flags.sort((a, b) =>
+          a.severity === 'critical' ? -1 : b.severity === 'critical' ? 1 : 0
+        )[0];
+        const severity = (m.sentiment_score ?? 0) <= -0.4 ? 'critical' : 'high';
+        return {
+          title: m.title || 'Untitled',
+          severity,
+          riskFlag: topFlag?.flag?.replace(/_/g, ' ') || 'risk detected',
+          meetingId: m.id,
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Generate AI insights
  */
 async function generateInsights(
@@ -806,10 +850,11 @@ async function processOrgDigest(
     const digestDateStr = window.startIso.slice(0, 10); // YYYY-MM-DD
 
     // Gather all data (both org-level and raw for per-user grouping)
-    const [rawData, weekStats, staleDeals] = await Promise.all([
+    const [rawData, weekStats, staleDeals, criticalMeetings] = await Promise.all([
       getRawDigestData(supabase, org.orgId, window),
       getWeekStats(supabase, org.orgId),
       getStaleDeals(supabase, org.orgId),
+      getCriticalMeetings(supabase, org.orgId, window),
     ]);
 
     const { rawMeetings, rawOverdueTasks, rawDueTodayTasks } = rawData;
@@ -863,8 +908,67 @@ async function processOrgDigest(
       appUrl,
     };
 
+    // Add critical meetings section to digest (US-011)
+    if (criticalMeetings.length > 0) {
+      const criticalBlocks = [
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*:rotating_light: Critical Meetings (${criticalMeetings.length})*`,
+          },
+        },
+        ...criticalMeetings.slice(0, 5).map((cm) => ({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `${cm.severity === 'critical' ? ':red_circle:' : ':large_orange_circle:'} *${cm.title}*\n${cm.riskFlag}`,
+          },
+          accessory: {
+            type: 'button',
+            text: { type: 'plain_text', text: 'View', emoji: true },
+            url: `${appUrl}/meetings?id=${cm.meetingId}`,
+            action_id: `digest_critical_view_${cm.meetingId}`,
+          },
+        })),
+      ];
+      // Inject before the last element (which is typically the footer)
+      digestData.criticalMeetings = criticalMeetings;
+    }
+
     // Build message (team/org digest)
     const message = buildDailyDigestMessage(digestData);
+    // Inject critical meetings blocks if present
+    if (criticalMeetings.length > 0 && message.blocks.length > 1) {
+      const criticalBlocks: any[] = [
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*:rotating_light: Critical Meetings (${criticalMeetings.length})*`,
+          },
+        },
+      ];
+      for (const cm of criticalMeetings.slice(0, 5)) {
+        criticalBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `${cm.severity === 'critical' ? ':red_circle:' : ':large_orange_circle:'} *${cm.title}*\n${cm.riskFlag}`,
+          },
+          accessory: {
+            type: 'button',
+            text: { type: 'plain_text', text: 'View', emoji: true },
+            url: `${appUrl}/meetings?id=${cm.meetingId}`,
+            action_id: `digest_critical_view_${cm.meetingId}`,
+          },
+        });
+      }
+      // Insert before last block (footer)
+      message.blocks.splice(-1, 0, ...criticalBlocks);
+    }
 
     // Optional: send org/team digest to channel
     let channelResult: { ok: boolean; ts?: string; error?: string } = { ok: true };

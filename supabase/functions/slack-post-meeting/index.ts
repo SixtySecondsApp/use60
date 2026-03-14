@@ -71,6 +71,8 @@ async function analyzeMeeting(
   actionItems: Array<{ task: string; suggestedOwner?: string; dueInDays: number }>;
   coachingInsight: string;
   keyQuotes: string[];
+  riskFlags: Array<{ flag: string; severity: 'critical' | 'high' | 'medium'; evidence: string }>;
+  commitments: Array<{ description: string; suggestedOwner?: string; suggestedDueDate?: string }>;
 }> {
   // Fail-soft: this is a Slack notification. If AI is not configured, still send a useful message.
   if (!anthropicApiKey) {
@@ -83,6 +85,8 @@ async function analyzeMeeting(
       actionItems: [],
       coachingInsight: 'Review the meeting summary and add follow-up tasks.',
       keyQuotes: [],
+      riskFlags: [],
+      commitments: [],
     };
   }
 
@@ -98,6 +102,8 @@ async function analyzeMeeting(
       actionItems: [],
       coachingInsight: 'No transcript available — review your notes and add follow-up tasks manually.',
       keyQuotes: [],
+      riskFlags: [],
+      commitments: [],
     };
   }
 
@@ -120,6 +126,7 @@ Your goal is to provide an actionable meeting summary that helps:
 1. Sales managers quickly understand meeting outcomes without watching recordings
 2. Sales reps get immediate coaching feedback
 3. Teams stay aligned on deal progress
+4. Identify critical risk signals that require immediate team attention
 
 Focus on brevity, action-orientation, and constructive coaching.
 Return ONLY valid JSON with no additional text.`,
@@ -144,8 +151,25 @@ Return your analysis as JSON with this exact structure:
   "talkTimeCustomer": 0-100,
   "actionItems": [{ "task": "string", "suggestedOwner": "string", "dueInDays": 1-14 }],
   "coachingInsight": "One specific tip for the sales rep",
-  "keyQuotes": ["Notable customer quote"]
-}`
+  "keyQuotes": ["Notable customer quote"],
+  "riskFlags": [{ "flag": "client_terminated|budget_cut|competitor_displacement|severe_dissatisfaction|relationship_breakdown|scope_reduction|legal_escalation", "severity": "critical|high|medium", "evidence": "Direct quote or paraphrase from transcript" }],
+  "commitments": [{ "description": "What was promised", "suggestedOwner": "Who should do it", "suggestedDueDate": "YYYY-MM-DD or null" }]
+}
+
+RISK FLAG RULES:
+- Only include riskFlags if genuine risk signals exist. Empty array if the meeting was normal.
+- "client_terminated" = client explicitly ending the relationship or contract
+- "severe_dissatisfaction" = strong negative feedback, anger, frustration beyond normal negotiation
+- "budget_cut" = budget reduced or funding pulled
+- "competitor_displacement" = client switching to or seriously evaluating a competitor
+- "relationship_breakdown" = trust issues, communication failures, misalignment
+- "scope_reduction" = reducing scope, pulling features, downsizing engagement
+- "legal_escalation" = threats of legal action, contract disputes
+- severity: "critical" = immediate action needed, "high" = urgent attention, "medium" = monitor
+
+COMMITMENT RULES:
+- Extract specific promises made by either party (e.g., "send over the assets", "compile a Google Drive link")
+- Include both our commitments to the client AND the client's commitments to us`
       }]
     }),
   });
@@ -184,6 +208,8 @@ Return your analysis as JSON with this exact structure:
       actionItems: [],
       coachingInsight: 'Review the meeting recording for detailed insights.',
       keyQuotes: [],
+      riskFlags: [],
+      commitments: [],
     };
   }
 }
@@ -808,6 +834,51 @@ serve(async (req) => {
         orgId: effectiveOrgId,
       },
     );
+
+    // Store risk flags and sentiment back to meetings table (fire-and-forget)
+    if (meeting.id && !isTest) {
+      supabase
+        .from('meetings')
+        .update({
+          risk_flags: analysis.riskFlags || [],
+          sentiment_score: typeof analysis.sentimentScore === 'number'
+            ? (analysis.sentimentScore - 50) / 50 // Convert 0-100 to -1.0..1.0
+            : null,
+          sentiment_reasoning: analysis.summary,
+        })
+        .eq('id', meeting.id)
+        .then(({ error: updateErr }) => {
+          if (updateErr) console.warn('[slack-post-meeting] Failed to store risk_flags:', updateErr.message);
+          else console.log('[slack-post-meeting] Stored risk_flags for meeting:', meeting.id);
+        });
+    }
+
+    // Fire-and-forget: trigger critical meeting alert check (US-012)
+    if (!isTest && (analysis.riskFlags?.length > 0 || analysis.sentimentScore <= 40)) {
+      fetch(`${supabaseUrl}/functions/v1/slack-critical-meeting-alert`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({
+          meetingId: meeting.id,
+          orgId: effectiveOrgId,
+          analysis: {
+            summary: analysis.summary,
+            sentiment: analysis.sentiment,
+            sentimentScore: analysis.sentimentScore,
+            riskFlags: analysis.riskFlags || [],
+            commitments: analysis.commitments || [],
+            actionItems: analysis.actionItems || [],
+            coachingInsight: analysis.coachingInsight,
+            keyQuotes: analysis.keyQuotes || [],
+          },
+        }),
+      }).catch((err) => {
+        console.error('[slack-post-meeting] Critical meeting alert check failed (non-blocking):', err);
+      });
+    }
 
     // Fire-and-forget deal memory extraction — runs in background, does not block Slack delivery
     const dealId = (deal as { id?: string } | undefined)?.id;

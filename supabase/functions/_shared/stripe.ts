@@ -3,7 +3,7 @@
 
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 
-// Initialize Stripe client with secret key
+// Initialize Stripe client with secret key (original workspace)
 export function getStripeClient(): Stripe {
   const secretKey = Deno.env.get("STRIPE_SECRET_KEY");
   if (!secretKey) {
@@ -15,6 +15,27 @@ export function getStripeClient(): Stripe {
   });
 }
 
+// Initialize Stripe client for V2 workspace (V23 pricing)
+export function getStripeClientV2(): Stripe {
+  const secretKey = Deno.env.get("STRIPE_SECRET_KEY_V2");
+  if (!secretKey) {
+    throw new Error("STRIPE_SECRET_KEY_V2 environment variable is not set — configure the V2 Stripe workspace key");
+  }
+  return new Stripe(secretKey, {
+    apiVersion: "2023-10-16",
+    httpClient: Stripe.createFetchHttpClient(),
+  });
+}
+
+// Get webhook secret for V2 workspace
+export function getStripeWebhookSecretV2(): string {
+  const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET_V2");
+  if (!secret) {
+    throw new Error("STRIPE_WEBHOOK_SECRET_V2 environment variable is not set");
+  }
+  return secret;
+}
+
 // Verify Stripe webhook signature using native Web Crypto API.
 // The Stripe SDK's constructEvent / constructEventAsync both pull in
 // Node.js crypto polyfills that crash in the Supabase Edge Runtime,
@@ -24,8 +45,9 @@ const DEFAULT_TOLERANCE_SECONDS = 300; // 5 minutes
 export async function verifyWebhookSignature(
   payload: string,
   signature: string | null,
+  webhookSecretOverride?: string,
 ): Promise<Stripe.Event> {
-  const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+  const webhookSecret = webhookSecretOverride ?? Deno.env.get("STRIPE_WEBHOOK_SECRET");
 
   if (!webhookSecret) {
     throw new Error("STRIPE_WEBHOOK_SECRET environment variable is not set");

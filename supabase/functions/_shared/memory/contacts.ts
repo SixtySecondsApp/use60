@@ -29,6 +29,8 @@ function resolveBoost(event: Pick<DealMemoryEvent, 'event_type' | 'detail'>): nu
   return 0;
 }
 
+const MAX_STRENGTH_HISTORY = 30;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -57,7 +59,7 @@ export async function updateContactFromEvent(
     const { data: existing } = await supabase
       .from('contact_memory')
       .select(
-        'id, relationship_strength, total_meetings, total_emails_sent, total_emails_received, last_interaction_at',
+        'id, relationship_strength, total_meetings, total_emails_sent, total_emails_received, last_interaction_at, strength_history',
       )
       .eq('org_id', org_id)
       .eq('contact_id', contactId)
@@ -74,9 +76,16 @@ export async function updateContactFromEvent(
           ? source_timestamp
           : existing.last_interaction_at;
 
+      // Append strength snapshot to history (cap at 30 entries)
+      const today = new Date().toISOString().slice(0, 10);
+      const existingHistory = Array.isArray(existing.strength_history) ? existing.strength_history : [];
+      const newEntry = { strength: parseFloat(newStrength.toFixed(4)), date: today, event: event_type };
+      const updatedHistory = [...existingHistory, newEntry].slice(-MAX_STRENGTH_HISTORY);
+
       const updates: Record<string, unknown> = {
         relationship_strength: newStrength,
         last_interaction_at: newLastInteraction,
+        strength_history: updatedHistory,
       };
 
       if (event_type === 'meeting_summary') {
@@ -97,6 +106,10 @@ export async function updateContactFromEvent(
       // ---- Insert path ----
       const initialStrength = clamp(0.5 + boost, 0.1, 1.0);
 
+      // Initialize strength_history with the first entry
+      const today = new Date().toISOString().slice(0, 10);
+      const initialHistory = [{ strength: parseFloat(initialStrength.toFixed(4)), date: today, event: event_type }];
+
       const insert: Record<string, unknown> = {
         org_id,
         contact_id: contactId,
@@ -105,6 +118,7 @@ export async function updateContactFromEvent(
         total_meetings: 0,
         total_emails_sent: 0,
         total_emails_received: 0,
+        strength_history: initialHistory,
       };
 
       if (event_type === 'meeting_summary') {
@@ -137,7 +151,7 @@ export async function getContactProfile(
   const { data, error } = await supabase
     .from('contact_memory')
     .select(
-      'id, org_id, contact_id, communication_style, decision_style, interests, buying_role_history, relationship_strength, total_meetings, total_emails_sent, total_emails_received, last_interaction_at, avg_response_time_hours, summary, summary_updated_at, created_at, updated_at',
+      'id, org_id, contact_id, communication_style, decision_style, interests, buying_role_history, relationship_strength, strength_history, total_meetings, total_emails_sent, total_emails_received, last_interaction_at, avg_response_time_hours, summary, summary_updated_at, created_at, updated_at',
     )
     .eq('org_id', orgId)
     .eq('contact_id', contactId)

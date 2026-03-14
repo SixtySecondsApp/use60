@@ -32,6 +32,7 @@ serve(async (req) => {
       message,
       blocks,
       attachments,
+      thread_ts,
       team_id,
       user_id: bodyUserId,
       org_id: bodyOrgId,
@@ -350,6 +351,10 @@ serve(async (req) => {
 
     if (attachments) {
       slackMessage.attachments = attachments;
+    }
+
+    if (thread_ts) {
+      slackMessage.thread_ts = thread_ts;
     }
 
     // Send message to Slack using Web API

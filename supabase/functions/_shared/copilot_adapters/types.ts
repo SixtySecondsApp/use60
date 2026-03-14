@@ -83,7 +83,9 @@ export type ExecuteActionName =
   | 'meeting_analytics_insights'
   // Sales targets / goals
   | 'get_targets'
-  | 'upsert_target';
+  | 'upsert_target'
+  // Document generation
+  | 'generate_document';
 
 /**
  * Parameters for run_sequence action - executes a multi-step agent sequence

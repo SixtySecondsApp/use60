@@ -22,7 +22,8 @@ export type ProactiveNotificationType =
   | 'account_intelligence_digest'
   | 'deal_risk_scan'
   | 'campaign_daily_check'
-  | 'coaching_weekly';
+  | 'coaching_weekly'
+  | 'critical_meeting_alert';
 
 export interface ProactiveNotificationPayload {
   type: ProactiveNotificationType;
@@ -52,6 +53,9 @@ export interface ProactiveNotificationPayload {
     style?: 'primary' | 'danger';
   }>;
   
+  // Threading (BA-003c: daily Slack thread)
+  thread_ts?: string;
+
   // In-app notification mapping
   inAppCategory?: 'workflow' | 'deal' | 'task' | 'meeting' | 'system' | 'team';
   inAppType?: 'info' | 'success' | 'warning' | 'error';

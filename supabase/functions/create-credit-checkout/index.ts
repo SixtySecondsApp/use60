@@ -1,12 +1,24 @@
 // supabase/functions/create-credit-checkout/index.ts
-// Creates a Stripe Checkout Session for one-time credit pack purchase (GBP)
+// Creates a Stripe Checkout Session for one-time credit pack purchase (multi-currency: USD, GBP, EUR)
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 import { getCorsHeaders, handleCorsPreflightRequest, jsonResponse, errorResponse } from "../_shared/corsHelper.ts";
 import { getStripeClient, getOrCreateStripeCustomer, getSiteUrl } from "../_shared/stripe.ts";
 import { captureException } from "../_shared/sentryEdge.ts";
-import { CREDIT_PACKS, type PackType } from "../_shared/creditPacks.ts";
+import { CREDIT_PACKS, type CreditPack, type PackType } from "../_shared/creditPacks.ts";
+
+type SupportedCurrency = 'USD' | 'GBP' | 'EUR';
+const VALID_CURRENCIES: SupportedCurrency[] = ['USD', 'GBP', 'EUR'];
+
+/** Convert a pack's price to minor currency units (cents/pence) for the given currency. */
+function getPackPriceInMinorUnits(pack: CreditPack, currency: string): { amount: number; stripeCurrency: string } {
+  switch (currency.toUpperCase()) {
+    case 'USD': return { amount: pack.priceUSD * 100, stripeCurrency: 'usd' };
+    case 'EUR': return { amount: pack.priceEUR * 100, stripeCurrency: 'eur' };
+    default:    return { amount: pack.priceGBP * 100, stripeCurrency: 'gbp' };
+  }
+}
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -17,6 +29,7 @@ const PURCHASABLE_PACK_TYPES: PackType[] = ["starter", "growth", "scale"];
 interface CreditCheckoutRequest {
   org_id: string;
   pack_type: PackType;
+  currency?: SupportedCurrency;
   success_url?: string;
   cancel_url?: string;
 }
@@ -54,10 +67,20 @@ serve(async (req) => {
 
     // Parse request body
     const body: CreditCheckoutRequest = await req.json();
-    const { org_id, pack_type, success_url, cancel_url } = body;
+    const { org_id, pack_type, currency: rawCurrency, success_url, cancel_url } = body;
 
     if (!org_id || !pack_type) {
       return errorResponse("Missing required fields: org_id, pack_type", req, 400);
+    }
+
+    // Validate currency (default to GBP for backwards compat)
+    const currency = (rawCurrency ?? 'GBP').toUpperCase() as SupportedCurrency;
+    if (!VALID_CURRENCIES.includes(currency)) {
+      return errorResponse(
+        `Invalid currency "${rawCurrency}". Must be one of: ${VALID_CURRENCIES.join(", ")}`,
+        req,
+        400,
+      );
     }
 
     // Validate pack_type: only individual packs are self-serve
@@ -122,8 +145,8 @@ serve(async (req) => {
 
     const siteUrl = getSiteUrl();
 
-    // Price in pence (GBP): priceGBP is in whole pounds, convert to pence
-    const unitAmountPence = pack.priceGBP * 100;
+    // Convert price to minor units (cents/pence) for the selected currency
+    const { amount: unitAmount, stripeCurrency } = getPackPriceInMinorUnits(pack, currency);
 
     // Check if Stripe Tax is fully configured before enabling automatic_tax
     let taxEnabled = false;
@@ -141,12 +164,12 @@ serve(async (req) => {
       line_items: [
         {
           price_data: {
-            currency: "gbp",
+            currency: stripeCurrency,
             product_data: {
               name: `${pack.label} — ${pack.credits} Credits`,
               description: pack.description,
             },
-            unit_amount: unitAmountPence,
+            unit_amount: unitAmount,
           },
           quantity: 1,
         },
@@ -158,6 +181,7 @@ serve(async (req) => {
         org_id,
         pack_type,
         credits: String(pack.credits),
+        currency,
         user_id: user.id,
       },
       allow_promotion_codes: true,

@@ -106,6 +106,11 @@ outputs:
 execution_mode: "sync"
 timeout_ms: 30000
 
+# === BRAIN CONTEXT (auto-injected memory tables) ===
+brain_context:
+  - "contact_memory"
+  - "deal_memory_events"
+
 # === AGENT AFFINITY (multi-agent routing) ===
 agent_affinity:
   - "pipeline"
@@ -231,6 +236,12 @@ outputs:
 execution_mode: "async"  # Sequences often need async for HITL
 timeout_ms: 300000       # 5 minutes for full workflow
 
+# === BRAIN CONTEXT (auto-injected memory tables) ===
+brain_context:
+  - "contact_memory"
+  - "deal_memory_events"
+  - "copilot_memories"
+
 # === AGENT AFFINITY (multi-agent routing) ===
 agent_affinity:
   - "pipeline"
@@ -255,6 +266,7 @@ tags:
 | Execution | Usually sync | Often async (HITL) |
 | workflow_description | Not needed | Describes flow |
 | linked_skills | Not used | Lists orchestrated skills |
+| brain_context | Default: contact + deal | Same as skill, may add copilot_memories |
 | agent_affinity | Optional, limits to specific agents | Optional, same behavior |
 
 ---
@@ -397,6 +409,81 @@ Only `${company_name}` should be used inline in skill bodies — for titles, com
 | daily-brief-planner | `full` |
 | daily-focus-planner | `full` |
 | search-documentation | `full` |
+
+---
+
+## Brain Context (Auto-Injected Memory Tables)
+
+The `brain_context` field declares which Brain tables the copilot should auto-inject as context before skill execution. This lets skills receive relevant memory (contact history, deal events, learned preferences) without the skill author manually fetching it.
+
+### Field Spec
+
+```yaml
+brain_context:
+  - "contact_memory"
+  - "deal_memory_events"
+```
+
+- **Type**: `string[]` (array of Brain table identifiers)
+- **Required**: No. Defaults to `['contact_memory', 'deal_memory_events']` (most skills benefit from deal + contact context).
+- **Accepted values**: `contact_memory`, `deal_memory_events`, `copilot_memories`, `commitments`, `none`
+- **Location**: Top-level frontmatter field, alongside `execution_mode`, `agent_affinity`, etc.
+
+### Value Definitions
+
+| Value | Description | Use When |
+|-------|-------------|----------|
+| `contact_memory` | Past interactions, preferences, and notes about the contact | Skill references a specific person |
+| `deal_memory_events` | Timeline of deal events, stage changes, and signals | Skill analyzes or acts on a deal |
+| `copilot_memories` | Learned user preferences and patterns (e.g., tone, formatting habits) | Skill generates content the user will send |
+| `commitments` | Open commitments and promises made to contacts | Skill drafts follow-ups or checks accountability |
+| `none` | Opt out of all Brain context injection | Utility skills, formatting, or search-only skills |
+
+### Behavior
+
+| `brain_context` value | What gets injected |
+|-----------------------|--------------------|
+| Not set (default) | `contact_memory` + `deal_memory_events` |
+| `["contact_memory", "copilot_memories"]` | Contact memory + learned preferences |
+| `["none"]` | Nothing -- no Brain tables injected |
+| `["contact_memory", "deal_memory_events", "copilot_memories", "commitments"]` | All available Brain context |
+
+### Examples
+
+**Deal-focused skill** (default -- contact + deal context):
+```yaml
+brain_context:
+  - "contact_memory"
+  - "deal_memory_events"
+```
+
+**Content generation skill** (needs tone preferences):
+```yaml
+brain_context:
+  - "contact_memory"
+  - "deal_memory_events"
+  - "copilot_memories"
+```
+
+**Follow-up skill** (needs commitments):
+```yaml
+brain_context:
+  - "contact_memory"
+  - "deal_memory_events"
+  - "commitments"
+```
+
+**Utility/formatting skill** (no context needed):
+```yaml
+brain_context:
+  - "none"
+```
+
+### Compilation
+
+The `brain_context` field is stored in `platform_skills.frontmatter` (JSONB) and passes through to `organization_skills.compiled_frontmatter` unchanged during compilation. The compilation pipeline (`compile-organization-skills`) copies all frontmatter fields through, so no special handling is required -- `brain_context` is preserved as-is.
+
+The copilot runtime reads `brain_context` from the compiled frontmatter at execution time and fetches the declared tables before invoking the skill.
 
 ---
 

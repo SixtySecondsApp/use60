@@ -1,11 +1,16 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { AdapterRegistry } from './registry.ts';
 import type { ActionResult, AdapterContext, ExecuteActionName, InvokeSkillParams, CreateTaskParams } from './types.ts';
+import { writeSkillMemory } from '../skills/writeSkillMemory.ts';
+import { matchDocumentType } from '../documents/documentTypeRegistry.ts';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
 // Maximum skill nesting depth to prevent infinite recursion
 const MAX_INVOKE_DEPTH = 3;
+
+// Skills that are non-substantive lookups — skip memory writes
+const SKIP_MEMORY_SKILLS = new Set(['list_skills', 'get_skill']);
 
 const normalizeDueDate = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
@@ -455,6 +460,23 @@ export async function executeAction(
             };
           }
 
+          // SBI-005: fire-and-forget skill memory write for pipeline skills
+          const pipelineOutput = JSON.stringify(pipelineData).slice(0, 500);
+          if (pipelineOutput && orgId) {
+            writeSkillMemory(
+              skillKey,
+              userId,
+              orgId,
+              String(skillContext.trigger_type || 'copilot').slice(0, 200),
+              pipelineOutput,
+              {
+                contactId: skillContext.contact_id ? String(skillContext.contact_id) : undefined,
+                dealId: skillContext.deal_id ? String(skillContext.deal_id) : undefined,
+              },
+              client
+            ).catch(console.warn);
+          }
+
           return {
             success: true,
             data: {
@@ -485,6 +507,33 @@ export async function executeAction(
         context: skillContext,
         dryRun,
       });
+
+      // SBI-005: fire-and-forget skill memory write after successful execution.
+      // brain_context check is handled in invoke_skill where frontmatter is available;
+      // for run_skill the skill already executed so the memory is always valuable.
+      if (
+        result.status !== 'failed' &&
+        result.summary &&
+        orgId &&
+        !SKIP_MEMORY_SKILLS.has(skillKey)
+      ) {
+        const inputStr = (skillContext.user_message || skillContext.query || skillKey).toString().slice(0, 200);
+        const outputStr = (result.summary || JSON.stringify(result.data)).slice(0, 500);
+
+        writeSkillMemory(
+          skillKey,
+          userId,
+          orgId,
+          inputStr,
+          outputStr,
+          {
+            contactId: skillContext.contact_id ? String(skillContext.contact_id) : undefined,
+            dealId: skillContext.deal_id ? String(skillContext.deal_id) : undefined,
+            companyId: skillContext.company_id ? String(skillContext.company_id) : undefined,
+          },
+          client
+        ).catch(console.warn);
+      }
 
       return {
         success: result.status !== 'failed',
@@ -610,12 +659,36 @@ export async function executeAction(
         ? { ...parentContext, ...explicitContext }
         : explicitContext;
 
+      // SBI-005: fire-and-forget skill memory write for invoke_skill
+      const resolvedFrontmatter = skillData.compiled_frontmatter || skillData.platform_skills?.frontmatter || {};
+      const invokeBrainCtx = (resolvedFrontmatter as Record<string, unknown>).brain_context;
+      const invokeSkipBrainNone = Array.isArray(invokeBrainCtx) && invokeBrainCtx.length === 1 && invokeBrainCtx[0] === 'none';
+
+      if (!invokeSkipBrainNone && !SKIP_MEMORY_SKILLS.has(skillKey)) {
+        const invokeInputStr = (mergedContext.user_message || mergedContext.query || skillKey).toString().slice(0, 200);
+        const invokeOutputStr = `Invoked skill: ${skillKey}`.slice(0, 500);
+
+        writeSkillMemory(
+          skillKey,
+          userId,
+          orgId,
+          invokeInputStr,
+          invokeOutputStr,
+          {
+            contactId: mergedContext.contact_id ? String(mergedContext.contact_id) : undefined,
+            dealId: mergedContext.deal_id ? String(mergedContext.deal_id) : undefined,
+            companyId: mergedContext.company_id ? String(mergedContext.company_id) : undefined,
+          },
+          client
+        ).catch(console.warn);
+      }
+
       return {
         success: true,
         data: {
           skill_key: skillKey,
           skill_content: skillData.compiled_content || skillData.platform_skills?.content_template || '',
-          skill_frontmatter: skillData.compiled_frontmatter || skillData.platform_skills?.frontmatter || {},
+          skill_frontmatter: resolvedFrontmatter,
           context: mergedContext,
           invoke_metadata: {
             depth: currentDepth + 1,
@@ -2576,6 +2649,94 @@ export async function executeAction(
         },
         source: 'upsert_target',
       };
+    }
+
+    // =========================================================================
+    // Document Generation (DOC-007)
+    // =========================================================================
+    case 'generate_document': {
+      const documentType = params.document_type ? String(params.document_type) : undefined;
+      const userMessage = params.user_message ? String(params.user_message) : undefined;
+
+      // Resolve document type — either explicitly provided or matched from user message
+      const resolvedDocType = documentType || (userMessage ? matchDocumentType(userMessage) : null);
+      if (!resolvedDocType) {
+        return {
+          success: false,
+          data: null,
+          error: 'Could not determine document type. Provide document_type or a user_message that matches a known type (proposal, next_steps, team_brief, scoping_document, project_plan, discussion_points, ideal_workflow, proposal_terms).',
+        };
+      }
+
+      const dealId = params.deal_id ? String(params.deal_id) : undefined;
+      const contactId = params.contact_id ? String(params.contact_id) : undefined;
+
+      if (!dealId && !contactId) {
+        return {
+          success: false,
+          data: null,
+          error: 'generate_document requires at least one of deal_id or contact_id to fetch meeting context.',
+        };
+      }
+
+      // Fetch the most recent meeting summary for this deal/contact
+      let meetingQuery = client
+        .from('meetings')
+        .select('id, title, summary, next_steps, transcript_summary, owner_user_id, created_at')
+        .eq('owner_user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (dealId) {
+        meetingQuery = meetingQuery.eq('deal_id', dealId);
+      }
+      if (contactId) {
+        meetingQuery = meetingQuery.eq('contact_id', contactId);
+      }
+
+      const { data: meetings, error: meetingError } = await meetingQuery;
+
+      if (meetingError) {
+        console.error('[generate_document] Failed to fetch meeting:', meetingError.message);
+        return { success: false, data: null, error: `Failed to fetch meeting context: ${meetingError.message}` };
+      }
+
+      const meeting = meetings?.[0];
+      const meetingContext = {
+        summary: meeting?.summary || meeting?.transcript_summary || 'No meeting summary available. Generate based on deal/contact context.',
+        next_steps: meeting?.next_steps || 'No next steps recorded.',
+        transcript_excerpt: meeting?.transcript_summary || undefined,
+      };
+
+      // Call generate-document edge function
+      try {
+        const { data: docResult, error: docError } = await client.functions.invoke('generate-document', {
+          body: {
+            document_type: resolvedDocType,
+            org_id: orgId,
+            user_id: userId,
+            deal_id: dealId,
+            contact_id: contactId,
+            meeting_context: meetingContext,
+          },
+        });
+
+        if (docError) {
+          return { success: false, data: null, error: `Document generation failed: ${docError.message}` };
+        }
+
+        return {
+          success: true,
+          data: {
+            document_type: resolvedDocType,
+            document: docResult?.document || docResult,
+            meeting_used: meeting ? { id: meeting.id, title: meeting.title, date: meeting.created_at } : null,
+          },
+          source: 'generate_document',
+        };
+      } catch (err: any) {
+        return { success: false, data: null, error: `Document generation error: ${err.message}` };
+      }
     }
 
     default:

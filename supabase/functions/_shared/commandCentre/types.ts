@@ -9,6 +9,7 @@
 // Values here MUST match the literal strings agents write via writeAdapter.
 export type SourceAgent =
   | 'morning-brief'
+  | 'morning-briefing'
   | 'pipeline-analysis'
   | 'meeting-prep'
   | 'post-meeting'
@@ -18,7 +19,10 @@ export type SourceAgent =
   | 'health-recalculate'
   | 'notification-bridge'
   | 'pipeline_scan'
-  | 'pipeline_hygiene';
+  | 'pipeline_hygiene'
+  | 'commitment-tracker'
+  | 'contact_decay'
+  | 'document-intelligence';
 
 // Item types — matches item_type column values in command_centre_items
 export type ItemType =
@@ -30,7 +34,10 @@ export type ItemType =
   | 'coaching'
   | 'alert'
   | 'meeting_prep'
-  | 'insight';
+  | 'insight'
+  | 'morning_brief'
+  | 'decay_alert'
+  | 'document_draft';
 
 // Status enum — must match CHECK constraint in command_centre_items
 export type ItemStatus =
@@ -80,7 +87,7 @@ export interface CommandCentreItem {
 }
 
 export interface DraftedAction {
-  type: 'send_email' | 'update_crm' | 'create_task' | 'schedule_meeting' | 'send_proposal';
+  type: 'send_email' | 'update_crm' | 'create_task' | 'schedule_meeting' | 'send_proposal' | 'send_document';
   payload: {
     to?: string;
     subject?: string;

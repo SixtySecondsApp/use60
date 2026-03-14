@@ -25,6 +25,7 @@ import {
   errorResponse,
   jsonResponse,
 } from '../_shared/corsHelper.ts';
+import { isAbilityEnabledForOrg } from '../_shared/proactive/cronPreferenceGate.ts';
 
 // =============================================================================
 // Config
@@ -114,6 +115,16 @@ serve(async (req) => {
     // -------------------------------------------------------------------------
     for (const orgId of orgIds) {
       result.orgs_processed++;
+
+      // TRINITY-007: Check org preference gate before dispatching
+      const abilityGate = await isAbilityEnabledForOrg(supabase, orgId, 'stale_deal_revival');
+      if (!abilityGate.allowed) {
+        console.log(`[agent-reengagement] ${abilityGate.reason} — skipping`);
+        result.results.push({ org_id: orgId, dispatched: false });
+        result.orgs_skipped++;
+        continue;
+      }
+
       const orgResult = await dispatchReengagementScan(orgId);
       result.results.push(orgResult);
 

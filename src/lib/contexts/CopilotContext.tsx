@@ -92,7 +92,7 @@ interface CopilotContextValue {
   isOpen: boolean;
   openCopilot: (initialQuery?: string, startNewChat?: boolean) => void;
   closeCopilot: () => void;
-  sendMessage: (message: string, options?: { silent?: boolean; apiContent?: string }) => Promise<void>;
+  sendMessage: (message: string, options?: { silent?: boolean; apiContent?: string; seedContext?: import('@/lib/hooks/useCopilotChat').SeedContext }) => Promise<void>;
   cancelRequest: () => void;
   messages: CopilotMessage[];
   isLoading: boolean;
@@ -1278,7 +1278,7 @@ export const CopilotProvider: React.FC<CopilotProviderProps> = ({ children }) =>
   }, []);
 
   const sendMessage = useCallback(
-    async (message: string, options?: { silent?: boolean; entities?: Array<{ id: string; type: string; name: string }>; skillCommand?: string; apiContent?: string }) => {
+    async (message: string, options?: { silent?: boolean; entities?: Array<{ id: string; type: string; name: string }>; skillCommand?: string; apiContent?: string; seedContext?: import('@/lib/hooks/useCopilotChat').SeedContext }) => {
       const isModeLoading = autonomousModeEnabled
         ? autonomousCopilot.isThinking || autonomousCopilot.isStreaming
         : agentModeEnabled
