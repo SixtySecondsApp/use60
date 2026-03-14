@@ -42,10 +42,12 @@ import { useCommandCentreItemMutations } from '@/lib/hooks/useCommandCentreItems
 import type { CCItem } from '@/lib/services/commandCentreItemsService';
 import { useCopilot } from '@/lib/contexts/CopilotContext';
 import { URGENCY_CONFIG } from './constants';
+import { CCChainReplay } from './CCChainReplay';
 import { CCEmailPanel } from './panels/CCEmailPanel';
 import { CCCrmDiffPanel } from './panels/CCCrmDiffPanel';
 import { CCDealHealthPanel } from './panels/CCDealHealthPanel';
 import { CCSignalPanel } from './panels/CCSignalPanel';
+import { CCInlineActions } from './CCInlineActions';
 
 // ============================================================================
 // Props
@@ -783,6 +785,9 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
               </div>
             )}
 
+            {/* ---- Inline actions (TRINITY-017) ---- */}
+            <CCInlineActions item={item} />
+
             {/* ---- Typed panel registry ---- */}
             {(() => {
               const draftedAction = (item.drafted_action as Record<string, unknown>) ?? {};
@@ -905,6 +910,15 @@ export function CCDetailPanel({ item, onClose }: CCDetailPanelProps) {
             <CollapsibleSection title="Confidence Breakdown" defaultOpen={false}>
               <ConfidenceSection score={item.confidence_score} factors={confidenceFactors} />
             </CollapsibleSection>
+
+            {/* Chain replay — TRINITY-018 */}
+            {(() => {
+              const chainId =
+                (item.context?.chain_id as string | undefined) ??
+                (item.enrichment_context?.chain_id as string | undefined) ??
+                null;
+              return <CCChainReplay chainId={chainId} />;
+            })()}
 
             {/* Timeline */}
             <CollapsibleSection title="Timeline" defaultOpen={false}>
