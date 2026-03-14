@@ -75,7 +75,6 @@ export type TriggerType =
 
 export type BackendType =
   | 'orchestrator'   // Runs via agent-orchestrator edge function
-  | 'v1-simulate'    // Legacy V1 simulator (proactive-meeting-prep etc.)
   | 'cron-job';      // Edge function invoked by Supabase cron
 
 export type DeliveryChannel = 'slack' | 'email' | 'in-app';
@@ -286,7 +285,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-orange-500 to-red-600',
     eventType: 'overdue_deal_scan',
     triggerType: 'cron',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -306,7 +305,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-violet-500 to-purple-600',
     eventType: 'ghost_deal_scan',
     triggerType: 'cron',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -440,7 +439,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     ],
   },
 
-  // ── V1 Proactive Notifications (Slack + In-App, real data) ──────────────
+  // ── Proactive Notifications (migrated from V1 to orchestrator, SBI-008) ─
   {
     id: 'morning-brief',
     name: 'Daily Brief',
@@ -451,7 +450,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-amber-500 to-yellow-500',
     eventType: 'morning_brief',
     triggerType: 'cron',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -471,7 +470,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-sky-500 to-blue-600',
     eventType: 'sales_assistant_digest',
     triggerType: 'cron',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -491,7 +490,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-indigo-400 to-blue-500',
     eventType: 'pre_meeting_nudge',
     triggerType: 'cron',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -511,7 +510,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-emerald-500 to-green-600',
     eventType: 'post_call_summary',
     triggerType: 'event',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -531,7 +530,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-rose-500 to-red-500',
     eventType: 'hitl_followup_email',
     triggerType: 'event',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: true,
     status: 'active',
@@ -551,7 +550,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-red-500 to-orange-500',
     eventType: 'stale_deal_alert',
     triggerType: 'cron',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -571,7 +570,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-fuchsia-500 to-purple-600',
     eventType: 'email_reply_alert',
     triggerType: 'event',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -591,7 +590,7 @@ export const ABILITY_REGISTRY: AbilityDefinition[] = [
     gradient: 'from-yellow-400 to-amber-500',
     eventType: 'ai_smart_suggestion',
     triggerType: 'cron',
-    backendType: 'v1-simulate',
+    backendType: 'orchestrator',
     stepCount: 1,
     hasApproval: false,
     status: 'active',
@@ -970,11 +969,10 @@ export const LIFECYCLE_STAGES: Array<{
 
 /**
  * Maps ability eventType to orchestrator sequence_type for backend preferences.
- * Only abilities with orchestrator backend have a mapping.
- * Abilities without a mapping use localStorage-only state.
+ * All orchestrator abilities must have a mapping here.
  */
 export const EVENT_TYPE_TO_SEQUENCE_TYPE: Record<string, string> = {
-  // Orchestrator-backed abilities (9 sequence types)
+  // Orchestrator-backed abilities (9 original sequence types)
   'meeting_ended': 'meeting_ended',
   'pre_meeting_90min': 'pre_meeting_90min',
   'deal_risk_scan': 'deal_risk_scan',
@@ -996,6 +994,18 @@ export const EVENT_TYPE_TO_SEQUENCE_TYPE: Record<string, string> = {
   'sent_received_ratio': 'sent_received_ratio',
   'document_linking': 'document_linking',
   'attendee_enrichment': 'attendee_enrichment',
+  // Migrated from V1-simulate (SBI-008)
+  // NOTE: These need CHECK constraint extension in SBI-009
+  'overdue_deal_scan': 'overdue_deal_scan',
+  'ghost_deal_scan': 'ghost_deal_scan',
+  'morning_brief': 'morning_brief',
+  'sales_assistant_digest': 'sales_assistant_digest',
+  'pre_meeting_nudge': 'pre_meeting_nudge',
+  'post_call_summary': 'post_call_summary',
+  'hitl_followup_email': 'hitl_followup_email',
+  'stale_deal_alert': 'stale_deal_alert',
+  'email_reply_alert': 'email_reply_alert',
+  'ai_smart_suggestion': 'ai_smart_suggestion',
 };
 
 // =============================================================================

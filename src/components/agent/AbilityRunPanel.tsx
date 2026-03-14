@@ -9,12 +9,9 @@ import { LiveOutputPanel } from '@/components/agent/LiveOutputPanel';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Play, Loader2, RotateCcw, Zap, Send, MessageSquare, Mail, Bell } from 'lucide-react';
+import { Play, Loader2, RotateCcw, Zap, MessageSquare, Mail, Bell } from 'lucide-react';
 import type { AbilityDefinition, DeliveryChannel } from '@/lib/agent/abilityRegistry';
-import { V1ResultPreview } from '@/components/agent/V1ResultPreview';
 
 interface AbilityRunPanelProps {
   ability: AbilityDefinition;
@@ -53,14 +50,9 @@ export function AbilityRunPanel({ ability, activeChannels, isEnabled }: AbilityR
   const [jobId, setJobId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
-  // V1 simulate state (delivery channels now controlled by card toggles)
-  const [v1UseRealData, setV1UseRealData] = useState(true);
-  const [v1DryRun, setV1DryRun] = useState(false);
-  const [v1Result, setV1Result] = useState<Record<string, unknown> | null>(null);
-
   // Fetch recent meetings — available for all abilities as optional context
   const shouldFetchMeetings =
-    ability.backendType === 'orchestrator' || ability.backendType === 'v1-simulate';
+    ability.backendType === 'orchestrator';
 
   // Meeting required only for orchestrator meeting-triggered abilities
   const meetingRequired =
@@ -288,164 +280,6 @@ export function AbilityRunPanel({ ability, activeChannels, isEnabled }: AbilityR
     </div>
   );
 
-  const handleRunV1Simulate = async () => {
-    if (!user?.id || !orgId) {
-      toast.error('Missing user or organization');
-      return;
-    }
-
-    if (!isEnabled) {
-      toast.error('This ability is paused. Enable it first.');
-      return;
-    }
-
-    setIsRunning(true);
-    setV1Result(null);
-
-    try {
-      // Use active channels to determine delivery targets
-      const sendSlack = activeChannels.includes('slack');
-      const createInApp = activeChannels.includes('in-app');
-
-      const { data, error } = await supabase.functions.invoke('proactive-simulate', {
-        body: {
-          orgId,
-          feature: ability.eventType,
-          targetUserId: user.id,
-          sendSlack,
-          createInApp,
-          sendEmail: activeChannels.includes('email'),
-          dryRun: v1DryRun,
-          simulationMode: !v1UseRealData,
-          entityIds: {
-            ...(selectedMeetingId ? { meetingId: selectedMeetingId } : {}),
-          },
-        },
-      });
-
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Simulation failed');
-
-      setV1Result(data as Record<string, unknown>);
-      toast.success('Simulation executed', {
-        description: v1DryRun ? 'Dry run — nothing was sent' : undefined,
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to run simulation';
-      toast.error(msg);
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
-  const renderV1SimulatePanel = () => (
-    <div className="space-y-4">
-      {/* Linked skill badge */}
-      {ability.skillKey && (
-        <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-          <Zap className="w-3.5 h-3.5" />
-          <span>Powered by skill:</span>
-          <Badge variant="outline" className="text-[11px] font-mono">{ability.skillKey}</Badge>
-        </div>
-      )}
-
-      {/* Channel delivery info */}
-      {activeChannels.length > 0 && (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Delivering to:</span>
-          <div className="flex items-center gap-2">
-            {activeChannels.map((channel) => {
-              const ChannelIcon = getChannelIcon(channel);
-              return (
-                <Badge key={channel} variant="outline" className="gap-1">
-                  <ChannelIcon className={`w-3 h-3 ${getChannelColor(channel)}`} />
-                  {channel === 'in-app' ? 'In-App' : channel.charAt(0).toUpperCase() + channel.slice(1)}
-                </Badge>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Optional meeting context picker */}
-      {meetings && meetings.length > 0 && (
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Meeting Context <span className="text-muted-foreground font-normal">(optional)</span></label>
-          <select
-            value={selectedMeetingId}
-            onChange={(e) => setSelectedMeetingId(e.target.value)}
-            disabled={isRunning || loadingMeetings}
-            className="w-full px-3 py-2 border rounded-md bg-background text-sm"
-          >
-            <option value="">No meeting selected</option>
-            {meetings.map((meeting) => (
-              <option key={meeting.id} value={meeting.id}>
-                {meeting.title} ({new Date(meeting.meeting_start).toLocaleDateString()})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Data mode + dry run options */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center gap-2">
-          <Switch id="v1-real" checked={v1UseRealData} onCheckedChange={setV1UseRealData} disabled={!isEnabled || isRunning} />
-          <Label htmlFor="v1-real" className="text-sm">Live data</Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch id="v1-dry" checked={v1DryRun} onCheckedChange={setV1DryRun} disabled={!isEnabled || isRunning} />
-          <Label htmlFor="v1-dry" className="text-sm">Dry run</Label>
-        </div>
-      </div>
-
-      {!v1UseRealData && (
-        <p className="text-[11px] text-amber-600 dark:text-amber-400">
-          Using demo data. Toggle Live data on to use your real meetings, deals, and contacts.
-        </p>
-      )}
-
-      {/* Disabled overlay message */}
-      {!isEnabled && (
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
-          <p className="text-sm text-amber-800 dark:text-amber-400">
-            This ability is paused. Enable it from the ability card to run it.
-          </p>
-        </div>
-      )}
-
-      <div className="flex gap-2">
-        <Button onClick={handleRunV1Simulate} disabled={!isEnabled || isRunning} className="gap-2">
-          {isRunning ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Running...
-            </>
-          ) : (
-            <>
-              <Send className="w-4 h-4" />
-              Run with {v1UseRealData ? 'live' : 'demo'} data
-            </>
-          )}
-        </Button>
-        {v1Result && (
-          <Button
-            variant="outline"
-            onClick={() => setV1Result(null)}
-            disabled={isRunning}
-          >
-            <RotateCcw className="w-4 h-4" />
-          </Button>
-        )}
-      </div>
-
-      {/* Result */}
-      {v1Result && (
-        <V1ResultPreview result={v1Result} v1UseRealData={v1UseRealData} />
-      )}
-    </div>
-  );
-
   const renderCronJobPanel = () => (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -501,7 +335,6 @@ export function AbilityRunPanel({ ability, activeChannels, isEnabled }: AbilityR
 
       <CardContent>
         {ability.backendType === 'orchestrator' && renderOrchestratorPanel()}
-        {ability.backendType === 'v1-simulate' && renderV1SimulatePanel()}
         {ability.backendType === 'cron-job' && renderCronJobPanel()}
       </CardContent>
     </Card>

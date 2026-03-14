@@ -189,14 +189,6 @@ export function AbilityCard({
             HITL
           </Badge>
         )}
-        {!hasBackendState && ability.backendType === 'v1-simulate' && (
-          <Badge
-            variant="outline"
-            className="text-[10px] border-amber-500 text-amber-600 dark:text-amber-400"
-          >
-            V1
-          </Badge>
-        )}
       </div>
 
       {/* Icon with gradient background */}
