@@ -16,6 +16,7 @@ const BrainDealMemory = lazy(() => import('@/components/brain/BrainDealMemory'))
 const BrainCommitments = lazy(() => import('@/components/brain/BrainCommitments'));
 const BrainContactMemory = lazy(() => import('@/components/brain/BrainContactMemory'));
 const BrainAgentLog = lazy(() => import('@/components/brain/BrainAgentLog'));
+const BrainSettings = lazy(() => import('@/components/brain/BrainSettings'));
 
 // ============================================================================
 // Tab definitions
@@ -31,26 +32,6 @@ const BRAIN_TABS = [
 ] as const;
 
 type BrainTab = (typeof BRAIN_TABS)[number]['id'];
-
-// ============================================================================
-// Placeholder empty state
-// ============================================================================
-
-function TabPlaceholder({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-24">
-      <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-gray-800/50 flex items-center justify-center mb-4">
-        <Brain className="h-7 w-7 text-slate-400 dark:text-gray-500" />
-      </div>
-      <p className="text-sm font-medium text-slate-600 dark:text-gray-300 mb-1">
-        {label}
-      </p>
-      <p className="text-xs text-slate-400 dark:text-gray-500">
-        Coming soon
-      </p>
-    </div>
-  );
-}
 
 // ============================================================================
 // Main page
@@ -135,11 +116,17 @@ export default function BrainPage() {
                 <BrainAgentLog />
               </Suspense>
             </TabsContent>
-            {BRAIN_TABS.filter((tab) => tab.id !== 'memory-feed' && tab.id !== 'deal-memory' && tab.id !== 'commitments' && tab.id !== 'contact-memory' && tab.id !== 'agent-log').map((tab) => (
-              <TabsContent key={tab.id} value={tab.id}>
-                <TabPlaceholder label={tab.label} />
-              </TabsContent>
-            ))}
+            <TabsContent value={'settings' satisfies BrainTab}>
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-24">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                  </div>
+                }
+              >
+                <BrainSettings />
+              </Suspense>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
