@@ -1,11 +1,15 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { AdapterRegistry } from './registry.ts';
 import type { ActionResult, AdapterContext, ExecuteActionName, InvokeSkillParams, CreateTaskParams } from './types.ts';
+import { writeSkillMemory } from '../skills/writeSkillMemory.ts';
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
 // Maximum skill nesting depth to prevent infinite recursion
 const MAX_INVOKE_DEPTH = 3;
+
+// Skills that are non-substantive lookups — skip memory writes
+const SKIP_MEMORY_SKILLS = new Set(['list_skills', 'get_skill']);
 
 const normalizeDueDate = (value: unknown): string | null => {
   if (value === null || value === undefined) return null;
@@ -455,6 +459,23 @@ export async function executeAction(
             };
           }
 
+          // SBI-005: fire-and-forget skill memory write for pipeline skills
+          const pipelineOutput = JSON.stringify(pipelineData).slice(0, 500);
+          if (pipelineOutput && orgId) {
+            writeSkillMemory(
+              skillKey,
+              userId,
+              orgId,
+              String(skillContext.trigger_type || 'copilot').slice(0, 200),
+              pipelineOutput,
+              {
+                contactId: skillContext.contact_id ? String(skillContext.contact_id) : undefined,
+                dealId: skillContext.deal_id ? String(skillContext.deal_id) : undefined,
+              },
+              client
+            ).catch(console.warn);
+          }
+
           return {
             success: true,
             data: {
@@ -485,6 +506,33 @@ export async function executeAction(
         context: skillContext,
         dryRun,
       });
+
+      // SBI-005: fire-and-forget skill memory write after successful execution.
+      // brain_context check is handled in invoke_skill where frontmatter is available;
+      // for run_skill the skill already executed so the memory is always valuable.
+      if (
+        result.status !== 'failed' &&
+        result.summary &&
+        orgId &&
+        !SKIP_MEMORY_SKILLS.has(skillKey)
+      ) {
+        const inputStr = (skillContext.user_message || skillContext.query || skillKey).toString().slice(0, 200);
+        const outputStr = (result.summary || JSON.stringify(result.data)).slice(0, 500);
+
+        writeSkillMemory(
+          skillKey,
+          userId,
+          orgId,
+          inputStr,
+          outputStr,
+          {
+            contactId: skillContext.contact_id ? String(skillContext.contact_id) : undefined,
+            dealId: skillContext.deal_id ? String(skillContext.deal_id) : undefined,
+            companyId: skillContext.company_id ? String(skillContext.company_id) : undefined,
+          },
+          client
+        ).catch(console.warn);
+      }
 
       return {
         success: result.status !== 'failed',
@@ -610,12 +658,36 @@ export async function executeAction(
         ? { ...parentContext, ...explicitContext }
         : explicitContext;
 
+      // SBI-005: fire-and-forget skill memory write for invoke_skill
+      const resolvedFrontmatter = skillData.compiled_frontmatter || skillData.platform_skills?.frontmatter || {};
+      const invokeBrainCtx = (resolvedFrontmatter as Record<string, unknown>).brain_context;
+      const invokeSkipBrainNone = Array.isArray(invokeBrainCtx) && invokeBrainCtx.length === 1 && invokeBrainCtx[0] === 'none';
+
+      if (!invokeSkipBrainNone && !SKIP_MEMORY_SKILLS.has(skillKey)) {
+        const invokeInputStr = (mergedContext.user_message || mergedContext.query || skillKey).toString().slice(0, 200);
+        const invokeOutputStr = `Invoked skill: ${skillKey}`.slice(0, 500);
+
+        writeSkillMemory(
+          skillKey,
+          userId,
+          orgId,
+          invokeInputStr,
+          invokeOutputStr,
+          {
+            contactId: mergedContext.contact_id ? String(mergedContext.contact_id) : undefined,
+            dealId: mergedContext.deal_id ? String(mergedContext.deal_id) : undefined,
+            companyId: mergedContext.company_id ? String(mergedContext.company_id) : undefined,
+          },
+          client
+        ).catch(console.warn);
+      }
+
       return {
         success: true,
         data: {
           skill_key: skillKey,
           skill_content: skillData.compiled_content || skillData.platform_skills?.content_template || '',
-          skill_frontmatter: skillData.compiled_frontmatter || skillData.platform_skills?.frontmatter || {},
+          skill_frontmatter: resolvedFrontmatter,
           context: mergedContext,
           invoke_metadata: {
             depth: currentDepth + 1,
