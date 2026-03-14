@@ -5,6 +5,9 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { buildProposalReviewMessage, type ProposalReviewData } from '../../_shared/slackBlocks.ts';
+import { writeDocumentMemory } from '../../_shared/documents/writeDocumentMemory.ts';
+import { getDailyThreadTs } from '../../_shared/slack/dailyThread.ts';
+import { sendSlackDM } from '../../_shared/proactive/deliverySlack.ts';
 
 interface ProposalActionContext {
   actionId: string;
@@ -55,11 +58,14 @@ export async function handleProposalAction(ctx: ProposalActionContext): Promise<
     let contactId: string | undefined;
     let createdAt: string | undefined;
     let currentTier = 'approve';
+    let proposalTitle: string | undefined;
+    let proposalSections: Array<{ id: string; type: string; title: string; content: string }> | undefined;
+    let documentType: string | undefined;
 
     if (proposalId) {
       const { data: proposalRow } = await supabase
         .from('proposals')
-        .select('style_config, deal_id, contact_id, created_at')
+        .select('style_config, deal_id, contact_id, created_at, title, sections, document_type')
         .eq('id', proposalId)
         .maybeSingle();
 
@@ -67,6 +73,9 @@ export async function handleProposalAction(ctx: ProposalActionContext): Promise<
         dealId = proposalRow.deal_id ?? undefined;
         contactId = proposalRow.contact_id ?? undefined;
         createdAt = proposalRow.created_at;
+        proposalTitle = proposalRow.title ?? undefined;
+        proposalSections = Array.isArray(proposalRow.sections) ? proposalRow.sections : undefined;
+        documentType = proposalRow.document_type ?? 'proposal';
 
         const editMetrics = (proposalRow.style_config as Record<string, unknown> | null)
           ?._edit_metrics as Record<string, unknown> | undefined;
@@ -138,7 +147,23 @@ export async function handleProposalAction(ctx: ProposalActionContext): Promise<
       }
     }
 
+    // DOC-006: Wire email delivery after Slack approval
     await sendSlackResponse(ctx.responseUrl, 'Proposal approved! Sending...');
+
+    try {
+      await deliverProposalEmail(supabase, {
+        proposalId: proposalId!,
+        dealId,
+        contactId,
+        documentType: documentType || 'proposal',
+        proposalTitle,
+        proposalSections,
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+      });
+    } catch (deliveryErr) {
+      console.error('[proposal-handler] DOC-006 email delivery failed (non-fatal):', deliveryErr);
+    }
 
   } else if (action === 'edit') {
     const jobId = parts.slice(2).join('_');
@@ -178,6 +203,200 @@ export async function handleProposalAction(ctx: ProposalActionContext): Promise<
       .eq('id', ctx.actionValue);
 
     await sendSlackResponse(ctx.responseUrl, '⏭️ Proposal skipped.');
+  }
+}
+
+// =============================================================================
+// DOC-006: Email delivery after Slack approval
+// =============================================================================
+
+interface DeliverProposalEmailParams {
+  proposalId: string;
+  dealId: string | undefined;
+  contactId: string | undefined;
+  documentType: string;
+  proposalTitle: string | undefined;
+  proposalSections: Array<{ id: string; type: string; title: string; content: string }> | undefined;
+  userId: string;
+  orgId: string;
+}
+
+async function deliverProposalEmail(
+  supabase: ReturnType<typeof createClient>,
+  params: DeliverProposalEmailParams,
+): Promise<void> {
+  const {
+    proposalId, dealId, contactId, documentType, proposalTitle,
+    proposalSections, userId, orgId,
+  } = params;
+
+  // 1. Resolve contact email
+  if (!contactId) {
+    console.warn('[DOC-006] No contactId on proposal, skipping email delivery');
+    return;
+  }
+
+  const { data: contact } = await supabase
+    .from('contacts')
+    .select('email, first_name, last_name')
+    .eq('id', contactId)
+    .maybeSingle();
+
+  if (!contact?.email) {
+    console.warn(`[DOC-006] Contact ${contactId} has no email, skipping delivery`);
+    return;
+  }
+
+  const contactName = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'prospect';
+
+  // 2. Resolve deal name
+  let dealName = proposalTitle || 'your project';
+  if (dealId) {
+    const { data: deal } = await supabase
+      .from('deals')
+      .select('name')
+      .eq('id', dealId)
+      .maybeSingle();
+    if (deal?.name) dealName = deal.name;
+  }
+
+  // 3. Format document type label
+  const docTypeLabel = documentType
+    .split('_')
+    .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+
+  // 4. Build email subject & body from sections
+  const subject = `${docTypeLabel}: ${dealName}`;
+
+  let emailBody = '';
+  if (proposalSections && proposalSections.length > 0) {
+    // Find executive_summary section
+    const execSummary = proposalSections.find((s) => s.type === 'executive_summary');
+    const otherSections = proposalSections.filter(
+      (s) => s.type !== 'executive_summary' && s.type !== 'cover',
+    );
+
+    if (execSummary?.content) {
+      emailBody += execSummary.content;
+    }
+
+    emailBody += `<p>Please find the detailed ${docTypeLabel} below.</p>`;
+
+    if (otherSections.length > 0) {
+      emailBody += '<ul>';
+      for (const section of otherSections) {
+        emailBody += `<li>${section.title}</li>`;
+      }
+      emailBody += '</ul>';
+    }
+  } else {
+    emailBody = `<p>Please find the ${docTypeLabel} for ${dealName} attached.</p>`;
+  }
+
+  // 5. Send email via email-send-as-rep
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+  let emailSent = false;
+  try {
+    const emailResponse = await fetch(`${supabaseUrl}/functions/v1/email-send-as-rep`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId,
+        org_id: orgId,
+        to: contact.email,
+        subject,
+        body: emailBody,
+      }),
+    });
+
+    if (emailResponse.ok) {
+      emailSent = true;
+      console.log(`[DOC-006] Email sent to ${contact.email} for proposal ${proposalId}`);
+    } else {
+      const errText = await emailResponse.text().catch(() => 'unknown error');
+      console.error(`[DOC-006] email-send-as-rep failed (${emailResponse.status}): ${errText}`);
+    }
+  } catch (emailErr) {
+    console.error('[DOC-006] email-send-as-rep invocation error:', emailErr);
+  }
+
+  // 6. Update proposals table with sent_at (store in metadata JSONB if column doesn't exist)
+  try {
+    const sentAt = new Date().toISOString();
+    const { error: updateErr } = await supabase
+      .from('proposals')
+      .update({
+        sent_at: sentAt,
+        updated_at: sentAt,
+      })
+      .eq('id', proposalId);
+
+    if (updateErr) {
+      // Fallback: sent_at column may not exist yet — store in style_config metadata
+      console.warn('[DOC-006] sent_at column update failed, storing in style_config:', updateErr.message);
+      const { data: existing } = await supabase
+        .from('proposals')
+        .select('style_config')
+        .eq('id', proposalId)
+        .maybeSingle();
+
+      const styleConfig = (existing?.style_config as Record<string, unknown>) || {};
+      styleConfig._sent_at = sentAt;
+
+      await supabase
+        .from('proposals')
+        .update({ style_config: styleConfig, updated_at: sentAt })
+        .eq('id', proposalId);
+    }
+  } catch (updateErr) {
+    console.error('[DOC-006] Failed to update proposal sent_at:', updateErr);
+  }
+
+  // 7. Write Brain memory via writeDocumentMemory
+  const sectionCount = proposalSections?.length ?? 0;
+  await writeDocumentMemory(orgId, dealId || null, contactId, docTypeLabel, sectionCount, contactName, supabase);
+
+  // 8. Post confirmation to daily Slack thread
+  try {
+    const threadTs = await getDailyThreadTs(userId, orgId, supabase);
+
+    // Look up Slack credentials for DM
+    const { data: slackOrg } = await supabase
+      .from('slack_org_settings')
+      .select('bot_access_token')
+      .eq('org_id', orgId)
+      .eq('is_connected', true)
+      .maybeSingle();
+
+    if (slackOrg?.bot_access_token) {
+      const { data: mapping } = await supabase
+        .from('slack_user_mappings')
+        .select('slack_user_id')
+        .eq('org_id', orgId)
+        .eq('sixty_user_id', userId)
+        .maybeSingle();
+
+      if (mapping?.slack_user_id) {
+        const statusMsg = emailSent
+          ? `${docTypeLabel} sent to ${contactName} (${contact.email})`
+          : `${docTypeLabel} approved for ${contactName} (email delivery failed — please send manually)`;
+
+        await sendSlackDM({
+          botToken: slackOrg.bot_access_token,
+          slackUserId: mapping.slack_user_id,
+          text: statusMsg,
+          ...(threadTs ? { thread_ts: threadTs } : {}),
+        });
+      }
+    }
+  } catch (threadErr) {
+    console.error('[DOC-006] Failed to post daily thread confirmation:', threadErr);
   }
 }
 
