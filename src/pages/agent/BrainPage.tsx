@@ -7,8 +7,12 @@
  * TRINITY-004
  */
 
-import { Brain } from 'lucide-react';
+import { lazy, Suspense } from 'react';
+import { Brain, Loader2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import BrainMemoryFeed from '@/components/brain/BrainMemoryFeed';
+
+const BrainDealMemory = lazy(() => import('@/components/brain/BrainDealMemory'));
 
 // ============================================================================
 // Tab definitions
@@ -80,7 +84,21 @@ export default function BrainPage() {
               ))}
             </TabsList>
 
-            {BRAIN_TABS.map((tab) => (
+            <TabsContent value={'memory-feed' satisfies BrainTab}>
+              <BrainMemoryFeed />
+            </TabsContent>
+            <TabsContent value={'deal-memory' satisfies BrainTab}>
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-24">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                  </div>
+                }
+              >
+                <BrainDealMemory />
+              </Suspense>
+            </TabsContent>
+            {BRAIN_TABS.filter((tab) => tab.id !== 'memory-feed' && tab.id !== 'deal-memory').map((tab) => (
               <TabsContent key={tab.id} value={tab.id}>
                 <TabPlaceholder label={tab.label} />
               </TabsContent>
