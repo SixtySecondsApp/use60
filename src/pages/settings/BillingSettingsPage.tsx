@@ -11,7 +11,8 @@
  *   - Subscription Management / Stripe portal
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import SettingsPageWrapper from '@/components/SettingsPageWrapper';
 import { useOrg } from '@/lib/contexts/OrgContext';
 import {
@@ -96,8 +97,36 @@ export default function BillingSettingsPage() {
   const { subscription, trial, isLoading, error } = useCurrentSubscription();
   const createCheckoutSession = useCreateCheckoutSession();
   const subscriptionGate = useSubscriptionGate(organizationId);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+
+  // Auto-trigger Founding Member checkout when arriving from signup?plan=founding
+  useEffect(() => {
+    const checkoutParam = searchParams.get('checkout');
+    if (checkoutParam === 'founding' && organizationId && !isLoading) {
+      // Clear the param so it doesn't re-trigger
+      setSearchParams({}, { replace: true });
+      // Call the founding checkout edge function
+      const triggerFoundingCheckout = async () => {
+        try {
+          const { data, error: fnError } = await (await import('@/lib/supabase/clientV2')).supabase
+            .functions.invoke('create-founding-checkout', {
+              body: { org_id: organizationId, currency: 'USD' },
+            });
+          if (fnError) throw fnError;
+          if (data?.url) {
+            window.location.href = data.url;
+          } else {
+            toast.error(data?.error || 'Could not start checkout');
+          }
+        } catch (err: any) {
+          toast.error(err?.message || 'Could not start checkout');
+        }
+      };
+      triggerFoundingCheckout();
+    }
+  }, [searchParams, organizationId, isLoading, setSearchParams]);
 
   // PlanChangeModal state: null = closed
   const [planChangeTarget, setPlanChangeTarget] = useState<{

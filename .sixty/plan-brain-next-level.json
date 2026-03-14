@@ -1,0 +1,385 @@
+{
+  "feature": {
+    "id": "brain-next-level",
+    "name": "Brain Next Level \u2014 5 Enhancements That Make 60 Feel Alive",
+    "status": "complete",
+    "createdAt": "2026-03-14T00:00:00Z",
+    "complexity": {
+      "total": 6,
+      "tier": 2,
+      "label": "Medium"
+    }
+  },
+  "stories": [
+    {
+      "id": "NL-001a",
+      "feature": "brain-next-level",
+      "title": "Create useBrainInsights hook \u2014 cross-reference commitments, decay, sentiment",
+      "type": "component",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "deal_memory_events",
+          "contact_memory",
+          "copilot_memories"
+        ]
+      },
+      "blocks": [
+        "NL-001b"
+      ],
+      "parallelWith": [
+        "NL-002a",
+        "NL-004a"
+      ],
+      "acceptance": [
+        "New hook src/lib/hooks/useBrainInsights.ts",
+        "Queries: overdue commitments from deal_memory_events, contacts with strength < 0.4 from contact_memory, deals with negative sentiment from recent meetings",
+        "Cross-references: matches decaying contacts to their deals, finds commitments tied to at-risk deals",
+        "Produces 2-3 actionable insight objects with: title, body, urgency, actionUrl, contactName, dealName",
+        "Each insight is a complete sentence with context (not just a metric)",
+        "Uses React Query with 5-minute stale time",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/lib/hooks/useBrainInsights.ts"
+      ],
+      "completedAt": "2026-03-14T19:30:00Z"
+    },
+    {
+      "id": "NL-001b",
+      "feature": "brain-next-level",
+      "title": "Build BrainInsightCards component \u2014 proactive insights in Brain header",
+      "type": "component",
+      "status": "complete",
+      "priority": 1,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "NL-001a"
+        ],
+        "files": [
+          "src/pages/agent/BrainPage.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "NL-002b",
+        "NL-003",
+        "NL-004b"
+      ],
+      "acceptance": [
+        "New component src/components/brain/BrainInsightCards.tsx",
+        "Renders 2-3 insight cards between PipelineSentimentTicker and tabs on BrainPage",
+        "Each card: colored left border (amber=action needed, red=urgent, blue=opportunity), icon, title, body text, action button",
+        "Action button navigates to relevant page (deal detail, contact, copilot with context)",
+        "Cards animate in with subtle fade (no heavy animation)",
+        "Dismissable per card (stores dismissed IDs in localStorage, resets daily)",
+        "Empty state: hidden entirely (no 'no insights' message)",
+        "Wired into BrainPage.tsx between sentiment ticker and tabs",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/brain/BrainInsightCards.tsx",
+        "src/pages/agent/BrainPage.tsx"
+      ],
+      "completedAt": "2026-03-14T20:15:00Z"
+    },
+    {
+      "id": "NL-002a",
+      "feature": "brain-next-level",
+      "title": "Add relationship_strength_history to contact_memory + snapshot on decay",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "supabase/functions/_shared/memory/decay.ts"
+        ],
+        "schema": [
+          "contact_memory"
+        ]
+      },
+      "blocks": [
+        "NL-002b"
+      ],
+      "parallelWith": [
+        "NL-001a",
+        "NL-004a"
+      ],
+      "acceptance": [
+        "New migration adds strength_history JSONB DEFAULT '[]' to contact_memory",
+        "Each entry: { strength: number, date: string, event?: string }",
+        "runRelationshipDecay() appends snapshot to strength_history after each decay run",
+        "updateContactFromEvent() appends snapshot when strength changes from events",
+        "History capped at 30 entries (oldest trimmed on append)",
+        "Migration is re-runnable",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/new_contact_strength_history.sql",
+        "supabase/functions/_shared/memory/decay.ts",
+        "supabase/functions/_shared/memory/contacts.ts"
+      ],
+      "completedAt": "2026-03-14T19:30:00Z"
+    },
+    {
+      "id": "NL-002b",
+      "feature": "brain-next-level",
+      "title": "Build RelationshipPulseGraph sparkline in Contact Memory tab",
+      "type": "component",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "NL-002a"
+        ],
+        "files": [
+          "src/components/brain/BrainContactMemory.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "NL-001b",
+        "NL-003",
+        "NL-004b"
+      ],
+      "acceptance": [
+        "New component src/components/brain/RelationshipPulseGraph.tsx",
+        "Recharts AreaChart sparkline showing strength_history over time",
+        "Color gradient: green (>0.7) to amber (0.4-0.7) to red (<0.4)",
+        "Hovering a point shows: date, strength %, event that caused the change",
+        "Threshold line at 0.4 (dashed red) showing the decay alert boundary",
+        "Integrated into BrainContactMemory detail panel replacing or augmenting the static strength bar",
+        "Compact size: 100% width, ~120px height",
+        "Empty state: shows flat line at current strength if no history",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/brain/RelationshipPulseGraph.tsx",
+        "src/components/brain/BrainContactMemory.tsx"
+      ],
+      "completedAt": "2026-03-14T20:15:00Z"
+    },
+    {
+      "id": "NL-003",
+      "feature": "brain-next-level",
+      "title": "Build MeetingPrepCard \u2014 30-second glanceable prep before meetings",
+      "type": "component",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [
+          "src/pages/agent/BrainPage.tsx"
+        ],
+        "schema": [
+          "calendar_events",
+          "contact_memory",
+          "deal_memory_events"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "NL-001b",
+        "NL-002b",
+        "NL-004b"
+      ],
+      "acceptance": [
+        "New component src/components/brain/MeetingPrepCard.tsx",
+        "Queries calendar_events for meetings starting within next 90 minutes for the user",
+        "For each upcoming meeting, fetches: contact_memory (strength, style), copilot_memories (recent context), deal_memory_events (open commitments, objections)",
+        "Renders a compact card: meeting title, time until ('in 58 min'), contact name + strength bar, 3-4 bullet points (style hint, open commitment, last sentiment, suggested opener)",
+        "Suggested opener generated from context (not LLM \u2014 template-based from objections/commitments)",
+        "Card auto-appears when meeting is within 90 min, auto-hides after meeting start time",
+        "Positioned on Brain page between insight cards and tabs (only when upcoming meeting exists)",
+        "If no upcoming meetings, component returns null (hidden)",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "src/components/brain/MeetingPrepCard.tsx",
+        "src/lib/hooks/useUpcomingMeetingPrep.ts",
+        "src/pages/agent/BrainPage.tsx"
+      ],
+      "completedAt": "2026-03-14T20:15:00Z"
+    },
+    {
+      "id": "NL-004a",
+      "feature": "brain-next-level",
+      "title": "Create useDealMomentum hook \u2014 composite momentum score per deal",
+      "type": "component",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "meetings",
+          "deals",
+          "deal_memory_events"
+        ]
+      },
+      "blocks": [
+        "NL-004b"
+      ],
+      "parallelWith": [
+        "NL-001a",
+        "NL-002a"
+      ],
+      "acceptance": [
+        "New hook src/lib/hooks/useDealMomentum.ts",
+        "For each active deal, computes momentum from 4 signals (all SQL, no LLM):",
+        "  1. Meeting frequency trend: meetings in last 14 days vs prior 14 days",
+        "  2. Sentiment trajectory: avg sentiment of last 3 meetings vs prior 3",
+        "  3. Commitment health: fulfilled/total ratio from deal_memory_events",
+        "  4. Recency: days since last interaction from contact_memory",
+        "Momentum score: -1.0 (stalling) to +1.0 (accelerating), computed as weighted average",
+        "Status label: 'accelerating' (>0.3), 'steady' (-0.3 to 0.3), 'decelerating' (-0.3 to -0.6), 'stalled' (<-0.6)",
+        "Returns array of { dealId, dealName, company, momentum, status, signals }",
+        "Uses React Query with 5-minute stale time",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/lib/hooks/useDealMomentum.ts"
+      ],
+      "completedAt": "2026-03-14T19:30:00Z"
+    },
+    {
+      "id": "NL-004b",
+      "feature": "brain-next-level",
+      "title": "Add momentum indicators to Deal Memory tab + Pipeline Sentiment Ticker",
+      "type": "component",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "NL-004a"
+        ],
+        "files": [
+          "src/components/brain/BrainDealMemory.tsx",
+          "src/components/brain/PipelineSentimentTicker.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "NL-001b",
+        "NL-002b",
+        "NL-003"
+      ],
+      "acceptance": [
+        "Deal Memory tab: deal selector dropdown shows momentum arrow + label next to each deal name",
+        "Selected deal shows momentum card at top: score, 4 signal breakdown, trend arrow",
+        "PipelineSentimentTicker: each deal row gains momentum arrow (replaces or augments existing trend)",
+        "Momentum arrows: green up (accelerating), gray horizontal (steady), amber down (decelerating), red down (stalled)",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "src/components/brain/BrainDealMemory.tsx",
+        "src/components/brain/PipelineSentimentTicker.tsx"
+      ],
+      "completedAt": "2026-03-14T20:15:00Z"
+    },
+    {
+      "id": "NL-005",
+      "feature": "brain-next-level",
+      "title": "Copilot memory playback \u2014 proactive memory recall on deal/contact mention",
+      "type": "api",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "NL-001a"
+        ],
+        "files": [
+          "supabase/functions/copilot-autonomous/index.ts"
+        ],
+        "schema": [
+          "contact_memory",
+          "deal_memory_events",
+          "copilot_memories"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "copilot-autonomous detects deal or contact mentions in user message (company name, contact name, deal name)",
+        "When detected, queries Brain tables for that entity: contact_memory, recent deal_memory_events, copilot_memories",
+        "Prepends a [MEMORY RECALL] block to the system prompt: 'Here is what you remember about {entity}...'",
+        "Block includes: relationship strength, meeting count, open commitments, recent objections, last sentiment",
+        "LLM naturally incorporates memory into its response (no new structured panel needed)",
+        "Max 400 tokens for memory recall block",
+        "Only triggers for first message in conversation about an entity (not every turn)",
+        "Falls back gracefully if no memory exists (no block added)",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "completedAt": "2026-03-14T20:45:00Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 8,
+    "estimatedMinutes": 225,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": [
+          "NL-001a",
+          "NL-002a",
+          "NL-004a"
+        ],
+        "reason": "Data layer: insights hook, strength history schema, momentum hook \u2014 all independent"
+      },
+      {
+        "group": 2,
+        "stories": [
+          "NL-001b",
+          "NL-002b",
+          "NL-003",
+          "NL-004b"
+        ],
+        "reason": "UI layer: insight cards, pulse graph, meeting prep card, momentum indicators"
+      },
+      {
+        "group": 3,
+        "stories": [
+          "NL-005"
+        ],
+        "reason": "Copilot integration: memory playback (needs insights hook pattern)"
+      }
+    ],
+    "lastUpdated": "2026-03-14T20:45:00Z"
+  },
+  "team": {
+    "tier": 2,
+    "workers": "sonnet x3",
+    "reviewer": "opus"
+  }
+}

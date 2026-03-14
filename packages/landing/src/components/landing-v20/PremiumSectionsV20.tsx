@@ -1,5 +1,5 @@
 /**
- * V19 Premium Sections — Polished dark blue glassy aesthetic
+ * V20 Premium Sections — Enhanced dark blue glassy aesthetic
  *
  * Design system:
  *   Page bg:     #070b18 (deep navy)
@@ -8,13 +8,10 @@
  *   Accent:      emerald (#37bd7e) for CTAs, blue-400 for info labels
  *   Glow:        radial-gradient blue at 6% opacity
  *
- * V19 polish over V18:
- *   - Gradient hero headline (bg-clip-text)
- *   - Animated gradient border on CTA buttons
- *   - Testimonial avatars
- *   - Integration card hover micro-animations
- *   - Smooth section reveals (blur + scale)
- *   - Benefits illustration polish (typing, ticks, counting)
+ * V20 enhancements over V19:
+ *   - Hero floating glass-morphism cards showing AI agent activity (#5)
+ *   - Benefits illustrations persist state when switching tabs — no re-mount (#9)
+ *   - CTA section with mini dashboard preview and parallax tilt (#10)
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -22,7 +19,7 @@ import { motion, AnimatePresence, useInView } from 'framer-motion';
 import {
   ArrowRight, Globe, Check, Mail, Calendar, Target, Search,
   FileText, Activity, Clock, TrendingUp, AlertTriangle, Zap,
-  Users, DollarSign,
+  Users, DollarSign, BarChart3,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ConfettiService } from '../../lib/services/confettiService';
@@ -41,11 +38,11 @@ const stagger = {
 
 // ─── Animated gradient border keyframes (injected once) ──────
 const GRADIENT_BORDER_CSS = `
-@keyframes v19-gradient-spin {
-  0% { --v19-angle: 0deg; }
-  100% { --v19-angle: 360deg; }
+@keyframes v20-gradient-spin {
+  0% { --v20-angle: 0deg; }
+  100% { --v20-angle: 360deg; }
 }
-@property --v19-angle {
+@property --v20-angle {
   syntax: '<angle>';
   initial-value: 0deg;
   inherits: false;
@@ -61,13 +58,179 @@ function injectGradientCSS() {
   cssInjected = true;
 }
 
+// ─── Hero Glass Card Data ─────────────────────────────────────
+
+interface GlassCardItem {
+  id: number;
+  icon: LucideIcon;
+  text: string;
+  color: string;
+}
+
+const GLASS_CARD_ACTIONS: Omit<GlassCardItem, 'id'>[] = [
+  { icon: Users, text: 'Enriching 43 contacts...', color: 'blue' },
+  { icon: Mail, text: 'Drafting follow-up email...', color: 'violet' },
+  { icon: FileText, text: 'Analyzing meeting transcript...', color: 'emerald' },
+  { icon: TrendingUp, text: 'Updating pipeline health...', color: 'amber' },
+  { icon: Calendar, text: 'Scheduling prep brief...', color: 'sky' },
+  { icon: FileText, text: 'Generating proposal...', color: 'rose' },
+  { icon: Search, text: 'Finding 47 ICP matches...', color: 'indigo' },
+  { icon: BarChart3, text: '3 deals need attention this week', color: 'amber' },
+];
+
+// Static Tailwind class map (for purging)
+const GLASS_CARD_COLORS: Record<string, {
+  bgLight: string; bgDark: string;
+  iconLight: string; iconDark: string;
+  progressLight: string; progressDark: string;
+}> = {
+  blue: {
+    bgLight: 'bg-blue-100', bgDark: 'dark:bg-blue-500/15',
+    iconLight: 'text-blue-600', iconDark: 'dark:text-blue-400',
+    progressLight: 'bg-blue-400', progressDark: 'dark:bg-blue-400',
+  },
+  violet: {
+    bgLight: 'bg-violet-100', bgDark: 'dark:bg-violet-500/15',
+    iconLight: 'text-violet-600', iconDark: 'dark:text-violet-400',
+    progressLight: 'bg-violet-400', progressDark: 'dark:bg-violet-400',
+  },
+  emerald: {
+    bgLight: 'bg-emerald-100', bgDark: 'dark:bg-emerald-500/15',
+    iconLight: 'text-emerald-600', iconDark: 'dark:text-emerald-400',
+    progressLight: 'bg-emerald-400', progressDark: 'dark:bg-emerald-400',
+  },
+  amber: {
+    bgLight: 'bg-amber-100', bgDark: 'dark:bg-amber-500/15',
+    iconLight: 'text-amber-600', iconDark: 'dark:text-amber-400',
+    progressLight: 'bg-amber-400', progressDark: 'dark:bg-amber-400',
+  },
+  sky: {
+    bgLight: 'bg-sky-100', bgDark: 'dark:bg-sky-500/15',
+    iconLight: 'text-sky-600', iconDark: 'dark:text-sky-400',
+    progressLight: 'bg-sky-400', progressDark: 'dark:bg-sky-400',
+  },
+  rose: {
+    bgLight: 'bg-rose-100', bgDark: 'dark:bg-rose-500/15',
+    iconLight: 'text-rose-600', iconDark: 'dark:text-rose-400',
+    progressLight: 'bg-rose-400', progressDark: 'dark:bg-rose-400',
+  },
+  indigo: {
+    bgLight: 'bg-indigo-100', bgDark: 'dark:bg-indigo-500/15',
+    iconLight: 'text-indigo-600', iconDark: 'dark:text-indigo-400',
+    progressLight: 'bg-indigo-400', progressDark: 'dark:bg-indigo-400',
+  },
+};
+
+function HeroGlassCards() {
+  const [cards, setCards] = useState<GlassCardItem[]>(() => [
+    { ...GLASS_CARD_ACTIONS[0], id: 0 },
+    { ...GLASS_CARD_ACTIONS[1], id: 1 },
+  ]);
+  const nextIdRef = useRef(2);
+  const nextIndexRef = useRef(2);
+  const [scrollOpacity, setScrollOpacity] = useState(1);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const actionIndex = nextIndexRef.current % GLASS_CARD_ACTIONS.length;
+      const newCard: GlassCardItem = {
+        ...GLASS_CARD_ACTIONS[actionIndex],
+        id: nextIdRef.current,
+      };
+      nextIdRef.current += 1;
+      nextIndexRef.current += 1;
+
+      setCards((prev) => {
+        // Keep latest 2 cards, add new one on top (latest first)
+        const kept = prev.slice(0, 2);
+        return [newCard, ...kept].slice(0, 3);
+      });
+    }, 2500);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fade out as user scrolls past the hero
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      const fadeStart = 200;
+      const fadeEnd = 600;
+      if (scrollY <= fadeStart) {
+        setScrollOpacity(1);
+      } else if (scrollY >= fadeEnd) {
+        setScrollOpacity(0);
+      } else {
+        setScrollOpacity(1 - (scrollY - fadeStart) / (fadeEnd - fadeStart));
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  if (scrollOpacity <= 0) return null;
+
+  return (
+    <div
+      className="absolute bottom-8 right-6 hidden md:flex flex-col-reverse gap-2.5 z-20 pointer-events-none"
+      style={{ opacity: scrollOpacity, transition: 'opacity 0.1s ease-out' }}
+    >
+      <AnimatePresence initial={false}>
+        {cards.map((card, stackIndex) => {
+          const Icon = card.icon;
+          const colors = GLASS_CARD_COLORS[card.color] || GLASS_CARD_COLORS.blue;
+          // Latest card (index 0) is full size, older cards shrink slightly
+          const scaleOffset = stackIndex * 0.02;
+          const opacityOffset = stackIndex * 0.15;
+
+          return (
+            <motion.div
+              key={card.id}
+              layout
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{
+                opacity: 1 - opacityOffset,
+                y: 0,
+                scale: 1 - scaleOffset,
+              }}
+              exit={{ opacity: 0, y: -10, scale: 0.98 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="w-72 px-4 py-3 rounded-xl
+                bg-white/80 dark:bg-white/[0.06] backdrop-blur-xl
+                border border-gray-200/50 dark:border-white/[0.08]
+                shadow-lg shadow-black/5 dark:shadow-black/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-lg ${colors.bgLight} ${colors.bgDark} flex items-center justify-center shrink-0`}>
+                  <Icon className={`w-4 h-4 ${colors.iconLight} ${colors.iconDark}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug truncate">{card.text}</p>
+                  {/* Subtle progress indicator */}
+                  <div className="mt-1.5 h-0.5 rounded-full bg-gray-200/50 dark:bg-white/[0.06] overflow-hidden">
+                    <motion.div
+                      className={`h-full rounded-full ${colors.progressLight} ${colors.progressDark} opacity-60`}
+                      initial={{ width: '0%' }}
+                      animate={{ width: '100%' }}
+                      transition={{ duration: 2.5, ease: 'linear' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ═════════════════════════════════════════════════════════════
 //  HERO
 // ═════════════════════════════════════════════════════════════
 
-const exampleDomains = ['stripe.com', 'notion.com', 'linear.app', 'figma.com'];
+const exampleDomains = ['shopify.com', 'slack.com', 'hubspot.com', 'zapier.com'];
 
-export function HeroV19({ onTryDemo }: { onTryDemo: (url: string) => void }) {
+export function HeroV20({ onTryDemo }: { onTryDemo: (url: string) => void }) {
   const [demoUrl, setDemoUrl] = useState('');
 
   useEffect(() => { injectGradientCSS(); }, []);
@@ -111,17 +274,16 @@ export function HeroV19({ onTryDemo }: { onTryDemo: (url: string) => void }) {
           <motion.h1 variants={fadeUp}
             className="font-display font-extrabold text-5xl md:text-7xl tracking-tight leading-[1.08]
               text-gray-900 dark:bg-clip-text dark:text-transparent dark:bg-gradient-to-b dark:from-white dark:via-white dark:to-zinc-400">
-            Everything before and<br />after the call
+            You&apos;re the closer.<br />60 is everything else.
           </motion.h1>
 
           <motion.p variants={fadeUp}
             className="mt-4 sm:mt-6 text-gray-500 dark:text-gray-400 text-base sm:text-xl font-body max-w-2xl leading-relaxed">
-            60 is the AI command center for sales. Follow-ups, meeting prep,
-            pipeline hygiene — handled before you think about it.
+            AI-powered sales ops for founders and small teams who&apos;d rather sell than administrate.
           </motion.p>
 
           <motion.form variants={fadeUp} onSubmit={handleDemoSubmit}
-            className="mt-8 sm:mt-10 flex flex-col sm:flex-row gap-3 w-full max-w-lg mx-auto">
+            className="mt-8 sm:mt-10 flex flex-row gap-2 sm:gap-3 w-full max-w-lg mx-auto">
             <div className="relative flex-1">
               <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
@@ -136,18 +298,18 @@ export function HeroV19({ onTryDemo }: { onTryDemo: (url: string) => void }) {
                   backdrop-blur-sm transition-all"
               />
             </div>
-            <div className="relative group">
+            <div className="relative group shrink-0">
               {/* Animated gradient border — blue in light, emerald in dark */}
               <div className="absolute -inset-[1px] rounded-lg opacity-60 group-hover:opacity-100 blur-[1px] transition-opacity
                 bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400
                 dark:from-emerald-400 dark:via-[#37bd7e] dark:to-teal-400"
-                style={{ backgroundSize: '200% 100%', animation: 'v19-gradient-spin 3s linear infinite' }} />
+                style={{ backgroundSize: '200% 100%', animation: 'v20-gradient-spin 3s linear infinite' }} />
               <button type="submit"
                 className="relative px-6 py-3 rounded-lg text-sm font-semibold
                   bg-blue-500 text-white hover:bg-blue-600 dark:bg-[#37bd7e] dark:hover:bg-[#2ea86d]
                   transition-all hover:translate-y-[-1px] hover:shadow-lg hover:shadow-blue-500/20 dark:hover:shadow-[#37bd7e]/20
                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-[#37bd7e] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-[#070b18]
-                  flex items-center justify-center gap-2">
+                  flex items-center justify-center gap-2 whitespace-nowrap">
                 Try the demo
                 <ArrowRight className="w-4 h-4" />
               </button>
@@ -175,6 +337,9 @@ export function HeroV19({ onTryDemo }: { onTryDemo: (url: string) => void }) {
 
         </motion.div>
       </div>
+
+      {/* V20: Floating glass-morphism cards — desktop only */}
+      <HeroGlassCards />
     </section>
   );
 }
@@ -194,7 +359,7 @@ const LOGOS = [
   { name: 'Stripe', domain: 'stripe.com' },
 ];
 
-export function LogoBarV19() {
+export function LogoBarV20() {
   return (
     <section className="bg-gray-50 dark:bg-[#070b18] py-16 border-b border-gray-200 dark:border-white/[0.04]">
       <motion.div
@@ -398,7 +563,7 @@ function ProspectingIllustration() {
   );
 }
 
-// ─── Mini Proposal Document Assembly (from app's ProposalProgressOverlay) ───
+// ─── Mini Proposal Document Assembly ───
 
 function ProposalSkeletonLine({ w, delay, dark = false }: { w: string; delay: number; dark?: boolean }) {
   return (
@@ -431,8 +596,8 @@ function ProposalMiniPage({ children, show }: { children: React.ReactNode; show:
       initial={{ opacity: 0, y: 6 }}
       animate={show ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="rounded-[3px] border border-gray-200 dark:border-white/10 shadow-sm overflow-hidden shrink-0 bg-white dark:bg-gray-900/50"
-      style={{ width: '100%', aspectRatio: '210 / 297' }}
+      className="rounded-[3px] border border-gray-200 dark:border-white/10 shadow-sm overflow-hidden bg-white dark:bg-gray-900/50"
+      style={{ flex: '1 1 0%', minWidth: 0, aspectRatio: '210 / 297' }}
     >
       {show && children}
     </motion.div>
@@ -552,13 +717,25 @@ function PipelineIllustration() {
 
 const ILLUSTRATIONS = [FollowUpIllustration, MeetingPrepIllustration, DealHealthIllustration, ProspectingIllustration, ProposalIllustration, PipelineIllustration];
 
-export function BenefitsV19() {
+export function BenefitsV20() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [progressKey, setProgressKey] = useState(0);
   const isPaused = useRef(false);
   const sectionRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(sectionRef, { once: false, margin: '-100px' });
+
+  // Track which illustrations have been mounted (lazy first render)
+  const [mountedIndices, setMountedIndices] = useState<Set<number>>(new Set([0]));
+
+  useEffect(() => {
+    setMountedIndices((prev) => {
+      if (prev.has(activeIndex)) return prev;
+      const next = new Set(prev);
+      next.add(activeIndex);
+      return next;
+    });
+  }, [activeIndex]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -576,14 +753,13 @@ export function BenefitsV19() {
   }, []);
 
   const activeBenefit = BENEFITS[activeIndex];
-  const ActiveIllustration = ILLUSTRATIONS[activeIndex];
 
   return (
-    <section ref={sectionRef} id="features" className="bg-white dark:bg-[#070b18] py-24 md:py-32">
+    <section ref={sectionRef} id="features" className="bg-white dark:bg-[#070b18] py-16 md:py-20">
       <div className="max-w-6xl mx-auto px-6">
         <motion.div variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, margin: '-60px' }}
           className="text-center mb-12 md:mb-16">
-          <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-4 tracking-wide uppercase">Why teams choose 60</p>
+          <p className="text-sm font-medium text-blue-600 dark:text-emerald-400 mb-4 tracking-wide uppercase">Why teams choose 60</p>
           <h2 className="font-display font-bold text-3xl md:text-4xl text-gray-900 dark:text-white tracking-tight">
             Stop doing sales admin. Start closing deals.
           </h2>
@@ -627,7 +803,7 @@ export function BenefitsV19() {
                     active ? 'text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                   }`}>
                   {active && (
-                    <motion.div layoutId="benefit-tab-v19"
+                    <motion.div layoutId="benefit-tab-v20"
                       className="absolute inset-0 bg-white rounded-lg border border-gray-200 shadow-sm dark:bg-white/[0.08] dark:border-white/[0.06] dark:shadow-none"
                       transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
                   )}
@@ -654,13 +830,14 @@ export function BenefitsV19() {
           </div>
         </div>
 
-        {/* Content */}
-        <AnimatePresence mode="wait">
-          <motion.div key={activeBenefit.id}
-            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start">
-            <div className="space-y-5">
+        {/* Content — V20: Text animates on switch, illustrations persist */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start">
+          {/* Left: Text content — switches with animation */}
+          <AnimatePresence mode="wait">
+            <motion.div key={activeBenefit.id}
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="space-y-5">
               <div>
                 <h3 className="font-display font-bold text-2xl md:text-3xl text-gray-900 dark:text-white mb-3">{activeBenefit.headline}</h3>
                 <p className="text-gray-500 dark:text-gray-400 text-base font-body leading-relaxed">{activeBenefit.description}</p>
@@ -674,12 +851,24 @@ export function BenefitsV19() {
                   </motion.li>
                 ))}
               </ul>
-            </div>
-            <div className="rounded-xl bg-gray-50 border border-gray-200 dark:bg-white/[0.03] dark:border-white/[0.06] backdrop-blur-sm p-5 sm:p-6 min-h-[260px]">
-              <ActiveIllustration />
-            </div>
-          </motion.div>
-        </AnimatePresence>
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Right: Illustrations — ALL rendered, inactive ones hidden to preserve state */}
+          <div className="rounded-xl bg-gray-50 border border-gray-200 dark:bg-white/[0.03] dark:border-white/[0.06] backdrop-blur-sm p-5 sm:p-6 min-h-[260px] overflow-hidden">
+            {ILLUSTRATIONS.map((Illustration, i) => (
+              <div
+                key={i}
+                style={activeIndex === i
+                  ? { visibility: 'visible' as const, height: 'auto', overflow: 'visible' as const }
+                  : { visibility: 'hidden' as const, height: 0, overflow: 'hidden' as const }
+                }
+              >
+                {mountedIndices.has(i) && <Illustration />}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -732,13 +921,13 @@ function IntegrationLogo({ domain, name }: { domain: string; name: string }) {
   );
 }
 
-export function IntegrationsV19() {
+export function IntegrationsV20() {
   return (
     <section className="bg-gray-50 dark:bg-[#0a1020] py-24 md:py-32" id="integrations">
       <div className="max-w-6xl mx-auto px-6">
         <motion.div variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, margin: '-60px' }}
           className="text-center mb-16">
-          <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-4 tracking-wide uppercase">Integrations</p>
+          <p className="text-sm font-medium text-blue-600 dark:text-emerald-400 mb-4 tracking-wide uppercase">Integrations</p>
           <h2 className="font-display font-bold text-3xl md:text-4xl text-gray-900 dark:text-white tracking-tight">
             Connects to everything. Controls everything.
           </h2>
@@ -799,10 +988,10 @@ const STATS: StatDef[] = [
   { icon: DollarSign, target: 255, suffix: 'K+', prefix: '$', label: 'saved vs. hiring' },
 ];
 
-function StatCountUp({ target, isInView }: { target: number; isInView: boolean }) {
+function StatCountUp({ target, isInView: visible }: { target: number; isInView: boolean }) {
   const [count, setCount] = useState(0);
   useEffect(() => {
-    if (!isInView) return;
+    if (!visible) return;
     let frame: number;
     const start = performance.now();
     const duration = 2000;
@@ -814,11 +1003,11 @@ function StatCountUp({ target, isInView }: { target: number; isInView: boolean }
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [isInView, target]);
+  }, [visible, target]);
   return <>{count}</>;
 }
 
-export function StatsV19() {
+export function StatsV20() {
   const ref = useRef<HTMLDivElement>(null);
   const isInView = useInView(ref, { once: true, margin: '-80px' });
 
@@ -864,13 +1053,13 @@ const TESTIMONIALS = [
   { quote: "We tried Clay, Apollo, and three other tools. 60 is the only one that actually does the work instead of just showing you data.", author: 'Sarah T.', role: 'Head of Revenue, Growth-stage SaaS', avatarGradient: 'from-amber-500 to-orange-400' },
 ];
 
-export function TestimonialsV19() {
+export function TestimonialsV20() {
   return (
     <section className="bg-white dark:bg-[#070b18] py-24 md:py-32">
       <div className="max-w-6xl mx-auto px-6">
         <motion.div variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true, margin: '-60px' }}
           className="text-center mb-16">
-          <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-4 tracking-wide uppercase">From early users</p>
+          <p className="text-sm font-medium text-blue-600 dark:text-emerald-400 mb-4 tracking-wide uppercase">From early users</p>
           <h2 className="font-display font-bold text-3xl md:text-4xl text-gray-900 dark:text-white tracking-tight">
             Teams building pipeline faster with 60
           </h2>
@@ -903,19 +1092,145 @@ export function TestimonialsV19() {
 }
 
 // ═════════════════════════════════════════════════════════════
-//  FINAL CTA
+//  FINAL CTA — V20: Mini Dashboard Preview with Parallax Tilt
 // ═════════════════════════════════════════════════════════════
 
-export function CTAV19() {
-  const ref = useRef<HTMLAnchorElement>(null);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+// Static color map for CTA KPI cards (Tailwind purging)
+const CTA_KPI_COLORS: Record<string, string> = {
+  emerald: 'text-emerald-400',
+  blue: 'text-blue-400',
+  violet: 'text-violet-400',
+};
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    setOffset({ x: (e.clientX - rect.left - rect.width / 2) * 0.3, y: (e.clientY - rect.top - rect.height / 2) * 0.3 });
+function MiniDashboardPreview() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    // Calculate rotation: mouse position relative to center, capped at 8 degrees
+    const rx = ((e.clientX - rect.left) / rect.width - 0.5) * 16; // max 8 degrees
+    const ry = ((e.clientY - rect.top) / rect.height - 0.5) * -16; // max 8 degrees, inverted
+    setTilt({ x: rx, y: ry });
   }, []);
 
+  const handleMouseLeave = useCallback(() => {
+    setTilt({ x: 0, y: 0 });
+  }, []);
+
+  const kpis = [
+    { label: 'Revenue', val: '$48.2k', color: 'emerald' },
+    { label: 'Meetings', val: '23', color: 'blue' },
+    { label: 'Proposals', val: '7', color: 'violet' },
+  ];
+
+  const pipelineCols = [
+    { name: 'Discovery', count: 4, color: 'bg-blue-500/40' },
+    { name: 'Proposal', count: 2, color: 'bg-violet-500/40' },
+    { name: 'Negotiation', count: 3, color: 'bg-amber-500/40' },
+    { name: 'Closed', count: 5, color: 'bg-emerald-500/40' },
+  ];
+
+  const activityItems = [
+    { text: 'Follow-up sent to Campium', time: '2m ago' },
+    { text: 'Meeting prep ready', time: '15m ago' },
+    { text: 'Deal stage updated', time: '1h ago' },
+  ];
+
+  return (
+    <div
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className="flex items-center justify-center"
+      style={{ perspective: '800px' }}
+    >
+      <motion.div
+        animate={{
+          rotateX: tilt.y,
+          rotateY: tilt.x,
+        }}
+        transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+        style={{ transformStyle: 'preserve-3d' }}
+        className="relative w-full max-w-3xl mx-auto"
+      >
+        {/* Subtle glow behind the dashboard */}
+        <div className="absolute -inset-4 rounded-2xl opacity-20 blur-2xl bg-gradient-to-br from-blue-500/30 to-emerald-500/30 dark:from-blue-500/20 dark:to-[#37bd7e]/20 pointer-events-none" />
+
+        <div className="relative w-full max-w-3xl aspect-[16/10] rounded-xl overflow-hidden
+          bg-white dark:bg-[#0c1221] border border-gray-200 dark:border-white/[0.08] shadow-2xl shadow-gray-300/40 dark:shadow-black/40">
+          {/* Top bar */}
+          <div className="h-10 bg-gray-50 dark:bg-[#0a0f1a] border-b border-gray-200 dark:border-white/[0.06] flex items-center px-4 gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-red-400/60 dark:bg-red-500/60" />
+            <div className="w-3 h-3 rounded-full bg-amber-400/60 dark:bg-amber-500/60" />
+            <div className="w-3 h-3 rounded-full bg-emerald-400/60 dark:bg-emerald-500/60" />
+            <div className="flex-1 flex justify-center">
+              <div className="px-5 py-1 rounded-md bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06]">
+                <span className="text-xs text-gray-500 font-mono">app.use60.com</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="absolute left-0 top-10 bottom-0 w-16 bg-gray-50 dark:bg-[#080d17] border-r border-gray-200 dark:border-white/[0.06]">
+            <div className="flex items-center justify-center h-10 border-b border-gray-100 dark:border-white/[0.04]">
+              <div className="w-6 h-6 rounded bg-blue-500/15 dark:bg-emerald-500/20" />
+            </div>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className={`w-8 h-8 mx-auto mt-2.5 rounded-lg flex items-center justify-center ${i === 1 ? 'bg-blue-500/10 border border-blue-500/20 dark:bg-emerald-500/10 dark:border-emerald-500/20' : 'bg-gray-100 dark:bg-white/[0.03]'}`}>
+                <div className={`w-3.5 h-3.5 rounded-sm ${i === 1 ? 'bg-blue-400/40 dark:bg-emerald-400/40' : 'bg-gray-200 dark:bg-white/[0.08]'}`} />
+              </div>
+            ))}
+          </div>
+
+          {/* Content area */}
+          <div className="absolute left-16 top-10 right-0 bottom-0 p-5">
+            {/* Metric cards strip */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              {kpis.map((k) => (
+                <div key={k.label} className="rounded-lg bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.06] p-4">
+                  <p className="text-xs text-gray-500 mb-1">{k.label}</p>
+                  <p className={`text-xl font-bold ${CTA_KPI_COLORS[k.color]}`}>{k.val}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Mini pipeline columns */}
+            <div className="flex gap-3 mb-4">
+              {pipelineCols.map((col) => (
+                <div key={col.name} className="flex-1 rounded-lg bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/[0.05] p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[11px] text-gray-500 truncate">{col.name}</p>
+                    <span className="text-[11px] text-gray-600 font-medium">{col.count}</span>
+                  </div>
+                  {Array.from({ length: Math.min(col.count, 3) }).map((_, j) => (
+                    <div key={j} className={`h-2.5 rounded-sm ${col.color} mb-1.5`} />
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            {/* Activity list */}
+            <div className="space-y-2">
+              {activityItems.map((item) => (
+                <div key={item.text} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/[0.04]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-2 h-2 rounded-full bg-blue-400/40 dark:bg-emerald-400/40" />
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{item.text}</span>
+                  </div>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-600 ml-3 shrink-0">{item.time}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+export function CTAV20() {
   return (
     <section className="relative bg-gray-50 dark:bg-[#0a1020] py-24 md:py-32 overflow-hidden">
       {/* Glow */}
@@ -928,7 +1243,13 @@ export function CTAV19() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: '-60px' }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="relative z-10 max-w-2xl mx-auto px-6 text-center">
+        className="relative z-10 max-w-5xl mx-auto px-6 text-center"
+      >
+        {/* Mini dashboard preview — above the CTA text, centered */}
+        <div className="mb-12">
+          <MiniDashboardPreview />
+        </div>
+
         <h2 className="font-display font-bold text-3xl md:text-5xl text-gray-900 dark:text-white tracking-tight">
           Your AI sales team is ready
         </h2>
@@ -936,18 +1257,14 @@ export function CTAV19() {
           Stop paying for tools that don&apos;t talk to each other. Start with the command center that does everything.
         </p>
 
-        <div className="mt-10" onMouseMove={handleMouseMove} onMouseLeave={() => setOffset({ x: 0, y: 0 })}>
-          <motion.div
-            animate={{ x: offset.x, y: offset.y }}
-            transition={{ type: 'spring', stiffness: 300, damping: 20, mass: 0.5 }}
-            className="inline-block relative group">
+        <div className="mt-10">
+          <div className="inline-block relative group">
             {/* Animated gradient border — blue in light, emerald in dark */}
             <div className="absolute -inset-[1.5px] rounded-xl opacity-60 group-hover:opacity-100 blur-[1px] transition-opacity
               bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400
               dark:from-emerald-400 dark:via-[#37bd7e] dark:to-teal-400"
-              style={{ backgroundSize: '200% 100%', animation: 'v19-gradient-spin 3s linear infinite' }} />
+              style={{ backgroundSize: '200% 100%', animation: 'v20-gradient-spin 3s linear infinite' }} />
             <a
-              ref={ref}
               href="https://www.use60.com/waitlist"
               className="relative inline-flex items-center gap-2 px-8 py-4 rounded-xl text-base font-semibold
                 bg-blue-500 text-white hover:bg-blue-600 dark:bg-[#37bd7e] dark:hover:bg-[#2ea86d]
@@ -956,7 +1273,7 @@ export function CTAV19() {
               Get Started
               <ArrowRight className="w-5 h-5" />
             </a>
-          </motion.div>
+          </div>
         </div>
 
         <button
@@ -995,7 +1312,7 @@ const FOOTER_LINKS = {
   ],
 };
 
-export function FooterV19() {
+export function FooterV20() {
   return (
     <footer className="bg-gray-100 dark:bg-[#050810] text-gray-500 dark:text-gray-400 py-16 md:py-20 border-t border-gray-200 dark:border-white/[0.04]">
       <div className="max-w-6xl mx-auto px-6">

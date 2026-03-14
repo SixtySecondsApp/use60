@@ -48,7 +48,12 @@ const LandingPageV16 = lazy(() => import('./pages/LandingPageV16').then(m => ({ 
 const LandingPageV17 = lazy(() => import('./pages/LandingPageV17').then(m => ({ default: m.LandingPageV17 })));
 const LandingPageV18 = lazy(() => import('./pages/LandingPageV18').then(m => ({ default: m.LandingPageV18 })));
 const LandingPageV19 = lazy(() => import('./pages/LandingPageV19').then(m => ({ default: m.LandingPageV19 })));
+const LandingPageV20 = lazy(() => import('./pages/LandingPageV20').then(m => ({ default: m.LandingPageV20 })));
+const LandingPageV21 = lazy(() => import('./pages/LandingPageV21').then(m => ({ default: m.LandingPageV21 })));
+const LandingPageV22 = lazy(() => import('./pages/LandingPageV22').then(m => ({ default: m.LandingPageV22 })));
+const LandingPageV23 = lazy(() => import('./pages/LandingPageV23').then(m => ({ default: m.LandingPageV23 })));
 const DemoLanding = lazy(() => import('./pages/DemoLanding'));
+const PublicDocsPage = lazy(() => import('./pages/PublicDocsPage'));
 import { getAppUrl } from './lib/utils/siteUrl';
 import { trackPageView } from './lib/pageViewTracker';
 import { CookieConsentBanner } from './lib/consent/CookieConsentBanner';
@@ -128,9 +133,14 @@ function App() {
         <Route path="/v17" element={<Suspense fallback={<div className="min-h-screen bg-white" />}><LandingPageV17 /></Suspense>} />
         <Route path="/v18" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><LandingPageV18 /></Suspense>} />
         <Route path="/v19" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><LandingPageV19 /></Suspense>} />
+        <Route path="/v20" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><LandingPageV20 /></Suspense>} />
+        <Route path="/v21" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><LandingPageV21 /></Suspense>} />
+        <Route path="/v22" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><LandingPageV22 /></Suspense>} />
+        <Route path="/v23" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><LandingPageV23 /></Suspense>} />
         <Route path="/d/:hash" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><DemoLanding /></Suspense>} />
+        <Route path="/docs" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><PublicDocsPage /></Suspense>} />
         <Route path="/v1" element={<LandingPage />} />
-        <Route path="/" element={<LandingPageV7 />} />
+        <Route path="/" element={<Suspense fallback={<div className="min-h-screen bg-[#070b18]" />}><LandingPageV23 /></Suspense>} />
       </Routes>
     </BrowserRouter>
   );

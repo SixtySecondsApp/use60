@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeToggleV10 } from '../landing-v10/ThemeToggleV10';
 
 const LOGO_ICON = 'https://ygdpgliavpxeugaajgrb.supabase.co/storage/v1/object/public/Logos/ac4efca2-1fe1-49b3-9d5e-6ac3d8bf3459/Icon.png';
@@ -15,12 +16,32 @@ interface NavbarV19Props {
 const NAV_LINKS = [
   { label: 'Features', href: '#features' },
   { label: 'Integrations', href: '#integrations' },
-  { label: 'Pricing', href: '/pricing' },
+  { label: 'Pricing', href: '#pricing' },
+  { label: 'Docs', href: '/docs' },
 ];
 
 export function NavbarV19({ isDark, onToggleTheme }: NavbarV19Props) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleNavClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+      if (!href.startsWith('#')) return; // Let normal links behave as usual
+
+      e.preventDefault();
+      const id = href.slice(1);
+      const isHomePage = location.pathname === '/' || location.pathname === '/v23';
+
+      if (isHomePage) {
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        navigate(`/v23${href}`);
+      }
+    },
+    [location.pathname, navigate],
+  );
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -49,6 +70,7 @@ export function NavbarV19({ isDark, onToggleTheme }: NavbarV19Props) {
             <a
               key={link.label}
               href={link.href}
+              onClick={(e) => handleNavClick(e, link.href)}
               className="text-sm font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
             >
               {link.label}
@@ -98,7 +120,10 @@ export function NavbarV19({ isDark, onToggleTheme }: NavbarV19Props) {
                 <a
                   key={link.label}
                   href={link.href}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(e) => {
+                    handleNavClick(e, link.href);
+                    setMobileOpen(false);
+                  }}
                   className="text-base font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors py-2"
                 >
                   {link.label}

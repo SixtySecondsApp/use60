@@ -1,0 +1,252 @@
+{
+  "project": {
+    "name": "landing-v21-polish",
+    "stack": {
+      "framework": "react-vite",
+      "styling": "tailwind",
+      "animation": "framer-motion",
+      "testing": "vitest"
+    },
+    "createdAt": "2026-03-14T12:00:00Z"
+  },
+
+  "features": [
+    {
+      "id": "v21-polish",
+      "name": "V21 Landing Page — Final Polish Sprint",
+      "status": "pending",
+      "prd": null,
+      "createdAt": "2026-03-14T12:00:00Z"
+    }
+  ],
+
+  "stories": [
+    {
+      "id": "V21P-001",
+      "feature": "v21-polish",
+      "title": "Fix interactive demo hover-pause zone",
+      "type": "fix",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-002", "V21P-003"],
+      "acceptance": [
+        "Hover only pauses auto-cycle when cursor is directly on the chapter list or demo area, not the full section width",
+        "Auto-cycle resumes immediately when cursor leaves the interactive area",
+        "Mobile touch behavior unchanged"
+      ],
+      "estimatedMinutes": 8,
+      "files": [
+        "src/components/landing-v20/InteractiveDemoV20.tsx"
+      ]
+    },
+    {
+      "id": "V21P-002",
+      "feature": "v21-polish",
+      "title": "Tighten section spacing across page",
+      "type": "fix",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-001", "V21P-003"],
+      "acceptance": [
+        "Reduced vertical padding between InteractiveDemo and WhoItsFor sections",
+        "Reduced padding above WhoItsFor heading",
+        "Reduced gap after Integrations section before Stats",
+        "Page feels tighter and flows without dead space"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/landing-v21/PremiumSectionsV21.tsx",
+        "src/components/landing-v20/PremiumSectionsV20.tsx",
+        "src/components/landing-v20/InteractiveDemoV20.tsx"
+      ]
+    },
+    {
+      "id": "V21P-003",
+      "feature": "v21-polish",
+      "title": "Animated count-up on credibility bar stats",
+      "type": "component",
+      "status": "pending",
+      "priority": 1,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-001", "V21P-002"],
+      "acceptance": [
+        "10, 200, 500, 40 animate with smooth count-up when scrolled into view",
+        "Uses useInView to trigger only once",
+        "Animation easing matches StatsV20 style (ease-out cubic)"
+      ],
+      "estimatedMinutes": 10,
+      "files": [
+        "src/components/landing-v21/PremiumSectionsV21.tsx"
+      ]
+    },
+    {
+      "id": "V21P-004",
+      "feature": "v21-polish",
+      "title": "Scrolling integration logo marquee",
+      "type": "component",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-005"],
+      "acceptance": [
+        "Smooth infinite-scrolling strip of integration logos below credibility bar",
+        "Uses CSS animation (not JS) for performance",
+        "Logos from logo.dev CDN with graceful fallback",
+        "Pauses on hover, duplicated set for seamless loop",
+        "Works in both light and dark mode with appropriate opacity"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/landing-v21/PremiumSectionsV21.tsx",
+        "src/pages/LandingPageV21.tsx"
+      ]
+    },
+    {
+      "id": "V21P-005",
+      "feature": "v21-polish",
+      "title": "Before & After comparison strip",
+      "type": "component",
+      "status": "pending",
+      "priority": 2,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-004"],
+      "acceptance": [
+        "Two-column layout: 'Without 60' (red/negative) vs 'With 60' (green/positive)",
+        "3-4 comparison rows: time on admin, follow-up rate, tools needed, pipeline visibility",
+        "Subtle animation on scroll-in",
+        "Placed between Benefits and ProductShowcase sections",
+        "Responsive: stacks vertically on mobile"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/landing-v21/PremiumSectionsV21.tsx",
+        "src/pages/LandingPageV21.tsx"
+      ]
+    },
+    {
+      "id": "V21P-006",
+      "feature": "v21-polish",
+      "title": "FAQ accordion section",
+      "type": "component",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-007", "V21P-008"],
+      "acceptance": [
+        "4-5 FAQ items with click-to-expand accordion behavior",
+        "Questions: setup time, CRM compatibility, data security, pricing, support",
+        "Smooth height animation on expand/collapse",
+        "Placed between Testimonials and CTA sections",
+        "Only one item open at a time"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/landing-v21/PremiumSectionsV21.tsx",
+        "src/pages/LandingPageV21.tsx"
+      ]
+    },
+    {
+      "id": "V21P-007",
+      "feature": "v21-polish",
+      "title": "Sticky CTA bar after hero scroll",
+      "type": "component",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-006", "V21P-008"],
+      "acceptance": [
+        "Slim bar slides down from top after scrolling past hero section (~600px)",
+        "Contains 'Get Started' button and optional domain input",
+        "Hides when scrolled back to hero",
+        "Smooth slide animation (translateY)",
+        "Does not conflict with NavbarV19 — positioned below it or integrated"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/landing-v21/PremiumSectionsV21.tsx",
+        "src/pages/LandingPageV21.tsx"
+      ]
+    },
+    {
+      "id": "V21P-008",
+      "feature": "v21-polish",
+      "title": "Trust and security badges at CTA",
+      "type": "component",
+      "status": "pending",
+      "priority": 3,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-006", "V21P-007"],
+      "acceptance": [
+        "Small trust badges below pricing anchor: SOC 2, GDPR, 256-bit encryption, 99.9% uptime",
+        "Subtle gray icons with text labels",
+        "Builds trust at the conversion point",
+        "Works in both light and dark mode"
+      ],
+      "estimatedMinutes": 8,
+      "files": [
+        "src/components/landing-v21/PremiumSectionsV21.tsx"
+      ]
+    },
+    {
+      "id": "V21P-009",
+      "feature": "v21-polish",
+      "title": "Mobile testimonial carousel",
+      "type": "component",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-010"],
+      "acceptance": [
+        "On mobile (<768px), testimonials show as swipeable carousel instead of stacked grid",
+        "Dot indicators showing current card",
+        "Auto-advances every 5 seconds",
+        "Touch swipe support via CSS scroll-snap",
+        "Desktop layout unchanged (2x2 grid)"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "src/components/landing-v21/PremiumSectionsV21.tsx"
+      ]
+    },
+    {
+      "id": "V21P-010",
+      "feature": "v21-polish",
+      "title": "Persona card deep links to benefits",
+      "type": "component",
+      "status": "pending",
+      "priority": 4,
+      "dependencies": { "stories": [], "files": [], "schema": [] },
+      "blocks": [],
+      "parallelWith": ["V21P-009"],
+      "acceptance": [
+        "Each persona card is clickable with a 'See how' link",
+        "Clicking smooth-scrolls to Benefits section",
+        "Auto-selects the most relevant benefit tab (Founders→Follow-ups, Teams→Deal health, Agencies→Pipeline)",
+        "Hover state indicates clickability"
+      ],
+      "estimatedMinutes": 12,
+      "files": [
+        "src/components/landing-v21/PremiumSectionsV21.tsx",
+        "src/components/landing-v20/PremiumSectionsV20.tsx"
+      ]
+    }
+  ],
+
+  "execution": {
+    "totalStories": 10,
+    "completedStories": 0,
+    "currentFeature": "v21-polish",
+    "lastUpdated": "2026-03-14T12:00:00Z"
+  }
+}

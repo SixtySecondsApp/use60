@@ -1,0 +1,505 @@
+{
+  "feature": {
+    "id": "document-intelligence",
+    "name": "Document Intelligence \u2014 8 Auto-Generated Document Types from Meetings",
+    "status": "complete",
+    "createdAt": "2026-03-14T00:00:00Z",
+    "complexity": {
+      "total": 7,
+      "tier": 3,
+      "label": "High"
+    }
+  },
+  "stories": [
+    {
+      "id": "DOC-001",
+      "feature": "document-intelligence",
+      "title": "Create document type registry with 8 types + generation prompts",
+      "type": "api",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "DOC-002",
+        "DOC-003",
+        "DOC-004"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "New file _shared/documents/documentTypeRegistry.ts created",
+        "Exports DocumentType enum: proposal, proposal_terms, next_steps, team_brief, discussion_points, scoping_document, ideal_workflow, project_plan",
+        "Each type has: key, displayName, description, intentKeywords (for detection), sectionTemplate (array of section names), defaultTone, slackEmoji",
+        "Exports getDocumentType(key) and getAllDocumentTypes()",
+        "Each type has a generation system prompt template that instructs Haiku what sections to produce",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/_shared/documents/documentTypeRegistry.ts"
+      ],
+      "completedAt": "2026-03-14T23:30:00Z"
+    },
+    {
+      "id": "DOC-002",
+      "feature": "document-intelligence",
+      "title": "Extend detect-intents to identify 8 document types from meeting transcripts",
+      "type": "api",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "DOC-001"
+        ],
+        "files": [
+          "supabase/functions/detect-intents/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "DOC-003"
+      ],
+      "parallelWith": [
+        "DOC-005"
+      ],
+      "acceptance": [
+        "detect-intents extraction prompt updated to detect 8 document intents (not just send_proposal)",
+        "Intent types extended: send_proposal, send_proposal_terms, send_next_steps, send_team_brief, send_discussion_points, send_scoping_doc, send_workflow, send_project_plan",
+        "Each detected intent includes: document_type key, confidence, source phrase from transcript",
+        "Backward compatible: send_proposal still works as before",
+        "Haiku prompt includes examples of each type for accurate detection",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/detect-intents/index.ts"
+      ],
+      "completedAt": "2026-03-14T23:30:00Z"
+    },
+    {
+      "id": "DOC-003",
+      "feature": "document-intelligence",
+      "title": "Create generate-document edge function \u2014 universal document generator",
+      "type": "api",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "DOC-001"
+        ],
+        "files": [],
+        "schema": [
+          "proposals"
+        ]
+      },
+      "blocks": [
+        "DOC-004"
+      ],
+      "parallelWith": [
+        "DOC-002"
+      ],
+      "acceptance": [
+        "New edge function supabase/functions/generate-document/index.ts",
+        "Accepts: document_type, org_id, user_id, deal_id, contact_id, meeting_context (summary, transcript excerpt, next_steps)",
+        "Loads document type from registry to get section template + generation prompt",
+        "Calls Haiku with the type-specific prompt + meeting context + Brain context (via getBrainContext)",
+        "Produces structured sections matching the template (JSONB array)",
+        "Stores in proposals table (reuses existing schema \u2014 proposals table is generic enough for all doc types) with document_type column",
+        "Returns document_id + sections",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/generate-document/index.ts"
+      ],
+      "completedAt": "2026-03-14T23:30:00Z"
+    },
+    {
+      "id": "DOC-004",
+      "feature": "document-intelligence",
+      "title": "Wire document detection into orchestrator + Slack HITL with edit options",
+      "type": "api",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "DOC-002",
+          "DOC-003"
+        ],
+        "files": [
+          "supabase/functions/_shared/orchestrator/eventSequences.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "DOC-006"
+      ],
+      "parallelWith": [
+        "DOC-005"
+      ],
+      "acceptance": [
+        "detect-proposal-intent adapter updated to handle all 8 document types (not just proposals)",
+        "Adapter calls generate-document with the detected document_type",
+        "proposal-approval adapter updated: Slack DM shows document type name + preview + 3 buttons",
+        "Slack buttons: [Approve & Send] [Edit in 60] [Skip] \u2014 same HITL flow as proposals",
+        "Edit link opens /documents/review/{docId} (or existing /proposals/review/{docId})",
+        "CC item created with item_type matching document type (e.g. 'next_steps_draft', 'scoping_doc_draft')",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts",
+        "supabase/functions/_shared/commandCentre/types.ts"
+      ],
+      "completedAt": "2026-03-15T00:00:00Z"
+    },
+    {
+      "id": "DOC-005",
+      "feature": "document-intelligence",
+      "title": "Add document_type column to proposals table + Brain memory write on send",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "proposals"
+        ]
+      },
+      "blocks": [
+        "DOC-006"
+      ],
+      "parallelWith": [
+        "DOC-002",
+        "DOC-003"
+      ],
+      "acceptance": [
+        "Migration adds document_type TEXT DEFAULT 'proposal' to proposals table",
+        "Index on (deal_id, document_type) for fast lookup",
+        "After document is approved and sent, write deal_memory_event: event_type=document_sent, event_category=timeline",
+        "Memory event includes: document_type, section_count, recipient contact name",
+        "Migration is re-runnable",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 15,
+      "files": [
+        "supabase/migrations/new_proposals_document_type.sql"
+      ],
+      "completedAt": "2026-03-14T23:30:00Z"
+    },
+    {
+      "id": "DOC-006",
+      "feature": "document-intelligence",
+      "title": "Wire email delivery after Slack approval \u2014 send document to prospect",
+      "type": "api",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "DOC-004",
+          "DOC-005"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "DOC-007"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "After [Approve & Send] in Slack, resolve contact email from deal/contact context",
+        "Generate email body from document sections (executive summary + key points + CTA)",
+        "Attach PDF if available (from proposal-render-gotenberg) or inline the document content",
+        "Send via email-send-as-rep edge function (sends from rep's connected email)",
+        "Update proposals table: sent_at timestamp, recipient_email",
+        "Write deal_memory_event: document_sent with delivery confirmation",
+        "Post confirmation to daily Slack thread: '{Document type} sent to {contact} at {email}'",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/slack-interactive/handlers/proposal.ts",
+        "supabase/functions/_shared/orchestrator/adapters/proposalGenerator.ts"
+      ],
+      "completedAt": "2026-03-15T00:00:00Z"
+    },
+    {
+      "id": "DOC-007",
+      "feature": "document-intelligence",
+      "title": "Add document generation to copilot \u2014 user can request any document type on demand",
+      "type": "api",
+      "status": "complete",
+      "priority": 4,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "DOC-006"
+        ],
+        "files": [
+          "supabase/functions/copilot-autonomous/index.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "DOC-008"
+      ],
+      "parallelWith": [],
+      "acceptance": [
+        "Copilot detects document generation requests: 'write a proposal for Microquant', 'create next steps for the Amondo deal', 'draft a scoping document'",
+        "Maps request to document_type from registry",
+        "Calls generate-document edge function with deal/contact context from conversation",
+        "Returns structured response panel showing document sections with [Send to Contact] [Edit] [Copy] buttons",
+        "Brain context injected into generation (via getBrainContext) for personalization",
+        "Typecheck passes"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/functions/copilot-autonomous/index.ts"
+      ],
+      "completedAt": "2026-03-15T00:15:00Z"
+    },
+    {
+      "id": "DOC-008",
+      "feature": "document-intelligence",
+      "title": "Build document preview component for CC detail panel + copilot response",
+      "type": "component",
+      "status": "complete",
+      "priority": 4,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "DOC-007"
+        ],
+        "files": [
+          "src/components/commandCentre/CCDetailPanel.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [],
+      "acceptance": [
+        "New component src/components/documents/DocumentPreview.tsx",
+        "Renders document sections in a clean preview: cover/header, then each section with title + content",
+        "Document type badge at top (Proposal, Next Steps, Scoping Doc, etc.) with type-specific icon and color",
+        "Action buttons: [Send to Contact] [Edit] [Download PDF] [Copy to Clipboard]",
+        "Integrated into CCDetailPanel for document-type CC items",
+        "Also usable as copilot response panel for document generation",
+        "Responsive and matches existing design system",
+        "Typecheck passes",
+        "Verify in browser on localhost:5175"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/documents/DocumentPreview.tsx",
+        "src/components/commandCentre/CCDetailPanel.tsx"
+      ],
+      "completedAt": "2026-03-15T00:15:00Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 8,
+    "completedStories": 8,
+    "estimatedMinutes": 205,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": [
+          "DOC-001"
+        ],
+        "reason": "Foundation: document type registry"
+      },
+      {
+        "group": 2,
+        "stories": [
+          "DOC-002",
+          "DOC-003",
+          "DOC-005"
+        ],
+        "reason": "Core: intent detection + generator + schema"
+      },
+      {
+        "group": 3,
+        "stories": [
+          "DOC-004",
+          "DOC-006"
+        ],
+        "reason": "Wiring: orchestrator + Slack HITL + email delivery"
+      },
+      {
+        "group": 4,
+        "stories": [
+          "DOC-007",
+          "DOC-008"
+        ],
+        "reason": "Copilot + UI: on-demand generation + preview component"
+      }
+    ],
+    "lastUpdated": "2026-03-15T00:15:00Z"
+  },
+  "team": {
+    "tier": 3,
+    "workers": "sonnet x3",
+    "reviewer": "opus"
+  },
+  "documentTypes": {
+    "proposal": {
+      "displayName": "Proposal",
+      "description": "Full commercial proposal with pricing, timeline, and terms",
+      "intentKeywords": [
+        "send proposal",
+        "put together a proposal",
+        "draft a proposal",
+        "proposal for"
+      ],
+      "sections": [
+        "cover",
+        "executive_summary",
+        "problem",
+        "solution",
+        "approach",
+        "timeline",
+        "pricing",
+        "next_steps"
+      ]
+    },
+    "proposal_terms": {
+      "displayName": "Proposal + Terms",
+      "description": "Proposal with appended legal/commercial terms and conditions",
+      "intentKeywords": [
+        "proposal with terms",
+        "include terms",
+        "send contract",
+        "agreement"
+      ],
+      "sections": [
+        "cover",
+        "executive_summary",
+        "solution",
+        "pricing",
+        "terms_and_conditions",
+        "payment_terms",
+        "liability",
+        "signatures"
+      ]
+    },
+    "next_steps": {
+      "displayName": "Next Steps",
+      "description": "Action items and follow-up plan from the meeting",
+      "intentKeywords": [
+        "send next steps",
+        "follow up with steps",
+        "action items",
+        "what we agreed"
+      ],
+      "sections": [
+        "meeting_recap",
+        "action_items",
+        "owner_assignments",
+        "timeline",
+        "next_meeting"
+      ]
+    },
+    "team_brief": {
+      "displayName": "Information For The Team",
+      "description": "Internal brief for the team about the deal/prospect",
+      "intentKeywords": [
+        "brief the team",
+        "update the team",
+        "internal summary",
+        "team update"
+      ],
+      "sections": [
+        "deal_overview",
+        "prospect_profile",
+        "key_takeaways",
+        "risks_and_blockers",
+        "recommended_actions"
+      ]
+    },
+    "discussion_points": {
+      "displayName": "Call Discussion Points",
+      "description": "Structured agenda and talking points for the next call",
+      "intentKeywords": [
+        "discussion points",
+        "talking points",
+        "prep for next call",
+        "agenda"
+      ],
+      "sections": [
+        "meeting_objective",
+        "key_topics",
+        "questions_to_ask",
+        "points_to_cover",
+        "desired_outcomes"
+      ]
+    },
+    "scoping_document": {
+      "displayName": "Scoping Document",
+      "description": "Technical scope definition with requirements and deliverables",
+      "intentKeywords": [
+        "scope this out",
+        "scoping document",
+        "define scope",
+        "requirements doc"
+      ],
+      "sections": [
+        "project_overview",
+        "objectives",
+        "requirements",
+        "deliverables",
+        "assumptions",
+        "constraints",
+        "timeline",
+        "out_of_scope"
+      ]
+    },
+    "ideal_workflow": {
+      "displayName": "Ideal Workflow",
+      "description": "Process map showing the ideal workflow for the prospect",
+      "intentKeywords": [
+        "map out the workflow",
+        "ideal workflow",
+        "process flow",
+        "how it would work"
+      ],
+      "sections": [
+        "current_state",
+        "pain_points",
+        "proposed_workflow",
+        "integration_points",
+        "expected_outcomes",
+        "implementation_steps"
+      ]
+    },
+    "project_plan": {
+      "displayName": "Project Plan",
+      "description": "Detailed project plan with milestones, phases, and resource allocation",
+      "intentKeywords": [
+        "project plan",
+        "put together a plan",
+        "implementation plan",
+        "rollout plan"
+      ],
+      "sections": [
+        "project_overview",
+        "phases",
+        "milestones",
+        "resource_allocation",
+        "dependencies",
+        "risks",
+        "success_criteria",
+        "timeline"
+      ]
+    }
+  }
+}

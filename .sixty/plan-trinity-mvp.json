@@ -1,0 +1,823 @@
+{
+  "feature": {
+    "id": "trinity-mvp",
+    "name": "Trinity Build \u2014 Brain + Marketplace + Unified Inbox (Full)",
+    "status": "complete",
+    "createdAt": "2026-03-14T00:00:00Z",
+    "description": "Full Trinity Build: security foundations, Brain page (memory feed, deal memory, contact memory, commitments, agent log, settings), Marketplace (DB-backed abilities, fleet/orchestrator/cron gating, run tracking), Unified Inbox (left-rail refactor, context injection, inline actions, chain replay, resolution tracking).",
+    "complexity": {
+      "total": 8,
+      "tier": 3,
+      "label": "High"
+    }
+  },
+  "stories": [
+    {
+      "id": "TRINITY-001",
+      "feature": "trinity-mvp",
+      "title": "Fix merge conflicts in 3 memory migration files",
+      "type": "fix",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "TRINITY-004",
+        "TRINITY-005",
+        "TRINITY-006"
+      ],
+      "parallelWith": [
+        "TRINITY-002",
+        "TRINITY-003"
+      ],
+      "acceptance": [
+        "supabase/migrations/20260225100001_deal_memory_events.sql has no <<<<<<< markers",
+        "supabase/migrations/20260225100002_deal_memory_snapshots.sql has no <<<<<<< markers",
+        "supabase/migrations/20260225100005_contact_rep_memory.sql has no <<<<<<< markers",
+        "Use HEAD pattern (DO $$ BEGIN ... EXCEPTION ... END $$) for idempotent RLS policies",
+        "npx supabase db push --linked --dry-run passes without errors"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/20260225100001_deal_memory_events.sql",
+        "supabase/migrations/20260225100002_deal_memory_snapshots.sql",
+        "supabase/migrations/20260225100005_contact_rep_memory.sql"
+      ],
+      "completedAt": "2026-03-14T10:45:00Z"
+    },
+    {
+      "id": "TRINITY-002",
+      "feature": "trinity-mvp",
+      "title": "Fix copilot_memories RLS \u2014 add org scoping via clerk_org_id",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "copilot_memories"
+        ]
+      },
+      "blocks": [
+        "TRINITY-004",
+        "TRINITY-005"
+      ],
+      "parallelWith": [
+        "TRINITY-001",
+        "TRINITY-003"
+      ],
+      "acceptance": [
+        "New migration drops existing user-only RLS policy on copilot_memories",
+        "New RLS policy checks auth.uid() = user_id AND org scoping via clerk_org_id matching user's active org",
+        "Multi-org users only see memories for their currently active org",
+        "Migration uses DROP POLICY IF EXISTS + CREATE POLICY pattern",
+        "Tested: user in org A cannot see memories with clerk_org_id of org B"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "supabase/migrations/new_copilot_memories_rls_org_scope.sql"
+      ],
+      "completedAt": "2026-03-14T10:45:00Z"
+    },
+    {
+      "id": "TRINITY-003",
+      "feature": "trinity-mvp",
+      "title": "Add retention policy + decay_score index on copilot_memories",
+      "type": "schema",
+      "status": "complete",
+      "priority": 1,
+      "group": 1,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "copilot_memories"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-001",
+        "TRINITY-002"
+      ],
+      "acceptance": [
+        "New migration adds decay_score NUMERIC(3,2) DEFAULT 1.0 column to copilot_memories",
+        "Index on (user_id, decay_score DESC) WHERE decay_score > 0.1 created",
+        "pg_cron job created to delete memories older than 365 days with decay_score < 0.1",
+        "Migration is re-runnable (IF NOT EXISTS / DO blocks)"
+      ],
+      "estimatedMinutes": 20,
+      "files": [
+        "supabase/migrations/new_copilot_memories_retention.sql"
+      ],
+      "completedAt": "2026-03-14T10:45:00Z"
+    },
+    {
+      "id": "TRINITY-004",
+      "feature": "trinity-mvp",
+      "title": "Brain page scaffold \u2014 route, layout, 5 section tabs",
+      "type": "component",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [
+          "TRINITY-001",
+          "TRINITY-002"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [
+        "TRINITY-005",
+        "TRINITY-006"
+      ],
+      "parallelWith": [
+        "TRINITY-007",
+        "TRINITY-010"
+      ],
+      "acceptance": [
+        "New route /agent/brain registered in App.tsx with lazy import",
+        "Sidebar link added under Agent section in AppLayout",
+        "BrainPage.tsx created following CommandCentre.tsx scaffold pattern",
+        "5 tabs: Memory Feed, Deal Memory, Contact Memory, Agent Log, Settings",
+        "Each tab renders a placeholder component with empty state",
+        "Page gated behind authenticated user (not admin-only \u2014 users see their own memories)"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "src/pages/agent/BrainPage.tsx",
+        "src/App.tsx"
+      ],
+      "completedAt": "2026-03-14T11:10:00Z"
+    },
+    {
+      "id": "TRINITY-005",
+      "feature": "trinity-mvp",
+      "title": "Memory Feed tab \u2014 realtime stream of copilot_memories by category",
+      "type": "component",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "TRINITY-004"
+        ],
+        "files": [],
+        "schema": [
+          "copilot_memories"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-006",
+        "TRINITY-008",
+        "TRINITY-009"
+      ],
+      "acceptance": [
+        "BrainMemoryFeed.tsx component created in src/components/brain/",
+        "useBrainMemories hook created \u2014 queries copilot_memories filtered by user_id + org",
+        "Supabase Realtime subscription on copilot_memories for live updates (table already published)",
+        "Filter by category: deal, contact, rep, commitment, general",
+        "Each memory card shows: category badge, subject, content preview, decay_score bar, last_accessed_at",
+        "Pagination with cursor-based loading (newest first)",
+        "Empty state when no memories exist"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "src/components/brain/BrainMemoryFeed.tsx",
+        "src/lib/hooks/useBrainMemories.ts"
+      ],
+      "completedAt": "2026-03-14T11:50:00Z"
+    },
+    {
+      "id": "TRINITY-006",
+      "feature": "trinity-mvp",
+      "title": "Deal Memory viewer \u2014 grouped events with commitment timeline",
+      "type": "component",
+      "status": "complete",
+      "priority": 3,
+      "group": 3,
+      "dependencies": {
+        "stories": [
+          "TRINITY-004"
+        ],
+        "files": [],
+        "schema": [
+          "deal_memory_events"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-005",
+        "TRINITY-008",
+        "TRINITY-009"
+      ],
+      "acceptance": [
+        "BrainDealMemory.tsx component created in src/components/brain/",
+        "Deal selector dropdown showing user's deals",
+        "Timeline view of deal_memory_events grouped by event_category",
+        "18 event categories rendered with distinct badges",
+        "Commitment events highlighted with due date and status (pending/fulfilled/broken)",
+        "Confidence score shown per event",
+        "Empty state when no deal selected or no events exist"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "src/components/brain/BrainDealMemory.tsx",
+        "src/lib/hooks/useDealMemoryEvents.ts"
+      ],
+      "completedAt": "2026-03-14T11:50:00Z"
+    },
+    {
+      "id": "TRINITY-007",
+      "feature": "trinity-mvp",
+      "title": "Wire cron-triggered abilities to respect user preferences before invocation",
+      "type": "api",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "user_sequence_preferences",
+          "proactive_agent_config"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-004",
+        "TRINITY-010"
+      ],
+      "acceptance": [
+        "proactive-meeting-prep/index.ts checks proactive_agent_config.is_enabled + user_sequence_preferences before generating prep",
+        "agent-deal-risk-batch/index.ts checks org config + user preferences before scoring",
+        "Stale deal revival cron handler checks preferences before processing",
+        "Campaign daily check cron handler checks preferences before pulling metrics",
+        "Coaching weekly cron handler checks preferences before aggregating",
+        "Users who toggled ability OFF in marketplace no longer receive cron-triggered notifications",
+        "Org-level master toggle (proactive_agent_config.is_enabled = false) skips all cron processing for that org"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "supabase/functions/proactive-meeting-prep/index.ts",
+        "supabase/functions/agent-deal-risk-batch/index.ts"
+      ],
+      "completedAt": "2026-03-14T11:10:00Z"
+    },
+    {
+      "id": "TRINITY-008",
+      "feature": "trinity-mvp",
+      "title": "Persist delivery channel preferences to DB instead of localStorage",
+      "type": "component",
+      "status": "complete",
+      "priority": 4,
+      "group": 3,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "user_sequence_preferences"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-005",
+        "TRINITY-006"
+      ],
+      "acceptance": [
+        "user_sequence_preferences.delivery_channel column used for channel prefs (already exists in schema)",
+        "MarketplaceAbilityCard + AbilityDetailSheet save channel toggles to DB via update_user_sequence_preference RPC",
+        "Remove localStorage reads/writes for delivery channels (agent-ability-channels-{id} keys)",
+        "Channel preferences survive across browsers/devices",
+        "Orchestrator runner reads delivery_channel from preferences and routes output accordingly",
+        "Default channels from abilityRegistry used when no DB preference exists"
+      ],
+      "estimatedMinutes": 30,
+      "files": [
+        "src/components/agent/marketplace/MarketplaceAbilityCard.tsx",
+        "src/components/agent/marketplace/AbilityDetailSheet.tsx",
+        "src/lib/hooks/useAgentAbilityPreferences.ts"
+      ],
+      "completedAt": "2026-03-14T11:50:00Z"
+    },
+    {
+      "id": "TRINITY-009",
+      "feature": "trinity-mvp",
+      "title": "Add run tracking \u2014 update last_run_at + run_count after each ability execution",
+      "type": "api",
+      "status": "complete",
+      "priority": 5,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "TRINITY-007"
+        ],
+        "files": [],
+        "schema": [
+          "user_sequence_preferences"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-011"
+      ],
+      "acceptance": [
+        "New migration adds last_run_at TIMESTAMPTZ and run_count INTEGER DEFAULT 0 to user_sequence_preferences if not present",
+        "Orchestrator runner.ts updates last_run_at and increments run_count on sequence completion (success or failure)",
+        "Marketplace ability cards show last_run_at as relative time ('2h ago') and run_count badge",
+        "AbilityDetailSheet shows full run history summary from sequence_jobs table",
+        "Stats refresh on marketplace page load (no polling needed)"
+      ],
+      "estimatedMinutes": 35,
+      "files": [
+        "supabase/functions/_shared/orchestrator/runner.ts",
+        "supabase/migrations/new_sequence_prefs_run_tracking.sql",
+        "src/components/agent/marketplace/MarketplaceAbilityCard.tsx"
+      ],
+      "completedAt": "2026-03-14T12:30:00Z"
+    },
+    {
+      "id": "TRINITY-010",
+      "feature": "trinity-mvp",
+      "title": "Add resolved_via + thread_id columns to command_centre_items",
+      "type": "schema",
+      "status": "complete",
+      "priority": 2,
+      "group": 2,
+      "dependencies": {
+        "stories": [],
+        "files": [],
+        "schema": [
+          "command_centre_items"
+        ]
+      },
+      "blocks": [
+        "TRINITY-011"
+      ],
+      "parallelWith": [
+        "TRINITY-004",
+        "TRINITY-007"
+      ],
+      "acceptance": [
+        "New migration adds resolved_via TEXT (copilot, manual, auto, slack)",
+        "Adds resolved_conversation_id UUID nullable",
+        "Adds thread_id UUID nullable for grouping related items",
+        "Index on (thread_id) WHERE thread_id IS NOT NULL",
+        "commandCentreItemsService.ts updated to set resolved_via on approval/dismiss/auto-resolve",
+        "Migration is re-runnable"
+      ],
+      "estimatedMinutes": 25,
+      "files": [
+        "supabase/migrations/new_cc_items_resolved_via.sql",
+        "src/lib/services/commandCentreItemsService.ts"
+      ],
+      "completedAt": "2026-03-14T11:10:00Z"
+    },
+    {
+      "id": "TRINITY-011",
+      "feature": "trinity-mvp",
+      "title": "Add seedContext to useCopilotChat for CC item context injection",
+      "type": "component",
+      "status": "complete",
+      "priority": 6,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "TRINITY-010"
+        ],
+        "files": [
+          "src/lib/hooks/useCopilotChat.ts"
+        ],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-009"
+      ],
+      "acceptance": [
+        "SendMessageOptions in useCopilotChat.ts gains seedContext?: { itemId: string, itemType: string, dealId?: string, contactId?: string }",
+        "When seedContext provided, it's included in the API request body to copilot-autonomous",
+        "copilot-autonomous edge function accepts seed_context in request body and injects into system prompt",
+        "CC item detail panel gains 'Ask Copilot' button that opens copilot with seedContext pre-loaded",
+        "Existing copilot behavior unchanged when seedContext not provided"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "src/lib/hooks/useCopilotChat.ts",
+        "supabase/functions/copilot-autonomous/index.ts",
+        "src/components/commandCentre/CCDetailPanel.tsx"
+      ],
+      "completedAt": "2026-03-14T12:30:00Z"
+    },
+    {
+      "id": "TRINITY-012",
+      "feature": "trinity-mvp",
+      "title": "Contact Memory tab \u2014 interaction graph with decay strength bars",
+      "type": "component",
+      "status": "complete",
+      "priority": 4,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "TRINITY-004",
+          "TRINITY-003"
+        ],
+        "files": [],
+        "schema": [
+          "contact_memory",
+          "copilot_memories"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-009",
+        "TRINITY-011",
+        "TRINITY-013"
+      ],
+      "acceptance": [
+        "BrainContactMemory.tsx component created in src/components/brain/",
+        "Contact selector with search \u2014 shows contacts the user has interacted with",
+        "Per-contact view: relationship_strength bar (0-1 scale, color-coded green/yellow/red)",
+        "Decay visualization: shows strength over time using last_accessed_at and decay_score",
+        "Interaction timeline: meetings, emails, notes related to this contact from copilot_memories",
+        "Stale relationship warning when decay_score < 0.3",
+        "Empty state when no contact selected"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "src/components/brain/BrainContactMemory.tsx",
+        "src/lib/hooks/useContactMemory.ts"
+      ],
+      "completedAt": "2026-03-14T12:30:00Z"
+    },
+    {
+      "id": "TRINITY-013",
+      "feature": "trinity-mvp",
+      "title": "Commitments tracker tab \u2014 deadlines grouped by deal/contact",
+      "type": "component",
+      "status": "complete",
+      "priority": 4,
+      "group": 4,
+      "dependencies": {
+        "stories": [
+          "TRINITY-004",
+          "TRINITY-006"
+        ],
+        "files": [],
+        "schema": [
+          "deal_memory_events"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-012",
+        "TRINITY-009",
+        "TRINITY-011"
+      ],
+      "acceptance": [
+        "BrainCommitments.tsx component created in src/components/brain/",
+        "Queries deal_memory_events WHERE event_category IN ('commitment_made', 'commitment_fulfilled', 'commitment_broken')",
+        "Grouped by: overdue (red), due this week (amber), upcoming (default), fulfilled (green, collapsed)",
+        "Each commitment shows: description, deal name, contact name, due date, status badge",
+        "Sort: overdue first, then by due date ascending",
+        "Broken commitments show risk_flag event if auto-generated",
+        "Mark as fulfilled button updates event via markCommitmentFulfilled() from commitments.ts"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "src/components/brain/BrainCommitments.tsx",
+        "src/lib/hooks/useCommitments.ts"
+      ],
+      "completedAt": "2026-03-14T12:30:00Z"
+    },
+    {
+      "id": "TRINITY-014",
+      "feature": "trinity-mvp",
+      "title": "Agent Log viewer tab \u2014 daily action log with chain grouping",
+      "type": "component",
+      "status": "complete",
+      "priority": 5,
+      "group": 5,
+      "dependencies": {
+        "stories": [
+          "TRINITY-004"
+        ],
+        "files": [],
+        "schema": [
+          "agent_daily_logs"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-015",
+        "TRINITY-016"
+      ],
+      "acceptance": [
+        "BrainAgentLog.tsx component created in src/components/brain/",
+        "Queries agent_daily_logs for user's org, ordered by created_at DESC",
+        "Filter by agent_type: morning-brief, post-meeting, deal-risk, etc.",
+        "Filter by outcome: success, failed, pending, cancelled, skipped",
+        "Chain grouping: items with same chain_id shown together with wave_number ordering",
+        "Each entry shows: agent_type badge, action_type, decision_reasoning preview, credit_cost, execution_ms",
+        "Expandable row reveals full action_detail JSONB and input_context_summary",
+        "Pagination: 50 entries per page, cursor-based"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "src/components/brain/BrainAgentLog.tsx",
+        "src/lib/hooks/useAgentDailyLogs.ts"
+      ],
+      "completedAt": "2026-03-14T13:15:00Z"
+    },
+    {
+      "id": "TRINITY-015",
+      "feature": "trinity-mvp",
+      "title": "Memory Settings tab \u2014 decay overrides, category purge, retention",
+      "type": "component",
+      "status": "complete",
+      "priority": 5,
+      "group": 5,
+      "dependencies": {
+        "stories": [
+          "TRINITY-004",
+          "TRINITY-003"
+        ],
+        "files": [],
+        "schema": [
+          "copilot_memories"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-014",
+        "TRINITY-016"
+      ],
+      "acceptance": [
+        "BrainSettings.tsx component created in src/components/brain/",
+        "Category toggles: enable/disable memory collection per category (deal, contact, rep, commitment, general)",
+        "Decay rate override: slider per category to adjust decay speed (0.5x slower to 2x faster)",
+        "Bulk purge: delete all memories for a specific deal, contact, or date range with confirmation dialog",
+        "Memory stats: total count per category, oldest/newest memory dates",
+        "Settings persisted to user_settings JSONB column (memory_preferences key)",
+        "Changes take effect on next memory write/decay cycle"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "src/components/brain/BrainSettings.tsx"
+      ],
+      "completedAt": "2026-03-14T13:15:00Z"
+    },
+    {
+      "id": "TRINITY-016",
+      "feature": "trinity-mvp",
+      "title": "Unified Inbox \u2014 left-rail layout refactor with item list + detail panel",
+      "type": "component",
+      "status": "complete",
+      "priority": 5,
+      "group": 5,
+      "dependencies": {
+        "stories": [
+          "TRINITY-010",
+          "TRINITY-011"
+        ],
+        "files": [
+          "src/pages/platform/CommandCentre.tsx"
+        ],
+        "schema": []
+      },
+      "blocks": [
+        "TRINITY-017",
+        "TRINITY-018",
+        "TRINITY-019"
+      ],
+      "parallelWith": [
+        "TRINITY-014",
+        "TRINITY-015"
+      ],
+      "acceptance": [
+        "CommandCentre.tsx refactored from vertical feed to left-rail/right-panel layout",
+        "Left rail (w-[380px]): scrollable item list with existing CCItemCard components",
+        "Right panel (flex-1): selected item detail with CCDetailPanel + copilot chat area",
+        "Item selection highlights in left rail, loads detail on right",
+        "Keyboard navigation preserved: j/k moves selection, Enter opens detail",
+        "Deep links preserved: /command-centre?item=uuid selects that item",
+        "Responsive: on mobile (<768px), falls back to single-column with back navigation",
+        "Existing filter bar, grouping, and bulk actions remain functional"
+      ],
+      "estimatedMinutes": 120,
+      "files": [
+        "src/pages/platform/CommandCentre.tsx",
+        "src/components/commandCentre/CCItemCard.tsx",
+        "src/components/commandCentre/CCDetailPanel.tsx"
+      ],
+      "completedAt": "2026-03-14T13:15:00Z"
+    },
+    {
+      "id": "TRINITY-017",
+      "feature": "trinity-mvp",
+      "title": "Inline actions \u2014 reply email, create task, update CRM from CC item",
+      "type": "component",
+      "status": "complete",
+      "priority": 6,
+      "group": 6,
+      "dependencies": {
+        "stories": [
+          "TRINITY-016"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-018",
+        "TRINITY-019"
+      ],
+      "acceptance": [
+        "CCDetailPanel gains inline action buttons beyond approve/dismiss/snooze",
+        "Reply Email: opens email composer pre-filled with CC item context (contact, deal, suggested content)",
+        "Create Task: opens QuickAdd task modal with title/description pre-filled from CC item",
+        "Update CRM: for deal_risk items, offers one-click stage change or field update via existing deal service",
+        "Each action sets resolved_via = 'manual' on the CC item after completion",
+        "Actions respect autonomy tier: suggest-tier items show as suggestions, approve-tier items show Approve button",
+        "Error toast on action failure, success toast on completion"
+      ],
+      "estimatedMinutes": 90,
+      "files": [
+        "src/components/commandCentre/CCDetailPanel.tsx",
+        "src/components/commandCentre/CCInlineActions.tsx"
+      ],
+      "completedAt": "2026-03-14T14:00:00Z"
+    },
+    {
+      "id": "TRINITY-018",
+      "feature": "trinity-mvp",
+      "title": "Chain replay \u2014 surface agent_daily_logs reasoning chain for CC items",
+      "type": "component",
+      "status": "complete",
+      "priority": 6,
+      "group": 6,
+      "dependencies": {
+        "stories": [
+          "TRINITY-016"
+        ],
+        "files": [],
+        "schema": [
+          "agent_daily_logs",
+          "command_centre_items"
+        ]
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-017",
+        "TRINITY-019"
+      ],
+      "acceptance": [
+        "CCChainReplay.tsx component created in src/components/commandCentre/",
+        "When a CC item has source_agent set, queries agent_daily_logs for matching chain_id",
+        "Renders chain as a step-by-step timeline: wave 1 \u2192 wave 2 \u2192 ... \u2192 final output",
+        "Each step shows: agent_type, action_type, decision_reasoning, outcome badge, credit_cost",
+        "Collapsible by default, expandable via 'Show reasoning' link in CCDetailPanel",
+        "If no chain_id found, shows 'Direct action \u2014 no reasoning chain available'",
+        "Handles loading state and errors gracefully"
+      ],
+      "estimatedMinutes": 60,
+      "files": [
+        "src/components/commandCentre/CCChainReplay.tsx",
+        "src/lib/hooks/useChainReplay.ts"
+      ],
+      "completedAt": "2026-03-14T14:00:00Z"
+    },
+    {
+      "id": "TRINITY-019",
+      "feature": "trinity-mvp",
+      "title": "Bulk actions \u2014 multi-select approve/dismiss/snooze from left rail",
+      "type": "component",
+      "status": "complete",
+      "priority": 6,
+      "group": 6,
+      "dependencies": {
+        "stories": [
+          "TRINITY-016"
+        ],
+        "files": [],
+        "schema": []
+      },
+      "blocks": [],
+      "parallelWith": [
+        "TRINITY-017",
+        "TRINITY-018"
+      ],
+      "acceptance": [
+        "Checkbox added to each CCItemCard for multi-select",
+        "Shift+click selects range (standard pattern)",
+        "Bulk action bar appears when 2+ items selected: Approve All, Dismiss All, Snooze All",
+        "Bulk approve calls existing mutation for each selected item (batched, max 25)",
+        "Confirmation dialog for bulk dismiss: 'Dismiss N items? This cannot be undone.'",
+        "Keyboard shortcut: Cmd+A selects all visible items",
+        "Selection count badge shown in bulk action bar",
+        "All mutations set resolved_via = 'manual'"
+      ],
+      "estimatedMinutes": 45,
+      "files": [
+        "src/pages/platform/CommandCentre.tsx",
+        "src/components/commandCentre/CCItemCard.tsx",
+        "src/components/commandCentre/CCBulkActionBar.tsx"
+      ],
+      "completedAt": "2026-03-14T14:00:00Z"
+    }
+  ],
+  "execution": {
+    "totalStories": 19,
+    "completedStories": 19,
+    "estimatedMinutes": 910,
+    "parallelGroups": [
+      {
+        "group": 1,
+        "stories": [
+          "TRINITY-001",
+          "TRINITY-002",
+          "TRINITY-003"
+        ],
+        "reason": "All independent foundation fixes \u2014 merge conflicts, RLS, retention"
+      },
+      {
+        "group": 2,
+        "stories": [
+          "TRINITY-004",
+          "TRINITY-007",
+          "TRINITY-010"
+        ],
+        "reason": "Brain scaffold, cron preference wiring, CC schema \u2014 all independent after Group 1"
+      },
+      {
+        "group": 3,
+        "stories": [
+          "TRINITY-005",
+          "TRINITY-006",
+          "TRINITY-008"
+        ],
+        "reason": "Brain memory feed + deal memory + delivery channel DB persistence"
+      },
+      {
+        "group": 4,
+        "stories": [
+          "TRINITY-009",
+          "TRINITY-011",
+          "TRINITY-012",
+          "TRINITY-013"
+        ],
+        "reason": "Run tracking, copilot seedContext, contact memory, commitments"
+      },
+      {
+        "group": 5,
+        "stories": [
+          "TRINITY-014",
+          "TRINITY-015",
+          "TRINITY-016"
+        ],
+        "reason": "Agent log viewer, memory settings, left-rail inbox refactor"
+      },
+      {
+        "group": 6,
+        "stories": [
+          "TRINITY-017",
+          "TRINITY-018",
+          "TRINITY-019"
+        ],
+        "reason": "Inline actions, chain replay, bulk actions \u2014 all need left-rail done"
+      }
+    ],
+    "lastUpdated": "2026-03-14T14:00:00Z"
+  },
+  "team": {
+    "tier": 3,
+    "workers": "sonnet x2",
+    "reviewer": "opus"
+  },
+  "references": {
+    "brainPagePattern": "src/pages/platform/CommandCentre.tsx",
+    "marketplacePage": "src/pages/agent/AgentMarketplacePage.tsx",
+    "abilityRegistry": "src/lib/agent/abilityRegistry.ts",
+    "fleetRouterCache": "supabase/functions/_shared/orchestrator/fleetRouter.ts",
+    "memorySystem": "supabase/functions/_shared/memory/",
+    "copilotChat": "src/lib/hooks/useCopilotChat.ts",
+    "ccService": "src/lib/services/commandCentreItemsService.ts"
+  },
+  "deferredToV2": [
+    "Autonomy tier selector in Marketplace UI (currently just enable/disable toggle)",
+    "Per-rep ability overrides (user_ability_overrides table)",
+    "Credit budget 80% throttle warning (currently hard cap at 100% only)",
+    "Real autonomy gate implementation (currently stub returning { allowed: true })",
+    "Copilot memory recall in seedContext (fetch relevant memories before API call)",
+    "Memory decay background job (cron to refresh decay_score periodically)",
+    "Rep Memory tab in Brain page (learned preferences, tone calibration)",
+    "V1 abilities migration from localStorage to DB-backed preferences"
+  ]
+}
