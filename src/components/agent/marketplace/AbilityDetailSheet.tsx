@@ -12,11 +12,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { useAbilityPrerequisites } from '@/hooks/useAbilityPrerequisites';
-import { useAgentAbilityPreferences } from '@/hooks/useAgentAbilityPreferences';
+import { useAgentAbilityPreferences, type DeliveryChannelsDB } from '@/hooks/useAgentAbilityPreferences';
 import { getSequenceTypeForEventType, USE_CASE_CATEGORIES, type AbilityDefinition } from '@/lib/agent/abilityRegistry';
 import { cn } from '@/lib/utils';
 import { Check, Lock, MessageSquare, Mail, Bell, Zap, Clock, TrendingUp, FlaskConical, ChevronDown } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { AbilityTestPanel } from '@/components/agent/marketplace/AbilityTestPanel';
 
@@ -88,10 +88,16 @@ export function AbilityDetailSheet({
 }: AbilityDetailSheetProps) {
   const navigate = useNavigate();
   const { checks, isLoading: integrationsLoading } = useAbilityPrerequisites(ability?.id ?? '');
-  const { isEnabled: isBackendEnabled, toggleEnabled: toggleBackendEnabled, isToggling } = useAgentAbilityPreferences();
+  const {
+    isEnabled: isBackendEnabled,
+    toggleEnabled: toggleBackendEnabled,
+    isToggling,
+    getDeliveryChannels: getDbChannels,
+    updateDeliveryChannels: updateDbChannels,
+  } = useAgentAbilityPreferences();
 
-  // Delivery channels state (localStorage)
-  const [deliveryChannels, setDeliveryChannels] = useState<Record<DeliveryChannel, boolean>>({
+  // V1 localStorage channels state (only used for non-orchestrator abilities)
+  const [localChannels, setLocalChannels] = useState<Record<DeliveryChannel, boolean>>({
     slack: true,
     email: true,
     'in-app': true,
@@ -99,9 +105,41 @@ export function AbilityDetailSheet({
 
   const [testOpen, setTestOpen] = useState(false);
 
-  // Load delivery channels from localStorage
+  // Determine enable/disable state
+  const sequenceType = ability ? getSequenceTypeForEventType(ability.eventType) : undefined;
+  const hasBackendState = !!sequenceType;
+  const isOrchestrator = ability?.backendType === 'orchestrator' && hasBackendState;
+
+  // Compute ability default channels (used as fallback when no DB preference exists)
+  const abilityDefaults = useMemo<Record<DeliveryChannel, boolean>>(() => {
+    if (!ability) return { slack: true, email: true, 'in-app': true };
+    return {
+      slack: ability.defaultChannels.includes('slack'),
+      email: ability.defaultChannels.includes('email'),
+      'in-app': ability.defaultChannels.includes('in-app'),
+    };
+  }, [ability]);
+
+  // For orchestrator abilities: read from DB, fall back to ability defaults
+  const dbChannelsRaw = sequenceType ? getDbChannels(sequenceType) : null;
+  const dbChannels = useMemo<Record<DeliveryChannel, boolean>>(() => {
+    if (dbChannelsRaw) {
+      // Map DB keys (in_app) to UI keys (in-app)
+      return {
+        slack: dbChannelsRaw.slack,
+        email: dbChannelsRaw.email,
+        'in-app': dbChannelsRaw.in_app,
+      };
+    }
+    return abilityDefaults;
+  }, [dbChannelsRaw, abilityDefaults]);
+
+  // The active delivery channels: DB-backed for orchestrator, localStorage for V1
+  const deliveryChannels = isOrchestrator ? dbChannels : localChannels;
+
+  // Load V1 delivery channels from localStorage (only for non-orchestrator abilities)
   useEffect(() => {
-    if (!ability) return;
+    if (!ability || isOrchestrator) return;
 
     const key = `agent-ability-channels-${ability.id}`;
     const stored = localStorage.getItem(key);
@@ -109,38 +147,45 @@ export function AbilityDetailSheet({
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        setDeliveryChannels(parsed);
+        setLocalChannels(parsed);
       } catch (e) {
         console.error('[AbilityDetailSheet] Failed to parse delivery channels from localStorage:', e);
       }
     } else {
-      // Set defaults from ability definition
-      const defaults = {
-        slack: ability.defaultChannels.includes('slack'),
-        email: ability.defaultChannels.includes('email'),
-        'in-app': ability.defaultChannels.includes('in-app'),
-      };
-      setDeliveryChannels(defaults);
+      setLocalChannels(abilityDefaults);
     }
-  }, [ability]);
+  }, [ability, isOrchestrator, abilityDefaults]);
 
-  // Save delivery channels to localStorage
-  const handleChannelToggle = (channel: DeliveryChannel) => {
+  // Handle channel toggle: DB for orchestrator, localStorage for V1
+  const handleChannelToggle = useCallback((channel: DeliveryChannel) => {
     if (!ability) return;
 
-    const updated = {
-      ...deliveryChannels,
-      [channel]: !deliveryChannels[channel],
-    };
-    setDeliveryChannels(updated);
+    if (isOrchestrator && sequenceType) {
+      // Map UI state to DB format (in-app -> in_app) and toggle the channel
+      const updatedDb: DeliveryChannelsDB = {
+        slack: deliveryChannels.slack,
+        email: deliveryChannels.email,
+        in_app: deliveryChannels['in-app'],
+      };
+      // Toggle the specific channel
+      if (channel === 'in-app') {
+        updatedDb.in_app = !updatedDb.in_app;
+      } else {
+        updatedDb[channel] = !updatedDb[channel];
+      }
+      updateDbChannels(sequenceType, updatedDb);
+    } else {
+      // V1: localStorage
+      const updated = {
+        ...localChannels,
+        [channel]: !localChannels[channel],
+      };
+      setLocalChannels(updated);
 
-    const key = `agent-ability-channels-${ability.id}`;
-    localStorage.setItem(key, JSON.stringify(updated));
-  };
-
-  // Determine enable/disable state
-  const sequenceType = ability ? getSequenceTypeForEventType(ability.eventType) : undefined;
-  const hasBackendState = !!sequenceType;
+      const key = `agent-ability-channels-${ability.id}`;
+      localStorage.setItem(key, JSON.stringify(updated));
+    }
+  }, [ability, isOrchestrator, sequenceType, deliveryChannels, localChannels, updateDbChannels]);
 
   const isAbilityEnabled = hasBackendState
     ? isBackendEnabled(sequenceType)
