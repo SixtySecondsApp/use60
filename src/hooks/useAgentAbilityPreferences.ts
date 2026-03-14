@@ -27,6 +27,8 @@ interface SequencePreference {
   is_enabled: boolean;
   delivery_channel: string | null;
   delivery_channels: DeliveryChannelsDB | null;
+  last_run_at: string | null;
+  run_count: number;
 }
 
 export function useAgentAbilityPreferences() {
@@ -238,6 +240,22 @@ export function useAgentAbilityPreferences() {
     await channelsMutation.mutateAsync({ sequenceType, deliveryChannels });
   };
 
+  /**
+   * Get the last_run_at timestamp for a sequence type.
+   */
+  const getLastRunAt = (sequenceType: string): string | null => {
+    const pref = preferences.find((p) => p.sequence_type === sequenceType);
+    return pref?.last_run_at ?? null;
+  };
+
+  /**
+   * Get the run_count for a sequence type.
+   */
+  const getRunCount = (sequenceType: string): number => {
+    const pref = preferences.find((p) => p.sequence_type === sequenceType);
+    return pref?.run_count ?? 0;
+  };
+
   return {
     preferences,
     isLoading,
@@ -247,5 +265,7 @@ export function useAgentAbilityPreferences() {
     getDeliveryChannels,
     updateDeliveryChannels,
     isUpdatingChannels: channelsMutation.isPending,
+    getLastRunAt,
+    getRunCount,
   };
 }

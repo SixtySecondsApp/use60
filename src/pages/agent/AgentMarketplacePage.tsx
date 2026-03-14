@@ -39,8 +39,12 @@ export default function AgentMarketplacePage() {
   }, []);
 
   // Backend preferences for orchestrator abilities
-  const { isEnabled: isBackendEnabled, toggleEnabled: toggleBackendEnabled } =
-    useAgentAbilityPreferences();
+  const {
+    isEnabled: isBackendEnabled,
+    toggleEnabled: toggleBackendEnabled,
+    getLastRunAt,
+    getRunCount,
+  } = useAgentAbilityPreferences();
 
   // localStorage state for V1 abilities (trigger re-render on change)
   const [localToggleKey, setLocalToggleKey] = useState(0);
@@ -175,7 +179,20 @@ export default function AgentMarketplacePage() {
             {/* Ability Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {abilities.map((ability) => {
-                const stats = abilityStats?.[ability.eventType];
+                const jobStats = abilityStats?.[ability.eventType];
+                const seqType = getSequenceTypeForEventType(ability.eventType);
+                // Prefer preference-based run tracking (authoritative from runner),
+                // fall back to sequence_jobs query for non-orchestrator abilities
+                const prefLastRun = seqType ? getLastRunAt(seqType) : null;
+                const prefRunCount = seqType ? getRunCount(seqType) : 0;
+                const stats: AbilityStats | undefined =
+                  (prefRunCount > 0 || (jobStats && jobStats.totalRuns > 0))
+                    ? {
+                        lastRunAt: prefLastRun || jobStats?.lastRunAt || null,
+                        totalRuns: prefRunCount || jobStats?.totalRuns || 0,
+                        successCount: jobStats?.successCount || 0,
+                      }
+                    : undefined;
                 return (
                   <MarketplaceAbilityCard
                     key={ability.id}

@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { Lock, Clock, CheckCircle2 } from 'lucide-react';
+import { Lock, Clock, CheckCircle2, Activity } from 'lucide-react';
 import type { AbilityDefinition } from '@/lib/agent/abilityRegistry';
 import { useAbilityPrerequisites } from '@/hooks/useAbilityPrerequisites';
 import { useIntegrationStore } from '@/lib/stores/integrationStore';
@@ -158,6 +158,20 @@ export function MarketplaceAbilityCard({
               >
                 HITL
               </Badge>
+            )}
+            {stats && stats.totalRuns > 0 && (
+              <Badge
+                variant="outline"
+                className="text-[10px] border-purple-400 text-purple-600 dark:text-purple-400 gap-0.5"
+              >
+                <Activity className="w-2.5 h-2.5" />
+                {stats.totalRuns}
+              </Badge>
+            )}
+            {stats?.lastRunAt && (
+              <span className="text-[10px] text-muted-foreground ml-0.5">
+                {formatTimeAgo(stats.lastRunAt)}
+              </span>
             )}
           </div>
         </div>

@@ -613,6 +613,9 @@ async function executeStepsParallel(
     console.warn('[orchestrator] Cost rollup failed (non-fatal):', costErr);
   }
 
+  // TRINITY-009: Update run tracking (last_run_at + run_count) on user_sequence_preferences
+  await updateRunTracking(supabase, state);
+
   await rpcCompleteJob(supabase, jobId, {
     steps_completed: state.steps_completed,
     outputs: state.outputs,
@@ -799,6 +802,9 @@ async function executeStepsSequential(
   } catch (costErr) {
     console.warn('[orchestrator] Cost rollup failed (non-fatal):', costErr);
   }
+
+  // TRINITY-009: Update run tracking (last_run_at + run_count) on user_sequence_preferences
+  await updateRunTracking(supabase, state);
 
   await rpcCompleteJob(supabase, jobId, {
     steps_completed: state.steps_completed,
@@ -1005,6 +1011,51 @@ async function processFollowups(
         error_message: `Followup fire-and-forget failed: ${String(err)}`,
       });
     }
+  }
+}
+
+/**
+ * TRINITY-009: Update run tracking after sequence completion.
+ * Calls RPC to atomically upsert last_run_at and increment run_count
+ * on user_sequence_preferences. Falls back to simple upsert if RPC missing.
+ * Non-fatal — never fails the sequence.
+ */
+async function updateRunTracking(
+  supabase: SupabaseClient,
+  state: SequenceState,
+): Promise<void> {
+  if (!state.event.user_id || !state.event.org_id) return;
+
+  try {
+    const { error: rpcError } = await supabase.rpc('record_sequence_run', {
+      p_user_id: state.event.user_id,
+      p_org_id: state.event.org_id,
+      p_sequence_type: state.event.type,
+    });
+
+    if (rpcError?.code === '42883' || rpcError?.message?.includes('does not exist')) {
+      // RPC not deployed yet — fall back to simple upsert (sets run_count=1, not increment)
+      console.warn('[orchestrator] record_sequence_run RPC not available, using fallback upsert');
+      await supabase
+        .from('user_sequence_preferences')
+        .upsert(
+          {
+            user_id: state.event.user_id,
+            org_id: state.event.org_id,
+            sequence_type: state.event.type,
+            last_run_at: new Date().toISOString(),
+            run_count: 1,
+            is_enabled: true,
+          },
+          { onConflict: 'user_id,org_id,sequence_type' }
+        );
+    } else if (rpcError) {
+      console.warn('[orchestrator] Run tracking RPC error (non-fatal):', rpcError.message);
+    } else {
+      console.log(`[orchestrator] Run tracking updated for ${state.event.type}`);
+    }
+  } catch (err) {
+    console.warn('[orchestrator] Run tracking failed (non-fatal):', err);
   }
 }
 
