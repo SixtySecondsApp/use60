@@ -106,6 +106,15 @@ export const EVENT_SEQUENCES: Record<EventType, SequenceStep[]> = {
       available: true,
       depends_on: ['extract-action-items'],
     },
+    // Wave 2b: BA-001c — Extract deal memories (preferences, objections, context) from transcript
+    {
+      skill: 'extract-deal-memories',
+      requires_context: ['tier1', 'tier2'],
+      requires_approval: false,
+      criticality: 'best-effort',
+      available: true,
+      depends_on: ['extract-action-items'],
+    },
     // Wave 2b: Infer attendee stakeholder roles from transcript (REL-003)
     {
       skill: 'infer-attendee-roles',
