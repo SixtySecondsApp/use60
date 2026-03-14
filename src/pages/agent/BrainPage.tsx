@@ -15,6 +15,7 @@ import BrainMemoryFeed from '@/components/brain/BrainMemoryFeed';
 const BrainDealMemory = lazy(() => import('@/components/brain/BrainDealMemory'));
 const BrainCommitments = lazy(() => import('@/components/brain/BrainCommitments'));
 const BrainContactMemory = lazy(() => import('@/components/brain/BrainContactMemory'));
+const BrainAgentLog = lazy(() => import('@/components/brain/BrainAgentLog'));
 
 // ============================================================================
 // Tab definitions
@@ -123,7 +124,18 @@ export default function BrainPage() {
                 <BrainContactMemory />
               </Suspense>
             </TabsContent>
-            {BRAIN_TABS.filter((tab) => tab.id !== 'memory-feed' && tab.id !== 'deal-memory' && tab.id !== 'commitments' && tab.id !== 'contact-memory').map((tab) => (
+            <TabsContent value={'agent-log' satisfies BrainTab}>
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center py-24">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                  </div>
+                }
+              >
+                <BrainAgentLog />
+              </Suspense>
+            </TabsContent>
+            {BRAIN_TABS.filter((tab) => tab.id !== 'memory-feed' && tab.id !== 'deal-memory' && tab.id !== 'commitments' && tab.id !== 'contact-memory' && tab.id !== 'agent-log').map((tab) => (
               <TabsContent key={tab.id} value={tab.id}>
                 <TabPlaceholder label={tab.label} />
               </TabsContent>
